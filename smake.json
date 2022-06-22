@@ -1,0 +1,16 @@
+{
+    "build": {
+        "name": "libxutils.a",
+        "outputDir": "./obj",
+        "flags": "-g -O2 -Wall -D_XUTILS_USE_SSL",
+        "libs": "-lpthread -lssl -lcrypto",
+        "excludes": [
+            "./examples",
+            "./cmake"
+        ]
+    },
+    "install": {
+        "headerDir": "/usr/local/include/xutils",
+        "binaryDir": "/usr/local/lib"
+    }
+}
