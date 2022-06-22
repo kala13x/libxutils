@@ -690,6 +690,21 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_wind_t *pWin, xtop_args_t *pArgs, xarray_t *
     return XWindow_AddAligned(pWin, sLine, XSTR_CLR_LIGHT_CYAN, XCLI_LEFT);
 }
 
+void XTOPApp_ParseCoreObj(xjson_obj_t *pCoreObj, xcpu_info_t *pCore)
+{
+    pCore->nSoftInterrupts = XJSON_GetU32(XJSON_GetObject(pCoreObj, "softInterrupts"));
+    pCore->nHardInterrupts = XJSON_GetU32(XJSON_GetObject(pCoreObj, "hardInterrupts"));
+    pCore->nUserSpaceNiced = XJSON_GetU32(XJSON_GetObject(pCoreObj, "userSpaceNiced"));
+    pCore->nKernelSpace = XJSON_GetU32(XJSON_GetObject(pCoreObj, "kernelSpace"));
+    pCore->nUserSpace = XJSON_GetU32(XJSON_GetObject(pCoreObj, "userSpace"));
+    pCore->nIdleTime = XJSON_GetU32(XJSON_GetObject(pCoreObj, "idleTime"));
+    pCore->nIOWait = XJSON_GetU32(XJSON_GetObject(pCoreObj, "ioWait"));
+    pCore->nStealTime = XJSON_GetU32(XJSON_GetObject(pCoreObj, "stealTime"));
+    pCore->nGuestTime = XJSON_GetU32(XJSON_GetObject(pCoreObj, "guestTime"));
+    pCore->nGuestNiced = XJSON_GetU32(XJSON_GetObject(pCoreObj, "guestNiced"));
+    pCore->nID = XJSON_GetU32(XJSON_GetObject(pCoreObj, "id"));
+}
+
 int XTOPApp_GetJSONStats(xtop_stats_t *pStats, xjson_t *pJson)
 {
     xcpu_stats_t *pCpuStats = &pStats->cpuStats;
@@ -749,21 +764,18 @@ int XTOPApp_GetJSONStats(xtop_stats_t *pStats, xjson_t *pJson)
         return XSTDERR;
     }
 
+    xjson_obj_t *pSumObj = XJSON_GetObject(pUsageObj, "sum");
+    if (pSumObj == NULL)
+    {
+        xloge("Response does not contain CPU sum object in JSON");
+        return XSTDERR;
+    }
+
     float fKernelSpace =  XJSON_GetFloat(XJSON_GetObject(pProcObj, "kernelSpace"));
     float fUserSpace =  XJSON_GetFloat(XJSON_GetObject(pProcObj, "userSpace"));
     pCpuStats->usage.nKernelSpaceUsage = XFloatToU32(fKernelSpace);
     pCpuStats->usage.nUserSpaceUsage = XFloatToU32(fUserSpace);
-
-    pCpuStats->sum.nSoftInterrupts = XJSON_GetU32(XJSON_GetObject(pUsageObj, "softInterrupts"));
-    pCpuStats->sum.nHardInterrupts = XJSON_GetU32(XJSON_GetObject(pUsageObj, "hardInterrupts"));
-    pCpuStats->sum.nUserSpaceNiced = XJSON_GetU32(XJSON_GetObject(pUsageObj, "userSpaceNiced"));
-    pCpuStats->sum.nKernelSpace = XJSON_GetU32(XJSON_GetObject(pUsageObj, "kernelSpace"));
-    pCpuStats->sum.nUserSpace = XJSON_GetU32(XJSON_GetObject(pUsageObj, "userSpace"));
-    pCpuStats->sum.nIdleTime = XJSON_GetU32(XJSON_GetObject(pUsageObj, "idleTime"));
-    pCpuStats->sum.nIOWait = XJSON_GetU32(XJSON_GetObject(pUsageObj, "ioWait"));
-    pCpuStats->sum.nStealTime = XJSON_GetU32(XJSON_GetObject(pUsageObj, "stealTime"));
-    pCpuStats->sum.nGuestTime = XJSON_GetU32(XJSON_GetObject(pUsageObj, "guestTime"));
-    pCpuStats->sum.nGuestNiced = XJSON_GetU32(XJSON_GetObject(pUsageObj, "guestNiced"));
+    XTOPApp_ParseCoreObj(pSumObj, &pCpuStats->sum);
 
     nLength = XJSON_GetArrayLength(pCoresObj);
     XSYNC_ATOMIC_SET(&pStats->cpuStats.nCoreCount, nLength);
@@ -780,17 +792,7 @@ int XTOPApp_GetJSONStats(xtop_stats_t *pStats, xjson_t *pJson)
                 return XSTDERR;
             }
 
-            pInfo->nSoftInterrupts = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "softInterrupts"));
-            pInfo->nHardInterrupts = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "hardInterrupts"));
-            pInfo->nUserSpaceNiced = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "userSpaceNiced"));
-            pInfo->nKernelSpace = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "kernelSpace"));
-            pInfo->nUserSpace = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "userSpace"));
-            pInfo->nIdleTime = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "idleTime"));
-            pInfo->nIOWait = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "ioWait"));
-            pInfo->nStealTime = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "stealTime"));
-            pInfo->nGuestTime = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "guestTime"));
-            pInfo->nGuestNiced = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "guestNiced"));
-            pInfo->nID = XJSON_GetInt(XJSON_GetObject(pArrItemObj, "id"));
+            XTOPApp_ParseCoreObj(pArrItemObj, pInfo);
 
             if (XArray_AddData(&pCpuStats->cores, pInfo, 0) < 0)
             {
