@@ -936,7 +936,7 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
     *pRequest = XTOP_NOTFOUND;
 
-    xlogn("Received request: fd(%d), url: %s",
+    xlogn("Received request: fd(%d), url(%s)",
         (int)pData->nFD, pHandle->sUrl);
 
     if (pHandle->eMethod != XHTTP_GET)
@@ -974,50 +974,49 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_SetEvents(pData, XPOLLOUT);
 }
 
-xjson_obj_t* XTOPApp_CreateMemoryObj(xtop_stats_t *pStats)
+int XTOPApp_AppendMemoryJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
 {
     xmem_info_t memInfo;
     XTop_GetMemoryInfo(pStats, &memInfo);
 
-    xjson_obj_t *pMemObj = XJSON_NewObject("memory", XFALSE);
-    if (pMemObj == NULL)
-    {
-        xloge("Failed to allocate memory for JSON memory object: %d", errno);
-        return NULL;
-    }
-
-    if (XJSON_AddU64(pMemObj, "memReclaimable", memInfo.nReclaimable) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "memBuffered", memInfo.nBuffers) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "memResident", memInfo.nResidentMemory) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "memVirtual", memInfo.nVirtualMemory) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "memCached", memInfo.nMemoryCached) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "memShared", memInfo.nMemoryShared) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "memAvail", memInfo.nMemoryAvail) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "memTotal", memInfo.nMemoryTotal) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "memFree", memInfo.nMemoryFree) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "swapCached", memInfo.nSwapCached) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "swapTotal", memInfo.nSwapTotal) != XJSON_ERR_NONE ||
-        XJSON_AddU64(pMemObj, "swapFree", memInfo.nSwapFree) != XJSON_ERR_NONE)
-    {
-        xloge("Failed to append entries to the JSON memory object: %d", errno);
-        XJSON_FreeObject(pMemObj);
-        return XFALSE;
-    }
-
-    return pMemObj;
+    return XString_Append(pJsonStr,
+        "\"memory\": {"
+            "\"memReclaimable\": %lu,"
+            "\"memBuffered\": %lu,"
+            "\"memResident\": %lu,"
+            "\"memVirtual\": %lu,"
+            "\"memCached\": %lu,"
+            "\"memShared\": %lu,"
+            "\"memAvail\": %lu,"
+            "\"memTotal\": %lu,"
+            "\"memFree\": %lu,"
+            "\"swapCached\": %lu,"
+            "\"swapTotal\": %lu,"
+            "\"swapFree\": %lu"
+        "}",
+        memInfo.nReclaimable,
+        memInfo.nBuffers,
+        memInfo.nResidentMemory,
+        memInfo.nVirtualMemory,
+        memInfo.nMemoryCached,
+        memInfo.nMemoryShared,
+        memInfo.nMemoryAvail,
+        memInfo.nMemoryTotal,
+        memInfo.nMemoryFree,
+        memInfo.nSwapCached,
+        memInfo.nSwapTotal,
+        memInfo.nSwapFree);
 }
 
-xjson_obj_t* XTOPApp_CreateNetworkObj(xtop_stats_t *pStats)
+int XTOPApp_AppendNetworkJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
 {
     xarray_t netIfaces;
     if (XTop_GetNetworkStats(pStats, &netIfaces) > 0)
     {
-        xjson_obj_t *pNetObj = XJSON_NewArray("network", XFALSE);
-        if (pNetObj == NULL)
+        if (XString_Append(pJsonStr, "\"network\": [") < 0)
         {
-            xloge("Failed to allocate memory for JSON array: %d", errno);
-            XJSON_FreeObject(pNetObj);
-            return NULL;
+            XArray_Destroy(&netIfaces);
+            return XSTDERR;
         }
 
         size_t i, nUsed = XArray_Used(&netIfaces);
@@ -1026,322 +1025,217 @@ xjson_obj_t* XTOPApp_CreateNetworkObj(xtop_stats_t *pStats)
             xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(&netIfaces, i);
             if (pIface == NULL) continue;
 
-            xjson_obj_t *pItemObj = XJSON_NewObject(NULL, XFALSE);
-            if (pItemObj == NULL)
-            {
-                xloge("Failed to allocate memory for JSON network item: %d", errno);
-                XJSON_FreeObject(pNetObj);
-                return NULL;
-            }
+            XString_Append(pJsonStr,
+                "{"
+                    "\"name\": \"%s\","
+                    "\"type\": %d,"
+                    "\"ipAddr\": \"%s\","
+                    "\"hwAddr\": \"%s\","
+                    "\"bandwidth\": %ld,"
+                    "\"bytesSent\": %ld,"
+                    "\"packetsSent\": %ld,"
+                    "\"bytesReceived\": %ld,"
+                    "\"packetsReceived\": %ld,"
+                    "\"bytesSentPerSec\": %lu,"
+                    "\"packetsSentPerSec\": %lu,"
+                    "\"bytesReceivedPerSec\": %lu,"
+                    "\"packetsReceivedPerSec\": %lu"
+                "}",
+                pIface->sName,
+                pIface->nType,
+                pIface->sIPAddr,
+                pIface->sHWAddr,
+                pIface->nBandwidth,
+                pIface->nBytesSent,
+                pIface->nPacketsSent,
+                pIface->nBytesReceived,
+                pIface->nPacketsReceived,
+                pIface->nBytesSentPerSec,
+                pIface->nPacketsSentPerSec,
+                pIface->nBytesReceivedPerSec,
+                pIface->nPacketsReceivedPerSec);
 
-            if (XJSON_AddObject(pNetObj, pItemObj) != XJSON_ERR_NONE)
+            if (pJsonStr->nStatus < 0 ||
+                (i + 1 < nUsed &&
+                XString_Append(pJsonStr, ",") < 0))
             {
-                xloge("Failed to append JSON network item object: %d", errno);
-                XJSON_FreeObject(pItemObj);
-                XJSON_FreeObject(pNetObj);
-                return NULL;
-            }
-
-            if (XJSON_AddU64(pItemObj, "packetsReceivedPerSec", pIface->nPacketsReceivedPerSec) != XJSON_ERR_NONE ||
-                XJSON_AddU64(pItemObj, "bytesReceivedPerSec", pIface->nBytesReceivedPerSec) != XJSON_ERR_NONE ||
-                XJSON_AddU64(pItemObj, "packetsSentPerSec", pIface->nPacketsSentPerSec) != XJSON_ERR_NONE ||
-                XJSON_AddU64(pItemObj, "bytesSentPerSec", pIface->nBytesSentPerSec) != XJSON_ERR_NONE ||
-                XJSON_AddU64(pItemObj, "packetsReceived", pIface->nPacketsReceived) != XJSON_ERR_NONE ||
-                XJSON_AddU64(pItemObj, "bytesReceived", pIface->nBytesReceived) != XJSON_ERR_NONE ||
-                XJSON_AddU64(pItemObj, "packetsSent", pIface->nPacketsSent) != XJSON_ERR_NONE ||
-                XJSON_AddU64(pItemObj, "bytesSent", pIface->nBytesSent) != XJSON_ERR_NONE ||
-                XJSON_AddU64(pItemObj, "bandwidth", pIface->nBandwidth) != XJSON_ERR_NONE ||
-                XJSON_AddU32(pItemObj, "type", pIface->nType) != XJSON_ERR_NONE ||
-                XJSON_AddString(pItemObj, "name", pIface->sName) != XJSON_ERR_NONE ||
-                XJSON_AddString(pItemObj, "hwAddr", pIface->sHWAddr) != XJSON_ERR_NONE ||
-                XJSON_AddString(pItemObj, "ipAddr", pIface->sIPAddr) != XJSON_ERR_NONE)
-            {
-                xloge("Failed to append entries to the JSON network object: %d", errno);
-                XJSON_FreeObject(pNetObj);
-                return NULL;
+                XArray_Destroy(&netIfaces);
+                return XSTDERR;
             }
         }
 
         XArray_Destroy(&netIfaces);
-        return pNetObj;
+        XString_Append(pJsonStr, "]");
+        return pJsonStr->nStatus;
     }
 
-    return NULL;
+    return XSTDERR;
 }
 
-xjson_obj_t* XTOPApp_CreateCPUInfoObj(xcpu_info_t *pCpu)
+int XTOPApp_AppendCoreJson(xcpu_info_t *pCpu, xstring_t *pJsonStr)
 {
-    xjson_obj_t *pCpuObj = XJSON_NewObject(NULL, XFALSE);
-    if (pCpuObj == NULL)
-    {
-        xloge("Failed to allocate memory for CPU core JSON object: %d", errno);
-        return NULL;
-    }
-
-    if (XJSON_AddU32(pCpuObj, "softInterrupts", pCpu->nSoftInterrupts) != XJSON_ERR_NONE ||
-        XJSON_AddU32(pCpuObj, "hardInterrupts", pCpu->nHardInterrupts) != XJSON_ERR_NONE ||
-        XJSON_AddU32(pCpuObj, "userSpaceNiced", pCpu->nUserSpaceNiced) != XJSON_ERR_NONE ||
-        XJSON_AddU32(pCpuObj, "kernelSpace", pCpu->nKernelSpace) != XJSON_ERR_NONE ||
-        XJSON_AddU32(pCpuObj, "userSpace", pCpu->nUserSpace) != XJSON_ERR_NONE ||
-        XJSON_AddU32(pCpuObj, "idleTime", pCpu->nIdleTime) != XJSON_ERR_NONE ||
-        XJSON_AddU32(pCpuObj, "ioWait", pCpu->nIOWait) != XJSON_ERR_NONE ||
-        XJSON_AddU32(pCpuObj, "stealTime", pCpu->nStealTime) != XJSON_ERR_NONE ||
-        XJSON_AddU32(pCpuObj, "guestTime", pCpu->nGuestTime) != XJSON_ERR_NONE ||
-        XJSON_AddU32(pCpuObj, "guestNiced", pCpu->nGuestNiced) != XJSON_ERR_NONE ||
-        XJSON_AddInt(pCpuObj, "id", pCpu->nID) != XJSON_ERR_NONE)
-    {
-        xloge("Failed to append entries to the CPU cores JSON object: %d", errno);
-        XJSON_FreeObject(pCpuObj);
-        return NULL;
-    }
-
-    return pCpuObj;
+    return XString_Append(pJsonStr,
+        "{"
+            "\"id\": %d,"
+            "\"softInterrupts\": %u,"
+            "\"hardInterrupts\": %u,"
+            "\"userSpaceNiced\": %u,"
+            "\"kernelSpace\": %u,"
+            "\"userSpace\": %u,"
+            "\"idleTime\": %u,"
+            "\"ioWait\": %u,"
+            "\"stealTime\": %u,"
+            "\"guestTime\": %u,"
+            "\"guestNiced\": %u"
+        "}",
+        pCpu->nID,
+        pCpu->nSoftInterrupts,
+        pCpu->nHardInterrupts,
+        pCpu->nUserSpaceNiced,
+        pCpu->nKernelSpace,
+        pCpu->nUserSpace,
+        pCpu->nIdleTime,
+        pCpu->nIOWait,
+        pCpu->nStealTime,
+        pCpu->nGuestTime,
+        pCpu->nGuestNiced);
 }
 
-xjson_obj_t* XTOPApp_CreateCPUObj(xtop_stats_t *pStats)
+int XTOPApp_AppendCPUJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
 {
     xcpu_stats_t cpuStats;
     if (XTop_GetCPUStats(pStats, &cpuStats) > 0)
     {
-        xjson_obj_t *pCpuObj = XJSON_NewObject("cpu", XFALSE);
-        if (pCpuObj == NULL)
+        XString_Append(pJsonStr,
+            "\"cpu\":{"
+                "\"loadAverage\": ["
+                    "{"
+                        "\"interval\": \"1m\","
+                        "\"value\": %f"
+                    "},"
+                    "{"
+                        "\"interval\": \"5m\","
+                        "\"value\": %f"
+                    "},"
+                    "{"
+                        "\"interval\": \"15m\","
+                        "\"value\": %f"
+                    "}"
+                "]",
+            XU32ToFloat(cpuStats.nLoadAvg[0]),
+            XU32ToFloat(cpuStats.nLoadAvg[1]),
+            XU32ToFloat(cpuStats.nLoadAvg[2]));
+
+        if (pJsonStr->nStatus < 0)
         {
-            xloge("Failed to allocate memory for JSON CPU object: %d", errno);
-            return NULL;
+            XArray_Destroy(&cpuStats.cores);
+            return XSTDERR;
         }
 
-        xjson_obj_t *pLoadArr = XJSON_NewArray("loadAverage", XFALSE);
-        if (pLoadArr == NULL)
+        XString_Append(pJsonStr,
+            ",\"usage\":{"
+                "\"process\":"
+                    "{"
+                        "\"kernelSpace\": %f,"
+                        "\"userSpace\": %f"
+                    "},"
+                "\"sum\":",
+            XU32ToFloat(cpuStats.usage.nUserSpaceUsage),
+            XU32ToFloat(cpuStats.usage.nKernelSpaceUsage));
+
+        if (pJsonStr->nStatus < 0 ||
+            XTOPApp_AppendCoreJson(&cpuStats.sum, pJsonStr) < 0 ||
+            XString_Append(pJsonStr, ",\"cores\":[") < 0)
         {
-            xloge("Failed to allocate memory for JSON loadAverage object: %d", errno);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
+            XArray_Destroy(&cpuStats.cores);
+            return XSTDERR;
         }
 
-        if (XJSON_AddObject(pCpuObj, pLoadArr) != XJSON_ERR_NONE)
-        {
-            xloge("Failed to append JSON loadAverage object: %d", errno);
-            XJSON_FreeObject(pLoadArr);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
-        }
-
-        int i;
-        for (i = 0; i < 3; i++)
-        {
-            xjson_obj_t *pItemObj = XJSON_NewObject(NULL, XFALSE);
-            if (pItemObj == NULL)
-            {
-                xloge("Failed to allocate memory for loadAverage item object: %d", errno);
-                XJSON_FreeObject(pCpuObj);
-                return NULL;
-            }
-
-            if (XJSON_AddObject(pLoadArr, pItemObj) != XJSON_ERR_NONE)
-            {
-                xloge("Failed to append JSON loadAverage item object: %d", errno);
-                XJSON_FreeObject(pItemObj);
-                XJSON_FreeObject(pCpuObj);
-                return NULL;
-            }
-
-            char sInterval[XSTR_TINY];
-            sInterval[0] = XSTR_NUL;
-
-            if (i == 0) xstrncpy(sInterval, sizeof(sInterval), "1m");
-            else if (i == 1) xstrncpy(sInterval, sizeof(sInterval), "5m");
-            else if (i == 2) xstrncpy(sInterval, sizeof(sInterval), "15m");
-
-            if (XJSON_AddString(pItemObj, "interval", sInterval) != XJSON_ERR_NONE ||
-                XJSON_AddFloat(pItemObj, "value", XU32ToFloat(cpuStats.nLoadAvg[i])) != XJSON_ERR_NONE)
-            {
-                xloge("Failed to append entries to the JSON network object: %d", errno);
-                XJSON_FreeObject(pCpuObj);
-                return NULL;
-            }
-        }
-
-        xjson_obj_t *pUsageObj = XJSON_NewObject("usage", XFALSE);
-        if (pUsageObj == NULL)
-        {
-            xloge("Failed to allocate memory for process JSON object: %d", errno);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
-        }
-
-        if (XJSON_AddObject(pCpuObj, pUsageObj) != XJSON_ERR_NONE)
-        {
-            xloge("Failed to append process JSON object: %d", errno);
-            XJSON_FreeObject(pUsageObj);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
-        }
-
-        xjson_obj_t *pProcObj = XJSON_NewObject("process", XFALSE);
-        if (pProcObj == NULL)
-        {
-            xloge("Failed to allocate memory for process JSON object: %d", errno);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
-        }
-
-        if (XJSON_AddObject(pUsageObj, pProcObj) != XJSON_ERR_NONE)
-        {
-            xloge("Failed to append process JSON object: %d", errno);
-            XJSON_FreeObject(pProcObj);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
-        }
-
-        if (XJSON_AddFloat(pProcObj, "userSpace", XU32ToFloat(cpuStats.usage.nUserSpaceUsage)) != XJSON_ERR_NONE ||
-            XJSON_AddFloat(pProcObj, "kernelSpace", XU32ToFloat(cpuStats.usage.nKernelSpaceUsage)) != XJSON_ERR_NONE)
-        {
-            xloge("Failed to append entries to the network JSON object: %d", errno);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
-        }
-
-        if (XJSON_AddU32(pUsageObj, "softInterrupts", cpuStats.sum.nSoftInterrupts) != XJSON_ERR_NONE ||
-            XJSON_AddU32(pUsageObj, "hardInterrupts", cpuStats.sum.nHardInterrupts) != XJSON_ERR_NONE ||
-            XJSON_AddU32(pUsageObj, "userSpaceNiced", cpuStats.sum.nUserSpaceNiced) != XJSON_ERR_NONE ||
-            XJSON_AddU32(pUsageObj, "kernelSpace", cpuStats.sum.nKernelSpace) != XJSON_ERR_NONE ||
-            XJSON_AddU32(pUsageObj, "userSpace", cpuStats.sum.nUserSpace) != XJSON_ERR_NONE ||
-            XJSON_AddU32(pUsageObj, "idleTime", cpuStats.sum.nIdleTime) != XJSON_ERR_NONE ||
-            XJSON_AddU32(pUsageObj, "ioWait", cpuStats.sum.nIOWait) != XJSON_ERR_NONE ||
-            XJSON_AddU32(pUsageObj, "stealTime", cpuStats.sum.nStealTime) != XJSON_ERR_NONE ||
-            XJSON_AddU32(pUsageObj, "guestTime", cpuStats.sum.nGuestTime) != XJSON_ERR_NONE ||
-            XJSON_AddU32(pUsageObj, "guestNiced", cpuStats.sum.nGuestNiced) != XJSON_ERR_NONE)
-        {
-            xloge("Failed to append entries to the CPU sum JSON object: %d", errno);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
-        }
-
-        xjson_obj_t *pCoresArr = XJSON_NewArray("cores", XFALSE);
-        if (pCoresArr == NULL)
-        {
-            xloge("Failed to allocate memory for cores JSON object: %d", errno);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
-        }
-
-        if (XJSON_AddObject(pUsageObj, pCoresArr) != XJSON_ERR_NONE)
-        {
-            xloge("Failed to append cores JSON object: %d", errno);
-            XJSON_FreeObject(pCoresArr);
-            XJSON_FreeObject(pCpuObj);
-            return NULL;
-        }
-
-        for (i = 0; i < (int)cpuStats.cores.nUsed; i++)
+        size_t i, nUsed = XArray_Used(&cpuStats.cores);
+        for (i = 0; i < nUsed; i++)
         {
             xcpu_info_t *pCore = (xcpu_info_t*)XArray_GetData(&cpuStats.cores, i);
             if (pCore == NULL) continue;
 
-            xjson_obj_t *pCoreObj = XTOPApp_CreateCPUInfoObj(pCore);
-            if (pCoreObj == NULL)
+            if (XTOPApp_AppendCoreJson(pCore, pJsonStr) < 0 ||
+                (i + 1 < nUsed && XString_Append(pJsonStr, ",") < 0))
             {
-                XJSON_FreeObject(pCpuObj);
-                return NULL;
-            }
-
-            if (XJSON_AddObject(pCoresArr, pCoreObj) != XJSON_ERR_NONE)
-            {
-                xloge("Failed to append CPU core JSON object: %d", errno);
-                XJSON_FreeObject(pCoreObj);
-                XJSON_FreeObject(pCpuObj);
-                return NULL;
+                XArray_Destroy(&cpuStats.cores);
+                return XSTDERR;
             }
         }
 
         XArray_Destroy(&cpuStats.cores);
-        return pCpuObj;
+        XString_Append(pJsonStr, "]}}");
+        return pJsonStr->nStatus;
     }
 
-    return NULL;
+    return XSTDERR;
 }
 
-char* XTOPApp_AssembleBody(xapi_data_t *pData, size_t *pLength)
+int XTOPApp_AssembleBody(xapi_data_t *pData, xstring_t *pJsonStr)
 {
     xtop_stats_t *pStats = (xtop_stats_t*)pData->pApi->pUserCtx;
     xtop_request_t eRequest = *(xtop_request_t*)pData->pSessionData;
 
-    xjson_obj_t *pRootObj = XJSON_NewObject(NULL, XFALSE);
-    if (pRootObj == NULL)
+    if (XString_Append(pJsonStr, "{") < 0)
     {
-        xloge("Failed to allocate memory for JSON root object: %d", errno);
-        return NULL;
+        xloge("Failed to initialize JSON string: %d", errno);
+        return XSTDERR;
     }
+
+    xbool_t bNeedComma = XFALSE;
 
     if (eRequest == XTOP_ALL || eRequest == XTOP_CPU)
     {
-        xjson_obj_t *pCPUObj = XTOPApp_CreateCPUObj(pStats);
-        if (pCPUObj == NULL)
+        if (XTOPApp_AppendCPUJson(pStats, pJsonStr) < 0)
         {
-            XJSON_FreeObject(pRootObj);
-            return NULL;
+            xloge("Failed to serialize CPU JSON string: %d", errno);
+            return XSTDERR;
         }
 
-        if (XJSON_AddObject(pRootObj, pCPUObj) != XJSON_ERR_NONE)
-        {
-            xloge("Failed to append JSON CPU object: %d", errno);
-            XJSON_FreeObject(pRootObj);
-            XJSON_FreeObject(pCPUObj);
-            return NULL;
-        }
+        bNeedComma = XTRUE;
     }
 
     if (eRequest == XTOP_ALL || eRequest == XTOP_MEMORY)
     {
-        xjson_obj_t *pMemObj = XTOPApp_CreateMemoryObj(pStats);
-        if (pMemObj == NULL)
+        if (bNeedComma && XString_Append(pJsonStr, ",") < 0)
         {
-            XJSON_FreeObject(pRootObj);
-            return NULL;
+            xloge("Failed to assemble JSON string: %d", errno);
+            return XSTDERR;
         }
 
-        if (XJSON_AddObject(pRootObj, pMemObj) != XJSON_ERR_NONE)
+        if (XTOPApp_AppendMemoryJson(pStats, pJsonStr) < 0)
         {
-            xloge("Failed to append JSON memory object: %d", errno);
-            XJSON_FreeObject(pRootObj);
-            XJSON_FreeObject(pMemObj);
-            return NULL;
+            xloge("Failed to serialize memory JSON string: %d", errno);
+            return XSTDERR;
         }
+
+        bNeedComma = XTRUE;
     }
 
     if (eRequest == XTOP_ALL || eRequest == XTOP_NETWORK)
     {
-        xjson_obj_t *pNetObj = XTOPApp_CreateNetworkObj(pStats);
-        if (pNetObj == NULL)
+        if (bNeedComma && XString_Append(pJsonStr, ",") < 0)
         {
-            XJSON_FreeObject(pRootObj);
-            return NULL;
+            xloge("Failed to assemble JSON string: %d", errno);
+            return XSTDERR;
         }
 
-        if (XJSON_AddObject(pRootObj, pNetObj) != XJSON_ERR_NONE)
+        if (XTOPApp_AppendNetworkJson(pStats, pJsonStr) < 0)
         {
-            xloge("Failed to append JSON network object: %d", errno);
-            XJSON_FreeObject(pRootObj);
-            XJSON_FreeObject(pNetObj);
-            return NULL;
+            xloge("Failed to serialize memory JSON string: %d", errno);
+            return XSTDERR;
         }
     }
 
-    xjson_writer_t writer;
-    XJSON_InitWriter(&writer, NULL, XSTR_MID);
-    writer.nTabSize = 4; // Enable linter
-
-    if (!XJSON_WriteObject(pRootObj, &writer))
+    if (XString_Append(pJsonStr, "}") < 0)
     {
-        xloge("Failed to serialize data in JSON format: %d", errno);
-        XJSON_DestroyWriter(&writer);
-        XJSON_FreeObject(pRootObj);
-        return NULL;
+        xloge("Failed to serialize JSON response: %d", errno);
+        return XSTDERR;
     }
 
-    XJSON_FreeObject(pRootObj);
-    *pLength = writer.nLength;
-    return (char*)writer.pData;
+    return XSTDOK;
 }
 
 int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -1361,38 +1255,80 @@ int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     const char *pContentType = NULL;
-    const char *pBody = NULL;
-    char *pContent = NULL;
-    size_t nLength = 0;
+    xstring_t content;
+
+    if (XString_Init(&content, XSTR_MID, XFALSE) < 0)
+    {
+        xloge("Failed to response content buffer: %d", errno);
+        return XSTDERR;
+    }
 
     if (pHandle->nStatusCode == 200)
     {
-        pContent = XTOPApp_AssembleBody(pData, &nLength);
-        if (pContent == NULL) return XSTDERR;
         pContentType = "application/json";
-        pBody = pContent;
+
+        if (XTOPApp_AssembleBody(pData, &content) < 0)
+        {
+            XString_Clear(&content);
+            return XSTDERR;
+        }
     }
     else
     {
-        pBody = XHTTP_GetCodeStr(pHandle->nStatusCode);
-        nLength = strlen(pBody);
         pContentType = "text/plain";
+        const char *pCodeStr = XHTTP_GetCodeStr(pHandle->nStatusCode);
+
+        if (XString_Append(&content, "%s", pCodeStr) < 0)
+        {
+            XString_Clear(&content);
+            return XSTDERR;
+        }
     }
 
-
     if (XHTTP_AddHeader(pHandle, "Content-Type", pContentType) < 0 ||
-        XHTTP_Assemble(pHandle, (const uint8_t*)pBody, nLength) == NULL)
+        XHTTP_Assemble(pHandle, (const uint8_t*)content.pData, content.nLength) == NULL)
     {
         xloge("Failed to assemble HTTP response: %s", strerror(errno));
-        free(pContent);
+        XString_Clear(&content);
         return XSTDERR;
     }
 
     xlogn("Sending response: fd(%d), buff(%zu)",
         (int)pData->nFD, pHandle->dataRaw.nUsed);
 
-    free(pContent);
+    XString_Clear(&content);
     return XSTDOK;
+}
+
+int XTOPApp_CheckRequest(xhttp_t *pHttp)
+{
+    xbyte_buffer_t *pBuff = &pHttp->dataRaw;
+    if (pBuff->nUsed < 8) return XSTDOK;
+
+    int nMethod = XHTTP_GetMethodType((const char *)pBuff->pData);
+    return nMethod != XHTTP_DUMMY ? XSTDOK : XSTDNON;
+}
+
+int XTOPApp_HTTPCallback(xhttp_t *pHttp, xhttp_ctx_t *pCbCtx)
+{
+    xapi_data_t *pData = (xapi_data_t*)pHttp->pUserCtx;
+    const char *pMessage = (const char*)pCbCtx->pData;
+
+    switch (pCbCtx->eCbType)
+    {
+        case XHTTP_READ_HDR:
+            return XTOPApp_CheckRequest(pHttp);
+        case XHTTP_STATUS:
+            xlogd("%s: fd(%d)", pMessage, (int)pData->nFD);
+            return XSTDOK;
+        case XHTTP_ERROR:
+            xloge("%s: fd(%d)", pMessage, (int)pData->nFD);
+            return XSTDERR;
+        default:
+            break;
+    }
+
+    return XSTDUSR;
 }
 
 int XTOPApp_InitSessionData(xapi_data_t *pData)
@@ -1406,6 +1342,10 @@ int XTOPApp_InitSessionData(xapi_data_t *pData)
 
     *pRequest = XTOP_INVALID;
     pData->pSessionData = pRequest;
+
+    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
+    uint16_t nCallbacks = XHTTP_ERROR | XHTTP_STATUS | XHTTP_READ_HDR;
+    XHTTP_SetCallback(pHandle, XTOPApp_HTTPCallback, pData, nCallbacks);
 
     xlogn("Accepted connection: fd(%d)", (int)pData->nFD);
     return XAPI_SetEvents(pData, XPOLLIN);

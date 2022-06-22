@@ -332,7 +332,7 @@ int XHTTPApp_Callback(xhttp_t *pHttp, xhttp_ctx_t *pCbCtx)
                 return XHTTPApp_DisplayResponseHdr(pHttp);
             xlogd("%s", (const char*)pCbCtx->pData);
             return XSTDOK;
-        case XHTTP_READ:
+        case XHTTP_READ_CNT:
             return XHTTPApp_DumpResponse(pHttp, pCbCtx);
         case XHTTP_WRITE:
             return XHTTPApp_DisplayRequest(pHttp);
@@ -400,7 +400,7 @@ int XHTTPApp_Perform(xhttp_args_t *pArgs, xlink_t *pLink)
     XHTTP_AddHeader(&handle, "User-Agent", "xutils/%s", XUtils_VersionShort());
     handle.nTimeout = pArgs->nTimeout;
 
-    uint16_t nCallbacks = XHTTP_ERROR | XHTTP_READ | XHTTP_WRITE | XHTTP_STATUS;
+    uint16_t nCallbacks = XHTTP_ERROR | XHTTP_READ_CNT | XHTTP_WRITE | XHTTP_STATUS;
     XHTTP_SetCallback(&handle, XHTTPApp_Callback, pArgs, nCallbacks);
 
     if (xstrused(pArgs->sHeaders) && XHTTPApp_AppendArgHeaders(&handle, pArgs) < 0)

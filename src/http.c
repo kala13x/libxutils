@@ -307,6 +307,7 @@ int XHTTP_Recycle(xhttp_t *pHttp)
     uint16_t nCbTypes = pHttp->nCbTypes;
     void *pCbCtx = pHttp->pUserCtx;
     char sVersion[XHTTP_FIELD_MAX];
+    sVersion[0] = XSTR_NUL;
 
     xstrncpy(sVersion, sizeof(sVersion), pHttp->sVersion);
     xbool_t nAllocated = pHttp->nAllocated;
@@ -774,6 +775,14 @@ xhttp_status_t XHTTP_ReadHeader(xhttp_t *pHttp, xsock_t *pSock)
         if (XSock_IsNB(pSock)) break;
     }
 
+    int nRetVal = XHTTP_Callback(pHttp, XHTTP_READ_HDR, pBuffer->pData, pBuffer->nSize);
+    if (nRetVal == XSTDERR) return XHTTP_TERMINATED;
+    else if (nRetVal == XSTDNON)
+    {
+        pHttp->nComplete = 1;
+        return XHTTP_COMPLETE;
+    }
+
     if (eStatus != XHTTP_COMPLETE &&
         eStatus != XHTTP_PARSED) return eStatus;
 
@@ -781,7 +790,7 @@ xhttp_status_t XHTTP_ReadHeader(xhttp_t *pHttp, xsock_t *pSock)
     size_t nBodySize = XHTTP_GetBodySize(pHttp);
     if (pBody == NULL || !nBodySize) return eStatus;
 
-    int nRetVal = XHTTP_Callback(pHttp, XHTTP_READ, pBody, nBodySize);
+    nRetVal = XHTTP_Callback(pHttp, XHTTP_READ_CNT, pBody, nBodySize);
     if (nRetVal == XSTDERR) return XHTTP_TERMINATED;
     else if (nRetVal == XSTDNON)
     {
@@ -808,7 +817,7 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
             nBytes = XSock_Read(pSock, sBuffer, sizeof(sBuffer));
             if (nBytes <= 0) return XHTTP_StatusCb(pHttp, XHTTP_ERRREAD);
 
-            nRetVal = XHTTP_Callback(pHttp, XHTTP_READ, sBuffer, nBytes);
+            nRetVal = XHTTP_Callback(pHttp, XHTTP_READ_CNT, sBuffer, nBytes);
             if (nRetVal == XSTDERR) return XHTTP_TERMINATED;
             else if (nRetVal == XSTDNON)
             {
@@ -854,7 +863,7 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
             return XHTTP_StatusCb(pHttp, XHTTP_ERRREAD);
         }
 
-        nRetVal = XHTTP_Callback(pHttp, XHTTP_READ, sBuffer, nBytes);
+        nRetVal = XHTTP_Callback(pHttp, XHTTP_READ_CNT, sBuffer, nBytes);
         if (nRetVal == XSTDERR) return XHTTP_TERMINATED;
         else if (nRetVal == XSTDNON)
         {

@@ -81,11 +81,11 @@ typedef enum {
 typedef enum
 {
     XHTTP_OTHER = (1 << 0),
-    XHTTP_READ = (1 << 1),
-    XHTTP_WRITE = (1 << 2),
-    XHTTP_ERROR = (1 << 3),
-    XHTTP_STATUS = (1 << 4),
-    XHTTP_CB_ALL = 30
+    XHTTP_WRITE = (1 << 1),
+    XHTTP_ERROR = (1 << 2),
+    XHTTP_STATUS = (1 << 3),
+    XHTTP_READ_HDR = (1 << 4),
+    XHTTP_READ_CNT = (1 << 5)
 } xhttp_cbtype_t;
 
 typedef struct xhttp_ctx_ {
