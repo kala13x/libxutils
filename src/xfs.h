@@ -36,7 +36,7 @@ typedef struct XFile {
     xmode_t nMode;
     size_t nBlockSize;
     size_t nSize;
-    int nAlloc:1;
+    xbool_t nAlloc;
     int nFlags;
     int nFD;
 } xfile_t;

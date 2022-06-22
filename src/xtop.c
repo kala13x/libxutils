@@ -518,9 +518,7 @@ uint32_t XTop_WaitLoad(xtop_stats_t *pStats, uint32_t nWaitUsecs)
 
     while (XSYNC_ATOMIC_GET(&pStats->nLoadDone) != XTRUE)
     {
-        if (nWaitUsecs < 0) break;
-        else if (!nWaitUsecs) continue;
-
+        if (!nWaitUsecs) continue;
         xusleep((uint32_t)nWaitUsecs);
         nCheckCount++;
     }

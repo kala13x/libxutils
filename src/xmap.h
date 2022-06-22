@@ -7,8 +7,8 @@
  * @brief Implementation of dynamically allocated hash map
  */
 
-#ifndef __XUTILS_NTP_H__
-#define __XUTILS_NTP_H__
+#ifndef __XUTILS_XMAP_H__
+#define __XUTILS_XMAP_H__
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,4 +71,4 @@ int XMap_UsedSize(xmap_t *pMap);
 #endif
 
 
-#endif /* __XUTILS_NTP_H__ */
+#endif /* __XUTILS_XMAP_H__ */

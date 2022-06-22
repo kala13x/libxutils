@@ -1209,16 +1209,16 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
         }
 
         EVP_PKEY *pKey = (EVP_PKEY *)sslCert.pKey;
-        X509 *pCert = (X509*)sslCert.pCert;
+        X509 *pXCert = (X509*)sslCert.pCert;
 
-        if (sslCert.pCert != NULL && SSL_CTX_use_certificate(pSSLCtx, pCert) <= 0)
+        if (pXCert != NULL && SSL_CTX_use_certificate(pSSLCtx, pXCert) <= 0)
         {
             pSock->eStatus = XSOCK_ERR_SSLCRT;
             XSock_Close(pSock);
             return XSOCK_INVALID;
         }
 
-        if (sslCert.pKey != NULL && SSL_CTX_use_PrivateKey(pSSLCtx, pKey) <= 0)
+        if (pKey != NULL && SSL_CTX_use_PrivateKey(pSSLCtx, pKey) <= 0)
         {
             pSock->eStatus = XSOCK_ERR_SSLKEY;
             XSock_Close(pSock);

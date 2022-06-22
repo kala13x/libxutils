@@ -253,13 +253,13 @@ int XTSParser_ParsePMT(xpmt_t *pPmt, uint8_t *pData, uint32_t nSize)
         pPmt->desc[pPmt->desc_count].descriptor_tag = (uint8_t)XBitParser_ReadBits(&parser, 8);
         pPmt->desc[pPmt->desc_count].descriptor_length = (uint8_t)XBitParser_ReadBits(&parser, 8);
 
-        uint8_t nSize = pPmt->desc[pPmt->desc_count].descriptor_length;
+        uint8_t nDescSize = pPmt->desc[pPmt->desc_count].descriptor_length;
         uint8_t *pDstData = pPmt->desc[pPmt->desc_count].data;
         uint8_t *pSrcData = &parser.pData[parser.nOffset];
-        memcpy(pDstData, pSrcData, nSize);
+        memcpy(pDstData, pSrcData, nDescSize);
 
-        XBitParser_ReadBits(&parser, nSize * 8);
-        nRead += (nSize + 2);
+        XBitParser_ReadBits(&parser, nDescSize * 8);
+        nRead += (nDescSize + 2);
         pPmt->desc_count++;
     }
 
@@ -276,7 +276,6 @@ int XTSParser_ParsePMT(xpmt_t *pPmt, uint8_t *pData, uint32_t nSize)
         while(ES_info_length > 0)
         {
             xpmt_desc_t *pDesc = &pStream->desc[pStream->desc_count];
-            if (ES_info_length <= 0) return 0;
             pDesc->descriptor_tag = (uint8_t)XBitParser_ReadBits(&parser, 8);
             ES_info_length--;
             if (ES_info_length <= 0) return 0;

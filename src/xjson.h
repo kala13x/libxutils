@@ -130,7 +130,7 @@ typedef struct xjson_writer_ {
     size_t nAvail;
     size_t nSize;
     char *pData;
-    int nAlloc:1;
+    uint8_t nAlloc;
 } xjson_writer_t;
 
 void XJSON_DestroyWriter(xjson_writer_t *pWriter);
