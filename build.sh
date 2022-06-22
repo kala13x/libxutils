@@ -7,8 +7,6 @@ if [ -f "LIB_CRYPTO" ] && [ -f "LIB_SSL"  ]; then
     export XUTILS_USE_SSL=y
 fi
 
-./clean.sh
-
 CPU_COUNT=`cat /proc/cpuinfo | grep processor -c`
 MAKE_TOOL=0
 
@@ -21,6 +19,8 @@ if [ $MAKE_TOOL == 0 ]; then
     echo "example: $0 smake"
     exit 1
 fi
+
+./clean.sh
 
 # Generate Makefile and build library
 $MAKE_TOOL . && make -j $CPU_COUNT
