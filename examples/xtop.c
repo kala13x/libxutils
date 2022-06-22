@@ -750,7 +750,7 @@ int XTOPApp_GetJSONStats(xtop_stats_t *pStats, xjson_t *pJson)
         return XSTDERR;
     }
 
-    xjson_obj_t *pProcObj = XJSON_GetObject(pUsageObj, "process");
+    xjson_obj_t *pProcObj = XJSON_GetObject(pCPUObj, "process");
     if (pProcObj == NULL)
     {
         xloge("Response does not contain CPU process object in JSON");
@@ -1135,12 +1135,12 @@ int XTOPApp_AppendCPUJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
         }
 
         XString_Append(pJsonStr,
-            ",\"usage\":{"
-                "\"process\":"
-                    "{"
-                        "\"kernelSpace\": %f,"
-                        "\"userSpace\": %f"
-                    "},"
+            ",\"process\":"
+                "{"
+                    "\"kernelSpace\": %f,"
+                    "\"userSpace\": %f"
+                "},"
+            "\"usage\":{"
                 "\"sum\":",
             XU32ToFloat(cpuStats.usage.nUserSpaceUsage),
             XU32ToFloat(cpuStats.usage.nKernelSpaceUsage));
