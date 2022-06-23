@@ -57,6 +57,7 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, XSOCKET nFD)
     xapi_data_t *pData = (xapi_data_t*)malloc(sizeof(xapi_data_t));
     if (pData == NULL) return NULL;
 
+    pData->sIPAddr[0] = XSTR_NUL;
     pData->pSessionData = NULL;
     pData->ePktType = XAPI_NONE;
     pData->pPacket = NULL;
@@ -190,6 +191,7 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
             return XEVENTS_CONTINUE;
         }
 
+        XSock_IPAddr(&clientSock, pApiData->sIPAddr, sizeof(pApiData->sIPAddr));
         xhttp_t *pHandle = XHTTP_Alloc(XHTTP_DUMMY, XSTDNON);
         if (pHandle == NULL)
         {
@@ -390,6 +392,8 @@ int XAPI_StartListener(xapi_t *pApi, const char *pAddr, uint16_t nPort)
         XSock_Close(pSock);
         return XSTDERR;
     }
+
+    xstrncpy(pApiData->sIPAddr, sizeof(pApiData->sIPAddr), pAddr);
 
     /* Create event instance */
     status = XEvents_Create(pEvents, XSTDNON, pApi, XAPI_EventCallback, XTRUE);

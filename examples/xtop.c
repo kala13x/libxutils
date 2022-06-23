@@ -29,6 +29,8 @@
 #define XTOP_SORT_NAME      3
 #define XTOP_SORT_LEN       4
 
+#define XTOP_API_URI        "/api/all"
+
 #define XTOP_CPU_HEADER " "\
     "CPU     IDL      "\
     "US      KS      "\
@@ -60,6 +62,7 @@ typedef struct xtop_args_ {
     xbool_t bExcludeCPU;
     xbool_t bDaemon;
     xbool_t bServer;
+    xbool_t bClient;
 
     char sLink[XLINK_MAX];
     char sAddr[XLINK_MAX];
@@ -112,8 +115,8 @@ void XTOPApp_DisplayUsage(const char *pName)
     XSTR_FMT_BOLD, XSTR_FMT_RESET, XSTR_CLR_RED, XSTR_FMT_RESET, XSTR_CLR_YELLOW,
     XSTR_FMT_RESET, XSTR_FMT_DIM, XSTR_FMT_RESET, XSTR_FMT_BOLD, XSTR_FMT_RESET);
 
-    printf("Usage: %s [-i <iface>] [-m <seconds>] [-s <type>] [-t <pid>] [-c]\n", pName);
-    printf(" %s [-a <addr>] [-p <port>] [-l <path>] [-r <link>] [-d] [-h]\n\n", XTOPApp_WhiteSpace(nLength));
+    printf("Usage: %s [-i <iface>] [-m <seconds>] [-t <type>] [-u <pid>] [-e]\n", pName);
+    printf(" %s [-a <addr>] [-p <port>] [-l <path>] [-c] [-d] [-s] [-h]\n\n", XTOPApp_WhiteSpace(nLength));
 
     printf("Options are:\n");
     printf("  %s-a%s <addr>             # Address of the listener server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
@@ -121,11 +124,12 @@ void XTOPApp_DisplayUsage(const char *pName)
     printf("  %s-i%s <iface>            # Interface name to display on top\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-m%s <seconds>          # Monitoring interval seconds\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-l%s <path>             # Output directory path for logs\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-r%s <link>             # Remote endpoint link to monitor\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-s%s <type>             # Sort result by selected type\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-t%s <pid>              # Track process CPU and memory usage\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-c%s                    # Exclude additional CPU info \n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-d%s                    # Run as server daemon \n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-t%s <type>             # Sort result by selected type\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-u%s <pid>              # Track process CPU and memory usage\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-e%s                    # Exclude additional CPU info\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-c%s                    # Run XTOP as HTTP client\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-d%s                    # Run XTOP as HTTP server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-s%s                    # Run as server as daemon\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-h%s                    # Print version and usage\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("Sort types:\n");
@@ -134,9 +138,9 @@ void XTOPApp_DisplayUsage(const char *pName)
     printf("   %sn%s: Sort by name\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("Examples:\n");
-    printf("1) %s -m 2 -s b -p 2274\n", pName);
-    printf("2) %s -s b -p 2274 -i enp4s0\n", pName);
-    printf("3) %s -r http://remote.srv/endpint/\n\n", pName);
+    printf("1) %s -m 2 -t b -u 2274\n", pName);
+    printf("2) %s -s b -u 2274 -i enp4s0\n", pName);
+    printf("3) %s -s -a remote.srv -p 8080\n\n", pName);
 }
 
 uint8_t XTOPApp_GetSortType(const char *pArg)
@@ -153,6 +157,7 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
     pArgs->bExcludeCPU = XFALSE;
     pArgs->bDaemon = XFALSE;
     pArgs->bServer = XFALSE;
+    pArgs->bClient = XFALSE;
     pArgs->nSort = XTOP_SORT_LEN;
 
     xstrnul(pArgs->sAddr);
@@ -165,7 +170,7 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
     pArgs->nPID = 0;
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "a:i:l:m:p:r:s:t:c1:d1:h1")) != -1)
+    while ((nChar = getopt(argc, argv, "a:i:l:m:p:t:u:c1:d1:s1:e1:d1:h1")) != -1)
     {
         switch (nChar)
         {
@@ -178,10 +183,7 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
             case 'l':
                 xstrncpy(pArgs->sLogs, sizeof(pArgs->sLogs), optarg);
                 break;
-            case 'r':
-                xstrncpy(pArgs->sLink, sizeof(pArgs->sLink), optarg);
-                break;
-            case 's':
+            case 't':
                 pArgs->nSort = XTOPApp_GetSortType(optarg);
                 break;
             case 'm':
@@ -190,14 +192,20 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
             case 'p':
                 pArgs->nPort = atoi(optarg);
                 break;
-            case 't':
+            case 'u':
                 pArgs->nPID = atoi(optarg);
                 break;
-            case 'c':
+            case 'e':
                 pArgs->bExcludeCPU = XTRUE;
+                break;
+            case 'c':
+                pArgs->bClient = XTRUE;
                 break;
             case 'd':
                 pArgs->bDaemon = XTRUE;
+                break;
+            case 's':
+                pArgs->bServer = XTRUE;
                 break;
             case 'h':
             default:
@@ -205,11 +213,28 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
         }
     }
 
-    pArgs->bServer = xstrused(pArgs->sAddr) && pArgs->nPort;
+    if (pArgs->bServer && pArgs->bClient)
+    {
+        xloge("Please specify only server or client mode");
+        return XFALSE;
+    }
+
     if (pArgs->bDaemon && !pArgs->bServer)
     {
-        xloge("Missing addr/port arguments for daemon");
+        xloge("Daemon argument works only for HTTP server mode");
         return XFALSE;
+    }
+
+    if (pArgs->bServer || pArgs->bClient)
+    {
+        if (!xstrused(pArgs->sAddr) || !pArgs->nPort)
+        {
+            xloge("Missing addr/port arguments for HTTP server or client");
+            return XFALSE;
+        }
+
+        xstrncpyf(pArgs->sLink, sizeof(pArgs->sLink), "%s:%u%s",
+            pArgs->sAddr, pArgs->nPort, XTOP_API_URI);
     }
 
     if (!pArgs->nIntervalU) pArgs->nIntervalU = XTOP_INTERVAL_USEC;
@@ -1349,13 +1374,13 @@ int XTOPApp_InitSessionData(xapi_data_t *pData)
     uint16_t nCallbacks = XHTTP_ERROR | XHTTP_STATUS | XHTTP_READ_HDR;
     XHTTP_SetCallback(pHandle, XTOPApp_HTTPCallback, pData, nCallbacks);
 
-    xlogn("Accepted connection: fd(%d)", (int)pData->nFD);
+    xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->nFD, pData->sIPAddr);
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
 int XTOPApp_ClearSessionData(xapi_data_t *pData)
 {
-    xlogn("Connection closed: fd(%d)", (int)pData->nFD);
+    xlogn("Connection closed: fd(%d), ip(%s)", (int)pData->nFD, pData->sIPAddr);
     free(pData->pSessionData);
     pData->pSessionData = NULL;
     return XSTDERR;
@@ -1439,10 +1464,7 @@ int main(int argc, char *argv[])
     nSignals[1] = SIGINT;
     XSig_Register(nSignals, 2, XTOPApp_SignalCallback);
 
-    xbool_t bRemote = xstrused(args.sLink);
-    xbool_t bMonStarted = XFALSE;
-
-    if (args.bServer || !bRemote)
+    if (!args.bClient)
     {
         int nStatus = XTop_StartMonitoring(&stats, args.nIntervalU, args.nPID);
         if (nStatus < 0)
@@ -1459,7 +1481,6 @@ int main(int argc, char *argv[])
         }
 
         XTop_WaitLoad(&stats, 1000);
-        bMonStarted = XTRUE;
     }
 
     if (args.bServer)
@@ -1483,7 +1504,7 @@ int main(int argc, char *argv[])
 
     while (!g_nInterrupted)
     {
-        if (bRemote && XTOPApp_GetRemoteStats(&args, &stats) < 0) break;
+        if (args.bClient && XTOPApp_GetRemoteStats(&args, &stats) < 0) break;
 
         XWindow_AddAligned(&win, "[XTOP]", XSTR_BACK_BLUE, XCLI_CENTER);
         XWindow_AddEmptyLine(&win);
@@ -1518,7 +1539,7 @@ int main(int argc, char *argv[])
         xusleep(args.nIntervalU);
     }
 
-    if (bMonStarted)
+    if (!args.bClient)
         XTop_StopMonitoring(&stats, 1000);
 
     XTop_DestroyStats(&stats);

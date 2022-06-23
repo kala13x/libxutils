@@ -58,6 +58,7 @@ typedef enum {
 typedef struct XAPI xapi_t;
 
 typedef struct XAPIData {
+    char sIPAddr[XSOCK_ADDR_MAX];
     xpacket_type_t ePktType;
     xevent_data_t *pEvData;
     void *pSessionData;
