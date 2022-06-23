@@ -1,20 +1,15 @@
 [![MIT License](https://img.shields.io/apm/l/atomic-design-ui.svg?)](https://github.com/kala13x/libxutils/blob/master/LICENSE)
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/kala13x/libxutils.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/kala13x/libxutils/alerts/)
+[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/kala13x/libxutils.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/kala13x/libxutils/context:cpp)
 
 ## libxutils - C/C++ Utility Library release 2.x
-The xUtils C Library is the general purpose, cross-platform library for all\
-Linux / Unix and Windows operating systems. It provides the implementations\
-of various functionality to make some routines easier for all the programs\
-written in C and C-compatible languages such as C++, Rust, and Objective C.
-
-This directory contains the sources of the xUtils C Library. See\
-the file `src/xver.h` to check out what release version you have.
+The xUtils C Library is the general purpose, cross-platform library for all Linux / Unix and Windows operating systems. It provides the safer implementations of various functionality to make some routines easier for all the programs written in C and C-compatible languages such as C++, Rust, and Objective C. This directory contains the sources of the xUtils C Library. See the file `src/xver.h` to check out what release version you have.
 
 ### Installation
 There are several ways to build and install the project.
 
 #### Using CMake
-If you have a `CMake` tool installed in your operating system,\
-this is probably the easiest and best way to build a project:\
+If you have a `CMake` tool installed in your operating system, this is probably the easiest and best way to build a project:
 ```
 git clone https://github.com/kala13x/libxutils.git
 cd libxutils
@@ -43,7 +38,6 @@ sudo make install
 ```
 
 ### Dependencies
-Everything in the library is implemented from the scratch but there is still one optional dependency.\
 The only dependency that the library uses is the `openssl-devl` package for the `SSL` implementations.\
 You can either install the `openssl-devel` package or disable the `SSL` support in the library.
 
@@ -55,7 +49,7 @@ Debian family: `sudo apt-get install libssl-dev`
 If you use the `CMake` tool for building the project, you do not need to disable anything manually,\
 `CMake` will automatically disable SSL support if the OpenSSL library is not installed in the system.
 
-If you are using `Makefile` to build the project, all you need to adjust `CFLAGS` and `LIBS` in `Makefile`.\
+If you use `Makefile` to build the project, all you need to adjust `CFLAGS` and `LIBS` in `Makefile`.\
 Remove `-D_XUTILS_USE_SSL` entry from the `CFLAGS`.\
 Remove `-lssl` and `-lcrypto` entries from the `LIBS`.
 
@@ -82,4 +76,4 @@ After building the examples, `sudo make install` command will install following 
 - `xtop` - Advanced resource monithor for CLI
 - `xsrc` - Advanced file search tool for CLI
 
-Run each of this tool with `-h` argument to checkout the usage and version information.
+Run each of this tool with `-h` argument to check out the usage and version information.
