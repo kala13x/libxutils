@@ -192,6 +192,7 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
         }
 
         XSock_IPAddr(&clientSock, pApiData->sIPAddr, sizeof(pApiData->sIPAddr));
+
         xhttp_t *pHandle = XHTTP_Alloc(XHTTP_DUMMY, XSTDNON);
         if (pHandle == NULL)
         {

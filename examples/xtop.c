@@ -963,12 +963,12 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
     *pRequest = XTOP_NOTFOUND;
 
-    xlogn("Received request: fd(%d), url(%s)",
-        (int)pData->nFD, pHandle->sUrl);
+    xlogn("Received request: fd(%d), method(%s), url(%s)",
+        (int)pData->nFD, XHTTP_GetMethodStr(pHandle->eMethod), pHandle->sUrl);
 
     if (pHandle->eMethod != XHTTP_GET)
     {
-        xlogw("Unsupported HTTP method: %s",
+        xlogw("Invalid or not supported HTTP method: %s",
             XHTTP_GetMethodStr(pHandle->eMethod));
 
         *pRequest = XTOP_NOTALLOWED;
@@ -995,7 +995,7 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     if (*pRequest == XTOP_NOTFOUND)
-        xlogw("Requested data is not found: %s", pHandle->sUrl);
+        xlogw("Requested endpoint is not found: %s", pHandle->sUrl);
 
     XArray_Destroy(pArr);
     return XAPI_SetEvents(pData, XPOLLOUT);
@@ -1320,8 +1320,8 @@ int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
         return XSTDERR;
     }
 
-    xlogn("Sending response: fd(%d), buff(%zu)",
-        (int)pData->nFD, pHandle->dataRaw.nUsed);
+    xlogn("Sending response: fd(%d), status(%d), length(%zu)",
+        (int)pData->nFD, pHandle->nStatusCode, pHandle->dataRaw.nUsed);
 
     XString_Clear(&content);
     return XSTDOK;
@@ -1403,7 +1403,7 @@ int XTOPApp_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_CLOSED:
             return XTOPApp_ClearSessionData(pData);
         case XAPI_CB_COMPLETE:
-            xlogn("Write data is complete: fd(%d)", (int)pData->nFD);
+            xlogn("Successfully sent a response to the client: fd(%d)", (int)pData->nFD);
             return XSTDERR;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;
@@ -1458,6 +1458,7 @@ int main(int argc, char *argv[])
 
     xlog_screen(!args.bDaemon);
     xlog_timing(XLOG_TIME);
+    xlog_ident(XTRUE);
 
     int nSignals[2];
     nSignals[0] = SIGTERM;

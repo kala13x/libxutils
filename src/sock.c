@@ -744,7 +744,7 @@ int XSock_SendBuff(xsock_t *pSock, xbyte_buffer_t *pBuffer)
 XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
 {
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
-    xsocklen_t len = sizeof(xsocklen_t);
+    xsocklen_t len = sizeof(pNewSock->inAddr);
 
     xsock_type_t eType = XSock_IsSSL(pSock) ?
         (pSock->eType == XSOCK_SSLV2_SERVER ?
