@@ -21,7 +21,7 @@
 #include <xutils/xfs.h>
 
 #define XTOP_VERSION_MAJ    0
-#define XTOP_VERSION_MIN    7
+#define XTOP_VERSION_MIN    8
 
 #define XTOP_SORT_DISABLE   0
 #define XTOP_SORT_BUSY      1
@@ -978,7 +978,7 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xarray_t *pArr = xstrsplit(pHandle->sUrl, "/");
     if (pArr == NULL)
     {
-        xlogw("Invalid request URL: %s", pHandle->sUrl);
+        xlogw("Invalid request URL or API endpoint: %s", pHandle->sUrl);
         *pRequest = XTOP_INVALID;
         return XAPI_SetEvents(pData, XPOLLOUT);
     }
@@ -995,7 +995,7 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     if (*pRequest == XTOP_NOTFOUND)
-        xlogw("Requested endpoint is not found: %s", pHandle->sUrl);
+        xlogw("Requested API endpoint is not found: %s", pHandle->sUrl);
 
     XArray_Destroy(pArr);
     return XAPI_SetEvents(pData, XPOLLOUT);
