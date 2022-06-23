@@ -3,7 +3,7 @@
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/kala13x/libxutils.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/kala13x/libxutils/context:cpp)
 
 ## libxutils - C/C++ Utility Library release 2.x
-The xUtils C Library is the general purpose, cross-platform library for all Linux / Unix and Windows operating systems. It provides the safer implementations of various functionality to make some routines easier for all the programs written in C and C-compatible languages such as C++, Rust, and Objective C. This directory contains the sources of the xUtils C Library. See the file `src/xver.h` to check out what release version you have.
+The xUtils C Library is the general purpose, cross-platform library for all Linux/Unix and Windows operating systems. It provides the safer implementations of various functionality to make some routines easier for all the programs written in C and C-compatible languages such as C++, Rust, and Objective C. This directory contains the sources of the xUtils C Library. See the file `src/xver.h` to check out what release version you have.
 
 ### Installation
 There are several ways to build and install the project.
@@ -38,7 +38,7 @@ sudo make install
 ```
 
 ### Dependencies
-The only dependency that the library uses is the `openssl-devl` package for the `SSL` implementations.\
+The only dependency that the library uses is the `openssl-devel` package for the `SSL` implementations.\
 You can either install the `openssl-devel` package or disable the `SSL` support in the library.
 
 #### Install OpenSSL development package
@@ -49,12 +49,12 @@ Debian family: `sudo apt-get install libssl-dev`
 If you use the `CMake` tool for building the project, you do not need to disable anything manually,\
 `CMake` will automatically disable SSL support if the OpenSSL library is not installed in the system.
 
-If you use `Makefile` to build the project, all you need to adjust `CFLAGS` and `LIBS` in `Makefile`.\
-Remove `-D_XUTILS_USE_SSL` entry from the `CFLAGS`.\
-Remove `-lssl` and `-lcrypto` entries from the `LIBS`.
+If you use `Makefile` to build the project, all you need to adjust `CFLAGS` and `LIBS` in `Makefile`.
+- Remove `-D_XUTILS_USE_SSL` entry from the `CFLAGS`.
+- Remove `-lssl` and `-lcrypto` entries from the `LIBS`.
 
 ### Usage
-If you want to use the library, include the required `<xutils/*.h>` header files in your source code, and\
+If you want to use the library, include the required `<xutils/*.h>` header files in your source code and\
 use `-lxutils` linker flag while compiling your project. See the example directory for more information.
 
 ### Examples
@@ -67,7 +67,7 @@ make
 ```
 
 There is also possible to install the tools from the example directory in the operating system.\
-After building the examples, `sudo make install` command will install following tools in the system:
+After building the examples, run `sudo make install` command to install following tools in the system:
 
 - `xcrypt` - File and text encrypt/decrypt tool for CLI
 - `xpass` - Secure password manager tool for CLI
