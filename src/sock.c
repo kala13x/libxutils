@@ -409,6 +409,7 @@ XSTATUS XSock_SetType(xsock_t *pSock, xsock_type_t eType)
 
 XSTATUS XSock_Init(xsock_t *pSock, xsock_type_t eType, XSOCKET nFD, uint8_t nNB)
 {
+    memset(&pSock->inAddr, 0, sizeof(pSock->inAddr));
     pSock->pPrivate = NULL;
     pSock->nFdMax = 0;
     pSock->nAddr = 0;
