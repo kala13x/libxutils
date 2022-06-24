@@ -8,6 +8,9 @@
  * The library will use poll(), epoll() or WSAPoll() depending on the operating system.
  */
 
+#ifndef __XUTILS_API_H__
+#define __XUTILS_API_H__
+
 #include "xstd.h"
 #include "sock.h"
 #include "http.h"
@@ -74,6 +77,10 @@ typedef struct XAPICTX {
     xapi_t *pApi;
 } xapi_ctx_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef int(*xapi_cb_t)(xapi_ctx_t *pCtx, xapi_data_t *pData);
 int XAPI_SetEvents(xapi_data_t *pData, int nEvents);
 xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pData);
@@ -91,3 +98,9 @@ const char* XAPI_GetStatusStr(xapi_ctx_t *pCtx);
 int XAPI_StartListener(xapi_t *pApi, const char *pAddr, uint16_t nPort);
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs);
 void XAPI_Destroy(xapi_t *pApi);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __XUTILS_API_H__ */
