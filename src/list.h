@@ -26,6 +26,7 @@ typedef struct xlist {
     void* pCbCtx;
     void* pData;
     size_t nSize;
+    uint32_t nID;
     uint8_t nAlloc;
 } xlist_t;
 
@@ -43,13 +44,17 @@ xlist_t* XList_RemoveTail(xlist_t *pList);
 xlist_t* XList_GetHead(xlist_t *pList);
 xlist_t* XList_GetTail(xlist_t *pList);
 
+xlist_t* XList_InsertPrev(xlist_t *pList, xlist_t *pNode);
 xlist_t* XList_InsertNext(xlist_t *pList, xlist_t *pNode);
 xlist_t* XList_InsertHead(xlist_t *pList, xlist_t *pNode);
 xlist_t* XList_InsertTail(xlist_t *pList, xlist_t *pNode);
+xlist_t* XList_InsertSorted(xlist_t *pList, xlist_t *pNode);
 
+xlist_t* XList_PushPrev(xlist_t *pList, void *pData, size_t nSize);
 xlist_t* XList_PushNext(xlist_t *pList, void *pData, size_t nSize);
 xlist_t* XList_PushFront(xlist_t *pList, void *pData, size_t nSize);
 xlist_t* XList_PushBack(xlist_t *pList, void *pData, size_t nSize);
+xlist_t* XList_PushSorted(xlist_t *pList, void *pData, size_t nSize, uint32_t nID);
 
 xlist_t* XList_Search(xlist_t *pList, void *pUserPtr, xlist_comparator_t compare);
 xlist_t* XList_Remove(xlist_t *pList, void *pUserPtr, xlist_comparator_t compare);
