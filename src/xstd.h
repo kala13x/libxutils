@@ -34,15 +34,21 @@
 #include <unistd.h>
 #include <netdb.h>
 
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <sys/utsname.h>
 #include <sys/socket.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <sys/mman.h>
+
+#include <netinet/if_ether.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/ip.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <net/ethernet.h>
 #include <net/if.h>
 #ifdef __linux__
 #include <sys/syscall.h>

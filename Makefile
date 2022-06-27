@@ -10,7 +10,6 @@ ODIR = ./obj
 OBJ = o
 
 OBJS = errex.$(OBJ) \
-	event.$(OBJ) \
 	hash.$(OBJ) \
 	http.$(OBJ) \
 	list.$(OBJ) \
@@ -33,6 +32,7 @@ OBJS = errex.$(OBJ) \
 	crypt.$(OBJ) \
 	xbuf.$(OBJ) \
 	xstr.$(OBJ) \
+	event.$(OBJ) \
 	mdtp.$(OBJ) \
 	ntp.$(OBJ) \
 	rtp.$(OBJ) \

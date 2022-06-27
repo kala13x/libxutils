@@ -41,13 +41,11 @@ typedef struct XRTPPacket {
     int nLength;
 } xrtp_packet_t;
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 uint32_t XRTP_GetTimestamp(float fRate);
-int XRTP_ValidatePayload(const uint8_t *pPayload, size_t nSize);
 int XRTP_ParseHeader(xrtp_header_t *pHeader, const uint8_t *pData, size_t nLength);
 int XRTP_ParsePacket(xrtp_packet_t *pPacket, uint8_t *pData, size_t nLength);
 uint8_t *XRTP_AssemblePacket(xrtp_header_t *pHeader, const uint8_t *pData, size_t nLength);

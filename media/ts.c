@@ -7,10 +7,7 @@
  * @brief Implementation of TS packet parser functionality
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
+#include "xstd.h"
 #include "ts.h"
 
 void XBitParser_Init(xbit_parser_t *pParser, uint8_t *pData, size_t nSize)
@@ -140,7 +137,7 @@ int XTSParser_ParseAdaptationField(xbit_parser_t *pParser, xadaptation_field_t *
 
 int XTSParser_Parse(xts_packet_t *pTS, uint8_t *pData, uint32_t nSize)
 {
-    if (pData == NULL || nSize < XTS_PACKET_SIZE) return 0;
+    if (pData == NULL || nSize < XTS_PACKET_SIZE) return XSTDNON;
     xadaptation_field_t *pField = &pTS->header.adaptationField;
     pTS->payload_data = NULL;
     pTS->payload_size = 0;
@@ -149,7 +146,7 @@ int XTSParser_Parse(xts_packet_t *pTS, uint8_t *pData, uint32_t nSize)
     XBitParser_Init(&parser, pData, nSize);
 
     XTSParser_ParseHeader(&parser, &pTS->header);
-    if (pTS->header.sync_byte != 0x47) return 0;
+    if (pTS->header.sync_byte != 0x47) return XSTDERR;
 
     if (pTS->header.adaptation_field_flag)
         XTSParser_ParseAdaptationField(&parser, pField);
@@ -494,4 +491,20 @@ int XTSParser_ParsePES(xpes_packet_t *pPES, uint8_t* pData, int nSize)
     if (pPES->packet_start_code_prefix == 1) return 1;
 
     return !parser.nError;
+}
+
+int XTSParser_ValidatePayload(const uint8_t *pPayload, size_t nSize)
+{
+    if (nSize % 188) return XSTDERR;
+    int nBlocks = (int)nSize / 188;
+    int i, nOffset = 0;
+
+    /* Check pPayload with 0x47 byte */
+    for (i = 0; i < nBlocks; i++)
+    {
+        if (pPayload[nOffset] != 0x47) return XSTDNON;
+        else nOffset += 188;
+    }
+
+    return XSTDOK;
 }

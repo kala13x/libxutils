@@ -11,6 +11,7 @@
 #include "rtp.h"
 
 #define XRTP_PACKET_SIZE 1500
+#define XRTP_HEADER_SIZE 12
 
 uint32_t XRTP_GetTimestamp(float fRate)
 {
@@ -19,26 +20,11 @@ uint32_t XRTP_GetTimestamp(float fRate)
     return nRTPTime;
 }
 
-int XRTP_ValidatePayload(const uint8_t *pPayload, size_t nSize)
-{
-    if (nSize % 188) return XSTDERR;
-    int nBlocks = (int)nSize / 188;
-    int i, nOffset = 0;
-
-    /* Check pPayload with 0x47 byte */
-    for (i = 0; i < nBlocks; i++)
-    {
-        if (pPayload[nOffset] != 0x47) return XSTDNON;
-        else nOffset += 188;
-    }
-
-    return XSTDOK;
-}
-
 int XRTP_ParseHeader(xrtp_header_t *pHeader, const uint8_t *pData, size_t nLength)
 {
     /* Check correct rtp version */
-    if ((pData[0] & 0xc0) != (2 << 6)) return XSTDERR;
+    if (pData == NULL || nLength < XRTP_HEADER_SIZE ||
+        (pData[0] & 0xc0) != (2 << 6)) return XSTDERR;
 
     /* Parse RTP header */
     pHeader->nVersion = (pData[0] & 0xc0) >> 6;
@@ -52,25 +38,20 @@ int XRTP_ParseHeader(xrtp_header_t *pHeader, const uint8_t *pData, size_t nLengt
     pHeader->nSSRC = ntohl(((unsigned int *) pData)[2]);
 
     uint32_t i;
-    if (pHeader->nSCRCCount)
+    if (!pHeader->nSCRCCount)
     {
-        for (i = 0; i < pHeader->nSCRCCount; i++)
-        {
-            pHeader->SCRC[i] = ntohl(((unsigned int *) pData)[3 + i]);
-            if (i >= SCRC_MAX) break;
-        }
-    }
-    else 
-    {
-        for (i = 0; i < SCRC_MAX; i++) 
-            pHeader->SCRC[i] = 0;
+        for (i = 0; i < SCRC_MAX; i++) pHeader->SCRC[i] = 0;
+        return XRTP_HEADER_SIZE;
     }
 
-    /* Offset to pPayload header */
-    int nOffset = (3 + pHeader->nSCRCCount) * 4;
-    if (nOffset >= nLength) return XSTDERR;
+    for (i = 0; i < pHeader->nSCRCCount; i++)
+    {
+        pHeader->SCRC[i] = ntohl(((unsigned int *) pData)[3 + i]);
+        if (i >= SCRC_MAX) break;
+    }
 
-    return nOffset;
+    /* Offset to pPayload */
+    return XRTP_HEADER_SIZE + pHeader->nSCRCCount * 4;
 }
 
 int XRTP_ParsePacket(xrtp_packet_t *pPacket, uint8_t *pData, size_t nLength)
@@ -80,6 +61,7 @@ int XRTP_ParsePacket(xrtp_packet_t *pPacket, uint8_t *pData, size_t nLength)
     if (nOffset < 0) return XSTDERR;
 
     /* Parse pPayload header */
+    pPacket->pPayload = &pData[nOffset];
     pPacket->nIdent = pData[nOffset++] << 16;
     pPacket->nIdent += pData[nOffset++] << 8;
     pPacket->nIdent += pData[nOffset++];
@@ -87,7 +69,6 @@ int XRTP_ParsePacket(xrtp_packet_t *pPacket, uint8_t *pData, size_t nLength)
     pPacket->nDataType = (pData[nOffset] & 0x30) >> 4;
     pPacket->nPackets = (pData[nOffset] & 0x0F);
     pPacket->nPayloadSize = (int)nLength - 4 * ((int)pPacket->rtpHeader.nSCRCCount + 3);
-    pPacket->pPayload = &pData[nOffset];
  
     nOffset++;
     int i;

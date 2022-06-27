@@ -208,6 +208,7 @@ int XTSParser_ParsePES(xpes_packet_t *pPES, uint8_t* pData, int nSize);
 int XTSParser_ParsePAT(xpat_t *pPat, uint8_t *pData, uint32_t nSize);
 int XTSParser_ParsePMT(xpmt_t *pPmt, uint8_t *pData, uint32_t nSize);
 int XTSParser_Parse(xts_packet_t *pTS, uint8_t *pData, uint32_t nSize);
+int XTSParser_ValidatePayload(const uint8_t *pPayload, size_t nSize);
 
 #ifdef __cplusplus
 }
