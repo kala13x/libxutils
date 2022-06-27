@@ -392,9 +392,13 @@ XSTATUS XSock_SetType(xsock_t *pSock, xsock_type_t eType)
             pSock->nProto = IPPROTO_UDP;
             pSock->nType = SOCK_DGRAM;
             break;
-        case XSOCK_RAW:
+        case XSOCK_TCP_RAW:
             pSock->nProto = IPPROTO_TCP;
             pSock->nType = SOCK_RAW;
+            break;
+        case XSOCK_UDP_RAW:
+            pSock->nProto = IPPROTO_UDP;
+            pSock->nType = SOCK_DGRAM;
             break;
         case XSOCK_UNDEFINED:
         default:
@@ -1413,11 +1417,17 @@ static XSOCKET XSock_SetupUDP(xsock_t *pSock)
     return pSock->nFD;
 }
 
-XSOCKET XSock_CreateRAW(xsock_t *pSock)
+XSOCKET XSock_CreateRAW(xsock_t *pSock, int nProtocol)
 {
-    XSock_Init(pSock, XSOCK_RAW, XSOCK_INVALID, 0);
-    pSock->nFD = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
-    if (pSock->nFD == XSOCK_INVALID) pSock->eStatus = XSOCK_ERR_CREATE;
+    xsock_type_t eType = (nProtocol == IPPROTO_TCP) ?
+                        XSOCK_TCP_RAW : XSOCK_UDP_RAW;
+
+    XSock_Init(pSock, eType, XSOCK_INVALID, 0);
+    pSock->nFD = socket(AF_INET, SOCK_RAW, nProtocol);
+
+    if (pSock->nFD == XSOCK_INVALID)
+        pSock->eStatus = XSOCK_ERR_CREATE;
+
     return pSock->nFD;
 }
 
@@ -1426,7 +1436,8 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, xsock_type_t eType, size_t nFdMax, const
     int nStatus = XSock_Init(pSock, eType, XSOCK_INVALID, 0);
     if (nStatus == XSOCK_ERROR) return XSOCK_INVALID;
 
-    if (pSock->eType != XSOCK_RAW)
+    if (pSock->eType != XSOCK_TCP_RAW &&
+        pSock->eType != XSOCK_UDP_RAW)
     {
         pSock->nFdMax = XSTD_FIRSTOF(nFdMax, XSOCK_FD_MAX);
         pSock->nAddr = XSock_NetAddr(pAddr);

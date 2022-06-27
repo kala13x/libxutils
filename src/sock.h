@@ -108,7 +108,8 @@ typedef enum {
 
 /* Supported socket types */
 typedef enum {
-    XSOCK_RAW = (uint8_t)0,
+    XSOCK_TCP_RAW = (uint8_t)0,
+    XSOCK_UDP_RAW,
     XSOCK_TCP_PEER,
     XSOCK_TCP_CLIENT,
     XSOCK_TCP_SERVER,
@@ -254,7 +255,7 @@ XSOCKET XSock_CreateAdv(xsock_t* pSock, xsock_type_t eType, size_t nFdMax, const
 XSOCKET XSock_Create(xsock_t* pSock, xsock_type_t eType, const char* pAddr, uint16_t nPort);
 XSOCKET XSock_Open(xsock_t* pSock, xsock_type_t eType, xsock_addr_t* pAddr);
 XSOCKET XSock_Setup(xsock_t* pSock, xsock_type_t eType, const char* pAddr);
-XSOCKET XSock_CreateRAW(xsock_t* pSock);
+XSOCKET XSock_CreateRAW(xsock_t *pSock, int nProtocol);
 
 xsock_t* XSock_Alloc(xsock_type_t eType, const char* pAddr, uint16_t nPort);
 xsock_t* XSock_New(xsock_type_t eType, xsock_addr_t* pAddr);
