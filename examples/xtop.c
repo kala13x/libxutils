@@ -21,7 +21,7 @@
 #include <xutils/xfs.h>
 
 #define XTOP_VERSION_MAJ    0
-#define XTOP_VERSION_MIN    8
+#define XTOP_VERSION_MIN    9
 
 #define XTOP_SORT_DISABLE   0
 #define XTOP_SORT_BUSY      1
@@ -48,10 +48,12 @@
 static int g_nInterrupted = 0;
 extern char *optarg;
 
+#define XTOP_INVALID        400
+#define XTOP_NOTFOUND       404
+#define XTOP_NOTALLOWED     405
+
 typedef enum {
-    XTOP_INVALID = (uint8_t)0,
-    XTOP_NOTALLOWED,
-    XTOP_NOTFOUND,
+    XTOP_NONE = (uint8_t)0,
     XTOP_NETWORK,
     XTOP_MEMORY,
     XTOP_CPU,
@@ -59,6 +61,7 @@ typedef enum {
 } xtop_request_t;
 
 typedef struct xtop_args_ {
+    xtop_stats_t *pStats;
     xbool_t bExcludeCPU;
     xbool_t bDaemon;
     xbool_t bServer;
@@ -68,6 +71,9 @@ typedef struct xtop_args_ {
     char sAddr[XLINK_MAX];
     char sName[XNAME_MAX];
     char sLogs[XNAME_MAX];
+
+    char sToken[XSTR_MIN];
+    char sKey[XSTR_MIN];
 
     size_t nIntervalU;
     uint16_t nPort;
@@ -115,8 +121,9 @@ void XTOPApp_DisplayUsage(const char *pName)
     XSTR_FMT_BOLD, XSTR_FMT_RESET, XSTR_CLR_RED, XSTR_FMT_RESET, XSTR_CLR_YELLOW,
     XSTR_FMT_RESET, XSTR_FMT_DIM, XSTR_FMT_RESET, XSTR_FMT_BOLD, XSTR_FMT_RESET);
 
-    printf("Usage: %s [-i <iface>] [-m <seconds>] [-t <type>] [-u <pid>] [-e]\n", pName);
-    printf(" %s [-a <addr>] [-p <port>] [-l <path>] [-c] [-d] [-s] [-h]\n\n", XTOPApp_WhiteSpace(nLength));
+    printf("Usage: %s [-i <iface>] [-m <seconds>] [-t <type>] [-u <pid>]\n", pName);
+    printf(" %s [-a <addr>] [-p <port>] [-l <path>] [-d] [-s] [-e]\n", XTOPApp_WhiteSpace(nLength));
+    printf(" %s [-U <user>] [-P <pass>] [-K <key>] [-c] [-v] [-h]\n\n", XTOPApp_WhiteSpace(nLength));
 
     printf("Options are:\n");
     printf("  %s-a%s <addr>             # Address of the listener server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
@@ -126,10 +133,14 @@ void XTOPApp_DisplayUsage(const char *pName)
     printf("  %s-l%s <path>             # Output directory path for logs\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-t%s <type>             # Sort result by selected type\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-u%s <pid>              # Track process CPU and memory usage\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-U%s <user>             # Authorizatiob basic user\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-P%s <pass>             # Authorizatiob basic user\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-K%s <key>              # API key for authorization\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-e%s                    # Exclude additional CPU info\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-c%s                    # Run XTOP as HTTP client\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-d%s                    # Run XTOP as HTTP server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-s%s                    # Run as server as daemon\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-v%s                    # Enable verbosity\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-h%s                    # Print version and usage\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("Sort types:\n");
@@ -158,19 +169,27 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
     pArgs->bDaemon = XFALSE;
     pArgs->bServer = XFALSE;
     pArgs->bClient = XFALSE;
+    pArgs->pStats = NULL;
     pArgs->nSort = XTOP_SORT_LEN;
 
     xstrnul(pArgs->sAddr);
     xstrnul(pArgs->sLogs);
     xstrnul(pArgs->sLink);
     xstrnul(pArgs->sName);
+    xstrnul(pArgs->sToken);
+    xstrnul(pArgs->sKey);
 
     pArgs->nIntervalU = 0;
     pArgs->nPort = 0;
     pArgs->nPID = 0;
+
+    char sUser[XNAME_MAX] = XSTR_INIT;
+    char sPass[XSTR_TINY] = XSTR_INIT;
+
+    xbool_t bVerbose = XFALSE;
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "a:i:l:m:p:t:u:c1:d1:s1:e1:d1:h1")) != -1)
+    while ((nChar = getopt(argc, argv, "a:i:K:U:P:l:m:p:t:u:c1:d1:s1:e1:d1:v1:h1")) != -1)
     {
         switch (nChar)
         {
@@ -182,6 +201,15 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
                 break;
             case 'l':
                 xstrncpy(pArgs->sLogs, sizeof(pArgs->sLogs), optarg);
+                break;
+            case 'K':
+                xstrncpy(pArgs->sKey, sizeof(pArgs->sKey), optarg);
+                break;
+            case 'U':
+                xstrncpy(sUser, sizeof(sUser), optarg);
+                break;
+            case 'P':
+                xstrncpy(sPass, sizeof(sPass), optarg);
                 break;
             case 't':
                 pArgs->nSort = XTOPApp_GetSortType(optarg);
@@ -207,11 +235,17 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
             case 's':
                 pArgs->bServer = XTRUE;
                 break;
+            case 'v':
+                bVerbose = XTRUE;
+                break;
             case 'h':
             default:
                 return 0;
         }
     }
+
+    if (xstrused(sUser) || xstrused(sPass))
+        XHTTP_GetAuthToken(pArgs->sToken, sizeof(pArgs->sToken), sUser, sPass);
 
     if (pArgs->bServer && pArgs->bClient)
     {
@@ -257,6 +291,9 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
             return XFALSE;
         }
     }
+
+    if (bVerbose && pArgs->bServer)
+        xlog_enable(XLOG_ALL);
 
     return XTRUE;
 }
@@ -901,47 +938,77 @@ int XTOPApp_GetJSONStats(xtop_stats_t *pStats, xjson_t *pJson)
 
 int XTOPApp_GetRemoteStats(xtop_args_t *pArgs, xtop_stats_t *pStats)
 {
-    xhttp_t response;
-    xhttp_status_t eStatus = XHTTP_SoloPerform(&response, XHTTP_GET, pArgs->sLink, NULL, 0);
+    const char *pVer = XUtils_VersionShort();
+    xhttp_t handle;
+    xlink_t link;
 
+    if (XLink_Parse(&link, pArgs->sLink) < 0)
+    {
+        xloge("Failed to parse link: %s", pArgs->sLink);
+        return XSTDERR;
+    }
+
+    if (XHTTP_InitRequest(&handle, XHTTP_GET, link.sUrl, NULL) < 0)
+    {
+        xloge("Failed to initialize HTTP request: %d", errno);
+        return XSTDERR;
+    }
+
+    if (XHTTP_AddHeader(&handle, "Host", "%s", link.sHost) < 0 ||
+        XHTTP_AddHeader(&handle, "User-Agent", "xutils/%s", pVer) < 0)
+    {
+        xloge("Failed to initialize HTTP request: %d", errno);
+        XHTTP_Clear(&handle);
+        return XSTDERR;
+    }
+
+    if ((xstrused(pArgs->sKey) && XHTTP_AddHeader(&handle, "X-API-KEY", "%s", pArgs->sKey) < 0) ||
+        (xstrused(pArgs->sToken) && XHTTP_AddHeader(&handle, "Authorization", "Basic %s", pArgs->sToken) < 0))
+    {
+        xloge("Failed to setup authorization headers for request: %d", errno);
+        XHTTP_Clear(&handle);
+        return XSTDERR;
+    }
+
+    xhttp_status_t eStatus = XHTTP_LinkPerform(&handle, &link, NULL, 0);
     if (eStatus != XHTTP_COMPLETE)
     {
         xloge("%s", XHTTP_GetStatusStr(eStatus));
-        XHTTP_Clear(&response);
+        XHTTP_Clear(&handle);
         return XSTDERR;
     }
 
-    if (response.nStatusCode != 200)
+    if (handle.nStatusCode != 200)
     {
-        xlogw("HTTP response: %d %s", response.nStatusCode,
-                    XHTTP_GetCodeStr(response.nStatusCode));
+        xlogw("HTTP response: %d %s", handle.nStatusCode,
+                    XHTTP_GetCodeStr(handle.nStatusCode));
     
-        XHTTP_Clear(&response);
+        XHTTP_Clear(&handle);
         return XSTDERR;
     }
 
-    const char *pBody = (const char *)XHTTP_GetBody(&response);
+    const char *pBody = (const char *)XHTTP_GetBody(&handle);
     if (pBody == NULL)
     {
         xloge("HTTP response does not contain data");
-        XHTTP_Clear(&response);
+        XHTTP_Clear(&handle);
         return XSTDERR;
     }
 
     xjson_t json;
-    if (!XJSON_Parse(&json, pBody, response.nContentLength))
+    if (!XJSON_Parse(&json, pBody, handle.nContentLength))
     {
         char sError[256];
         XJSON_GetErrorStr(&json, sError, sizeof(sError));
         xloge("Failed to parse JSON: %s", sError);
 
-        XHTTP_Clear(&response);
+        XHTTP_Clear(&handle);
         return XSTDERR;
     }
 
     int nStatus = XTOPApp_GetJSONStats(pStats, &json);
 
-    XHTTP_Clear(&response);
+    XHTTP_Clear(&handle);
     XJSON_Destroy(&json);
     return nStatus;
 }
@@ -959,28 +1026,28 @@ void XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
 int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
+    xtop_args_t *pArgs = (xtop_args_t*)pData->pApi->pUserCtx;
+    int nStatus = XAPI_AuthorizeRequest(pData, pArgs->sToken, pArgs->sKey);
+    if (nStatus <= 0) return nStatus;
+
     xtop_request_t *pRequest = (xtop_request_t*)pData->pSessionData;
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
-    *pRequest = XTOP_NOTFOUND;
+    *pRequest = XTOP_NONE;
 
     xlogn("Received request: fd(%d), method(%s), url(%s)",
         (int)pData->nFD, XHTTP_GetMethodStr(pHandle->eMethod), pHandle->sUrl);
 
     if (pHandle->eMethod != XHTTP_GET)
     {
-        xlogw("Invalid or not supported HTTP method: %s",
-            XHTTP_GetMethodStr(pHandle->eMethod));
-
-        *pRequest = XTOP_NOTALLOWED;
-        return XAPI_SetEvents(pData, XPOLLOUT);
+        xlogw("Invalid or not supported HTTP method: %s", XHTTP_GetMethodStr(pHandle->eMethod));
+        return XAPI_SetResponse(pData, XTOP_NOTALLOWED, XAPI_NONE);
     }
 
     xarray_t *pArr = xstrsplit(pHandle->sUrl, "/");
     if (pArr == NULL)
     {
         xlogw("Invalid request URL or API endpoint: %s", pHandle->sUrl);
-        *pRequest = XTOP_INVALID;
-        return XAPI_SetEvents(pData, XPOLLOUT);
+        return XAPI_SetResponse(pData, XTOP_INVALID, XAPI_NONE);
     }
 
     char *pDirect = (char*)XArray_GetData(pArr, 0);
@@ -994,10 +1061,14 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
         else if (!strncmp(pEntry, "network", 7)) *pRequest = XTOP_NETWORK;
     }
 
-    if (*pRequest == XTOP_NOTFOUND)
-        xlogw("Requested API endpoint is not found: %s", pHandle->sUrl);
-
     XArray_Destroy(pArr);
+
+    if (*pRequest == XTOP_NONE)
+    {
+        xlogw("Requested API endpoint is not found: %s", pHandle->sUrl);
+        return XAPI_SetResponse(pData, XTOP_NOTFOUND, XAPI_NONE);
+    }
+
     return XAPI_SetEvents(pData, XPOLLOUT);
 }
 
@@ -1202,7 +1273,8 @@ int XTOPApp_AppendCPUJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
 
 int XTOPApp_AssembleBody(xapi_data_t *pData, xstring_t *pJsonStr)
 {
-    xtop_stats_t *pStats = (xtop_stats_t*)pData->pApi->pUserCtx;
+    xtop_args_t *pArgs = (xtop_args_t*)pData->pApi->pUserCtx;
+    xtop_stats_t *pStats = (xtop_stats_t*)pArgs->pStats;
     xtop_request_t eRequest = *(xtop_request_t*)pData->pSessionData;
 
     if (XString_Append(pJsonStr, "{") < 0)
@@ -1267,52 +1339,24 @@ int XTOPApp_AssembleBody(xapi_data_t *pData, xstring_t *pJsonStr)
 
 int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xtop_request_t *pRequest = (xtop_request_t*)pData->pSessionData;
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
+    pHandle->nStatusCode = 200;
 
-    if (*pRequest == XTOP_INVALID) pHandle->nStatusCode = 400;
-    else if (*pRequest == XTOP_NOTFOUND) pHandle->nStatusCode = 404;
-    else if (*pRequest == XTOP_NOTALLOWED) pHandle->nStatusCode = 405;
-    else pHandle->nStatusCode = 200;
-
-    if (XHTTP_AddHeader(pHandle, "Server", "xutils/%s", XUtils_VersionShort()) < 0)
-    {
-        xloge("Failed to initialize HTTP response: %s", strerror(errno));
-        return XSTDERR;
-    }
-
-    const char *pContentType = NULL;
     xstring_t content;
-
     if (XString_Init(&content, XSTR_MID, XFALSE) < 0)
     {
         xloge("Failed to response content buffer: %d", errno);
         return XSTDERR;
     }
 
-    if (pHandle->nStatusCode == 200)
+    if (XTOPApp_AssembleBody(pData, &content) < 0)
     {
-        pContentType = "application/json";
-
-        if (XTOPApp_AssembleBody(pData, &content) < 0)
-        {
-            XString_Clear(&content);
-            return XSTDERR;
-        }
-    }
-    else
-    {
-        pContentType = "text/plain";
-        const char *pCodeStr = XHTTP_GetCodeStr(pHandle->nStatusCode);
-
-        if (XString_Append(&content, "%s", pCodeStr) < 0)
-        {
-            XString_Clear(&content);
-            return XSTDERR;
-        }
+        XString_Clear(&content);
+        return XSTDERR;
     }
 
-    if (XHTTP_AddHeader(pHandle, "Content-Type", pContentType) < 0 ||
+    if (XHTTP_AddHeader(pHandle, "Content-Type", "application/json") < 0 ||
+        XHTTP_AddHeader(pHandle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
         XHTTP_Assemble(pHandle, (const uint8_t*)content.pData, content.nLength) == NULL)
     {
         xloge("Failed to assemble HTTP response: %s", strerror(errno));
@@ -1419,7 +1463,8 @@ int XTOPApp_ServerMode(xtop_args_t *pArgs, xtop_stats_t *pStats)
 {
     xapi_t api;
     api.callback = XTOPApp_ServiceCb;
-    api.pUserCtx = pStats;
+    api.pUserCtx = pArgs;
+    pArgs->pStats = pStats;
 
     if (XAPI_StartListener(&api, pArgs->sAddr, pArgs->nPort) < 0) return XSTDERR;
     xlogn("Socket started listen to port: %d", pArgs->nPort);

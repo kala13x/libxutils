@@ -301,33 +301,28 @@ int XHTTP_InitResponse(xhttp_t *pHttp, uint16_t nStatusCode, const char *pVer)
     return nStatus;
 }
 
-int XHTTP_Recycle(xhttp_t *pHttp)
+void XHTTP_Recycle(xhttp_t *pHttp, xbool_t bHard)
 {
-    xhttp_cb_t callback = pHttp->callback;
-    uint16_t nCbTypes = pHttp->nCbTypes;
-    void *pCbCtx = pHttp->pUserCtx;
-    char sVersion[XHTTP_FIELD_MAX];
-    sVersion[0] = XSTR_NUL;
+    XMap_Destroy(&pHttp->headerMap);
+    XMap_Init(&pHttp->headerMap, XSTDNON);
+    pHttp->headerMap.clearCb = XHTTP_HeaderClearCb;
 
-    xstrncpy(sVersion, sizeof(sVersion), pHttp->sVersion);
-    xbool_t nAllocated = pHttp->nAllocated;
-    size_t nContentMax = pHttp->nContentMax;
-    size_t nHeaderMax = pHttp->nHeaderMax;
-    int nAllowUpdate = pHttp->nAllowUpdate;
-    int nTimeOut = pHttp->nTimeout;
-    pHttp->nAllocated = XFALSE;
+    if (bHard)
+    {
+        XByteBuffer_Clear(&pHttp->dataRaw);
+        XByteBuffer_Init(&pHttp->dataRaw, XSTDNON, XSTDNON);
+    }
+    else XByteBuffer_Reset(&pHttp->dataRaw);
 
-    XHTTP_Clear(pHttp); // Recycle the HTTP handle
-    int nStatus = XHTTP_Init(pHttp, XHTTP_DUMMY, XSTDNON);
-    XHTTP_SetCallback(pHttp, callback, pCbCtx, nCbTypes);
-    xstrncpy(pHttp->sVersion, sizeof(sVersion), sVersion);
+    pHttp->nContentLength = 0;
+    pHttp->nHeaderLength = 0;
+    pHttp->nHeaderCount = 0;
+    pHttp->nStatusCode = 0;
+    pHttp->nComplete = 0;
+    pHttp->sUrl[0] = '\0';
 
-    pHttp->nAllowUpdate = nAllowUpdate;
-    pHttp->nContentMax = nContentMax;
-    pHttp->nHeaderMax = nHeaderMax;
-    pHttp->nAllocated = nAllocated;
-    pHttp->nTimeout = nTimeOut;
-    return nStatus;
+    pHttp->eMethod = XHTTP_DUMMY;
+    pHttp->eType = XHTTP_INITIAL;
 }
 
 xhttp_t *XHTTP_Alloc(xhttp_method_t eMethod, size_t nDataSize)
@@ -446,6 +441,19 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
     if (!pHttp->headerMap.nUsed) return XSTDERR;
 
     return (int)pHttp->headerMap.nUsed;
+}
+
+size_t XHTTP_GetAuthToken(char *pToken, size_t nSize, const char *pUser, const char *pPass)
+{
+    char sToken[XHTTP_OPTION_MAX];
+    size_t nLength = xstrncpyf(sToken, sizeof(sToken), "%s:%s", pUser, pPass);
+
+    char *pEncodedToken = XCrypt_Base64((const uint8_t*)sToken, &nLength);
+    if (pEncodedToken == NULL) return XSTDNON;
+
+    size_t nDstBytes = xstrncpy(pToken, nLength, pEncodedToken);
+    free(pEncodedToken);
+    return nDstBytes;
 }
 
 int XHTTP_SetAuthBasic(xhttp_t *pHttp, const char *pUser, const char *pPwd)
@@ -997,7 +1005,7 @@ xhttp_status_t XHTTP_Perform(xhttp_t *pHttp, xsock_t *pSock, const uint8_t *pBod
     if (nStatus == XSTDERR)
         return XHTTP_TERMINATED;
 
-    XHTTP_Recycle(pHttp); // Recycle HTTP handle
+    XHTTP_Recycle(pHttp, XFALSE);
     return XHTTP_Receive(pHttp, pSock);
 }
 

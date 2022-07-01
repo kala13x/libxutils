@@ -10,17 +10,28 @@
 
 #include "xapi.h"
 #include "xbuf.h"
+#include "xver.h"
 
 const char* XAPI_GetStatus(xapi_status_t eStatus)
 {
     switch (eStatus)
     {
+        case XAPI_AUTH_FAILURE:
+            return "Authorization failure";
+        case XAPI_MISSING_TOKEN:
+            return "Missing auth basic header";
+        case XAPI_INVALID_TOKEN:
+            return "Invalid auth basic header";
+        case XAPI_MISSING_KEY:
+            return "Missing X-API-KEY header";
+        case XAPI_INVALID_KEY:
+            return "Invalid X-API-KEY header";
         case XAPI_EREGISTER:
             return "Failed to register event";
-        case XAPI_ERECYCLE:
-            return "Failed to recycle HTTP handle";
         case XAPI_EALLOC:
             return "Memory allocation failure";
+        case XAPI_EASSEMBLE:
+            return "Failed to initialize response";
         case XAPI_CLOSED:
             return "Closed remote connection";
         case XAPI_HUNGED:
@@ -60,6 +71,7 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, XSOCKET nFD)
     pData->sIPAddr[0] = XSTR_NUL;
     pData->pSessionData = NULL;
     pData->ePktType = XAPI_NONE;
+    pData->bCancel = XFALSE;
     pData->pPacket = NULL;
     pData->pEvData = NULL;
     pData->pApi = pApi;
@@ -166,6 +178,69 @@ static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
     return XEVENTS_CONTINUE;
 }
 
+int XAPI_SetResponse(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus)
+{
+    xhttp_t *pHandle = (xhttp_t*)pApiData->pPacket;
+    xapi_t *pApi = pApiData->pApi;
+    char sContent[XSTR_MIN];
+
+    XHTTP_Recycle(pHandle, XFALSE);
+    pHandle->nStatusCode = nCode;
+    pHandle->eType = XHTTP_RESPONSE;
+
+    size_t nLength = xstrncpyf(sContent, sizeof(sContent), "{\"status\": \"%s\"}",
+            eStatus != XAPI_NONE ? XAPI_GetStatus(eStatus) : XHTTP_GetCodeStr(nCode));
+
+    if ((eStatus == XAPI_MISSING_TOKEN &&
+        XHTTP_AddHeader(pHandle, "WWW-Authenticate", "Basic realm=\"XAPI\"") < 0) ||
+        XHTTP_AddHeader(pHandle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
+        XHTTP_AddHeader(pHandle, "Content-Type", "application/json") < 0 ||
+        XHTTP_Assemble(pHandle, (const uint8_t*)sContent, nLength) == NULL)
+    {
+        XAPI_ErrorCb(pApi, pApiData, XAPI_ST_API, XAPI_EASSEMBLE);
+        pApiData->bCancel = XTRUE;
+        return XSTDERR;
+    }
+
+    if (eStatus > XAPI_NONE && eStatus <= XAPI_EALLOC)
+        XAPI_ErrorCb(pApi, pApiData, XAPI_ST_API, eStatus);
+    else if (eStatus != XAPI_NONE)
+        XAPI_StatusCb(pApi, pApiData, XAPI_ST_API, eStatus);
+
+    return XAPI_SetEvents(pApiData, XPOLLOUT) < 0 ? XSTDERR : XSTDNON;
+}
+
+int XAPI_AuthorizeRequest(xapi_data_t *pApiData, const char *pToken, const char *pKey)
+{
+    if (pApiData == NULL) return XSTDERR;
+    xhttp_t *pHandle = (xhttp_t*)pApiData->pPacket;
+
+    size_t nTokenLength = xstrused(pToken) ? strlen(pToken) : XSTDNON;
+    size_t nKeyLength = xstrused(pKey) ? strlen(pKey) : XSTDNON;
+    if (!nTokenLength && !nKeyLength) return XSTDOK;
+
+    if (nKeyLength)
+    {
+        const char *pXKey = XHTTP_GetHeader(pHandle, "X-API-KEY");
+        if (!xstrused(pXKey)) return XAPI_SetResponse(pApiData, 401, XAPI_MISSING_KEY);;
+        if (strncmp(pXKey, pKey, nKeyLength)) return XAPI_SetResponse(pApiData, 401, XAPI_INVALID_KEY);
+    }
+
+    if (nTokenLength)
+    {
+        const char *pAuth = XHTTP_GetHeader(pHandle, "Authorization");
+        if (!xstrused(pAuth)) return XAPI_SetResponse(pApiData, 401, XAPI_MISSING_TOKEN);
+
+        int nPosit = xstrsrc(pAuth, "Basic");
+        if (nPosit < 0) return XAPI_SetResponse(pApiData, 401, XAPI_MISSING_TOKEN);
+
+        if (strncmp(&pAuth[nPosit + 6], pToken, nTokenLength))
+            return XAPI_SetResponse(pApiData, 401, XAPI_INVALID_TOKEN);
+    }
+
+    return XSTDOK;
+}
+
 static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 {
     if (pEvents == NULL || pEvData == NULL) return XEVENTS_DISCONNECT;
@@ -227,25 +302,22 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
     }
     else if (pEvData->nType == XAPI_EVENT_PEER)
     {
-        XSock_Init(&clientSock, XSOCK_TCP_PEER, pEvData->nFD, XTRUE);
         xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
+        if (pApiData->bCancel) return XEVENTS_DISCONNECT;
 
         xhttp_t *pHandle = (xhttp_t*)pApiData->pPacket;
         if (pHandle == NULL) return XEVENTS_DISCONNECT;
 
+        XSock_Init(&clientSock, XSOCK_TCP_PEER, pEvData->nFD, XTRUE);
         xhttp_status_t eStatus = XHTTP_Receive(pHandle, &clientSock);
+
         if (eStatus == XHTTP_COMPLETE)
         {
             int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_REQUEST);
             if (nStatus < 0) return XEVENTS_DISCONNECT;
+            else if (!nStatus) return XEVENTS_CONTINUE;
 
-            if (XHTTP_Recycle(pHandle) < 0)
-            {
-                XAPI_ErrorCb(pApi, pApiData, XAPI_ST_API, XAPI_ERECYCLE);
-                pEvData->pContext = NULL;
-                return XEVENTS_DISCONNECT;
-            }
-
+            XHTTP_Recycle(pHandle, XFALSE);
             pHandle->eType = XHTTP_RESPONSE;
             pApiData->ePktType = XPKT_HTTP;
             pApiData->pPacket = pHandle;
@@ -275,6 +347,8 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 {
     if (pEvents == NULL || pEvData == NULL) return XEVENTS_DISCONNECT;
     xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
+    if (pApiData->bCancel) return XEVENTS_DISCONNECT;
+
     xhttp_t *pHandle = (xhttp_t*)pApiData->pPacket;
     xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
     XSTATUS nStatus = XSTDNON;
@@ -304,13 +378,8 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
     {
         nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_COMPLETE);
         if (nStatus < 0) return XEVENTS_DISCONNECT;
-
-        if (XHTTP_Recycle(pHandle) < 0)
-        {
-            XAPI_ErrorCb(pApi, pApiData, XAPI_ST_API, XAPI_ERECYCLE);
-            pEvData->pContext = NULL;
-            return XEVENTS_DISCONNECT;
-        }
+        else if (!nStatus) return XEVENTS_CONTINUE;
+        XHTTP_Recycle(pHandle, XFALSE);
     }
     
     return nStatus == XSTDUSR ?

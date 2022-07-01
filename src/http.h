@@ -133,6 +133,7 @@ const char* XHTTP_GetStatusStr(xhttp_status_t eStatus);
 xhttp_method_t XHTTP_GetMethodType(const char *pData);
 
 void XHTTP_Clear(xhttp_t *pHttp);
+void XHTTP_Recycle(xhttp_t *pHttp, xbool_t bHard);
 xhttp_t *XHTTP_Alloc(xhttp_method_t eMethod, size_t nDataSize);
 
 int XHTTP_Copy(xhttp_t *pDst, xhttp_t *pSrc);
@@ -140,6 +141,7 @@ int XHTTP_Init(xhttp_t *pHttp, xhttp_method_t eMethod, size_t nSize);
 int XHTTP_InitRequest(xhttp_t *pHttp, xhttp_method_t eMethod, const char *pUri, const char *pVer);
 int XHTTP_InitResponse(xhttp_t *pHttp, uint16_t nStatusCode, const char *pVer);
 
+size_t XHTTP_GetAuthToken(char *pToken, size_t nSize, const char *pUser, const char *pPass);
 int XHTTP_SetAuthBasic(xhttp_t *pHttp, const char *pUser, const char *pPwd);
 int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...);
 xbyte_buffer_t* XHTTP_Assemble(xhttp_t *pHttp, const uint8_t *pContent, size_t nLength);
@@ -158,7 +160,6 @@ int XHTTP_SetCallback(xhttp_t *pHttp, xhttp_cb_t callback, void *pCbCtx, uint16_
 xhttp_status_t XHTTP_ReadHeader(xhttp_t *pHttp, xsock_t *pSock);
 xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock);
 xhttp_status_t XHTTP_Receive(xhttp_t *pHttp, xsock_t *pSock);
-int XHTTP_Recycle(xhttp_t *pHttp);
 
 xhttp_status_t XHTTP_Exchange(xhttp_t *pRequest, xhttp_t *pResponse, xsock_t *pSock);
 xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t *pLink);

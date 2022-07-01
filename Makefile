@@ -11,7 +11,6 @@ OBJ = o
 
 OBJS = errex.$(OBJ) \
 	hash.$(OBJ) \
-	http.$(OBJ) \
 	list.$(OBJ) \
 	sync.$(OBJ) \
 	thread.$(OBJ) \
@@ -33,6 +32,7 @@ OBJS = errex.$(OBJ) \
 	xbuf.$(OBJ) \
 	xstr.$(OBJ) \
 	event.$(OBJ) \
+	http.$(OBJ) \
 	mdtp.$(OBJ) \
 	ntp.$(OBJ) \
 	rtp.$(OBJ) \

@@ -53,18 +53,11 @@ int handle_request(xevent_data_t *pEvData)
     pHandle->dataRaw.pData[pHandle->nHeaderLength - 1] = XSTR_NUL;
     xlogi("Request header:\n\n%s", (char*)pHandle->dataRaw.pData);
 
-    if (XHTTP_Recycle(pHandle) < 0)
-    {
-        xloge("Failed to recycle HTTP handle: %s", strerror(errno));
-        pEvData->pContext = NULL;
-        return XEVENTS_DISCONNECT;
-    }
-
-    const char *pVer = XUtils_VersionShort();
+    XHTTP_Recycle(pHandle, XFALSE);
     pHandle->eType = XHTTP_RESPONSE;
     pHandle->nStatusCode = 200;
 
-    if (XHTTP_AddHeader(pHandle, "Server", "xutils/%s", pVer) < 0 ||
+    if (XHTTP_AddHeader(pHandle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
         XHTTP_AddHeader(pHandle, "Content-Type", "text/plain") < 0)
     {
         xloge("Failed to initialize HTTP response: %s", strerror(errno));
