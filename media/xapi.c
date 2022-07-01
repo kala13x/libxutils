@@ -449,6 +449,8 @@ int XAPI_StartListener(xapi_t *pApi, const char *pAddr, uint16_t nPort)
 
     /* Create server socket */
     XSock_Create(pSock, XSOCK_TCP_SERVER, pAddr, nPort);
+    XSock_ReuseAddr(pSock, XTRUE);
+
     if (pSock->nFD == XSOCK_INVALID)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_ST_SOCK, pSock->eStatus);
