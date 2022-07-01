@@ -63,7 +63,7 @@ const char* XAPI_GetStatusStr(xapi_ctx_t *pCtx)
     return "Unknown status";
 }
 
-static xapi_data_t* XAPI_NewData(xapi_t *pApi, XSOCKET nFD)
+static xapi_data_t* XAPI_NewData(xapi_t *pApi)
 {
     xapi_data_t *pData = (xapi_data_t*)malloc(sizeof(xapi_data_t));
     if (pData == NULL) return NULL;
@@ -75,7 +75,7 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, XSOCKET nFD)
     pData->pPacket = NULL;
     pData->pEvData = NULL;
     pData->pApi = pApi;
-    pData->nFD = nFD;
+    pData->nFD = XSOCK_INVALID;
     return pData;
 }
 
@@ -258,7 +258,7 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
             return XEVENTS_CONTINUE;
         }
 
-        xapi_data_t *pApiData = XAPI_NewData(pApi, clientSock.nFD);
+        xapi_data_t *pApiData = XAPI_NewData(pApi);
         if (pApiData == NULL)
         {
             XAPI_ErrorCb(pApi, NULL, XAPI_ST_API, XAPI_EALLOC);
@@ -267,6 +267,7 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
         }
 
         XSock_IPAddr(&clientSock, pApiData->sIPAddr, sizeof(pApiData->sIPAddr));
+        pApiData->nFD = clientSock.nFD;
 
         xhttp_t *pHandle = XHTTP_Alloc(XHTTP_DUMMY, XSTDNON);
         if (pHandle == NULL)
@@ -457,7 +458,7 @@ int XAPI_StartListener(xapi_t *pApi, const char *pAddr, uint16_t nPort)
         return XSTDERR;
     }
 
-    xapi_data_t *pApiData = XAPI_NewData(pApi, pSock->nFD);
+    xapi_data_t *pApiData = XAPI_NewData(pApi);
     if (pApiData == NULL)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_ST_API, XAPI_EALLOC);
@@ -466,6 +467,7 @@ int XAPI_StartListener(xapi_t *pApi, const char *pAddr, uint16_t nPort)
     }
 
     xstrncpy(pApiData->sIPAddr, sizeof(pApiData->sIPAddr), pAddr);
+    pApiData->nFD = pSock->nFD;
 
     /* Create event instance */
     status = XEvents_Create(pEvents, XSTDNON, pApi, XAPI_EventCallback, XTRUE);
