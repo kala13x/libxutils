@@ -47,9 +47,11 @@ add_library(xutils STATIC
     ${SOURCE_DIR}/sock.c
     ${SOURCE_DIR}/sync.c
     ${SOURCE_DIR}/xcpu.c
+    ${SOURCE_DIR}/xaes.c
     ${SOURCE_DIR}/thread.c
     ${SOURCE_DIR}/xjson.c
     ${SOURCE_DIR}/xfs.c
+    ${MEDIA_DIR}/xapi.c
     ${MEDIA_DIR}/mdtp.c
     ${MEDIA_DIR}/ntp.c
     ${MEDIA_DIR}/rtp.c
