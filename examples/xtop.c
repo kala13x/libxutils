@@ -1024,7 +1024,10 @@ void XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
     const char *pStr = XAPI_GetStatusStr(pCtx);
     int nFD = pData ? (int)pData->nFD : XSTDERR;
 
-    if (pCtx->eCbType == XAPI_CB_STATUS)
+    if (pCtx->eStType == XAPI_ST_API &&
+        pCtx->nStatus == XAPI_DESTROY)
+        xlogn("%s", pStr);
+    else if (pCtx->eCbType == XAPI_CB_STATUS)
         xlogn("%s: fd(%d)", pStr, nFD);
     else if (pCtx->eCbType == XAPI_CB_ERROR)
         xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
