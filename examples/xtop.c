@@ -20,8 +20,8 @@
 #include <xutils/xver.h>
 #include <xutils/xfs.h>
 
-#define XTOP_VERSION_MAJ    0
-#define XTOP_VERSION_MIN    9
+#define XTOP_VERSION_MAJ    1
+#define XTOP_VERSION_MIN    0
 
 #define XTOP_SORT_DISABLE   0
 #define XTOP_SORT_BUSY      1
@@ -126,32 +126,38 @@ void XTOPApp_DisplayUsage(const char *pName)
     printf(" %s [-U <user>] [-P <pass>] [-K <key>] [-c] [-v] [-h]\n\n", XTOPApp_WhiteSpace(nLength));
 
     printf("Options are:\n");
-    printf("  %s-a%s <addr>             # Address of the listener server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-p%s <port>             # Port of the listener server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-i%s <iface>            # Interface name to display on top\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-m%s <seconds>          # Monitoring interval seconds\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-l%s <path>             # Output directory path for logs\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-t%s <type>             # Sort result by selected type\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-t%s <type>             # Sort result by selected type%s*%s\n", XSTR_CLR_CYAN, XSTR_FMT_RESET, XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("  %s-u%s <pid>              # Track process CPU and memory usage\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-U%s <user>             # Authorizatiob basic user\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-P%s <pass>             # Authorizatiob basic user\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-K%s <key>              # API key for authorization\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-e%s                    # Exclude additional CPU info\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-c%s                    # Run XTOP as HTTP client\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-d%s                    # Run XTOP as HTTP server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-s%s                    # Run as server as daemon\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-v%s                    # Enable verbosity\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-h%s                    # Print version and usage\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
-    printf("Sort types:\n");
+    printf("%sXTOP has a REST API server and client mode to send%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("%sand receive statistics to or from a remote server:%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("  %s-a%s <addr>             # Address of the HTTP server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-p%s <port>             # Port of the HTTP server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-l%s <path>             # Output directory path for logs\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-c%s                    # Run XTOP as HTTP client\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-s%s                    # Run XTOP as HTTP server\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-d%s                    # Run server as a daemon\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-v%s                    # Enable verbosity\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+
+    printf("%sWhen using REST server/client mode, the authentication%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("%sparameters can be set with the following arguments:%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("  %s-U%s <user>             # Auth basic user\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-P%s <pass>             # Auth basic pass\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-K%s <key>              # X-API key\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+
+    printf("Sort types%s*%s:\n", XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("   %sb%s: Busy on top\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("   %sf%s: Free on top\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("   %sn%s: Sort by name\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("Examples:\n");
     printf("1) %s -m 2 -t b -u 2274\n", pName);
-    printf("2) %s -s b -u 2274 -i enp4s0\n", pName);
-    printf("3) %s -s -a remote.srv -p 8080\n\n", pName);
+    printf("2) %s -t f -u 2274 -i enp4s0\n", pName);
+    printf("3) %s -sa 127.0.0.1 -p 8080\n\n", pName);
 }
 
 uint8_t XTOPApp_GetSortType(const char *pArg)
@@ -1515,7 +1521,7 @@ int main(int argc, char *argv[])
         int nStatus = XTop_StartMonitoring(&stats, args.nIntervalU, args.nPID);
         if (nStatus < 0)
         {
-            xloge("PID not found: %d", args.nPID);
+            xloge("Process not found: %d", args.nPID);
             XTop_DestroyStats(&stats);
             return XSTDERR;
         }
