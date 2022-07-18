@@ -99,16 +99,16 @@ typedef struct XCPUInfo {
 } xcpu_info_t;
 
 typedef struct XProcInfo {
-    /* Calculated percents about CPU usage by this process */
+    /* Calculated percents about CPU usage by particular process */
     uint32_t nKernelSpaceUsage;
     uint32_t nUserSpaceUsage;
 
     /* Raw information for later percentage calculations */
-    int64_t nKernelSpaceChilds;		// Amount of time that this process's waited-for children have been scheduled in kernel mode
-    int64_t nUserSpaceChilds;		// Amount of time that this process's waited-for children have been scheduled in user mode
-    uint64_t nKernelSpace;			// Amount of time that this process has been scheduled in kernel mode
-    uint64_t nUserSpace;			// Amount of time that this process has been scheduled in user mode
-    uint64_t nTotalTime;			// Total amout of time that this process has been sheduled in any mode
+    int64_t nKernelSpaceChilds;     // Amount of time that this process's waited-for children have been scheduled in kernel mode
+    int64_t nUserSpaceChilds;       // Amount of time that this process's waited-for children have been scheduled in user mode
+    uint64_t nKernelSpace;          // Amount of time that this process has been scheduled in kernel mode
+    uint64_t nUserSpace;            // Amount of time that this process has been scheduled in user mode
+    uint64_t nTotalTime;            // Total amout of time that this process has been sheduled in any mode
 } xproc_info_t;
 
 typedef struct XCPUStats {

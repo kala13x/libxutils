@@ -426,6 +426,7 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
                 return XSTDNON;
             }
 
+            free(pKey);
             free(pPair->pData);
             pPair->pData = pValue;
         }

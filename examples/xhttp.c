@@ -21,7 +21,7 @@
 extern char *optarg;
 
 #define XHTTP_VERSION_MAJ   0
-#define XHTTP_VERSION_MIN   5
+#define XHTTP_VERSION_MIN   6
 
 #define XHTTP_INTERVAL_SEC  1
 
@@ -199,10 +199,18 @@ int XHTTPApp_AppendArgHeaders(xhttp_t *pHandle, xhttp_args_t *pArgs)
 
         char *pSavePtr = NULL;
         char *pOption = xstrtok(pHeader, ":", &pSavePtr);
-        if (pOption == NULL) return XSTDERR;
+        if (pOption == NULL)
+        {
+            XArray_Destroy(pArr);
+            return XSTDERR;
+        }
 
         char *pField = xstrtok(NULL, ":", &pSavePtr);
-        if (pField == NULL) return XSTDERR;
+        if (pField == NULL)
+        {
+            XArray_Destroy(pArr);
+            return XSTDERR;
+        }
 
         char *pOptionPtr = pOption;
         char *pFieldPtr = pField;
