@@ -23,10 +23,9 @@ jobs:
           gcc --version
           cmake --version
 
-    - run:
-        name: Make build
+      - name: Make build
         run: |
           mkdir build
           cd build
           cmake ..
-            make
+          make
