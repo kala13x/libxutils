@@ -28,16 +28,16 @@ int XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
     nflags = oflags;
     nflags.c_lflag &= ~ECHO;
     nflags.c_lflag |= ECHONL;
-
     if (pText != NULL) printf("%s", pText);
-    if (tcsetattr(fileno(stdin), TCSANOW, &nflags)) return XSTDERR;
-    fgets(pPass, nSize, stdin);
-    if (tcsetattr(fileno(stdin), TCSANOW, &oflags)) return XSTDERR;
 
-    nLength = strlen(pPass);
-    pPass[nLength - 1] = 0;
+    if (tcsetattr(fileno(stdin), TCSANOW, &nflags)) return XSTDERR;
+    char *pRet = fgets(pPass, nSize, stdin);
+    nLength = pRet != NULL ? strlen(pPass) - 1 : 0;
+    if (tcsetattr(fileno(stdin), TCSANOW, &oflags)) return XSTDERR;
 #endif
-    return (int)nLength;
+
+    pPass[nLength] = 0;
+    return nLength;
 }
 
 XSTATUS XCLI_GetWindowSize(xcli_size_t *pCli)
@@ -158,13 +158,15 @@ XSTATUS XWindow_AddAligned(xcli_wind_t *pWin, const char *pInput, const char *pF
     return XWindow_AddLineFmt(pWin, "%s%s%s%s%s", pFmt, sPreBuf, pInput, sAfterBuf, XSTR_FMT_RESET);
 }
 
-void XWindow_ClearScreen()
+int XWindow_ClearScreen()
 {
+    int nRet = XSTDNON;
 #if !defined(_WIN32) && !defined(_WIN64)
-    system("clear");
+    nRet = system("clear");
 #else
-    system("cls");
+    nRet = system("cls");
 #endif
+    return nRet;
 }
 
 XSTATUS XWindow_RenderLine(xcli_wind_t *pWin, xbyte_buffer_t *pLine, xarray_data_t *pArrData)

@@ -50,7 +50,7 @@ void XWindow_Init(xcli_wind_t *pWin);
 void XWindow_Destroy(xcli_wind_t *pWin);
 
 XSTATUS XWindow_UpdateSize(xcli_wind_t *pWin);
-void XWindow_ClearScreen();
+int XWindow_ClearScreen();
 
 XSTATUS XWindow_AddAligned(xcli_wind_t *pWin, const char *pInput, const char *pFmt, uint8_t nAlign);
 XSTATUS XWindow_AddLineFmt(xcli_wind_t *pWin, const char *pFmt, ...);
