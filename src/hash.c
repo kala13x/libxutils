@@ -9,7 +9,6 @@
 
 #include "xstd.h"
 #include "hash.h"
-#include "list.h"
 
 typedef struct XHashIterator {
     xhash_itfunc_t itfunc;

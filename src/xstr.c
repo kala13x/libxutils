@@ -14,7 +14,6 @@
 #include "xstd.h"
 #include "xstr.h"
 #include "sync.h"
-#include "xtype.h"
 
 /////////////////////////////////////////////////////////////////////////
 // C string functions

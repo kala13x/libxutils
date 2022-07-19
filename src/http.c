@@ -13,7 +13,6 @@
 #include "xver.h"
 #include "xstr.h"
 #include "http.h"
-#include "addr.h"
 #include "crypt.h"
 
 typedef struct XHTTPCode {

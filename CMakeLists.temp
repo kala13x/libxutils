@@ -27,14 +27,7 @@ SET(MEDIA_DIR "./media")
 include_directories(${SOURCE_DIR} ${MEDIA_DIR})
 
 add_library(xutils STATIC
-    ${SOURCE_DIR}/xver.c
-    ${SOURCE_DIR}/array.c
-    ${SOURCE_DIR}/crypt.c
-    ${SOURCE_DIR}/xstr.c
-    ${SOURCE_DIR}/xtype.c
-    ${SOURCE_DIR}/xbuf.c
-    ${SOURCE_DIR}/sync.c
-    ${SOURCE_DIR}/xaes.c
+    _SOURCE_LIST_
 )
 
 install(TARGETS xutils DESTINATION lib)

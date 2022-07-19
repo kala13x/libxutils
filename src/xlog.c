@@ -8,7 +8,6 @@
  */
 
 #include "xstd.h"
-#include "sync.h"
 #include "xstr.h"
 #include "xlog.h"
 #include "xtime.h"

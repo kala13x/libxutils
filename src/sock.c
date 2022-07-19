@@ -15,7 +15,6 @@
 #include "sock.h"
 #include "xstr.h"
 #include "sync.h"
-#include "xtype.h"
 
 /*
   S.K. >> Note:

@@ -10,7 +10,6 @@
 
 #include "xstd.h"
 #include "xtype.h"
-#include "sync.h"
 #include "xfs.h"
 #include "xstr.h"
 #include "addr.h"

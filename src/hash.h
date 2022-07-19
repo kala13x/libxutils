@@ -18,7 +18,7 @@ extern "C" {
 
 #include "xstd.h"
 #include "list.h"
-#include "sock.h"
+#include "xtype.h"
 
 #ifdef _XUTILS_HASH_MODULES
 #define XHASH_MODULES _XUTILS_HASH_MODULES
