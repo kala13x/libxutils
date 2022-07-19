@@ -15,7 +15,7 @@ The `xUtils` C Library is the general-purpose, cross-platform library for all Li
 #### Containrers:
 - [Dynamically allocated array with sorting and search features](https://github.com/kala13x/libxutils/blob/main/src/array.h)
 - [Dynamically allocated byte and data buffers](https://github.com/kala13x/libxutils/blob/main/src/xbuf.h)
-- [Dynamically allocated key-pair map](https://github.com/kala13x/libxutils/blob/main/src/xmap.h)
+- [Dynamically allocated key-value pair map](https://github.com/kala13x/libxutils/blob/main/src/xmap.h)
 - [Dynamically allocated hash map](https://github.com/kala13x/libxutils/blob/main/src/hash.h)
 - [Implementation of linked list](https://github.com/kala13x/libxutils/blob/main/src/list.h)
 
