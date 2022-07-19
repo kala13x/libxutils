@@ -9,36 +9,38 @@
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/kala13x/libxutils.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/kala13x/libxutils/context:cpp)
 
 ## libxutils - C/C++ Utility Library release 2.x
-The `xUtils` C Library is the general-purpose, cross-platform library for all Linux/Unix and Windows operating systems. It provides the safer implementations of various functions to make some routines easier for all the programs written in C and C-compatible languages such as C++, Rust, and Objective C. This directory contains the sources of the xUtils C Library. See the file `src/xver.h` to check out what release version you have.
+The `xUtils` C Library is the general-purpose, cross-platform library for `Linux/Unix` and `Windows` operating systems. It provides the safer implementations of various functions to make some routines easier for all the programs written in C and C-compatible languages such as C++, Rust, and Objective C. This directory contains the sources of the `xUtils` C Library. See the file `src/xver.h` to check out what release version you have.
 
 ### Here is an incomplete list of what this library offers.
 #### Containrers:
-- [Dynamically allocated array with sorting and search features](https://github.com/kala13x/libxutils/blob/main/src/array.h)
+- [Dynamically allocated array with sort and search features](https://github.com/kala13x/libxutils/blob/main/src/array.h)
 - [Dynamically allocated byte and data buffers](https://github.com/kala13x/libxutils/blob/main/src/xbuf.h)
 - [Dynamically allocated key-value pair map](https://github.com/kala13x/libxutils/blob/main/src/xmap.h)
 - [Dynamically allocated hash map](https://github.com/kala13x/libxutils/blob/main/src/hash.h)
 - [Implementation of linked list](https://github.com/kala13x/libxutils/blob/main/src/list.h)
 
 #### Network:
-- [Advanced socket library](https://github.com/kala13x/libxutils/blob/main/src/sock.h)
-- [Cross-platform event library](https://github.com/kala13x/libxutils/blob/main/src/event.h)
-- [MDTP client/server library](https://github.com/kala13x/libxutils/blob/main/media/mdtp.h)
+- [Cross-platform event library based on poll(), epoll() and WSAPoll()](https://github.com/kala13x/libxutils/blob/main/src/event.h)
+- [Cross-platform socket library with TCP, UDP and SSL support](https://github.com/kala13x/libxutils/blob/main/src/sock.h)
+- [Event based high performance REST API client/server library](https://github.com/kala13x/libxutils/blob/main/media/xapi.h)
 - [HTTP client/server library](https://github.com/kala13x/libxutils/blob/main/src/http.h)
-- [REST API client/server library](https://github.com/kala13x/libxutils/blob/main/media/xapi.h)
+- [MDTP client/server library](https://github.com/kala13x/libxutils/blob/main/media/mdtp.h)
 - [RTP packet parser library](https://github.com/kala13x/libxutils/blob/main/media/rtp.h)
 
 #### System:
 - [Cross-platform file and directory manipulations](https://github.com/kala13x/libxutils/blob/main/src/xfs.h)
+- [Cross-platform CPU affinity manipulation API](https://github.com/kala13x/libxutils/blob/main/src/xcpu.h)
+- [Implementation of advanced file search API](https://github.com/kala13x/libxutils/blob/main/src/xfs.h)
 - [System time manipulation library](https://github.com/kala13x/libxutils/blob/main/src/xtime.h)
 - [Performance monitoring library](https://github.com/kala13x/libxutils/blob/main/src/xtop.h)
 - [Advanced logging library](https://github.com/kala13x/libxutils/blob/main/src/xlog.h)
 
-#### Various implementations:
-- [JSON parser and writer library with lint and minify](https://github.com/kala13x/libxutils/blob/main/src/xjson.h)
+#### Miscellaneous:
+- [JSON parser and writer library with lint and minify support](https://github.com/kala13x/libxutils/blob/main/src/xjson.h)
 - [Implementation of various encrypt/decrypt algorithms](https://github.com/kala13x/libxutils/blob/main/src/crypt.h)
-- [Command Line interface manipulations](https://github.com/kala13x/libxutils/blob/main/src/xcli.h)
+- [Command-Line interface manipulations](https://github.com/kala13x/libxutils/blob/main/src/xcli.h)
 - [Cross-platform synchronization library](https://github.com/kala13x/libxutils/blob/main/src/sync.h)
-- [Cross-platform thread library](https://github.com/kala13x/libxutils/blob/main/src/thread.h)
+- [Cross-platform multithreading library](https://github.com/kala13x/libxutils/blob/main/src/thread.h)
 - [String manipulation library](https://github.com/kala13x/libxutils/blob/main/src/xstr.h)
 
 
