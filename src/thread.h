@@ -64,14 +64,12 @@ typedef struct XTask {
     xatomic_t nIntervalU;
     xatomic_t nAction;
     xatomic_t nStatus;
-    xatomic_t nCPUID;
 } xtask_t;
 
 int XTask_Start(xtask_t *pTask, xtask_cb_t callback, void *pContext, uint32_t nIntervalU);
 uint32_t XTask_Stop(xtask_t *pTask, int nIntervalU);
 uint32_t XTask_Hold(xtask_t *pTask, int nIntervalU);
 uint32_t XTask_Release(xtask_t *pTask, int nIntervalU);
-uint32_t XTask_AssignCPU(xtask_t *pTask, int nCPU, int nIntervalU);
 
 #ifdef __cplusplus
 }

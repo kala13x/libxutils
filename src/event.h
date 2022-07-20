@@ -35,8 +35,9 @@ extern "C" {
 #endif
 
 #include "xstd.h"
-#include "xtype.h"
+#include "sock.h"
 #include "hash.h"
+#include "xtype.h"
 
 #ifdef __linux__
 #include <sys/eventfd.h>

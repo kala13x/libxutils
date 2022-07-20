@@ -9,7 +9,6 @@
  */
 
 #include "xstd.h"
-#include "sock.h"
 #include "event.h"
 
 #define XEVENTS_DEFAULT_FD_MAX 1024

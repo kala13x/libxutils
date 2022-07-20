@@ -9,8 +9,6 @@
 
 #include "xstd.h"
 #include "sync.h"
-#include "xcpu.h"
-#include "xtype.h"
 #include "thread.h"
 
 #ifdef _WIN32
@@ -113,7 +111,6 @@ void *XTask_WorkerThread(void *pContext)
     xtask_t *pTask = (xtask_t*)pContext;
     XSYNC_ATOMIC_SET(&pTask->nStatus, XTASK_STAT_ACTIVE);
 
-    int nCurrentCPUID = XTASK_EMPTY_SET;
     xbool_t bIsPaused = XFALSE;
     xatomic_t nAction = 0;
 
@@ -140,14 +137,6 @@ void *XTask_WorkerThread(void *pContext)
             bIsPaused = XFALSE;
         }
 
-        int nCPUID = XSYNC_ATOMIC_GET(&pTask->nCPUID);
-        if (nCPUID != nCurrentCPUID)
-        {
-            nCurrentCPUID = nCPUID;
-            int nCPUS[1] = { nCPUID };
-            XCPU_SetAffinity(nCPUS, 1, XCPU_CALLER_PID);
-        }
-
         if (pTask->callback(pTask->pContext) < 0) break;
         if (nInterval) xusleep((uint32_t)nInterval);
     }
@@ -162,7 +151,6 @@ int XTask_Start(xtask_t *pTask, xtask_cb_t callback, void *pContext, uint32_t nI
     pTask->callback = callback;
     pTask->pContext = pContext;
 
-    XSYNC_ATOMIC_SET(&pTask->nCPUID, XTASK_EMPTY_SET);
     XSYNC_ATOMIC_SET(&pTask->nAction, XTASK_CTRL_RELEASE);
     XSYNC_ATOMIC_SET(&pTask->nIntervalU, nIntervalU);
 
@@ -204,13 +192,4 @@ uint32_t XTask_Stop(xtask_t *pTask, int nIntervalU)
 {
     XSYNC_ATOMIC_SET(&pTask->nAction, XTASK_CTRL_STOP);
     return XTask_Wait(pTask, XTASK_STAT_STOPPED, nIntervalU);
-}
-
-uint32_t XTask_AssignCPU(xtask_t *pTask, int nCPU, int nIntervalU)
-{
-    uint32_t nWaitTime = 0;
-    nWaitTime = XTask_Hold(pTask, nIntervalU);
-    XSYNC_ATOMIC_SET(&pTask->nCPUID, nCPU);
-    nWaitTime += XTask_Release(pTask, nIntervalU);
-    return nWaitTime;
 }
