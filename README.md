@@ -76,6 +76,27 @@ make
 sudo make install
 ```
 
+### Build particular files only
+If you want to use particular files and functions only, you can configure the library and select that functionality for the build, so you don't unnecessarily increase your program size and avoid unused code.
+
+The `xutils.conf` file contains a list of modules that will be included in the build when the `CMakeList.txt` file is generated.
+Open this file with a text editor and mark only the functionality you want to include with low-case `y` symbol. Removing that module from the list or using any other symbol will disable this module from the build.
+
+Example:
+```
+USE_ADDR=n
+USE_ARRAY=y
+USE_CRYPT=n
+USE_XTIME=n
+USE_EVENT=y
+USE_LIST=y
+USE_XBUF=y
+USE_HASH=n
+USE_XLOG=n
+USE_XSTR=y
+USE_XTOP=n
+```
+
 ### Dependencies
 The only dependency that the library uses is the `openssl-devel` package for the `SSL` implementations.\
 You can either install the `openssl-devel` package or disable the `SSL` support in the library.
