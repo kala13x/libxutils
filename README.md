@@ -77,27 +77,39 @@ sudo make install
 ```
 
 ### Build particular files only
-If you want to use particular files and functions only, you can configure the library and select that functionality for the build, so you don't unnecessarily increase your program size and avoid unused code.
+If you want to use particular files and functions, you can configure the library and select only that functionality for the build. In this way, it is possible not to increase the size of the program and to avoid the linkage of unused code.
 
-The `xutils.conf` file contains a list of modules that will be included in the build when the `CMakeList.txt` file is generated.
-Open this file with a text editor and mark only the functionality you want to include with low-case `y` symbol. Removing that module from the list or using any other symbol will disable this module from the build.
+The `libxutils` project has a config file that contains a list of modules that will be included in the build. This file is used by the `generate.sh` script, which resolves dependencies for each enabled module and generates a `CMakeList.txt` file.
+
+Open `xutils.conf` file with a text editor and mark only the functionality you want to include in the build. Use a low-case `y` symbol to enable and any other symbol to disable modules. Removing a related line from the list will also disable the module.
 
 Example:
 ```
-USE_ADDR=n
-USE_ARRAY=y
+...
+USE_ARRAY=n
 USE_CRYPT=n
 USE_XTIME=n
 USE_EVENT=y
-USE_LIST=y
-USE_XBUF=y
+USE_LIST=n
+USE_XBUF=n
 USE_HASH=n
-USE_XLOG=n
-USE_XSTR=y
-USE_XTOP=n
+USE_SOCK=n
+USE_XLOG=y
+USE_XSTR=n
+...
+```
+After updating the configuration, use the `generate.sh` script to generate the `CMakeLists.txt` file and then build the project using the `CMake` tool as in this example:
+
+```
+./generate.sh
+mkdir build
+cd build
+cmake .. && make
 ```
 
-Afther that, use `generate.sh` script to generate `CMakeLists.txt` file and then buid project using the CMAKE tool as in the example above.
+You may notice that when you select only one module, several other modules may be also included in the build. Because some files depend on other files in the project, the `generate.sh` script will automatically resolve these dependencies and include required files in the build as well.
+
+For example, if you only mark event library for a build, the socket library will be automatically enabled because the event module uses some functionality from sockets.
 
 ### Dependencies
 The only dependency that the library uses is the `openssl-devel` package for the `SSL` implementations.\
