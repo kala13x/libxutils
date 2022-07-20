@@ -97,6 +97,8 @@ USE_XSTR=y
 USE_XTOP=n
 ```
 
+Afther that, use `generate.sh` script to generate `CMakeLists.txt` file and then buid project using the CMAKE tool as in the example above.
+
 ### Dependencies
 The only dependency that the library uses is the `openssl-devel` package for the `SSL` implementations.\
 You can either install the `openssl-devel` package or disable the `SSL` support in the library.
