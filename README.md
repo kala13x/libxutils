@@ -133,15 +133,15 @@ use `-lxutils` linker flag while compiling your project. See the example directo
 
 ### Tools & Examples
 The project includes several examples and tools in the `examples` directory.\
-Currently, the examples can be built only by using Makefile on Linux.
+Currently, the examples can be built only by using `Makefile` from that directory.
 
 ```
 cd examples
 make
 ```
 
-There is also possible to install the tools from the example directory in the operating system.\
-After building the sources in example directory, run `sudo make install` command to install following tools in the system:
+There is also possible to install the tools in the operating system. After building the sources in example directory,\
+run `sudo make install` command to install following tools in the system:
 
 - `xcrypt` - File and text encrypt/decrypt tool for CLI
 - `xpass` - Secure password manager tool for CLI
