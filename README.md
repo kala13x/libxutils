@@ -141,7 +141,7 @@ make
 ```
 
 There is also possible to install the tools from the example directory in the operating system.\
-After building the examples, run `sudo make install` command to install following tools in the system:
+After building the sources in example directory, run `sudo make install` command to install following tools in the system:
 
 - `xcrypt` - File and text encrypt/decrypt tool for CLI
 - `xpass` - Secure password manager tool for CLI
