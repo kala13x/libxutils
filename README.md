@@ -131,7 +131,7 @@ If you use `Makefile` to build the project, all you need to adjust `CFLAGS` and 
 If you want to use the library, include the required `<xutils/*.h>` header files in your source code and\
 use `-lxutils` linker flag while compiling your project. See the example directory for more information.
 
-### Examples
+### Tools & Examples
 The project includes several examples and tools in the `examples` directory.\
 Currently, the examples can be built only by using Makefile on Linux.
 
