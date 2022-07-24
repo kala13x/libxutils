@@ -49,7 +49,8 @@ There are several ways to build and install the project.
 
 #### Using CMake
 If you have a `CMake` tool installed in your operating system, this is probably the easiest and best way to build a project:
-```
+
+```bash
 git clone https://github.com/kala13x/libxutils.git
 cd libxutils
 mkdir build && cd build
@@ -59,7 +60,8 @@ sudo make install
 
 #### Using SMake
 [SMake](https://github.com/kala13x/smake) is a simple Makefile generator tool for the Linux/Unix operating systems:
-```
+
+```bash
 git clone https://github.com/kala13x/libxutils.git
 cd libxutils
 smake && make
@@ -69,7 +71,8 @@ sudo make install
 #### Using Makefile
 If you do not have any of the above tools installed on your operating system,\
 then you can try the build by using already generated `Makefile` for linux.
-```
+
+```bash
 git clone https://github.com/kala13x/libxutils.git
 cd libxutils
 make
@@ -100,7 +103,7 @@ USE_XSTR=n
 ```
 After updating the configuration, use the `generate.sh` script to generate the `CMakeLists.txt` file and then build the project using the `CMake` tool as in this example:
 
-```
+```bash
 ./generate.sh
 mkdir build
 cd build
@@ -135,7 +138,7 @@ use `-lxutils` linker flag while compiling your project. See the example directo
 The project includes several examples and tools in the `examples` directory.\
 Currently, the examples can be built only by using `Makefile` from that directory.
 
-```
+```bash
 cd examples
 make
 ```
