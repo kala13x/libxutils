@@ -21,7 +21,6 @@ enable_crypt() {
 
 enable_event() {
     USE_EVENT=y
-    enable_sock
     enable_hash
 }
 
