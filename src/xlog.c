@@ -127,9 +127,10 @@ static void XLog_CreateTid(char *pOut, int nSize, uint8_t nTraceTid)
 static void XLog_DisplayMessage(const xlog_ctx_t *pCtx, const char *pInfo, size_t nInfoLen, const char *pInput)
 {
     xlog_cfg_t *pCfg = &g_xlog.config;
+    char *pLog = NULL;
     int nCbVal = 1;
 
-    const char *pSeparator = nInfoLen > 0 ? &pCfg->sSeparator[0] : XSTR_EMPTY;
+    const char *pSeparator = nInfoLen > 0 ? pCfg->sSeparator : XSTR_EMPTY;
     const char *pReset = pCtx->nFullColor ? XLOG_COLOR_RESET : XSTR_EMPTY;
     const char *pNewLine = pCtx->nNewLine ? XSTR_NEW_LINE : XSTR_EMPTY;
     const char *pMessage = pInput != NULL ? pInput : XSTR_EMPTY;
@@ -137,39 +138,52 @@ static void XLog_DisplayMessage(const xlog_ctx_t *pCtx, const char *pInfo, size_
     if (pCfg->logCallback != NULL)
     {
         size_t nLength = 0;
-        char *pLog = xstracpyn(&nLength, "%s%s%s%s%s", 
-            pInfo, pSeparator, pMessage, pReset, pNewLine);
-
-        if (pLog != NULL)
-        {
-            nCbVal = pCfg->logCallback(pLog, nLength, pCtx->eFlag, pCfg->pCbCtx);
-            free(pLog);
-        }
+        pLog = xstracpyn(&nLength, "%s%s%s%s%s", pInfo, pSeparator, pMessage, pReset, pNewLine);
+        if (pLog != NULL) nCbVal = pCfg->logCallback(pLog, nLength, pCtx->eFlag, pCfg->pCbCtx);
     }
 
     if (pCfg->nToScreen && nCbVal > 0)
     {
-        printf("%s%s%s%s%s", pInfo, pSeparator, pMessage, pReset, pNewLine);
+        if (pLog != NULL) printf("%s", pLog);
+        else printf("%s%s%s%s%s", pInfo, pSeparator, pMessage, pReset, pNewLine);
+
         if (pCfg->nFlush) fflush(stdout);
     }
 
-    if (!pCfg->nToFile || nCbVal < 0) return;
+    if (!pCfg->nToFile || nCbVal < 0)
+    {
+        free(pLog);
+        return;
+    }
+
     const xtime_t *pTime = &pCtx->time;
+    FILE* pFile = NULL;
 
     char sFilePath[XLOG_PATH_MAX + XLOG_NAME_MAX + XLOG_TIME_MAX];
-    xstrncpyf(sFilePath, sizeof(sFilePath), "%s/%s-%04d-%02d-%02d.log", 
+    xstrncpyf(sFilePath, sizeof(sFilePath), "%s/%s-%04d-%02d-%02d.log",
         pCfg->sFilePath, pCfg->sFileName, pTime->nYear, pTime->nMonth, pTime->nDay);
 
-    FILE* pFile = NULL;
 #ifdef _WIN32
-    if (fopen_s(&pFile, sFilePath, "a")) return;
+    if (fopen_s(&pFile, sFilePath, "a"))
+    {
+        free(pLog);
+        return;
+    }
 #else
     pFile = fopen(sFilePath, "a");
 #endif
 
-    if (pFile == NULL) return;
-    fprintf(pFile, "%s%s%s%s%s", pInfo, pSeparator, pMessage, pReset, pNewLine);
+    if (pFile == NULL)
+    {
+        free(pLog);
+        return;
+    }
+
+    if (pLog != NULL) fprintf(pFile, "%s", pLog);
+    else fprintf(pFile, "%s%s%s%s%s", pInfo, pSeparator, pMessage, pReset, pNewLine);
+
     fclose(pFile);
+    free(pLog);
 }
 
 static size_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSize)
@@ -178,16 +192,13 @@ static size_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSiz
     const xtime_t *pTime = &pCtx->time;
     char sDate[XLOG_TIME_MAX] = XSTR_INIT;
 
-    const char *pSpace = pCtx->eFlag == XLOG_NONE ?
-                        XSTR_EMPTY : XSTR_SPACE;
-
     if (pCfg->eTimeFormat == XLOG_TIME)
     {
         xstrncpyf(sDate, sizeof(sDate),
             "%02d:%02d:%02d.%02d%s",
             pTime->nHour,pTime->nMin,
             pTime->nSec, pTime->nFraq,
-            pSpace);
+            XSTR_SPACE);
     }
     else if (pCfg->eTimeFormat == XLOG_DATE)
     {
@@ -196,7 +207,7 @@ static size_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSiz
             pTime->nYear, pTime->nMonth,
             pTime->nDay, pTime->nHour,
             pTime->nMin, pTime->nSec,
-            pTime->nFraq, pSpace);
+            pTime->nFraq, XSTR_SPACE);
     }
 
     char sTid[XLOG_TAG_MAX], sTag[XLOG_TAG_MAX];

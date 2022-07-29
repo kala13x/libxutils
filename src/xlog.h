@@ -34,7 +34,7 @@ extern "C" {
 #define XLOG_COLOR_CYAN     "\x1B[36m"
 #define XLOG_COLOR_WHITE    "\x1B[37m"
 #define XLOG_COLOR_RESET    "\033[0m"
-#define XLOG_SPACE_IDENT    "        "
+#define XLOG_SPACE_IDENT    "       "
 
 /* Trace source location helpers */
 #define XLOG_LOCATION_LVL1(LINE) #LINE

@@ -43,13 +43,6 @@ int main()
     xlog_separator("[xutils]");
     xlog_ident(1);
 
-    xlog_cfg_t slgCfg;
-    xlog_get(&slgCfg);
-    slgCfg.eTimeFormat = XLOG_DATE;
-    slgCfg.logCallback = logCallback;
-    slgCfg.nUseHeap = 1;
-    xlog_set(&slgCfg);
-
     /* Log and print something with level 0 */
     XLog_Note("Test message with level 0");
 
@@ -62,6 +55,12 @@ int main()
     /* Log and print something with level 3 */
     XLog_Note("Test message with level 3");
 
+    xlog_cfg_t slgCfg;
+    xlog_get(&slgCfg);
+    slgCfg.eColorFormat = XLOG_COLORING_FULL;
+    slgCfg.nToFile = 1;
+    xlog_set(&slgCfg);
+
     /* Log and print something with char argument */
     XLog_Debug("Debug message with char argument: %s", char_arg);
 
@@ -69,8 +68,9 @@ int main()
     XLog_Error("Error message with int argument: %d", int_arg);
     XLog("Message without tag");
 
-    slgCfg.eColorFormat = XLOG_COLORING_FULL;
-    slgCfg.nToFile = 1;
+    slgCfg.eTimeFormat = XLOG_DATE;
+    slgCfg.logCallback = logCallback;
+    slgCfg.nUseHeap = 1;
     xlog_set(&slgCfg);
 
     /* Print message and save log in the file */
@@ -83,6 +83,7 @@ int main()
     /* Log with user specified tag */
     XLog("Message without tag and with int argument: %d", int_arg);
 
+    xlog("just another simple message");
     xlogd("just another debug message");
     xlogt("just another trace message");
 
