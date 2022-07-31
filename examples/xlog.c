@@ -41,7 +41,7 @@ int main()
     /* Initialize XLog with default parameters */
     XLog_Init("example", XLOG_ALL, 0);
     xlog_separator("[xutils]");
-    xlog_ident(1);
+    xlog_indent(1);
 
     /* Log and print something with level 0 */
     XLog_Note("Test message with level 0");

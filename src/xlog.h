@@ -140,7 +140,7 @@ typedef enum
 #define xlog_timing(fmt) XLog_TimeFormatSet(fmt)
 #define xlog_screen(fl) XLog_ScreenLogSet(fl)
 #define xlog_file(fl) XLog_FileLogSet(fl)
-#define xlog_ident(fl) XLog_IdentSet(fl)
+#define xlog_indent(fl) XLog_IndentSet(fl)
 #define xlog_flush(fl) XLog_FlushSet(fl)
 #define xlog_enable(fl) XLog_FlagEnable(fl)
 #define xlog_disable(fl) XLog_FlagDisable(fl)
@@ -159,7 +159,7 @@ typedef struct XLogConfig {
     uint8_t nToScreen;
     uint8_t nUseHeap;
     uint8_t nToFile;
-    uint8_t nIdent;
+    uint8_t nIndent;
     uint8_t nFlush;
     uint16_t nFlags;
 
@@ -179,7 +179,7 @@ void XLog_CallbackSet(xlog_cb_t callback, void *pContext);
 void XLog_SeparatorSet(const char *pSeparator);
 void XLog_ColorFormatSet(xlog_coloring_t eFmt);
 void XLog_TimeFormatSet(xlog_timing_t eFmt);
-void XLog_IdentSet(uint8_t nEnable);
+void XLog_IndentSet(uint8_t nEnable);
 
 size_t XLog_PathSet(const char *pPath);
 size_t XLog_NameSet(const char *pName);

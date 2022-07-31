@@ -1512,7 +1512,7 @@ int main(int argc, char *argv[])
 
     xlog_screen(!args.bDaemon);
     xlog_timing(XLOG_TIME);
-    xlog_ident(XTRUE);
+    xlog_indent(XTRUE);
 
     int nSignals[2];
     nSignals[0] = SIGTERM;

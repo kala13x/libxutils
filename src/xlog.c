@@ -27,10 +27,10 @@ typedef struct XLogCtx {
 
 static xlog_t g_xlog;
 
-static const char *XLog_GetIdent(xlog_flag_t eFlag)
+static const char *XLog_GetIndent(xlog_flag_t eFlag)
 {
     xlog_cfg_t *pCfg = &g_xlog.config;
-    if (!pCfg->nIdent) return XSTR_EMPTY;
+    if (!pCfg->nIndent) return XSTR_EMPTY;
 
     switch (eFlag)
     {
@@ -105,19 +105,19 @@ static void XLog_CreateTag(char *pOut, int nSize, xlog_flag_t eFlag, const char 
     xlog_cfg_t *pCfg = &g_xlog.config;
     pOut[0] = XSTR_NUL;
 
-    const char *pIdent = XLog_GetIdent(eFlag);
+    const char *pIndent = XLog_GetIndent(eFlag);
     const char *pTag = XLog_GetTagStr(eFlag);
 
     if (pTag == NULL)
     {
-        if (pCfg->nIdent)
-            xstrncpy(pOut, nSize, pIdent);
+        if (pCfg->nIndent)
+            xstrncpy(pOut, nSize, pIndent);
 
         return;
     }
 
-    if (pCfg->eColorFormat != XLOG_COLORING_TAG) xstrncpyf(pOut, nSize, "<%s>%s", pTag, pIdent);
-    else xstrncpyf(pOut, nSize, "%s<%s>%s%s", pColor, pTag, XLOG_COLOR_RESET, pIdent);
+    if (pCfg->eColorFormat != XLOG_COLORING_TAG) xstrncpyf(pOut, nSize, "<%s>%s", pTag, pIndent);
+    else xstrncpyf(pOut, nSize, "%s<%s>%s%s", pColor, pTag, XLOG_COLOR_RESET, pIndent);
 }
 
 static void XLog_CreateTid(char *pOut, int nSize, uint8_t nTraceTid)
@@ -361,10 +361,10 @@ void XLog_TimeFormatSet(xlog_timing_t eFmt)
     XSync_Unlock(&g_xlog.lock);
 }
 
-void XLog_IdentSet(uint8_t nEnable)
+void XLog_IndentSet(uint8_t nEnable)
 {
     XSync_Lock(&g_xlog.lock);
-    g_xlog.config.nIdent = nEnable;
+    g_xlog.config.nIndent = nEnable;
     XSync_Unlock(&g_xlog.lock);
 }
 
@@ -460,7 +460,7 @@ void XLog_Init(const char* pName, uint16_t nFlags, uint8_t nTdSafe)
     pCfg->nToScreen = 1;
     pCfg->nUseHeap = 0;
     pCfg->nToFile = 0;
-    pCfg->nIdent = 0;
+    pCfg->nIndent = 0;
     pCfg->nFlush = 0;
     pCfg->nFlags = nFlags;
 

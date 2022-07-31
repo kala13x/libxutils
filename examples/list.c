@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
     xlog_timing(XLOG_TIME);
     xlog_enable(XLOG_DEBUG | XLOG_INFO);
     xlog_separator("|");
-    xlog_ident(1);
+    xlog_indent(1);
 
     char *pFirst = strdup("first node");
     char *pSecond = strdup("second node");

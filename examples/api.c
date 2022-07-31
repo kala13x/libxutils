@@ -149,7 +149,7 @@ int main(int argc, char* argv[])
     xlog_defaults();
     xlog_timing(XLOG_TIME);
     xlog_setfl(XLOG_ALL);
-    xlog_ident(XTRUE);
+    xlog_indent(XTRUE);
 
     int nSignals[2];
     nSignals[0] = SIGTERM;

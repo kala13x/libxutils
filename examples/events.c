@@ -238,7 +238,7 @@ int main(int argc, char* argv[])
     xlog_defaults();
     xlog_timing(XLOG_TIME);
     xlog_setfl(XLOG_ALL);
-    xlog_ident(XTRUE);
+    xlog_indent(XTRUE);
 
     /* Register interrupt/termination signals */
     int nSignals[2];
