@@ -9,8 +9,7 @@ NAME = libxutils.a
 ODIR = ./obj
 OBJ = o
 
-OBJS = errex.$(OBJ) \
-	hash.$(OBJ) \
+OBJS = hash.$(OBJ) \
 	list.$(OBJ) \
 	sync.$(OBJ) \
 	thread.$(OBJ) \
@@ -20,19 +19,20 @@ OBJS = errex.$(OBJ) \
 	xtime.$(OBJ) \
 	xtype.$(OBJ) \
 	xver.$(OBJ) \
-	sock.$(OBJ) \
 	xtop.$(OBJ) \
-	xcli.$(OBJ) \
-	addr.$(OBJ) \
-	xfs.$(OBJ) \
 	xjson.$(OBJ) \
 	xaes.$(OBJ) \
 	array.$(OBJ) \
-	crypt.$(OBJ) \
 	xbuf.$(OBJ) \
 	xstr.$(OBJ) \
 	event.$(OBJ) \
 	http.$(OBJ) \
+	addr.$(OBJ) \
+	crypt.$(OBJ) \
+	errex.$(OBJ) \
+	sock.$(OBJ) \
+	xcli.$(OBJ) \
+	xfs.$(OBJ) \
 	mdtp.$(OBJ) \
 	ntp.$(OBJ) \
 	rtp.$(OBJ) \

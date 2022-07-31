@@ -43,7 +43,7 @@ int XThread_Run(xthread_t *pThread)
     if (pthread_attr_init(&attr) ||
         pthread_attr_setstacksize(&attr, pThread->nStackSize))
     {
-        fprintf(stderr, "<%s:%d> %s: Can not initialize pthread attribute: %d\n", 
+        fprintf(stderr, "<%s:%d> %s: Can not initialize pthread attribute: %d\n",
             __FILE__, __LINE__, __FUNCTION__, errno);
 
         pthread_attr_destroy(&attr);
@@ -54,7 +54,7 @@ int XThread_Run(xthread_t *pThread)
     {
         if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) 
         {
-            fprintf(stderr, "<%s:%d> %s Can not set detache state to the pthread attribute: %d\n", 
+            fprintf(stderr, "<%s:%d> %s Can not set detache state to the pthread attribute: %d\n",
                 __FILE__, __LINE__, __FUNCTION__, errno);
 
             pthread_attr_destroy(&attr);

@@ -74,7 +74,7 @@ static const char *XLog_GetColor(xlog_flag_t eFlag)
 {
     switch (eFlag)
     {
-        case XLOG_NOTE: return XLOG_COLOR_NORMAL;
+        case XLOG_NOTE: return XSTR_EMPTY;
         case XLOG_INFO: return XLOG_COLOR_GREEN;
         case XLOG_WARN: return XLOG_COLOR_YELLOW;
         case XLOG_DEBUG: return XLOG_COLOR_BLUE;
@@ -86,7 +86,7 @@ static const char *XLog_GetColor(xlog_flag_t eFlag)
         default: break;
     }
 
-    return XLOG_COLOR_NORMAL;
+    return XSTR_EMPTY;
 }
 
 static uint32_t XLog_GetThreadID(void)
@@ -110,7 +110,9 @@ static void XLog_CreateTag(char *pOut, int nSize, xlog_flag_t eFlag, const char 
 
     if (pTag == NULL)
     {
-        xstrncpy(pOut, nSize, pIdent);
+        if (pCfg->nIdent)
+            xstrncpy(pOut, nSize, pIdent);
+
         return;
     }
 
@@ -186,7 +188,7 @@ static void XLog_DisplayMessage(const xlog_ctx_t *pCtx, const char *pInfo, size_
     free(pLog);
 }
 
-static size_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSize)
+static xbool_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSize)
 {
     xlog_cfg_t *pCfg = &g_xlog.config;
     const xtime_t *pTime = &pCtx->time;
@@ -216,7 +218,7 @@ static size_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSiz
 
     XLog_CreateTid(sTid, sizeof(sTid), pCfg->nTraceTid);
     XLog_CreateTag(sTag, sizeof(sTag), pCtx->eFlag, pColorCode);
-    return xstrncpyf(pOut, nSize, "%s%s%s%s", pColor, sTid, sDate, sTag); 
+    return xstrncpyf(pOut, nSize, "%s%s%s%s", pColor, sTid, sDate, sTag);
 }
 
 static void XLog_DisplayHeap(const xlog_ctx_t *pCtx, va_list args)

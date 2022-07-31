@@ -66,7 +66,6 @@ int main()
 
     /* Log and print something with int argument */
     XLog_Error("Error message with int argument: %d", int_arg);
-    XLog("Message without tag");
 
     slgCfg.eTimeFormat = XLOG_DATE;
     slgCfg.logCallback = logCallback;
