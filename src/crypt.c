@@ -15,6 +15,8 @@
 
 #ifdef _WIN32
 #pragma warning(disable : 4146)
+#define htobe32(x) _byteswap_ulong(x)
+#define be32toh(x) _byteswap_ulong(x)
 #endif
 
 #define XMD5_LEFTROTATE(x, c) (((x) << (c)) | ((x) >> (32 - (c))))
@@ -286,9 +288,9 @@ char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength)
     xsha256_t xsha;
     XSHA256_Init(&xsha);
 
-    uint8_t i, nDigest[XSHA256_DIGEST_SIZE];
+    size_t i, nDigest[XSHA256_DIGEST_SIZE];
     XSHA256_Update(&xsha, pInput, nLength);
-    XSHA256_Final(&xsha, nDigest);
+    XSHA256_Final(&xsha, (uint8_t*)nDigest);
 
     for (i = 0; i < XSHA256_DIGEST_SIZE; i++)
     {
@@ -400,7 +402,8 @@ char* XCrypt_MD5(const uint8_t *pInput, size_t nLength)
             uint32_t temp = d;
             d = c;
             c = b;
-            b = b + XMD5_LEFTROTATE((a + f + g_intRadians[i] + w[g]), g_Radians[i]);
+            uint32_t nX = a + f + g_intRadians[i] + w[g];
+            b = b + XMD5_LEFTROTATE(nX, g_Radians[i]);
             a = temp;
         }
 
@@ -431,7 +434,7 @@ char* XCrypt_MD5(const uint8_t *pInput, size_t nLength)
 
 char *XCrypt_Casear(const char *pInput, size_t nLength, size_t nKey)
 {
-    if (pInput == NULL) return NULL;
+    if (pInput == NULL || !nLength) return NULL;
     char *pRetVal = (char*)malloc(nLength + 1);
     if (pRetVal == NULL) return NULL;
 
@@ -459,7 +462,7 @@ char *XCrypt_Casear(const char *pInput, size_t nLength, size_t nKey)
 
 char *XDecrypt_Casear(const char *pInput, size_t nLength, size_t nKey)
 {
-    if (pInput == NULL) return NULL;
+    if (pInput == NULL || !nLength) return NULL;
     char *pRetVal = (char*)malloc(nLength + 1);
     if (pRetVal == NULL) return NULL;
 
@@ -659,7 +662,11 @@ uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
     uint8_t nVal = 0;
     int nOffset = 0;
 
+#ifdef _WIN32
+    while (sscanf_s(pData, pFmt, (unsigned int*)&nVal, &nOffset) == 1)
+#else
     while (sscanf(pData, pFmt, (unsigned int*)&nVal, &nOffset) == 1)
+#endif
     {
         if (XByteBuffer_AddByte(&buffer, nVal) <= 0)
         {

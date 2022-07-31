@@ -74,7 +74,7 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
     }
 
     nTokenLen = xstrnsrc(pInput, nLength, "/", 0);
-    if (nTokenLen < 0) nTokenLen = nLength;
+    if (nTokenLen < 0) nTokenLen = (int)nLength;
 
     nTokenLen = xstrnsrc(pInput, nTokenLen, "@", nPosit);
     if (nTokenLen > 0)

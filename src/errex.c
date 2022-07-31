@@ -89,28 +89,31 @@ void XSig_Callback(int nSig)
 
 int XSig_Register(int *pSignals, size_t nCount, xsig_cb_t callback)
 {
+    size_t i = 0;
+
+#ifdef _WIN32
+    for (i = 0; i < nCount; i++)
+        signal(pSignals[i], callback);
+#else
     struct sigaction sact;
     sigemptyset(&sact.sa_mask);
     sact.sa_flags = 0;
     sact.sa_handler = callback;
 
-    size_t i;
     for (i = 0; i < nCount; i++)
         if (sigaction(pSignals[i], &sact, NULL))
             return pSignals[i];
+#endif
 
     return 0;
 }
 
 int XSig_ExitSignals(void)
 {
-#ifndef WIN32
     int nSignals[5];
     nSignals[0] = SIGINT;
     nSignals[1] = SIGILL;
-    nSignals[2] = SIGBUS;
     nSignals[3] = SIGSEGV;
     nSignals[4] = SIGTERM;
-    return XSig_Register(nSignals, 5, XSig_Callback);
-#endif
+    return XSig_Register(nSignals, 4, XSig_Callback);
 }

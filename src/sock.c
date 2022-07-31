@@ -1447,7 +1447,13 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, xsock_type_t eType, size_t nFdMax, const
         pSock->inAddr.sin_family = AF_INET;
     }
 
-    pSock->nFD = socket(AF_INET, pSock->nType | FD_CLOEXEC, pSock->nProto);
+    int nType = pSock->nType;
+
+#ifndef _WIN32
+    nType |= FD_CLOEXEC;
+#endif
+
+    pSock->nFD = socket(AF_INET, nType, pSock->nProto);
     if (pSock->nFD == XSOCK_INVALID)
     {
         pSock->eStatus = XSOCK_ERR_CREATE;

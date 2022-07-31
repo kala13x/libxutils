@@ -228,8 +228,12 @@ int XFile_GetStats(xfile_t *pFile)
     struct stat fileStat;
     if (fstat(pFile->nFD, &fileStat) < 0) return XSTDERR;
 
+#ifdef _WIN32
+    pFile->nBlockSize = XFILE_BUF_SIZE;
+#else
     pFile->nBlockSize = fileStat.st_blksize ?
         fileStat.st_blksize : XFILE_BUF_SIZE;
+#endif
 
     pFile->nMode = fileStat.st_mode;
     pFile->nSize = fileStat.st_size;
@@ -463,10 +467,10 @@ int XPath_Parse(xpath_t *pPath, const char *pPathStr)
     size_t nLength = strlen(pPathStr);
 
     if (pPathStr[nLength - 1] == '/')
-        return xstrncpy(pPath->sPath, sizeof(pPath->sPath), pPathStr);
+        return (int)xstrncpy(pPath->sPath, sizeof(pPath->sPath), pPathStr);
 
     xarray_t *pArr = xstrsplit(pPathStr, "/");
-    if (pArr == NULL) return xstrncpy(pPath->sFile, sizeof(pPath->sFile), pPathStr);
+    if (pArr == NULL) return (int)xstrncpy(pPath->sFile, sizeof(pPath->sFile), pPathStr);
 
     if (pPathStr[0] == '/')
     {
@@ -488,7 +492,7 @@ int XPath_Parse(xpath_t *pPath, const char *pPathStr)
             continue;
         }
 
-        return xstrncpy(pPath->sFile, sizeof(pPath->sFile), pEntry);
+        return (int)xstrncpy(pPath->sFile, sizeof(pPath->sFile), pEntry);
     }
 
     return XSTDNON;
@@ -542,7 +546,7 @@ int XPath_ModeToChmod(char *pOutput, size_t nSize, xmode_t nMode)
     nOwner += (nMode & _S_IWRITE) ? 2 : 0;
 #endif
 
-    return xstrncpyf(pOutput, nSize, "%d%d%d", nOwner, nGroup, nOthers);
+    return (int)xstrncpyf(pOutput, nSize, "%d%d%d", nOwner, nGroup, nOthers);
 }
 
 int XPath_ModeToPerm(char *pOutput, size_t nSize, xmode_t nMode)
@@ -898,6 +902,7 @@ void XFile_CreateEntry(xfile_entry_t *pEntry, const char *pName, const char *pPa
     pEntry->nGID = pStat->st_gid;
     pEntry->nUID = pStat->st_uid;
 
+#ifndef _WIN32
     if (pEntry->eType == XF_SYMLINK && pName != NULL && pPath != NULL)
     {
         char sPath[XPATH_MAX];
@@ -909,6 +914,7 @@ void XFile_CreateEntry(xfile_entry_t *pEntry, const char *pName, const char *pPa
         pEntry->sLink[nLen] = XSTR_NUL;
         pEntry->pRealPath = realpath(sPath, NULL);
     }
+#endif
 }
 
 xfile_entry_t* XFile_AllocEntry()

@@ -37,7 +37,7 @@ int XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
 #endif
 
     pPass[nLength] = 0;
-    return nLength;
+    return (int)nLength;
 }
 
 XSTATUS XCLI_GetWindowSize(xcli_size_t *pCli)
@@ -47,8 +47,8 @@ XSTATUS XCLI_GetWindowSize(xcli_size_t *pCli)
     csbi.srWindow.Right = csbi.srWindow.Left = 0;
     csbi.srWindow.Top = csbi.srWindow.Bottom = 0;
     GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-    pWin->nWinColumns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-    pCtpWinx->nWinRows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    pCli->nWinColumns = (size_t)csbi.srWindow.Right - (size_t)csbi.srWindow.Left + 1;
+    pCli->nWinRows = (size_t)csbi.srWindow.Bottom - (size_t)csbi.srWindow.Top + 1;
 #else
     struct winsize size;
     size.ws_col = size.ws_row = 0;
@@ -411,7 +411,7 @@ void XProgBar_MakeMove(xcli_bar_t *pCtx)
             {
                 if (++pCtx->nPosition > pCtx->nBarLength - nLoaderPercent - 1)
                 {
-                    pCtx->nPosition = pCtx->nBarLength - nLoaderPercent - 1;
+                    pCtx->nPosition = (int)pCtx->nBarLength - (int)nLoaderPercent - 1;
                     pCtx->bReverse = XTRUE;
                 }
             }
