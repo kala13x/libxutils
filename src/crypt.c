@@ -294,7 +294,7 @@ char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength)
 
     for (i = 0; i < XSHA256_DIGEST_SIZE; i++)
     {
-        xstrncpyf(pHash + i * 2, nAvail, "%02x", nDigest[i]);
+        xstrncpyf(pHash + i * 2, nAvail, "%02x", (unsigned int)nDigest[i]);
         nAvail -= i * 2;
     }
 
