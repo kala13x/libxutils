@@ -28,11 +28,11 @@ OBJS = hash.$(OBJ) \
 	event.$(OBJ) \
 	http.$(OBJ) \
 	addr.$(OBJ) \
-	crypt.$(OBJ) \
 	errex.$(OBJ) \
 	sock.$(OBJ) \
 	xcli.$(OBJ) \
 	xfs.$(OBJ) \
+	crypt.$(OBJ) \
 	mdtp.$(OBJ) \
 	ntp.$(OBJ) \
 	rtp.$(OBJ) \

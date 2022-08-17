@@ -288,7 +288,7 @@ char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength)
     xsha256_t xsha;
     XSHA256_Init(&xsha);
 
-    size_t i, nDigest[XSHA256_DIGEST_SIZE];
+    uint8_t i, nDigest[XSHA256_DIGEST_SIZE];
     XSHA256_Update(&xsha, pInput, nLength);
     XSHA256_Final(&xsha, (uint8_t*)nDigest);
 
