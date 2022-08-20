@@ -188,7 +188,7 @@ static void XLog_DisplayMessage(const xlog_ctx_t *pCtx, const char *pInfo, size_
     free(pLog);
 }
 
-static xbool_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSize)
+static size_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSize)
 {
     xlog_cfg_t *pCfg = &g_xlog.config;
     const xtime_t *pTime = &pCtx->time;
