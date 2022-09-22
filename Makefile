@@ -14,7 +14,6 @@ OBJS = hash.$(OBJ) \
 	sync.$(OBJ) \
 	thread.$(OBJ) \
 	xcpu.$(OBJ) \
-	xlog.$(OBJ) \
 	xmap.$(OBJ) \
 	xtime.$(OBJ) \
 	xtype.$(OBJ) \
@@ -33,6 +32,7 @@ OBJS = hash.$(OBJ) \
 	xcli.$(OBJ) \
 	xfs.$(OBJ) \
 	crypt.$(OBJ) \
+	xlog.$(OBJ) \
 	mdtp.$(OBJ) \
 	ntp.$(OBJ) \
 	rtp.$(OBJ) \

@@ -497,10 +497,10 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
         if (nBytes <= 0)
         {
             int nError = SSL_get_error(pSSL, nBytes);
+            xsock_status_t eStat = pSock->eStatus;
             pSock->eStatus = XSOCK_ERR_SSLREAD;
 
-            if (nError == SSL_ERROR_WANT_READ) continue;
-            else if (nError == SSL_ERROR_ZERO_RETURN)
+            if (nError == SSL_ERROR_ZERO_RETURN)
             {
                 XSock_SetShutdown(pSock, XFALSE);
                 pSock->eStatus = XSOCK_EOF;
@@ -514,6 +514,11 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
             {
                 XSock_SetShutdown(pSock, XFALSE);
                 pSock->eStatus = XSOCK_ERR_SSLERR;
+            }
+            else if (nError == SSL_ERROR_WANT_READ)
+            {
+                pSock->eStatus = eStat;
+                continue;
             }
 
             if (pSock->eStatus != XSOCK_EOF)
