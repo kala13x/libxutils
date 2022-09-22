@@ -1040,22 +1040,25 @@ xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *
     if (XSock_GetAddr(&addrInfo, pLink->sHost) < 0)
         return XHTTP_StatusCb(pHttp, XHTTP_ERRRESOLVE);
 
+    addrInfo.nPort = addrInfo.nPort ? addrInfo.nPort :
+        (XSockType_IsSSL(eType) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT);
+
     if (XHTTP_CHECK_FLAG(pHttp->nCbTypes, XHTTP_STATUS) && pHttp->callback != NULL)
     {
         char sBuffer[XHTTP_OPTION_MAX];
         xhttp_ctx_t cbCtx;
 
-        cbCtx.nLength = xstrncpyf(sBuffer, sizeof(sBuffer),
-            "Resolved remote addr: %s", addrInfo.sAddr);
+        cbCtx.nLength = xstrncpyf(
+            sBuffer, sizeof(sBuffer),
+            "Connecting to remote server: %s:%d",
+            addrInfo.sAddr, addrInfo.nPort
+        );
 
         cbCtx.pData = sBuffer;
         cbCtx.eCbType = XHTTP_STATUS;
         cbCtx.eStatus = XHTTP_RESOLVED;
         pHttp->callback(pHttp, &cbCtx);
     }
-
-    addrInfo.nPort = addrInfo.nPort ? addrInfo.nPort :
-        (XSockType_IsSSL(eType) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT);
 
     if (XSock_Open(&sock, eType, &addrInfo) == XSOCK_INVALID)
         return XHTTP_StatusCb(pHttp, XHTTP_ERRCONNECT);
