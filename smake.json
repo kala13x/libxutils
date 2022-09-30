@@ -4,6 +4,7 @@
         "outputDir": "./obj",
         "flags": "-g -O2 -Wall -D_XUTILS_USE_SSL",
         "libs": "-lpthread -lssl -lcrypto",
+        "overwrite": true,
         "excludes": [
             "./examples",
             "./cmake"
