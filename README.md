@@ -135,6 +135,7 @@ If you want to use the library, include the required `<xutils/*.h>` header files
 use `-lxutils` linker flag while compiling your project. See the example directory for more information.
 
 ### Tools & Examples
+
 The project includes several examples and tools in the `examples` directory.\
 Currently, the examples can be built only by using `Makefile` from that directory.
 
@@ -143,8 +144,15 @@ cd examples
 make
 ```
 
-There is also possible to install the tools in the operating system. After building the sources in example directory,\
-run `sudo make install` command to install following tools in the system:
+#### XTOP and more
+
+<p align="center">
+    <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/examples/xtop.png" alt="alternate text">
+</p>
+
+`XTOP` is `HTOP` like performance monitor that supports to monitor CPU, memory, and network traffic into a single window. In addition, it has powerful `REST API` client/server mode and much more.
+
+After building the sources in example directory, run `sudo make install` command to install following tools in the system:
 
 - `xcrypt` - File and text encrypt/decrypt tool for CLI
 - `xpass` - Secure password manager tool for CLI
