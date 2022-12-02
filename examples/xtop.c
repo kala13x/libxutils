@@ -21,7 +21,7 @@
 #include <xutils/xfs.h>
 
 #define XTOP_VERSION_MAJ    1
-#define XTOP_VERSION_MIN    0
+#define XTOP_VERSION_MIN    1
 
 #define XTOP_SORT_DISABLE   0
 #define XTOP_SORT_BUSY      1
@@ -345,18 +345,19 @@ int XTOPApp_FillCPUBar(xcli_bar_t *pBar, xcpu_info_t *pCore, char *pDst, size_t 
     fKernel += XU32ToFloat(pCore->nIOWait);
 
     /* Calculate percentage */
-    size_t nMaxSize = pBar->nBarLength;
-    size_t nNormal = nMaxSize * (size_t)floor(fNormal) / 100;
-    size_t nKernel = nMaxSize * (size_t)floor(fKernel) / 100;
-    size_t nVirt = nMaxSize * (size_t)floor(fVirt) / 100;
-    size_t nLow = nMaxSize * (size_t)floor(fLow) / 100;
+    size_t nNormal = pBar->nBarLength * (size_t)XFTON(fNormal) / 100;
+    size_t nKernel = pBar->nBarLength * (size_t)XFTON(fKernel) / 100;
+    size_t nVirt = pBar->nBarLength * (size_t)XFTON(fVirt) / 100;
+    size_t nLow = pBar->nBarLength * (size_t)XFTON(fLow) / 100;
     size_t nSum = nLow + nVirt + nNormal + nKernel;
+    float fSum = fNormal + fLow + fVirt + fKernel;
 
     /* Round the calculated results to improve bar fill accurracy */
-    if (fNormal > 0. && !nNormal && nSum < nMaxSize) { nNormal++; nSum++; }
-    if (fKernel > 0. && !nKernel && nSum < nMaxSize) { nKernel++; nSum++; }
-    if (fVirt > 0. && !nVirt && nSum < nMaxSize) { nVirt++; nSum++; }
-    if (fLow > 0. && !nLow && nSum < nMaxSize) nLow++;
+    if (fNormal > 0. && !nNormal && nSum < pBar->nBarLength) { nNormal++; nSum++; }
+    if (fKernel > 0. && !nKernel && nSum < pBar->nBarLength) { nKernel++; nSum++; }
+    if (fVirt > 0. && !nVirt && nSum < pBar->nBarLength) { nVirt++; nSum++; }
+    if (fLow > 0. && !nLow && nSum < pBar->nBarLength) { nLow++; nSum++; }
+    while (fSum >= 99.95 && nSum < pBar->nBarLength) { nLow++; nSum++; }
 
     /* Fill partial results with the bar used character */
     xstrfill(sNormal, sizeof(sNormal), nNormal, pBar->cLoader);

@@ -38,6 +38,8 @@ typedef uint8_t             xbool_t;
 #define XCHAR(var,size) char var[size] = {'\0'}
 #define XARG_SIZE(val)  val, sizeof(val)
 
+#define XFTON(x) ((x)>=0.0f?(int)((x)+0.5f):(int)((x)-0.5f))
+
 uint32_t XFloatToU32(float fValue);
 float XU32ToFloat(uint32_t nValue);
 

@@ -422,7 +422,7 @@ int XHTTPApp_Perform(xhttp_args_t *pArgs, xlink_t *pLink)
     xhttp_status_t eStatus;
 
     eStatus = XHTTP_LinkPerform(&handle, pLink, pArgs->content.pData, pArgs->content.nUsed);
-    if (eStatus != XHTTP_COMPLETE)
+    if (eStatus != XHTTP_COMPLETE && !XHTTP_GetBodySize(&handle))
     {
         if (eStatus == XHTTP_BIGCNT) xlogi("Too big content. Try to use output file (-o <file>)");
         XFile_Clean(pArgs->pOutputFile);
