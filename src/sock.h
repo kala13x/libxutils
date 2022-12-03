@@ -37,13 +37,13 @@ extern "C" {
 #endif
 
 #ifdef _WIN32
-typedef SOCKET              XSOCKET;
+typedef SOCKET              XSOCKET
 #define XSHUT_RDWR          SD_BOTH
 #define XSOCK_INVALID       INVALID_SOCKET
 #define XMSG_NOSIGNAL       0
 #define XMSG_DONTWAIT       0
 #else
-typedef int                 XSOCKET;
+typedef int                 XSOCKET
 #define XSHUT_RDWR          SHUT_RDWR
 #define XMSG_NOSIGNAL       MSG_NOSIGNAL
 #define XMSG_DONTWAIT       MSG_DONTWAIT
