@@ -15,7 +15,7 @@
 #include "array.h"
 
 typedef struct XProtocolPorts {
-    const char*	pProtocol;
+    const char* pProtocol;
     const int nPort;
     const int nRange;
 } xprotocol_ports_t;

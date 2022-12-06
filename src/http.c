@@ -17,7 +17,7 @@
 
 typedef struct XHTTPCode {
     const int nCode;
-    const char*	pDesc;
+    const char* pDesc;
 } xhttp_code_t;
 
 static xhttp_code_t g_XTTPCodes[] =

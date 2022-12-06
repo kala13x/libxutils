@@ -84,7 +84,7 @@ typedef struct xtop_args_ {
 void XTOPApp_SignalCallback(int sig)
 {
     if (sig == 2) printf("\n");
-	g_nInterrupted = 1;
+    g_nInterrupted = 1;
 }
 
 static char *XTOPApp_WhiteSpace(const int nLength)

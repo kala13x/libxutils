@@ -67,7 +67,7 @@
 #include "xlog.h"
 #endif
 
-typedef int	XSTATUS;
+typedef int XSTATUS;
 
 #ifndef XSTD_MIN
 #define XSTD_MIN(a,b)(a<b?a:b)

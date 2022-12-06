@@ -198,14 +198,14 @@ static const uint32_t g_Radians[] =
 void XSHA256_Init(xsha256_t *pSha)
 {
     memset(pSha, 0, sizeof(xsha256_t));
-	pSha->uDigest.hBytes[0] = 0x6A09E667;
-	pSha->uDigest.hBytes[1] = 0xBB67AE85;
-	pSha->uDigest.hBytes[2] = 0x3C6EF372;
-	pSha->uDigest.hBytes[3] = 0xA54FF53A;
-	pSha->uDigest.hBytes[4] = 0x510E527F;
-	pSha->uDigest.hBytes[5] = 0x9B05688C;
-	pSha->uDigest.hBytes[6] = 0x1F83D9AB;
-	pSha->uDigest.hBytes[7] = 0x5BE0CD19;
+    pSha->uDigest.hBytes[0] = 0x6A09E667;
+    pSha->uDigest.hBytes[1] = 0xBB67AE85;
+    pSha->uDigest.hBytes[2] = 0x3C6EF372;
+    pSha->uDigest.hBytes[3] = 0xA54FF53A;
+    pSha->uDigest.hBytes[4] = 0x510E527F;
+    pSha->uDigest.hBytes[5] = 0x9B05688C;
+    pSha->uDigest.hBytes[6] = 0x1F83D9AB;
+    pSha->uDigest.hBytes[7] = 0x5BE0CD19;
 }
 
 void XSHA256_Update(xsha256_t *pSha, const uint8_t *pData, size_t nLength)

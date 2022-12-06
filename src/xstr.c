@@ -37,7 +37,7 @@ size_t xstrarglen(const char *pFmt, va_list args)
     memcpy(&locArgs, &args, sizeof(va_list));
 #endif
 
-	int nLength = vsnprintf(0, 0, pFmt, locArgs);
+    int nLength = vsnprintf(0, 0, pFmt, locArgs);
 
 #ifdef _XUTILS_USE_EXT
     if (nLength > 0)
