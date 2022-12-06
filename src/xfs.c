@@ -136,6 +136,7 @@ int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char
     pFile->nFlags = (pFlags != NULL) ? XFile_ParseFlags(pFlags) : 0;
     pFile->nBlockSize = XFILE_BUF_SIZE;
     pFile->nSize = 0;
+    pFile->nFD = -1;
 
     const char *pPerm = (pPerms != NULL) ? pPerms : XFILE_DEFAULT_PERM;
     if (!XPath_PermToMode(pPerm, &pFile->nMode)) return XFILE_INVALID;
