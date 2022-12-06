@@ -48,6 +48,7 @@ typedef struct XMap {
 int XMap_Init(xmap_t *pMap, size_t nSize);
 int XMap_Realloc(xmap_t *pMap);
 void XMap_Destroy(xmap_t *pMap);
+void XMap_Reset(xmap_t *pMap);
 
 xmap_t *XMap_New(size_t nSize);
 void XMap_Free(xmap_t *pMap);

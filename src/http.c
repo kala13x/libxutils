@@ -302,16 +302,20 @@ int XHTTP_InitResponse(xhttp_t *pHttp, uint16_t nStatusCode, const char *pVer)
 
 void XHTTP_Reset(xhttp_t *pHttp, xbool_t bHard)
 {
-    XMap_Destroy(&pHttp->headerMap);
-    XMap_Init(&pHttp->headerMap, XSTDNON);
-    pHttp->headerMap.clearCb = XHTTP_HeaderClearCb;
-
     if (bHard)
     {
         XByteBuffer_Clear(&pHttp->dataRaw);
-        XByteBuffer_Init(&pHttp->dataRaw, XSTDNON, XSTDNON);
+        XByteBuffer_Init(&pHttp->dataRaw, XSTDNON, XFALSE);
+
+        XMap_Destroy(&pHttp->headerMap);
+        XMap_Init(&pHttp->headerMap, XSTDNON);
+        pHttp->headerMap.clearCb = XHTTP_HeaderClearCb;
     }
-    else XByteBuffer_Reset(&pHttp->dataRaw);
+    else
+    {
+        XByteBuffer_Reset(&pHttp->dataRaw);
+        XMap_Reset(&pHttp->headerMap);
+    }
 
     pHttp->nContentLength = 0;
     pHttp->nHeaderLength = 0;

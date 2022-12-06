@@ -87,10 +87,15 @@ int XMap_Iterate(xmap_t *pMap, xmap_iterator_t itfunc, void *pCtx)
     return XMAP_OK;
 }
 
-void XMap_Destroy(xmap_t *pMap)
+void XMap_Reset(xmap_t *pMap)
 {
     if (pMap == NULL || pMap->pPairs == NULL) return;
     XMap_Iterate(pMap, XMap_ClearIt, pMap);
+}
+
+void XMap_Destroy(xmap_t *pMap)
+{
+    XMap_Reset(pMap);
     XMap_Free(pMap);
 }
 
