@@ -9,35 +9,35 @@ NAME = libxutils.a
 ODIR = ./obj
 OBJ = o
 
-OBJS = hash.$(OBJ) \
-	list.$(OBJ) \
-	sync.$(OBJ) \
-	thread.$(OBJ) \
-	xcpu.$(OBJ) \
-	xmap.$(OBJ) \
-	xtime.$(OBJ) \
-	xtype.$(OBJ) \
-	xver.$(OBJ) \
-	xtop.$(OBJ) \
-	xjson.$(OBJ) \
-	xaes.$(OBJ) \
+OBJS = addr.$(OBJ) \
 	array.$(OBJ) \
-	xbuf.$(OBJ) \
-	xstr.$(OBJ) \
-	event.$(OBJ) \
-	http.$(OBJ) \
-	addr.$(OBJ) \
-	errex.$(OBJ) \
-	sock.$(OBJ) \
-	xcli.$(OBJ) \
-	xfs.$(OBJ) \
 	crypt.$(OBJ) \
-	xlog.$(OBJ) \
+	errex.$(OBJ) \
+	event.$(OBJ) \
+	hash.$(OBJ) \
+	http.$(OBJ) \
+	list.$(OBJ) \
 	mdtp.$(OBJ) \
 	ntp.$(OBJ) \
 	rtp.$(OBJ) \
+	sock.$(OBJ) \
+	sync.$(OBJ) \
+	thread.$(OBJ) \
 	ts.$(OBJ) \
-	xapi.$(OBJ)
+	xaes.$(OBJ) \
+	xapi.$(OBJ) \
+	xbuf.$(OBJ) \
+	xcli.$(OBJ) \
+	xcpu.$(OBJ) \
+	xfs.$(OBJ) \
+	xjson.$(OBJ) \
+	xlog.$(OBJ) \
+	xmap.$(OBJ) \
+	xstr.$(OBJ) \
+	xtime.$(OBJ) \
+	xtop.$(OBJ) \
+	xtype.$(OBJ) \
+	xver.$(OBJ)
 
 OBJECTS = $(patsubst %,$(ODIR)/%,$(OBJS))
 INSTALL_INC = /usr/local/include/xutils

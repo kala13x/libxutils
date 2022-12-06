@@ -346,7 +346,7 @@ xarray_data_t* XArray_InsertData(xarray_t *pArr, size_t nIndex, void *pData, siz
 
 void XArray_Swap(xarray_t *pArr, size_t nIndex1, size_t nIndex2)
 {
-    if (nIndex1 >= pArr->nUsed || 
+    if (nIndex1 >= pArr->nUsed ||
         nIndex2 >= pArr->nUsed) return;
 
     xarray_data_t *pData1 = pArr->pData[nIndex1];
