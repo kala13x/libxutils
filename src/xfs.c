@@ -615,8 +615,7 @@ int XPath_CopyFile(const char *pSrc, const char *pDst)
 int XPath_Read(const char *pPath, uint8_t *pBuffer, size_t nSize)
 {
     xfile_t file;
-    XFile_Open(&file, pPath, NULL, NULL);
-    if (file.nFD < 0) return XSTDERR;
+    if (XFile_Open(&file, pPath, NULL, NULL) < 0) return XSTDERR;
 
     int nBytes = XFile_Read(&file, pBuffer, nSize);
     size_t nTermPosit = (nBytes > 0) ? nBytes : 0;
@@ -631,10 +630,9 @@ uint8_t* XPath_Load(const char *pPath, size_t* pSize)
     xfile_t file;
     *pSize = 0;
 
-    XFile_Open(&file, pPath, NULL, NULL);
-    if (file.nFD < 0) return NULL;
-
+    if (XFile_Open(&file, pPath, NULL, NULL) < 0) return NULL;
     uint8_t *pData = XFile_Load(&file, pSize);
+
     XFile_Close(&file);
     return pData;
 }
