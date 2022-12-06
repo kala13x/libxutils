@@ -53,7 +53,7 @@ int handle_request(xevent_data_t *pEvData)
     pHandle->dataRaw.pData[pHandle->nHeaderLength - 1] = XSTR_NUL;
     xlogi("Request header:\n\n%s", (char*)pHandle->dataRaw.pData);
 
-    XHTTP_Recycle(pHandle, XFALSE);
+    XHTTP_Reset(pHandle, XFALSE);
     pHandle->eType = XHTTP_RESPONSE;
     pHandle->nStatusCode = 200;
 

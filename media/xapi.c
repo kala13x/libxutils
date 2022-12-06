@@ -184,7 +184,7 @@ int XAPI_SetResponse(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus)
     xapi_t *pApi = pApiData->pApi;
     char sContent[XSTR_MIN];
 
-    XHTTP_Recycle(pHandle, XFALSE);
+    XHTTP_Reset(pHandle, XFALSE);
     pHandle->nStatusCode = nCode;
     pHandle->eType = XHTTP_RESPONSE;
 
@@ -318,7 +318,7 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
             if (nStatus < 0) return XEVENTS_DISCONNECT;
             else if (!nStatus) return XEVENTS_CONTINUE;
 
-            XHTTP_Recycle(pHandle, XFALSE);
+            XHTTP_Reset(pHandle, XFALSE);
             pHandle->eType = XHTTP_RESPONSE;
             pApiData->ePktType = XPKT_HTTP;
             pApiData->pPacket = pHandle;
@@ -380,7 +380,7 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
         nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_COMPLETE);
         if (nStatus < 0) return XEVENTS_DISCONNECT;
         else if (!nStatus) return XEVENTS_CONTINUE;
-        XHTTP_Recycle(pHandle, XFALSE);
+        XHTTP_Reset(pHandle, XFALSE);
     }
     
     return nStatus == XSTDUSR ?

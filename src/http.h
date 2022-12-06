@@ -133,7 +133,7 @@ const char* XHTTP_GetStatusStr(xhttp_status_t eStatus);
 xhttp_method_t XHTTP_GetMethodType(const char *pData);
 
 void XHTTP_Clear(xhttp_t *pHttp);
-void XHTTP_Recycle(xhttp_t *pHttp, xbool_t bHard);
+void XHTTP_Reset(xhttp_t *pHttp, xbool_t bHard);
 xhttp_t *XHTTP_Alloc(xhttp_method_t eMethod, size_t nDataSize);
 
 int XHTTP_Copy(xhttp_t *pDst, xhttp_t *pSrc);

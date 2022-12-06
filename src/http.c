@@ -300,7 +300,7 @@ int XHTTP_InitResponse(xhttp_t *pHttp, uint16_t nStatusCode, const char *pVer)
     return nStatus;
 }
 
-void XHTTP_Recycle(xhttp_t *pHttp, xbool_t bHard)
+void XHTTP_Reset(xhttp_t *pHttp, xbool_t bHard)
 {
     XMap_Destroy(&pHttp->headerMap);
     XMap_Init(&pHttp->headerMap, XSTDNON);
@@ -1005,7 +1005,7 @@ xhttp_status_t XHTTP_Perform(xhttp_t *pHttp, xsock_t *pSock, const uint8_t *pBod
     if (nStatus == XSTDERR)
         return XHTTP_TERMINATED;
 
-    XHTTP_Recycle(pHttp, XFALSE);
+    XHTTP_Reset(pHttp, XFALSE);
     return XHTTP_Receive(pHttp, pSock);
 }
 
