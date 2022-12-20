@@ -1,14 +1,10 @@
-<p align="center">
-    <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/logo.png" alt="alternate text">
-</p>
-
 [![MIT License](https://img.shields.io/badge/License-MIT-brightgreen.svg?)](https://github.com/kala13x/libxutils/blob/main/LICENSE)
 [![Build workflow](https://github.com/kala13x/libxutils/actions/workflows/build_libxutils.yml/badge.svg)](https://github.com/kala13x/libxutils/actions)
 [![CodeQL](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/25173/badge.svg?)](https://scan.coverity.com/projects/libxutils)
 
 
-## libxutils - C/C++ Utility Library release 2.x
+## libxutils - Cross-platform C library release 2.x
 The `xUtils` C Library is the general-purpose, cross-platform library for `Linux/Unix` and `Windows` operating systems. It provides the safer implementations of various functions to make some routines easier for all the programs written in C and C-compatible languages such as C++, Rust, and Objective C. This directory contains the sources of the `xUtils` C Library. See the file `src/xver.h` to check out what release version you have.
 
 ### Here is an incomplete list of what this library offers.
