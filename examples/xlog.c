@@ -86,5 +86,7 @@ int main()
     xlogd("just another debug message");
     xlogt("just another trace message");
 
+    XLOG_ASSERT(XFALSE, 0, "Message from failed assert");
+
     return 0;
 }

@@ -149,6 +149,15 @@ typedef enum
 #define xlog_path(path) XLog_PathSet(path)
 #define xlog_name(name) XLog_NameSet(name)
 
+#define XLOG_ASSERT(condition, value, msg)  \
+    do {                                    \
+        if (!condition) {                   \
+            if (msg) xloge("%s", msg);      \
+            return value;                   \
+        }                                   \
+    }                                       \
+    while (XSTDNON)
+
 typedef struct XLogConfig {
     xlog_coloring_t eColorFormat;
     xlog_timing_t eTimeFormat;
