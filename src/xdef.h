@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/xmap.c
+ *  @file libxutils/src/xdef.h
  *
  *  This source is part of "libxutils" project
  *  2019-2020  Sun Dro (f4tb0y@protonmail.com)
