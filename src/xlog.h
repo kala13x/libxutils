@@ -149,10 +149,24 @@ typedef enum
 #define xlog_path(path) XLog_PathSet(path)
 #define xlog_name(name) XLog_NameSet(name)
 
-#define XLOG_ASSERT(condition, value, msg)  \
+#define XLOG_ASSERT(condition, value, ...)  \
     do {                                    \
         if (!condition) {                   \
-            if (msg) xloge("%s", msg);      \
+            if (__VA_ARGS__)                \
+                xloge(__VA_ARGS__);         \
+            else                            \
+                xloge(XLOG_THROW_LOCATION   \
+                "Assert failed");           \
+            return value;                   \
+        }                                   \
+    }                                       \
+    while (XSTDNON)
+
+#define XLOG_TRY(condition, value, ...)     \
+    do {                                    \
+        if (!condition) {                   \
+            if (__VA_ARGS__)                \
+                xlogw(__VA_ARGS__);         \
             return value;                   \
         }                                   \
     }                                       \
