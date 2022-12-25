@@ -4,9 +4,11 @@
 [![CodeQL](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/25173/badge.svg?)](https://scan.coverity.com/projects/libxutils)
 
-
 ## libxutils - Cross-platform C library release 2.x
-The `xUtils` C Library is the general-purpose, cross-platform library for `Linux/Unix` and `Windows` operating systems. It provides the safer implementations of various functions to make some routines easier for all the programs written in C and C-compatible languages such as C++, Rust, and Objective C. This directory contains the sources of the `xUtils` C Library. See the file `src/xver.h` to check out what release version you have.
+
+libxutils is a cross-platform C library that provides safer implementations of various functions to make routine tasks easier for programs written in C and C-compatible languages like C++, Rust, and Objective C. The library offers a range of features including containers, network tools, and system utilities. Some of the specific features include a dynamically allocated array with sort and search features, a byte and data buffer, a key-value pair map, a hash map, and a linked list. On the network side, the library provides an event library based on poll(), epoll(), and WSAPoll(), a socket library with TCP, UDP, and SSL support, an event-based high performance REST API client/server library, an HTTP client/server library, an MDTP client/server library, and an RTP packet parser library. Finally, the library includes cross-platform file and directory manipulation tools, a CPU affinity manipulation API, an advanced file search API, and a system time manipulation library.
+
+libxutils is available for both Linux/Unix and Windows operating systems and is released under the MIT License. To check the version of libxutils you have, you can refer to the file `src/xver.h`. Please note that the list of features provided in the README is incomplete. For more information about the full range of features offered by libxutils, you can refer to the individual header files linked below or browse the library's source code.
 
 ### Here is an incomplete list of what this library offers.
 #### Containrers:
