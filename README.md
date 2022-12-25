@@ -10,7 +10,6 @@ libxutils is a cross-platform C library that provides safer implementations of v
 
 libxutils is available for both Linux/Unix and Windows operating systems and is released under the MIT License. To check the version of libxutils you have, you can refer to the file `src/xver.h`. Please note that the list of features provided in the README is incomplete. For more information about the full range of features offered by libxutils, you can refer to the individual header files linked below or browse the library's source code.
 
-### Here is an incomplete list of what this library offers.
 #### Containrers:
 - [Dynamically allocated array with sort and search features](https://github.com/kala13x/libxutils/blob/main/src/array.h)
 - [Dynamically allocated byte and data buffers](https://github.com/kala13x/libxutils/blob/main/src/xbuf.h)
