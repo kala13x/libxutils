@@ -162,8 +162,7 @@ int XWindow_ClearScreen()
 {
     int nRet = XSTDNON;
 #if !defined(_WIN32) && !defined(_WIN64)
-    const char *pClearSeq = "\x1b[2J";
-    write(STDOUT_FILENO, pClearSeq, 4);
+    nRet = system("clear");
 #else
     nRet = system("cls");
 #endif

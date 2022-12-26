@@ -45,8 +45,6 @@ float XU32ToFloat(uint32_t nValue);
 
 size_t XBytesToUnit(char *pDst, size_t nSize, size_t nBytes, xbool_t bShort);
 size_t XKBToUnit(char *pDst, size_t nSize, size_t nKB, xbool_t bShort);
-
-int XTypeIsAlphabet(char nChar);
 xbool_t XTypeIsPrint(const uint8_t *pData, size_t nSize);
 
 #ifdef __cplusplus

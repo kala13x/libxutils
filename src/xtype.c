@@ -12,31 +12,21 @@
 #include "xstr.h"
 #include "xtype.h"
 
+union {
+    float fValue;
+    uint32_t u32;
+} XTypeConvert;
+
 uint32_t XFloatToU32(float fValue)
 {
-    uint16_t nIntegral = (uint16_t)floor(fValue);
-    float fBalance = fValue - (float)nIntegral;
-    uint16_t nDecimal = (uint16_t)(fBalance * 100);
-
-    uint32_t nRetVal;
-    nRetVal = (uint32_t)nIntegral;
-    nRetVal <<= 16;
-    nRetVal += (uint32_t)nDecimal;
-    return nRetVal;
+    XTypeConvert.fValue = fValue;
+    return XTypeConvert.u32;
 }
 
 float XU32ToFloat(uint32_t nValue)
 {
-    uint16_t nIntegral = (uint16_t)(nValue >> 16);
-    uint16_t nDecimal = (uint16_t)(nValue & 0xFF);
-    float fBalance = (float)nDecimal / (float)100;
-    return (float)((float)nIntegral + fBalance);
-}
-
-int XTypeIsAlphabet(char nChar)
-{
-    return ((nChar >= 'a' && nChar <= 'z') || 
-            (nChar >= 'A' && nChar <= 'Z')) ? 1 : 0;
+    XTypeConvert.u32 = nValue;
+    return XTypeConvert.fValue;
 }
 
 xbool_t XTypeIsPrint(const uint8_t *pData, size_t nSize)
@@ -48,8 +38,7 @@ xbool_t XTypeIsPrint(const uint8_t *pData, size_t nSize)
     {
         if (pData[i] == XSTR_NUL) break;
 
-        if (!isascii(pData[i]) &&
-            !isprint(pData[i]))
+        if (!isprint(pData[i]))
         {
             bPrintable = XFALSE;
             break;
@@ -61,48 +50,63 @@ xbool_t XTypeIsPrint(const uint8_t *pData, size_t nSize)
 
 size_t XBytesToUnit(char *pDst, size_t nSize, size_t nBytes, xbool_t bShort)
 {
-    if (bShort)
-    {
-        if (nBytes > 1073741824)
-            return xstrncpyf(pDst, nSize, "%.1fG", (double)nBytes / (double)1073741824);
-        else if (nBytes > 1048576)
-            return xstrncpyf(pDst, nSize, "%.1fM", (double)nBytes / (double)1048576);
-        else if (nBytes > 1024)
-            return xstrncpyf(pDst, nSize, "%.1fK", (double)nBytes / (double)1024);
-
-        return xstrncpyf(pDst, nSize, "%zuB", nBytes);
-    }
+    const char *pUnit;
+    double fVal = 0.;
 
     if (nBytes > 1073741824)
-        return xstrncpyf(pDst, nSize, "%.2f GB", (double)nBytes / (double)1073741824);
+    {
+        fVal = (double)nBytes / (double)1073741824;
+        pUnit = bShort ? "G" : " GB";
+    }
     else if (nBytes > 1048576)
-        return xstrncpyf(pDst, nSize, "%.2f MB", (double)nBytes / (double)1048576);
+    {
+        fVal = (double)nBytes / (double)1048576;
+        pUnit = bShort ? "M" : " MB";
+    }
     else if (nBytes > 1024)
-        return xstrncpyf(pDst, nSize, "%.2f KB", (double)nBytes / (double)1024);
+    {
+        fVal = (double)nBytes / (double)1024;
+        pUnit = bShort ? "K" : " KB";
+    }
+    else
+    {
+        fVal = (double)nBytes;
+        pUnit = bShort ? "B" : " B";
+    }
 
-    return xstrncpyf(pDst, nSize, "%zu  B", nBytes);
+    return bShort ?
+        xstrncpyf(pDst, nSize, "%.1f%s", fVal, pUnit) :
+        xstrncpyf(pDst, nSize, "%.2f %s", fVal, pUnit);
 }
+
 
 size_t XKBToUnit(char *pDst, size_t nSize, size_t nKB, xbool_t bShort)
 {
-    if (bShort)
-    {
-        if (nKB > 1073741824)
-            return xstrncpyf(pDst, nSize, "%.1fT", (double)nKB / (double)1073741824);
-        else if (nKB > 1048576)
-            return xstrncpyf(pDst, nSize, "%.1fG", (double)nKB / (double)1048576);
-        else if (nKB > 1024)
-            return xstrncpyf(pDst, nSize, "%.1fM", (double)nKB / (double)1024);
-
-        return xstrncpyf(pDst, nSize, "%zuK", nKB);
-    }
+    const char *pUnit;
+    double fVal = 0.;
 
     if (nKB > 1073741824)
-        return xstrncpyf(pDst, nSize, "%.2f TB", (double)nKB / (double)1073741824);
+    {
+        fVal = (double)nKB / (double)1073741824;
+        pUnit = bShort ? "T" : " TB";
+    }
     else if (nKB > 1048576)
-        return xstrncpyf(pDst, nSize, "%.2f GB", (double)nKB / (double)1048576);
+    {
+        fVal = (double)nKB / (double)1048576;
+        pUnit = bShort ? "G" : " GB";
+    }
     else if (nKB > 1024)
-        return xstrncpyf(pDst, nSize, "%.2f MB", (double)nKB / (double)1024);
+    {
+        fVal = (double)nKB / (double)1024;
+        pUnit = bShort ? "M" : " MB";
+    }
+    else
+    {
+        fVal = (double)nKB;
+        pUnit = bShort ? "K" : " KB";
+    }
 
-    return xstrncpyf(pDst, nSize, "%zu KB", nKB);
+    return bShort ?
+        xstrncpyf(pDst, nSize, "%.1f%s", fVal, pUnit) :
+        xstrncpyf(pDst, nSize, "%.2f %s", fVal, pUnit);
 }
