@@ -1,7 +1,6 @@
 [
     {
         "bigobj": {
-            "nullItem": null,
             "testobj1": {
                 "testobj2": {
                     "testbool1": true,
@@ -10,6 +9,9 @@
                 "testfloat1": 60.900002,
                 "testint1": 66
             },
+            "emptyArrObj": [
+                {}
+            ],
             "testobj3": {
                 "testarray2": [
                     true,
@@ -19,6 +21,8 @@
                 "testbool2": true,
                 "teststr2": "example string 2"
             },
+            "nullItem": null,
+            "emptyObject": {},
             "testarray1": [
                 {
                     "testint2": -67,
@@ -33,11 +37,7 @@
                     "testfloat2": 63.969690
                 }
             ],
-            "emptyObject": {},
-            "emptyArray": [],
-            "emptyArrObj": [
-                {}
-            ]
+            "emptyArray": []
         }
     }
 ]

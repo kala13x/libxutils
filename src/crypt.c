@@ -302,6 +302,30 @@ char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength)
     return pHash;
 }
 
+XSTATUS XCrypt_SHA256S(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
+{
+    if (nSize < XSHA256_LENGTH + 1 ||
+        pOutput == NULL ) return XSTDERR;
+
+    xsha256_t xsha;
+    XSHA256_Init(&xsha);
+
+    uint8_t i, nDigest[XSHA256_DIGEST_SIZE];
+    size_t nAvail = XSHA256_LENGTH;
+
+    XSHA256_Update(&xsha, pInput, nLength);
+    XSHA256_Final(&xsha, (uint8_t*)nDigest);
+
+    for (i = 0; i < XSHA256_DIGEST_SIZE; i++)
+    {
+        xstrncpyf(pOutput + i * 2, nAvail, "%02x", (unsigned int)nDigest[i]);
+        nAvail -= i * 2;
+    }
+
+    pOutput[XSHA256_LENGTH] = XSTR_NUL;
+    return XSTDOK;
+}
+
 ////////////////////////////////////////////////////////
 // End of SHA-256 implementation
 ////////////////////////////////////////////////////////

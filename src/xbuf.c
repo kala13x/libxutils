@@ -62,7 +62,7 @@ int XByteBuffer_Resize(xbyte_buffer_t *pBuffer, size_t nSize)
         return pBuffer->nStatus;
     }
 
-    if (pBuffer->pData != NULL && pBuffer->nUsed < nSize)
+    if (pBuffer->nUsed < nSize)
         pBuffer->pData[pBuffer->nUsed] = XSTR_NUL;
 
     pBuffer->nSize = nSize;

@@ -11,6 +11,9 @@
 #include "crypt.h"
 #include "xmap.h"
 
+#define XFNV_OFFSET_32 2166136261
+#define XFNV_PRIME_32  16777619
+
 int XMap_Init(xmap_t *pMap, size_t nSize)
 {
     pMap->nTableSize = nSize;
@@ -99,7 +102,7 @@ void XMap_Destroy(xmap_t *pMap)
     XMap_Free(pMap);
 }
 
-int XMap_Hash(xmap_t *pMap, const char *pStr)
+int XMap_HashMIX(xmap_t *pMap, const char *pStr)
 {
     if (!pMap->nTableSize) return XMAP_EINIT;
     uint32_t nHash = XCrypt_CRC32((unsigned char*)(pStr), strlen(pStr));
@@ -116,6 +119,70 @@ int XMap_Hash(xmap_t *pMap, const char *pStr)
 
     /* Knuth's Multiplicative Method */
     nHash = (nHash >> 3) * 2654435761;
+    return nHash % pMap->nTableSize;
+}
+
+int XMap_HashFNV(xmap_t *pMap, const char *pStr)
+{
+    if (!pMap->nTableSize) return XMAP_EINIT;
+    uint32_t nHash = XCrypt_CRC32((unsigned char*)(pStr), strlen(pStr));
+
+    nHash = ((nHash >> 16) ^ nHash) * 0x45d9f3b;
+    nHash = ((nHash >> 16) ^ nHash) * 0x45d9f3b;
+    nHash = (nHash >> 16) ^ nHash;
+    return nHash % pMap->nTableSize;
+}
+
+int XMap_HashSHA(xmap_t *pMap, const char *pStr)
+{
+    if (!pMap->nTableSize) return XMAP_EINIT;
+
+    unsigned char hash[XSHA256_LENGTH + 1];
+    XCrypt_SHA256S((char*)hash, sizeof(hash), (const uint8_t*)pStr, strlen(pStr));
+
+    uint32_t nHash = 0;
+    for (int i = 0; i < XSHA256_LENGTH; i++)
+    {
+        nHash ^= hash[i];
+        nHash += (nHash << 10);
+        nHash ^= (nHash >> 6);
+    }
+
+    nHash += (nHash << 3);
+    nHash ^= (nHash >> 11);
+    nHash += (nHash << 15);
+
+    return nHash % pMap->nTableSize;
+}
+
+int XMap_HashUNI(xmap_t *pMap, const char *pStr)
+{
+    if (!pMap->nTableSize) return XMAP_EINIT;
+
+    const uint8_t *pData = (const uint8_t*)pStr;
+    size_t nLength = strlen(pStr);
+
+    uint32_t nHash = 2166136261;
+    for (size_t i = 0; i < nLength; i++)
+    {
+        nHash ^= pData[i];
+        nHash *= 16777619;
+    }
+
+    return nHash % pMap->nTableSize;
+}
+
+int XMap_Hash(xmap_t *pMap, const char *pStr)
+{
+    if (!pMap->nTableSize) return XMAP_EINIT;
+    uint32_t nHash = XFNV_OFFSET_32;
+
+    while (*pStr)
+    {
+        nHash ^= *pStr++;
+        nHash *= XFNV_PRIME_32;
+    }
+
     return nHash % pMap->nTableSize;
 }
 
