@@ -355,13 +355,11 @@ uint32_t XCrypt_CRC32B(const uint8_t *pInput, size_t nLength)
     {
         uint32_t nByte = pInput[i];
         nCRC = nCRC ^ nByte;
-        int j;
 
-        for (j = 7; j >= 0; j--)
-        {
-            uint32_t nMask = -(nCRC & 1);
-            nCRC = (nCRC >> 1) ^ (0xEDB88320 & nMask);
-        }
+        nCRC = (nCRC >> 4) ^ (nCRC ^ (nCRC << 4));
+        nCRC = (nCRC >> 4) ^ (nCRC ^ (nCRC << 4));
+        nCRC = (nCRC >> 4) ^ (nCRC ^ (nCRC << 4));
+        nCRC = (nCRC >> 4) ^ (nCRC ^ (nCRC << 4));
     }
 
     return ~nCRC;

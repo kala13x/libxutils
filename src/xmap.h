@@ -65,7 +65,6 @@ int XMap_GetHash(xmap_t *pMap, const char* pKey);
 int XMap_HashMIX(xmap_t *pMap, const char *pStr);
 int XMap_HashFNV(xmap_t *pMap, const char *pStr);
 int XMap_HashSHA(xmap_t *pMap, const char *pStr);
-int XMap_HashUNI(xmap_t *pMap, const char *pStr);
 int XMap_Hash(xmap_t *pMap, const char *pStr);
 
 int XMap_Iterate(xmap_t *pMap, xmap_iterator_t itfunc, void *pCtx);

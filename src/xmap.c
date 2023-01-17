@@ -155,23 +155,6 @@ int XMap_HashSHA(xmap_t *pMap, const char *pStr)
     return nHash % pMap->nTableSize;
 }
 
-int XMap_HashUNI(xmap_t *pMap, const char *pStr)
-{
-    if (!pMap->nTableSize) return XMAP_EINIT;
-
-    const uint8_t *pData = (const uint8_t*)pStr;
-    size_t nLength = strlen(pStr);
-
-    uint32_t nHash = 2166136261;
-    for (size_t i = 0; i < nLength; i++)
-    {
-        nHash ^= pData[i];
-        nHash *= 16777619;
-    }
-
-    return nHash % pMap->nTableSize;
-}
-
 int XMap_Hash(xmap_t *pMap, const char *pStr)
 {
     if (!pMap->nTableSize) return XMAP_EINIT;

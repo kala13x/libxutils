@@ -31,6 +31,7 @@ typedef struct
     char sOutput[XPATH_MAX];
     char sInput[XPATH_MAX];
     char sText[XSTR_MID];
+    char sKey[XSTR_MID];
 
     size_t nAESKeyLen;
     xbool_t bDecrypt;
@@ -78,18 +79,19 @@ static void XCrypt_DisplayUsage(const char *pName)
 {
     int nLength = strlen(pName) + 6;
 
-    xlog("==========================================================");
+    xlog("==============================================================");
     xlog(" Crypt/Decrypt file or text - v%d.%d build %d (%s)",
         XCRYPT_VER_MAX, XCRYPT_VER_MIN, XCRYPT_BUILD_NUM, __DATE__);
-    xlog("==========================================================");
+    xlog("==============================================================");
 
-    xlog("Usage: %s [-c <cipher>] [-i <input>] [-o <output>]", pName);
-    xlog(" %s [-t <text>] [-a] [-d] [-f] [-h] [-p] [-v]\n", XCrypt_WhiteSpace(nLength));
+    xlog("Usage: %s [-c <ciphers>] [-i <input>] [-o <output>] [-h]", pName);
+    xlog(" %s [-k <key>] [-t <text>] [-a] [-d] [-f] [-p] [-v]\n", XCrypt_WhiteSpace(nLength));
 
     xlog("Options are:");
-    xlog("   -c <cipher>         # Encrypt/Decrypt ciphers (%s*%s)", XSTR_CLR_RED, XSTR_FMT_RESET);
+    xlog("   -c <ciphers>        # Encrypt/Decrypt ciphers (%s*%s)", XSTR_CLR_RED, XSTR_FMT_RESET);
     xlog("   -i <input>          # Input file path to encrtypt/decrypt");
     xlog("   -o <output>         # Output file path to write data");
+    xlog("   -k <key>            # Encrypt/Decrypt key");
     xlog("   -t <text>           # Text to encrtypt/decrypt");
     xlog("   -a                  # AES key length (default: 128)");
     xlog("   -d                  # Decryption mode");
@@ -114,10 +116,21 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("%s -c aes -i rawFile.txt -o crypted.bin", pName);
     xlog("%s -dc aes -i crypted.bin -o decrypted.txt", pName);
     xlog("%s -dc hex:aes -i crypted.txt -o decrypted.bin\n", pName);
+
+    xlog("%sNote:%s", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
+    xlog("%s1%s) If you do not specify an argument key (-k <key>),", XSTR_FMT_BOLD, XSTR_FMT_RESET);
+    xlog("the program will prompt you to enter the it securely.\n");
 }
 
 static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
 {
+    if (xstrused(pArgs->sKey))
+    {
+        pKey->nLength = xstrncpy(pKey->sKey, sizeof(pKey->sKey), pArgs->sKey);
+        if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nAESKeyLen;
+        return pKey->nLength ? XTRUE : XFALSE;
+    }
+
     const char *pCipher = XCrypt_GetCipherStr(pKey->eCipher);
     printf("Enter keyword for the cipher '%s': ", pCipher);
 
@@ -220,7 +233,7 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
     pArgs->nAESKeyLen = XAES_KEY_LENGTH; 
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "c:i:o:t:a:d1:f1:h1:p1:s1:v1")) != -1)
+    while ((nChar = getopt(argc, argv, "c:i:o:k:t:a:d1:f1:h1:p1:s1:v1")) != -1)
     {
         switch (nChar)
         {
@@ -232,6 +245,9 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
                 break;
             case 'o':
                 xstrncpy(pArgs->sOutput, sizeof(pArgs->sOutput), optarg);
+                break;
+            case 'k':
+                xstrncpy(pArgs->sKey, sizeof(pArgs->sKey), optarg);
                 break;
             case 't':
                 xstrncpy(pArgs->sText, sizeof(pArgs->sText), optarg);
