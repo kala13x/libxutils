@@ -16,6 +16,7 @@ OBJS = addr.$(OBJ) \
 	event.$(OBJ) \
 	hash.$(OBJ) \
 	http.$(OBJ) \
+	jwt.$(OBJ) \
 	list.$(OBJ) \
 	mdtp.$(OBJ) \
 	ntp.$(OBJ) \

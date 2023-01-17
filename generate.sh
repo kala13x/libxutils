@@ -135,6 +135,13 @@ enable_mdtp() {
     enable_xjson
 }
 
+enable_jwt() {
+    USE_JWT=y
+    enable_crypt
+    enable_xjson
+    enable_xstr
+}
+
 enable_xapi() {
     USE_XAPI=y
     enable_xbuf
@@ -164,6 +171,7 @@ enable_xapi() {
 [ -v USE_XTYPE ] && [ ${USE_XTYPE} == "y" ] && enable_xtype
 [ -v USE_NTP ] && [ ${USE_NTP} == "y" ] && enable_ntp
 [ -v USE_MDTP ] && [ ${USE_MDTP} == "y" ] && enable_mdtp
+[ -v USE_JWT ] && [ ${USE_JWT} == "y" ] && enable_jwt
 [ -v USE_XAPI ] && [ ${USE_XAPI} == "y" ] && enable_xapi
 
 # Enable particular functionality
@@ -268,6 +276,10 @@ sourceList="\${SOURCE_DIR}\/xver.c"
 [ -v USE_MDTP ] && [ ${USE_MDTP} == "y" ] && \
     echo "-- Using mdtp.c" && \
     sourceList="${sourceList}\n    \${MEDIA_DIR}\/mdtp.c"
+
+[ -v USE_JWT ] && [ ${USE_JWT} == "y" ] && \
+    echo "-- Using jwt.c" && \
+    sourceList="${sourceList}\n    \${MEDIA_DIR}\/jwt.c"
 
 [ -v USE_NTP ] && [ ${USE_NTP} == "y" ] && \
     echo "-- Using ntp.c" && \

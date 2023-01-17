@@ -1234,6 +1234,30 @@ int XJSON_Write(xjson_t *pJson, char *pOutput, size_t nSize)
         !nSize) return XJSON_FAILURE;
 
     xjson_writer_t writer;
-    XJSON_InitWriter(&writer, pOutput, nSize);
-    return XJSON_WriteObject(pJson->pRootObj, &writer);;
+    XASSERT(XJSON_InitWriter(&writer, NULL, 1), XJSON_FAILURE);
+    return XJSON_WriteObject(pJson->pRootObj, &writer);
+}
+
+char* XJSON_DumpObj(xjson_obj_t *pJsonObj, size_t nLint, size_t *pLength)
+{
+    XASSERT(pJsonObj, NULL);
+    xjson_writer_t writer;
+
+    XASSERT(XJSON_InitWriter(&writer, NULL, 1), NULL);
+    writer.nTabSize = nLint;
+
+    if (!XJSON_WriteObject(pJsonObj, &writer))
+    {
+        XJSON_DestroyWriter(&writer);
+        return NULL;
+    }
+
+    *pLength = writer.nLength;
+    return writer.pData;
+}
+
+char* XJSON_Dump(xjson_t *pJson, size_t nLint, size_t *pLength)
+{
+    XASSERT(pJson, NULL);
+    return XJSON_DumpObj(pJson->pRootObj, nLint, pLength);
 }

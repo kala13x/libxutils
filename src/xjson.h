@@ -138,6 +138,9 @@ int XJSON_InitWriter(xjson_writer_t *pWriter, char *pOutput, size_t nSize);
 int XJSON_WriteObject(xjson_obj_t *pObj, xjson_writer_t *pWriter);
 int XJSON_Write(xjson_t *pJson, char *pOutput, size_t nSize);
 
+char* XJSON_DumpObj(xjson_obj_t *pJsonObj, size_t nLint, size_t *pLength);
+char* XJSON_Dump(xjson_t *pJson, size_t nLint, size_t *pLength);
+
 #ifdef __cplusplus
 }
 #endif

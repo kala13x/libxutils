@@ -9,7 +9,11 @@ if [ ! -z "$1" ]; then
     make clean
     make $FILE
 
-    ./$FILE $2 $3 $4 $5 $6 $7 $8 $9
+    valgrind --leak-check=full \
+        --show-leak-kinds=all \
+        --show-error-list=yes \
+        --track-origins=yes \
+        ./$FILE $2 $3 $4 $5 $6 $7 $8 $9
 else
     make clean
     make

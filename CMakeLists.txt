@@ -53,6 +53,7 @@ add_library(xutils STATIC
     ${SOURCE_DIR}/xtype.c
     ${MEDIA_DIR}/xapi.c
     ${MEDIA_DIR}/mdtp.c
+    ${MEDIA_DIR}/jwt.c
     ${MEDIA_DIR}/ntp.c
     ${MEDIA_DIR}/rtp.c
     ${MEDIA_DIR}/ts.c
