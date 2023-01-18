@@ -13,7 +13,7 @@
 #include "xbuf.h"
 #include "crypt.h"
 
-#ifdef _WIN32
+#ifndef __linux__
 #pragma warning(disable : 4146)
 #define htobe32(x) _byteswap_ulong(x)
 #define be32toh(x) _byteswap_ulong(x)
