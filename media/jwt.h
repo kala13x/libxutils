@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-char* XJWT_Create(const char *pPayload, size_t nLength, const uint8_t *pKey, size_t nKeyLen, size_t *pJWTLen);
+char* XJWT_Create(const char *pPayload, size_t nPayloadLen, const uint8_t *pKey, size_t nKeyLen, size_t *pJWTLen);
 
 #ifdef __cplusplus
 }

@@ -87,6 +87,42 @@ static const unsigned char g_base64DecTable[XBASE64_TABLE_SIZE] =
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
         };
 
+static const unsigned char g_base64UrlDecTable[XBASE64_TABLE_SIZE] =
+        {
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b,
+            0x3c, 0x3d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+            0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+            0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+            0x17, 0x18, 0x19, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+            0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+            0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30,
+            0x31, 0x32, 0x33, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        };
+
 static const uint32_t g_crc32Table[] = {
       0x00000000L, 0x77073096L, 0xee0e612cL, 0x990951baL, 0x076dc419L,
       0x706af48fL, 0xe963a535L, 0x9e6495a3L, 0x0edb8832L, 0x79dcb8a4L,
@@ -142,7 +178,7 @@ static const uint32_t g_crc32Table[] = {
       0x2d02ef8dL
    };
 
-const uint32_t g_intRadians[64] = 
+static const uint32_t g_intRadians[64] = 
         {
             0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
             0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
@@ -162,7 +198,7 @@ const uint32_t g_intRadians[64] =
             0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
         };
 
-static char g_base64EncTable[] = 
+static const char g_base64EncTable[] = 
         {
             'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
             'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
@@ -174,7 +210,19 @@ static char g_base64EncTable[] =
             '4', '5', '6', '7', '8', '9', '+', '/'
         };
 
-static char g_charMap[XCHAR_MAP_SIZE] =
+static const char g_base64UrlEncTable[] =
+        {
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+            'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+            'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+            'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+            'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+            'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+            'w', 'x', 'y', 'z', '0', '1', '2', '3',
+            '4', '5', '6', '7', '8', '9', '-', '_'
+        };
+
+static const char g_charMap[XCHAR_MAP_SIZE] =
         { 
             'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 
             'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
@@ -326,6 +374,22 @@ XSTATUS XCrypt_SHA256S(char *pOutput, size_t nSize, const uint8_t *pInput, size_
     return XSTDOK;
 }
 
+XSTATUS XCrypt_SHA256U(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
+{
+    if (nSize < XSHA256_DIGEST_SIZE ||
+        pOutput == NULL ) return XSTDERR;
+
+    xsha256_t xsha;
+    uint8_t nDigest[XSHA256_DIGEST_SIZE];
+
+    XSHA256_Init(&xsha);
+    XSHA256_Update(&xsha, pInput, nLength);
+    XSHA256_Final(&xsha, nDigest);
+
+    memcpy(pOutput, nDigest, XSHA256_DIGEST_SIZE);
+    return XSTDOK;
+}
+
 static XSTATUS XCrypt_HMAC(uint8_t *pOut, size_t nSize, const uint8_t *pFirst, size_t nFLen, const uint8_t *pSec, size_t nSLen)
 {
     size_t nBufLen = nFLen + nSLen;
@@ -334,7 +398,7 @@ static XSTATUS XCrypt_HMAC(uint8_t *pOut, size_t nSize, const uint8_t *pFirst, s
 
     memcpy(pPadBuf, pFirst, nFLen);
     memcpy(pPadBuf + nFLen, pSec, nSLen);
-    XCrypt_SHA256S((char*)pOut, nSize, pPadBuf, nBufLen);
+    XCrypt_SHA256U(pOut, nSize, pPadBuf, nBufLen);
 
     free(pPadBuf);
     return XSTDOK;
@@ -343,60 +407,64 @@ static XSTATUS XCrypt_HMAC(uint8_t *pOut, size_t nSize, const uint8_t *pFirst, s
 /* https://www.rfc-editor.org/rfc/rfc2104 */
 char* XCrypt_HS256(const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
 {
-    uint8_t kBlock[XSHA256_BLOCK_SIZE + 1];
+    uint8_t diggest[XSHA256_DIGEST_SIZE];
+    uint8_t hash[XSHA256_DIGEST_SIZE];
+    uint8_t kBuff[XSHA256_BLOCK_SIZE];
     uint8_t kIpad[XSHA256_BLOCK_SIZE];
     uint8_t kOpad[XSHA256_BLOCK_SIZE];
-    uint8_t hash[XSHA256_LENGTH + 1];
     size_t nSize = XSHA256_LENGTH + 1;
 
     char *pOutput = (char*)malloc(nSize);
     if (pOutput == NULL) return NULL;
 
-    memset(kBlock, 0, sizeof(kBlock));
+    memset(kBuff, 0, sizeof(kBuff));
     memset(kIpad, 0x36, XSHA256_BLOCK_SIZE);
     memset(kOpad, 0x5c, XSHA256_BLOCK_SIZE);
 
-    if (nKeyLen <= XSHA256_BLOCK_SIZE) memcpy(kBlock, pKey, nKeyLen);
-    else XCrypt_SHA256S((char*)kBlock, sizeof(kBlock), pKey, nKeyLen);
+    if (nKeyLen <= XSHA256_BLOCK_SIZE) memcpy(kBuff, pKey, nKeyLen);
+    else XCrypt_SHA256U(kBuff, sizeof(kBuff), pKey, nKeyLen);
 
     uint8_t i = 0;
     for (i = 0; i < XSHA256_BLOCK_SIZE; i++)
     {
-        kIpad[i] ^= kBlock[i];
-        kOpad[i] ^= kBlock[i];
+        kIpad[i] ^= kBuff[i];
+        kOpad[i] ^= kBuff[i];
     }
 
-    XCrypt_HMAC(hash, sizeof(hash), kIpad, sizeof(kIpad), pData, nLength);
-    XCrypt_HMAC((uint8_t*)pOutput, nSize, kOpad, sizeof(kOpad), hash, sizeof(hash));
+    XCrypt_HMAC(diggest, sizeof(diggest), kIpad, sizeof(kIpad), pData, nLength);
+    XCrypt_HMAC(hash, sizeof(hash), kOpad, sizeof(kOpad), diggest, sizeof(diggest));
+    for (i = 0; i < sizeof(hash); i++) snprintf(pOutput + i * 2, 3, "%02x", (unsigned int)hash[i]);
 
     pOutput[XSHA256_LENGTH] = '\0';
     return pOutput;
 }
 
-XSTATUS XCrypt_HS256S(uint8_t *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
+XSTATUS XCrypt_HS256S(char *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
 {
-    if (nSize < XSHA256_LENGTH + 1) return XSTDERR;
-    uint8_t kBlock[XSHA256_BLOCK_SIZE + 1];
+    if (pOutput == NULL || nSize < XSHA256_LENGTH + 1) return XSTDERR;
+    uint8_t diggest[XSHA256_DIGEST_SIZE];
+    uint8_t hash[XSHA256_DIGEST_SIZE];
+    uint8_t kBuff[XSHA256_BLOCK_SIZE];
     uint8_t kIpad[XSHA256_BLOCK_SIZE];
     uint8_t kOpad[XSHA256_BLOCK_SIZE];
-    uint8_t hash[XSHA256_LENGTH + 1];
 
-    memset(kBlock, 0, sizeof(kBlock));
+    memset(kBuff, 0, sizeof(kBuff));
     memset(kIpad, 0x36, XSHA256_BLOCK_SIZE);
     memset(kOpad, 0x5c, XSHA256_BLOCK_SIZE);
 
-    if (nKeyLen <= XSHA256_BLOCK_SIZE) memcpy(kBlock, pKey, nKeyLen);
-    else XCrypt_SHA256S((char*)kBlock, sizeof(kBlock), pKey, nKeyLen);
+    if (nKeyLen <= XSHA256_BLOCK_SIZE) memcpy(kBuff, pKey, nKeyLen);
+    else XCrypt_SHA256U(kBuff, sizeof(kBuff), pKey, nKeyLen);
 
     uint8_t i = 0;
     for (i = 0; i < XSHA256_BLOCK_SIZE; i++)
     {
-        kIpad[i] ^= kBlock[i];
-        kOpad[i] ^= kBlock[i];
+        kIpad[i] ^= kBuff[i];
+        kOpad[i] ^= kBuff[i];
     }
 
-    XCrypt_HMAC(hash, sizeof(hash), kIpad, sizeof(kIpad), pData, nLength);
-    XCrypt_HMAC((uint8_t*)pOutput, nSize, kOpad, sizeof(kOpad), hash, sizeof(hash));
+    XCrypt_HMAC(diggest, sizeof(diggest), kIpad, sizeof(kIpad), pData, nLength);
+    XCrypt_HMAC(hash, sizeof(hash), kOpad, sizeof(kOpad), diggest, sizeof(diggest));
+    for (i = 0; i < sizeof(hash); i++) snprintf(pOutput + i * 2, 3, "%02x", (unsigned int)hash[i]);
 
     pOutput[XSHA256_LENGTH] = '\0';
     return XSTDOK;
@@ -656,11 +724,12 @@ char *XDecrypt_Base64(const uint8_t *pInput, size_t *pLength)
     if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
     size_t i, j, nLength = *pLength;
 
-    if (nLength % 4 != 0) return NULL;
+    while (nLength % 4 != 0) nLength++;
     size_t nOutLength = nLength / 4 * 3 + 1;
+    nLength = *pLength;
 
-    if (pInput[nLength - 1] == '=') (nOutLength)--;
-    if (pInput[nLength - 2] == '=') (nOutLength)--;
+    while (pInput[--nLength] == '=') nOutLength--;
+    nLength = *pLength;
 
     char *pDecodedData = (char *)calloc(1, nOutLength + 1);
     if (pDecodedData == NULL) return NULL;
@@ -684,6 +753,76 @@ char *XDecrypt_Base64(const uint8_t *pInput, size_t *pLength)
     *pLength = nOutLength + 1;
 
     return pDecodedData;
+}
+
+char *XDecrypt_Base64Url(const uint8_t *pInput, size_t *pLength)
+{
+    if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
+    size_t i, j, nLength = *pLength;
+
+    while (nLength % 4 != 0) nLength++;
+    size_t nOutLength = nLength / 4 * 3 + 1;
+    nLength = *pLength;
+
+    while (pInput[--nLength] == '-') nOutLength--;
+    nLength = *pLength;
+
+    char *pDecodedData = (char *)calloc(1, nOutLength + 1);
+    if (pDecodedData == NULL) return NULL;
+
+    for (i = 0, j = 0; i < nLength;)
+    {
+        uint32_t nSextetA = pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
+        uint32_t nSextetB = pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
+        uint32_t nSextetC = pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
+        uint32_t nSextetD = pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
+
+        uint32_t nTriple = (nSextetA << 3 * 6) + (nSextetB << 2 * 6) 
+                         + (nSextetC << 1 * 6) + (nSextetD << 0 * 6);
+
+        if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 2 * 8) & 0xFF;
+        if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 1 * 8) & 0xFF;
+        if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 0 * 8) & 0xFF;
+    }
+
+    while (pDecodedData[nOutLength] == '\0') nOutLength--;
+    *pLength = nOutLength + 1;
+
+    return pDecodedData;
+}
+
+char *XCrypt_Base64Url(const uint8_t *pInput, size_t *pLength)
+{
+    if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
+    size_t i, j, nLength = *pLength;
+
+    size_t nOutLength = ((nLength + 2) / 3) * 4;
+    if (nOutLength < nLength) return NULL;
+
+    char *pEncodedData = (char *)calloc(1, nOutLength + 1);
+    if (pEncodedData == NULL) return NULL;
+
+    for (i = 0, j = 0; i < nLength;) 
+    {
+        uint32_t nOctetA = i < nLength ? (unsigned char)pInput[i++] : 0;
+        uint32_t nOctetB = i < nLength ? (unsigned char)pInput[i++] : 0;
+        uint32_t nOctetC = i < nLength ? (unsigned char)pInput[i++] : 0;
+        uint32_t nTriple = (nOctetA << 0x10) + (nOctetB << 0x08) + nOctetC;
+
+        pEncodedData[j++] = g_base64UrlEncTable[(nTriple >> 3 * 6) & 0x3F];
+        pEncodedData[j++] = g_base64UrlEncTable[(nTriple >> 2 * 6) & 0x3F];
+        pEncodedData[j++] = g_base64UrlEncTable[(nTriple >> 1 * 6) & 0x3F];
+        pEncodedData[j++] = g_base64UrlEncTable[(nTriple >> 0 * 6) & 0x3F];
+    }
+
+    uint8_t nModTable[3] = {0, 2, 1};
+    for (i = 0; i < nModTable[nLength % 3]; i++)
+        pEncodedData[nOutLength - 1 - i] = '\0';
+
+    while (pEncodedData[nOutLength] == '\0') nOutLength--;
+    *pLength = nOutLength + 1;
+
+    return pEncodedData;
 }
 
 uint8_t* XCrypt_AES(const uint8_t *pInput, size_t *pLength, const uint8_t *pKey, size_t nKeyLen, const uint8_t *pIV)
@@ -789,7 +928,9 @@ xcrypt_chipher_t XCrypt_GetCipher(const char *pCipher)
     else if (!strncmp(pCipher, "crc32", 5)) return XC_CRC32;
     else if (!strncmp(pCipher, "crc32b", 6)) return XC_CRC32B;
     else if (!strncmp(pCipher, "casear", 6)) return XC_CASEAR;
+    else if (!strncmp(pCipher, "base64url", 9)) return XC_BASE64URL;
     else if (!strncmp(pCipher, "base64", 6)) return XC_BASE64;
+    else if (!strncmp(pCipher, "hs256", 5)) return XC_HS256;
     else if (!strncmp(pCipher, "sha256", 6)) return XC_SHA256;
     else if (!strncmp(pCipher, "reverse", 7)) return XC_REVERSE;
     return XC_INVALID;
@@ -807,6 +948,8 @@ const char* XCrypt_GetCipherStr(xcrypt_chipher_t eCipher)
         case XC_CRC32B: return "crc32b";
         case XC_CASEAR: return "casear";
         case XC_BASE64: return "base64";
+        case XC_BASE64URL: return "base64url";
+        case XC_HS256: return "h256";
         case XC_SHA256: return "sha256";
         case XC_REVERSE: return "reverse";
         case XC_MULTY: return "multy";
@@ -824,11 +967,13 @@ static xbool_t XCrypt_NeedsKey(xcrypt_chipher_t eCipher)
         case XC_AES:
         case XC_XOR:
         case XC_CASEAR:
+        case XC_HS256:
             return XTRUE;
         case XC_HEX:
         case XC_MD5:
         case XC_CRC32:
         case XC_BASE64:
+        case XC_BASE64URL:
         case XC_SHA256:
         case XC_REVERSE:
             return XFALSE;
@@ -892,8 +1037,10 @@ uint8_t* XCrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uint8
         case XC_XOR: pCrypted = XCrypt_XOR(pInput, *pLength, pKey, nKeyLength); break;
         case XC_MD5: pCrypted = (uint8_t*)XCrypt_MD5(pInput, *pLength); *pLength = XMD5_LENGTH; break;
         case XC_SHA256: pCrypted = (uint8_t*)XCrypt_SHA256(pInput, *pLength); *pLength = XSHA256_LENGTH; break;
+        case XC_HS256: pCrypted = (uint8_t*)XCrypt_HS256(pInput, *pLength, pKey, nKeyLength); *pLength = XSHA256_LENGTH; break;
         case XC_CASEAR: pCrypted = (uint8_t*)XCrypt_Casear((const char*)pInput, *pLength, atoi(encKey.sKey)); break;
         case XC_BASE64: pCrypted = (uint8_t*)XCrypt_Base64(pInput, pLength); break;
+        case XC_BASE64URL: pCrypted = (uint8_t*)XCrypt_Base64Url(pInput, pLength); break;
         case XC_REVERSE: pCrypted = (uint8_t*)XCrypt_Reverse((const char*)pInput, *pLength); break;
         default: break;
     }
@@ -938,6 +1085,7 @@ uint8_t* XDecrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uin
         case XC_XOR: pDecrypted = XCrypt_XOR(pInput, *pLength, pKey, nKeyLength); break;
         case XC_CASEAR: pDecrypted = (uint8_t*)XDecrypt_Casear((const char*)pInput, *pLength, atoi(decKey.sKey)); break;
         case XC_BASE64: pDecrypted = (uint8_t*)XDecrypt_Base64(pInput, pLength); break;
+        case XC_BASE64URL: pDecrypted = (uint8_t*)XDecrypt_Base64Url(pInput, pLength); break;
         case XC_REVERSE: pDecrypted = (uint8_t*)XCrypt_Reverse((const char*)pInput, *pLength); break;
         default: break;
     }

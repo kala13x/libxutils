@@ -48,11 +48,13 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
         case XC_HEX:
         case XC_XOR:
         case XC_BASE64:
+        case XC_BASE64URL:
         case XC_CASEAR:
         case XC_REVERSE:
             return XTRUE;
         case XC_MD5:
         case XC_CRC32:
+        case XC_HS256:
         case XC_SHA256:
             return XFALSE;
         default:
@@ -109,7 +111,9 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   crc32b");
     xlog("   casear");
     xlog("   base64");
+    xlog("   base64url");
     xlog("   sha256");
+    xlog("   hs256");
     xlog("   reverse\n");
 
     xlog("Examples:");

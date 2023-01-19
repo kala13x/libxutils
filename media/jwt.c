@@ -18,7 +18,7 @@
 
 static char* XJWT_CreateHeader(const char *pAlgo, const char *pType, size_t *pHdrLen)
 {
-    if (pType == NULL || pAlgo == NULL) return NULL;
+    XASSERT_RET((pType && pAlgo), NULL);
 
     xjson_obj_t *pJson = XJSON_NewObject(NULL, 0);
     XJSON_AddObject(pJson, XJSON_NewString("alg", pAlgo));
@@ -26,67 +26,62 @@ static char* XJWT_CreateHeader(const char *pAlgo, const char *pType, size_t *pHd
     char *pHeader = XJSON_DumpObj(pJson, 0, pHdrLen);
 
     XJSON_FreeObject(pJson);
-    return pHeader;
+    XASSERT_RET(pHeader, NULL);
+
+    char *pEncHeader = XCrypt_Base64Url((const uint8_t*)pHeader, pHdrLen);
+    free(pHeader);
+
+    return pEncHeader;
 }
 
-static char* XJWT_CreateSignature(const char *pHeader, size_t nHeaderLen, const char *pData, size_t nDataLen, const uint8_t *pKey, size_t nKeyLen)
+static char* XJWT_CreateSignature(
+                const char *pHeader,
+                size_t nHeaderLength,
+                const char *pPayload,
+                size_t nPayloadLength,
+                const uint8_t *pSecret,
+                size_t nSecretLength,
+                size_t *pSignatureLength)
 {
-    size_t nRawSigSize = nHeaderLen + nDataLen + 1;
-    char *pJoined = (char*)malloc(nRawSigSize);
-    if (pJoined == NULL) return NULL;
+    size_t nJointSize = nHeaderLength + nPayloadLength + 1;
+    char *pJointData = (char*)malloc(nJointSize);
 
-    size_t nRawSigLength = xstrncpyf(pJoined, nRawSigSize, "%s.%s", pHeader, pData);
-    char *pCrypted = XCrypt_HS256((const uint8_t*)pJoined, nRawSigLength, pKey, nKeyLen);
+    XASSERT_RET(pJointData, NULL);
+    char sHash[XSHA256_LENGTH + 1];
 
-    free(pJoined);
-    return pCrypted;
+    size_t nJointLength = xstrncpyf(pJointData, nJointSize, "%s.%s", pHeader, pPayload);
+    XCrypt_HS256S(sHash, sizeof(sHash), (const uint8_t*)pJointData, nJointLength, pSecret, nSecretLength);
+    free(pJointData);
+
+    return XCrypt_Base64Url((const uint8_t*)sHash, pSignatureLength);
 }
 
-static char* XJWT_CreateFinal(const char *pHeader, size_t nHdrLen, const char *pPayload, size_t nPayLen, const char *pSignature, size_t nSigLen, size_t *pJWTLength)
+char* XJWT_Create(const char *pPayload, size_t nPayloadLen, const uint8_t *pSecret, size_t nSecretLen, size_t *pJWTLen)
 {
-    char *pBaseHeader = XCrypt_Base64((const uint8_t*)pHeader, &nHdrLen);
-    if (pBaseHeader == NULL) return NULL;
+    if (pPayload == NULL || !nPayloadLen) return NULL;
+    size_t nHeaderLen = 0, nSigLen = XSHA256_LENGTH;
 
-    char *pBasePayload = XCrypt_Base64((const uint8_t*)pPayload, &nPayLen);
-    if (pBasePayload == NULL) { free(pBaseHeader); return NULL; }
+    char *pEncHeader = XJWT_CreateHeader(XJWT_ALGORITHM, XJWT_TYPE, &nHeaderLen);
+    if (pEncHeader == NULL) return NULL;
 
-    char *pBaseSignature = XCrypt_Base64((const uint8_t*)pSignature, &nSigLen);
-    if (pBaseSignature == NULL) { free(pBaseHeader); free(pBasePayload); return NULL; }
+    char *pEncPayload = XCrypt_Base64Url((const uint8_t*)pPayload, &nPayloadLen);
+    if (pEncPayload == NULL) { free(pEncHeader); return NULL; }
 
-    *pJWTLength = nHdrLen + nPayLen + nSigLen + 2;
-    char *pJWT = (char*)malloc(*pJWTLength + 1);
+    char *pSignature = XJWT_CreateSignature(pEncHeader, nHeaderLen, pEncPayload, nPayloadLen, pSecret, nSecretLen, &nSigLen);
+    if (pSignature == NULL) { free(pEncHeader); free(pEncPayload); return NULL; }
 
-    if (pJWT == NULL)
+    *pJWTLen = nHeaderLen + nPayloadLen + nSigLen + 2;
+    char *pJWT = (char*)malloc(*pJWTLen + 1);
+
+    if (pJWT != NULL)
     {
-        free(pBaseHeader);
-        free(pBasePayload);
-        free(pBaseSignature);
-        return NULL;
+        xstrncpyf(pJWT, *pJWTLen + 1, "%s.%s.%s",
+            pEncHeader, pEncPayload, pSignature);
     }
 
-    xstrncpyf(pJWT, *pJWTLength + 1, "%s.%s.%s",
-        pBaseHeader, pBasePayload, pBaseSignature);
-
-    free(pBaseHeader);
-    free(pBasePayload);
-    free(pBaseSignature);
-
-    return pJWT;
-}
-
-char* XJWT_Create(const char *pPayload, size_t nLength, const uint8_t *pKey, size_t nKeyLen, size_t *pJWTLen)
-{
-    if (pPayload == NULL || !nLength) return NULL;
-    size_t nHeaderLen = 0;
-
-    char *pHeader = XJWT_CreateHeader(XJWT_ALGORITHM, XJWT_TYPE, &nHeaderLen);
-    if (pHeader == NULL) return NULL;
-
-    char *pSignature = XJWT_CreateSignature(pHeader, nHeaderLen, pPayload, nLength, pKey, nKeyLen);
-    if (pSignature == NULL) { free(pHeader); return NULL; }
-
-    char *pJWT = XJWT_CreateFinal(pHeader, nHeaderLen, pPayload, nLength, pSignature, XSHA256_LENGTH, pJWTLen);
-    free(pSignature); free(pHeader);
+    free(pEncHeader);
+    free(pEncPayload);
+    free(pSignature);
 
     return pJWT;
 }
