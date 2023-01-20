@@ -3,24 +3,24 @@ LIBS = -lxutils -lpthread -lm
 LIBS += -lssl -lcrypto
 
 EXECS = array \
-		files \
-		events \
-		thread \
-		statcov \
-		strings \
-		server \
-		json \
-		xtop \
-		xlog \
-		xcrypt \
-		xpass \
-		xhttp \
-		xjson \
-		xsrc \
-		list \
-		ntp \
-		jwt \
-		api
+	files \
+	events \
+	thread \
+	statcov \
+	strings \
+	server \
+	json \
+	xtop \
+	xlog \
+	xcrypt \
+	xpass \
+	xhttp \
+	xjson \
+	xsrc \
+	list \
+	ntp \
+	jwt \
+	api
 
 OBJS = $(patsubst %,%.o,$(EXECS))
 
