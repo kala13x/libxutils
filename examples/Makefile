@@ -22,8 +22,6 @@ EXECS = array \
 	jwt \
 	api
 
-OBJS = $(patsubst %,%.o,$(EXECS))
-
 all: $(EXECS)
 
 $(EXECS): %: %.c
@@ -40,4 +38,4 @@ install:
 
 .PHONY: clean
 clean:
-	$(RM) $(EXECS) $(OBJS)
+	$(RM) $(EXECS)
