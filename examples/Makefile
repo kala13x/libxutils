@@ -22,65 +22,12 @@ EXECS = array \
 		jwt \
 		api
 
-all:
-	$(MAKE) $(EXECS)
+OBJS = $(patsubst %,%.o,$(EXECS))
 
-files:
-	$(CC) $(CFLAGS) -o files files.c $(LIBS)
+all: $(EXECS)
 
-server:
-	$(CC) $(CFLAGS) -o server server.c $(LIBS)
-
-statcov:
-	$(CC) $(CFLAGS) -o statcov statcov.c $(LIBS)
-
-xlog:
-	$(CC) $(CFLAGS) -o xlog xlog.c $(LIBS)
-
-thread:
-	$(CC) $(CFLAGS) -o thread thread.c $(LIBS)
-
-xtop:
-	$(CC) $(CFLAGS) -o xtop xtop.c $(LIBS)
-
-array:
-	$(CC) $(CFLAGS) -o array array.c $(LIBS)
-
-xhttp:
-	$(CC) $(CFLAGS) -o xhttp xhttp.c $(LIBS)
-
-strings:
-	$(CC) $(CFLAGS) -o strings strings.c $(LIBS)
-
-json:
-	$(CC) $(CFLAGS) -o json json.c $(LIBS)
-
-xjson:
-	$(CC) $(CFLAGS) -o xjson xjson.c $(LIBS)
-
-events:
-	$(CC) $(CFLAGS) -o events events.c $(LIBS)
-
-list:
-	$(CC) $(CFLAGS) -o list list.c $(LIBS)
-
-ntp:
-	$(CC) $(CFLAGS) -o ntp ntp.c $(LIBS)
-
-xsrc:
-	$(CC) $(CFLAGS) -o xsrc xsrc.c $(LIBS)
-
-xcrypt:
-	$(CC) $(CFLAGS) -o xcrypt xcrypt.c $(LIBS)
-
-xpass:
-	$(CC) $(CFLAGS) -o xpass xpass.c $(LIBS)
-
-jwt:
-	$(CC) $(CFLAGS) -o jwt jwt.c $(LIBS)
-
-api:
-	$(CC) $(CFLAGS) -o api api.c $(LIBS)
+$(EXECS): %: %.c
+	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
 .PHONY: install
 install:
