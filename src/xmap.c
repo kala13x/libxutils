@@ -138,7 +138,7 @@ int XMap_HashSHA(xmap_t *pMap, const char *pStr)
     if (!pMap->nTableSize) return XMAP_EINIT;
 
     unsigned char hash[XSHA256_LENGTH + 1];
-    XCrypt_SHA256S((char*)hash, sizeof(hash), (const uint8_t*)pStr, strlen(pStr));
+    XCrypt_SHA256H((char*)hash, sizeof(hash), (const uint8_t*)pStr, strlen(pStr));
 
     uint32_t nHash = 0;
     for (int i = 0; i < XSHA256_LENGTH; i++)

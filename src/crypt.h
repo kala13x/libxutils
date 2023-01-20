@@ -52,11 +52,13 @@ void XSHA256_Final(xsha256_t *pSha, uint8_t *pDigest);
 void XSHA256_FinalRaw(xsha256_t *pSha, uint8_t *pDigest);
 void XSHA256_Update(xsha256_t *pSha, const uint8_t *pData, size_t nLength);
 
-XSTATUS XCrypt_HS256S(char *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen);
+XSTATUS XCrypt_HS256U(uint8_t *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen);
+XSTATUS XCrypt_HS256H(char *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen);
+char* XCrypt_HS256B(const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen, size_t *pOutLen);
 char* XCrypt_HS256(const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen);
 
 XSTATUS XCrypt_SHA256U(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
-XSTATUS XCrypt_SHA256S(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
+XSTATUS XCrypt_SHA256H(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
 
 char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength);
 char* XCrypt_MD5(const uint8_t *pInput, size_t nLength);

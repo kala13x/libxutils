@@ -327,67 +327,42 @@ void XSHA256_ProcessBlock(xsha256_t *pSha)
         pSha->uDigest.hBytes[i] += nReg[i];
 }
 
-char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength)
+XSTATUS XCrypt_SHA256U(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
-    size_t nAvail = XSHA256_LENGTH;
-    char *pHash = (char*)malloc(nAvail + 1);
-    if (pHash == NULL) return NULL;
+    if (nSize < XSHA256_DIGEST_SIZE ||
+        pOutput == NULL) return XSTDERR;
 
     xsha256_t xsha;
     XSHA256_Init(&xsha);
-
-    uint8_t i, nDigest[XSHA256_DIGEST_SIZE];
     XSHA256_Update(&xsha, pInput, nLength);
-    XSHA256_Final(&xsha, (uint8_t*)nDigest);
+    XSHA256_Final(&xsha, pOutput);
 
-    for (i = 0; i < XSHA256_DIGEST_SIZE; i++)
-    {
-        xstrncpyf(pHash + i * 2, nAvail, "%02x", (unsigned int)nDigest[i]);
-        nAvail -= i * 2;
-    }
-
-    pHash[XSHA256_LENGTH] = XSTR_NUL;
-    return pHash;
+    return XSTDOK;
 }
 
-XSTATUS XCrypt_SHA256S(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
+XSTATUS XCrypt_SHA256H(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
     if (nSize < XSHA256_LENGTH + 1 ||
-        pOutput == NULL ) return XSTDERR;
-
-    xsha256_t xsha;
-    XSHA256_Init(&xsha);
+        pOutput == NULL) return XSTDERR;
 
     uint8_t i, nDigest[XSHA256_DIGEST_SIZE];
-    size_t nAvail = XSHA256_LENGTH;
-
-    XSHA256_Update(&xsha, pInput, nLength);
-    XSHA256_Final(&xsha, (uint8_t*)nDigest);
+    XCrypt_SHA256U(nDigest, nSize, pInput, nLength);
 
     for (i = 0; i < XSHA256_DIGEST_SIZE; i++)
-    {
-        xstrncpyf(pOutput + i * 2, nAvail, "%02x", (unsigned int)nDigest[i]);
-        nAvail -= i * 2;
-    }
+        xstrncpyf(pOutput + i * 2, 3, "%02x", (unsigned int)nDigest[i]);
 
     pOutput[XSHA256_LENGTH] = XSTR_NUL;
     return XSTDOK;
 }
 
-XSTATUS XCrypt_SHA256U(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
+char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength)
 {
-    if (nSize < XSHA256_DIGEST_SIZE ||
-        pOutput == NULL ) return XSTDERR;
+    size_t nSize = XSHA256_LENGTH + 1;
+    char *pHash = (char*)malloc(nSize);
+    if (pHash == NULL) return NULL;
 
-    xsha256_t xsha;
-    uint8_t nDigest[XSHA256_DIGEST_SIZE];
-
-    XSHA256_Init(&xsha);
-    XSHA256_Update(&xsha, pInput, nLength);
-    XSHA256_Final(&xsha, nDigest);
-
-    memcpy(pOutput, nDigest, XSHA256_DIGEST_SIZE);
-    return XSTDOK;
+    XCrypt_SHA256H(pHash, nSize, pInput, nLength);
+    return pHash;
 }
 
 static XSTATUS XCrypt_HMAC(uint8_t *pOut, size_t nSize, const uint8_t *pFirst, size_t nFLen, const uint8_t *pSec, size_t nSLen)
@@ -405,17 +380,13 @@ static XSTATUS XCrypt_HMAC(uint8_t *pOut, size_t nSize, const uint8_t *pFirst, s
 }
 
 /* https://www.rfc-editor.org/rfc/rfc2104 */
-char* XCrypt_HS256(const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
+XSTATUS XCrypt_HS256U(uint8_t *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
 {
+    if (pOutput == NULL || nSize < XSHA256_DIGEST_SIZE) return XSTDERR;
     uint8_t diggest[XSHA256_DIGEST_SIZE];
-    uint8_t hash[XSHA256_DIGEST_SIZE];
     uint8_t kBuff[XSHA256_BLOCK_SIZE];
     uint8_t kIpad[XSHA256_BLOCK_SIZE];
     uint8_t kOpad[XSHA256_BLOCK_SIZE];
-    size_t nSize = XSHA256_LENGTH + 1;
-
-    char *pOutput = (char*)malloc(nSize);
-    if (pOutput == NULL) return NULL;
 
     memset(kBuff, 0, sizeof(kBuff));
     memset(kIpad, 0x36, XSHA256_BLOCK_SIZE);
@@ -432,42 +403,40 @@ char* XCrypt_HS256(const uint8_t* pData, const size_t nLength, const uint8_t* pK
     }
 
     XCrypt_HMAC(diggest, sizeof(diggest), kIpad, sizeof(kIpad), pData, nLength);
-    XCrypt_HMAC(hash, sizeof(hash), kOpad, sizeof(kOpad), diggest, sizeof(diggest));
-    for (i = 0; i < sizeof(hash); i++) snprintf(pOutput + i * 2, 3, "%02x", (unsigned int)hash[i]);
+    XCrypt_HMAC(pOutput, nSize, kOpad, sizeof(kOpad), diggest, sizeof(diggest));
 
-    pOutput[XSHA256_LENGTH] = '\0';
-    return pOutput;
+    return XSTDOK;
 }
 
-XSTATUS XCrypt_HS256S(char *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
+XSTATUS XCrypt_HS256H(char *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
 {
     if (pOutput == NULL || nSize < XSHA256_LENGTH + 1) return XSTDERR;
-    uint8_t diggest[XSHA256_DIGEST_SIZE];
-    uint8_t hash[XSHA256_DIGEST_SIZE];
-    uint8_t kBuff[XSHA256_BLOCK_SIZE];
-    uint8_t kIpad[XSHA256_BLOCK_SIZE];
-    uint8_t kOpad[XSHA256_BLOCK_SIZE];
+    uint8_t i, hash[XSHA256_DIGEST_SIZE];
 
-    memset(kBuff, 0, sizeof(kBuff));
-    memset(kIpad, 0x36, XSHA256_BLOCK_SIZE);
-    memset(kOpad, 0x5c, XSHA256_BLOCK_SIZE);
-
-    if (nKeyLen <= XSHA256_BLOCK_SIZE) memcpy(kBuff, pKey, nKeyLen);
-    else XCrypt_SHA256U(kBuff, sizeof(kBuff), pKey, nKeyLen);
-
-    uint8_t i = 0;
-    for (i = 0; i < XSHA256_BLOCK_SIZE; i++)
-    {
-        kIpad[i] ^= kBuff[i];
-        kOpad[i] ^= kBuff[i];
-    }
-
-    XCrypt_HMAC(diggest, sizeof(diggest), kIpad, sizeof(kIpad), pData, nLength);
-    XCrypt_HMAC(hash, sizeof(hash), kOpad, sizeof(kOpad), diggest, sizeof(diggest));
-    for (i = 0; i < sizeof(hash); i++) snprintf(pOutput + i * 2, 3, "%02x", (unsigned int)hash[i]);
+    XCrypt_HS256U(hash, sizeof(hash), pData, nLength, pKey, nKeyLen);
+    for (i = 0; i < sizeof(hash); i++) xstrncpyf(pOutput + i * 2, 3, "%02x", (unsigned int)hash[i]);
 
     pOutput[XSHA256_LENGTH] = '\0';
     return XSTDOK;
+}
+
+char* XCrypt_HS256B(const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen, size_t *pOutLen)
+{
+    uint8_t hash[XSHA256_DIGEST_SIZE];
+    *pOutLen = sizeof(hash);
+
+    XCrypt_HS256U(hash, sizeof(hash), pData, nLength, pKey, nKeyLen);
+    return XCrypt_Base64Url(hash, pOutLen);
+}
+
+char* XCrypt_HS256(const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
+{
+    size_t nSize = XSHA256_LENGTH + 1;
+    char *pOutput = (char*)malloc(nSize);
+    if (pOutput == NULL) return NULL;
+
+    XCrypt_HS256H(pOutput, nSize, pData, nLength, pKey, nKeyLen);
+    return pOutput;
 }
 
 ////////////////////////////////////////////////////////
