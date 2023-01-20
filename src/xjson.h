@@ -108,6 +108,7 @@ size_t XJSON_GetErrorStr(xjson_t *pJson, char *pOutput, size_t nSize);
 
 int XJSON_Parse(xjson_t *pJson, const char *pData, size_t nSize);
 void XJSON_Destroy(xjson_t *pJson);
+void XJSON_Init(xjson_t *pJson);
 
 size_t XJSON_GetArrayLength(xjson_obj_t *pObj);
 int XJSON_RemoveArrayItem(xjson_obj_t *pObj, size_t nIndex);

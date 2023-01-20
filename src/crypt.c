@@ -369,7 +369,7 @@ static XSTATUS XCrypt_HMAC(uint8_t *pOut, size_t nSize, const uint8_t *pFirst, s
 {
     size_t nBufLen = nFLen + nSLen;
     uint8_t* pPadBuf = (uint8_t*)malloc(nBufLen);
-    XASSERT(pPadBuf, XSTDERR);
+    XASSERT_RET(pPadBuf, XSTDERR);
 
     memcpy(pPadBuf, pFirst, nFLen);
     memcpy(pPadBuf + nFLen, pSec, nSLen);
@@ -379,31 +379,30 @@ static XSTATUS XCrypt_HMAC(uint8_t *pOut, size_t nSize, const uint8_t *pFirst, s
     return XSTDOK;
 }
 
-/* https://www.rfc-editor.org/rfc/rfc2104 */
 XSTATUS XCrypt_HS256U(uint8_t *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
 {
     if (pOutput == NULL || nSize < XSHA256_DIGEST_SIZE) return XSTDERR;
-    uint8_t diggest[XSHA256_DIGEST_SIZE];
-    uint8_t kBuff[XSHA256_BLOCK_SIZE];
+    uint8_t hash[XSHA256_DIGEST_SIZE];
     uint8_t kIpad[XSHA256_BLOCK_SIZE];
     uint8_t kOpad[XSHA256_BLOCK_SIZE];
+    uint8_t kBuff[XSHA256_BLOCK_SIZE];
 
-    memset(kBuff, 0, sizeof(kBuff));
     memset(kIpad, 0x36, XSHA256_BLOCK_SIZE);
     memset(kOpad, 0x5c, XSHA256_BLOCK_SIZE);
+    memset(kBuff, 0, sizeof(kBuff));
 
     if (nKeyLen <= XSHA256_BLOCK_SIZE) memcpy(kBuff, pKey, nKeyLen);
     else XCrypt_SHA256U(kBuff, sizeof(kBuff), pKey, nKeyLen);
 
-    uint8_t i = 0;
+    uint8_t i;
     for (i = 0; i < XSHA256_BLOCK_SIZE; i++)
     {
         kIpad[i] ^= kBuff[i];
         kOpad[i] ^= kBuff[i];
     }
 
-    XCrypt_HMAC(diggest, sizeof(diggest), kIpad, sizeof(kIpad), pData, nLength);
-    XCrypt_HMAC(pOutput, nSize, kOpad, sizeof(kOpad), diggest, sizeof(diggest));
+    XCrypt_HMAC(hash, sizeof(hash), kIpad, sizeof(kIpad), pData, nLength);
+    XCrypt_HMAC(pOutput, nSize, kOpad, sizeof(kOpad), hash, sizeof(hash));
 
     return XSTDOK;
 }
@@ -706,9 +705,9 @@ char *XDecrypt_Base64(const uint8_t *pInput, size_t *pLength)
     for (i = 0, j = 0; i < nLength;)
     {
         uint32_t nSextetA = pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
-        uint32_t nSextetB = pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
-        uint32_t nSextetC = pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
-        uint32_t nSextetD = pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
+        uint32_t nSextetB = i >= nLength || pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
+        uint32_t nSextetC = i >= nLength || pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
+        uint32_t nSextetD = i >= nLength || pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
 
         uint32_t nTriple = (nSextetA << 3 * 6) + (nSextetB << 2 * 6) 
                          + (nSextetC << 1 * 6) + (nSextetD << 0 * 6);
@@ -742,9 +741,9 @@ char *XDecrypt_Base64Url(const uint8_t *pInput, size_t *pLength)
     for (i = 0, j = 0; i < nLength;)
     {
         uint32_t nSextetA = pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
-        uint32_t nSextetB = pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
-        uint32_t nSextetC = pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
-        uint32_t nSextetD = pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
+        uint32_t nSextetB = i >= nLength || pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
+        uint32_t nSextetC = i >= nLength || pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
+        uint32_t nSextetD = i >= nLength || pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
 
         uint32_t nTriple = (nSextetA << 3 * 6) + (nSextetB << 2 * 6) 
                          + (nSextetC << 1 * 6) + (nSextetD << 0 * 6);

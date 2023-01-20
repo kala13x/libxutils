@@ -19,6 +19,7 @@ EXECS = array \
 		xsrc \
 		list \
 		ntp \
+		jwt \
 		api
 
 all:
@@ -74,6 +75,9 @@ xcrypt:
 
 xpass:
 	$(CC) $(CFLAGS) -o xpass xpass.c $(LIBS)
+
+jwt:
+	$(CC) $(CFLAGS) -o jwt jwt.c $(LIBS)
 
 api:
 	$(CC) $(CFLAGS) -o api api.c $(LIBS)

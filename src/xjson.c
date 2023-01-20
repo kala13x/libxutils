@@ -853,8 +853,23 @@ int XJSON_Parse(xjson_t *pJson, const char *pData, size_t nSize)
     return XJSON_UnexpectedToken(pJson);
 }
 
+void XJSON_Init(xjson_t *pJson)
+{
+    pJson->pRootObj = NULL;
+    pJson->pData = NULL;
+
+    pJson->nError = XJSON_ERR_NONE;
+    pJson->nDataSize = 0;
+    pJson->nOffset = 0;
+
+    pJson->lastToken.nType = XJSON_TOKEN_INVALID;
+    pJson->lastToken.pData = NULL;
+    pJson->lastToken.nLength = 0;
+}
+
 void XJSON_Destroy(xjson_t *pJson)
 {
+    if (pJson == NULL) return;
     XJSON_FreeObject(pJson->pRootObj);
     pJson->nDataSize = 0;
     pJson->nOffset = 0;

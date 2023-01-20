@@ -137,6 +137,7 @@ enable_mdtp() {
 
 enable_jwt() {
     USE_JWT=y
+    USE_ARRAY=Y
     enable_crypt
     enable_xjson
     enable_xstr
