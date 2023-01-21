@@ -365,49 +365,60 @@ char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength)
     return pHash;
 }
 
-static XSTATUS XCrypt_HMAC(uint8_t *pOut, size_t nSize, const uint8_t *pFirst, size_t nFLen, const uint8_t *pSec, size_t nSLen)
+////////////////////////////////////////////////////////////////
+// HMAC SHA-256 algorithm implementation for C/C++ based on
+// MD5 sample code from https://www.rfc-editor.org/rfc/rfc2104
+////////////////////////////////////////////////////////////////
+
+XSTATUS XCrypt_HS256U(uint8_t *pOutput, size_t nSize, const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen)
 {
-    size_t nBufLen = nFLen + nSLen;
-    uint8_t* pPadBuf = (uint8_t*)malloc(nBufLen);
-    XASSERT_RET(pPadBuf, XSTDERR);
+    XASSERT_RET((nSize >= XSHA256_DIGEST_SIZE &&
+        nLength && nKeyLen && pOutput &&
+        pData && pKey), XSTDINV);
 
-    memcpy(pPadBuf, pFirst, nFLen);
-    memcpy(pPadBuf + nFLen, pSec, nSLen);
-    XCrypt_SHA256U(pOut, nSize, pPadBuf, nBufLen);
+    uint8_t i, diggest[XSHA256_DIGEST_SIZE];
+    uint8_t kIpad[XSHA256_BLOCK_SIZE] = {0};
+    uint8_t kOpad[XSHA256_BLOCK_SIZE] = {0};
+    xsha256_t xsha;
 
-    free(pPadBuf);
-    return XSTDOK;
-}
-
-XSTATUS XCrypt_HS256U(uint8_t *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
-{
-    if (pOutput == NULL || nSize < XSHA256_DIGEST_SIZE) return XSTDERR;
-    uint8_t hash[XSHA256_DIGEST_SIZE];
-    uint8_t kIpad[XSHA256_BLOCK_SIZE];
-    uint8_t kOpad[XSHA256_BLOCK_SIZE];
-    uint8_t kBuff[XSHA256_BLOCK_SIZE];
-
-    memset(kIpad, 0x36, XSHA256_BLOCK_SIZE);
-    memset(kOpad, 0x5c, XSHA256_BLOCK_SIZE);
-    memset(kBuff, 0, sizeof(kBuff));
-
-    if (nKeyLen <= XSHA256_BLOCK_SIZE) memcpy(kBuff, pKey, nKeyLen);
-    else XCrypt_SHA256U(kBuff, sizeof(kBuff), pKey, nKeyLen);
-
-    uint8_t i;
-    for (i = 0; i < XSHA256_BLOCK_SIZE; i++)
+    /* if key is longer than 64 bytes reset it to key=SHA256(key) */
+    if (nKeyLen > XSHA256_BLOCK_SIZE)
     {
-        kIpad[i] ^= kBuff[i];
-        kOpad[i] ^= kBuff[i];
+        uint8_t key[XSHA256_BLOCK_SIZE] = {0};
+        XCrypt_SHA256U(key, sizeof(key), pKey, nKeyLen);
+
+        memcpy(kIpad, pKey, XSHA256_DIGEST_SIZE);
+        memcpy(kOpad, pKey, XSHA256_DIGEST_SIZE);
+    }
+    else
+    {
+        memcpy(kIpad, pKey, nKeyLen);
+        memcpy(kOpad, pKey, nKeyLen);
     }
 
-    XCrypt_HMAC(hash, sizeof(hash), kIpad, sizeof(kIpad), pData, nLength);
-    XCrypt_HMAC(pOutput, nSize, kOpad, sizeof(kOpad), hash, sizeof(hash));
+    /* XOR key with ipad and opad values */
+    for (i = 0; i < XSHA256_BLOCK_SIZE; i++)
+    {
+        kIpad[i] ^= 0x36;
+        kOpad[i] ^= 0x5c;
+    }
+
+    /* Perform inner SHA256 */
+    XSHA256_Init(&xsha);
+    XSHA256_Update(&xsha, kIpad, sizeof(kIpad));
+    XSHA256_Update(&xsha, pData, nLength);
+    XSHA256_Final(&xsha, diggest);
+
+    /* Perform outer SHA256 */
+    XSHA256_Init(&xsha);
+    XSHA256_Update(&xsha, kOpad, sizeof(kOpad));
+    XSHA256_Update(&xsha, diggest, sizeof(diggest));
+    XSHA256_Final(&xsha, pOutput);
 
     return XSTDOK;
 }
 
-XSTATUS XCrypt_HS256H(char *pOutput, size_t nSize, const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
+XSTATUS XCrypt_HS256H(char *pOutput, size_t nSize, const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen)
 {
     if (pOutput == NULL || nSize < XSHA256_LENGTH + 1) return XSTDERR;
     uint8_t i, hash[XSHA256_DIGEST_SIZE];
@@ -419,7 +430,7 @@ XSTATUS XCrypt_HS256H(char *pOutput, size_t nSize, const uint8_t* pData, const s
     return XSTDOK;
 }
 
-char* XCrypt_HS256B(const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen, size_t *pOutLen)
+char* XCrypt_HS256B(const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen, size_t *pOutLen)
 {
     uint8_t hash[XSHA256_DIGEST_SIZE];
     *pOutLen = sizeof(hash);
@@ -428,7 +439,7 @@ char* XCrypt_HS256B(const uint8_t* pData, const size_t nLength, const uint8_t* p
     return XCrypt_Base64Url(hash, pOutLen);
 }
 
-char* XCrypt_HS256(const uint8_t* pData, const size_t nLength, const uint8_t* pKey, const size_t nKeyLen)
+char* XCrypt_HS256(const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen)
 {
     size_t nSize = XSHA256_LENGTH + 1;
     char *pOutput = (char*)malloc(nSize);
@@ -438,9 +449,9 @@ char* XCrypt_HS256(const uint8_t* pData, const size_t nLength, const uint8_t* pK
     return pOutput;
 }
 
-////////////////////////////////////////////////////////
-// End of SHA-256 implementation
-////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+// END OF HMAC SHA-256 implementation
+////////////////////////////////////////////////////////////
 
 uint32_t XCrypt_CRC32(const uint8_t *pInput, size_t nLength)
 {
