@@ -53,6 +53,7 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
         case XC_REVERSE:
             return XTRUE;
         case XC_MD5:
+        case XC_HMAC_MD5:
         case XC_CRC32:
         case XC_HS256:
         case XC_SHA256:
@@ -114,6 +115,7 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   base64url");
     xlog("   sha256");
     xlog("   hs256");
+    xlog("   hmacmd5");
     xlog("   reverse\n");
 
     xlog("Examples:");
