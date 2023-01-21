@@ -8,6 +8,26 @@
  * based on FIPS-197 implementation by Christophe Devine.
  */
 
+/*
+ *  FIPS-197 compliant AES implementation
+ *
+ *  Copyright (C) 2001-2004  Christophe Devine
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
 #include "xstd.h"
 #include "xtype.h"
 #include "xaes.h"
@@ -588,6 +608,10 @@ void XAES_DecryptBlock(xaes_context_t *pCtx, uint8_t output[XAES_BLOCK_SIZE], co
     XAES_PUT_UINT32_BE(X3, output, 12);
 }
 
+////////////////////////////////////////////////////////////////////////////////////////
+// libxutils implementation to encode and decode input buffers of various sizes
+////////////////////////////////////////////////////////////////////////////////////////
+
 uint8_t* XAES_Encrypt(xaes_context_t *pCtx, const uint8_t *pInput, size_t *pLength)
 {
     if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
@@ -709,3 +733,7 @@ uint8_t* XAES_Decrypt(xaes_context_t *pCtx, const  uint8_t *pInput, size_t *pLen
     free(pInputPtr);
     return pOutput;
 }
+
+////////////////////////////////////////////////////////////////////////////////////////
+// END OF: libxutils implementation to encode and decode input buffers of various sizes
+////////////////////////////////////////////////////////////////////////////////////////
