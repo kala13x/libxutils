@@ -64,6 +64,10 @@
 #define XSTDINV         -2
 #endif
 
+#ifndef XSTDEXC
+#define XSTDEXC         -3
+#endif
+
 #ifndef XSTDOK
 #define XSTDOK          1
 #endif
@@ -78,6 +82,9 @@
 
 #define XASSERT_RET(condition, value)           \
     if (!condition) return value
+
+#define XASSERT_VOID(condition)                 \
+    if (!condition) return
 
 #define XASSERT_DBG(condition, value)           \
     do {                                        \

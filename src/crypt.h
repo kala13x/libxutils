@@ -109,13 +109,23 @@ typedef struct XRSAKeys {
     size_t nPrivKeyLen;
     size_t nPubKeyLen;
     RSA *pKeyPair;
-} xrsa_pair_t;
+} xrsa_key_t;
 
-int XRSA_GeneratePair(xrsa_pair_t *pPair, size_t nKeyLength, size_t nPubKeyExp);
-void XRSA_FreePair(xrsa_pair_t *pPair);
+void XRSA_InitKey(xrsa_key_t *pPair);
+void XRSA_FreeKey(xrsa_key_t *pPair);
+int XRSA_GenerateKeys(xrsa_key_t *pPair, size_t nKeyLength, size_t nPubKeyExp);
 
-uint8_t* XRSA_Crypt(xrsa_pair_t *pPair, const uint8_t *pData, size_t nSize, size_t *pOutLength);
-uint8_t* XRSA_Decrypt(xrsa_pair_t *pPair, const uint8_t *pData, size_t nSize, size_t *pOutLength);
+uint8_t* XRSA_Crypt(xrsa_key_t *pPair, const uint8_t *pData, size_t nLength, size_t *pOutLength);
+uint8_t* XRSA_Decrypt(xrsa_key_t *pPair, const uint8_t *pData, size_t nLength, size_t *pOutLength);
+
+XSTATUS XRSA_LoadKeyFiles(xrsa_key_t *pPair, const char *pPrivPath, const char *pPubPath);
+XSTATUS XRSA_LoadPrivKeyFile(xrsa_key_t *pPair, const char *pPath);
+XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath);
+XSTATUS XRSA_LoadPrivKey(xrsa_key_t *pPair);
+XSTATUS XRSA_LoadPubKey(xrsa_key_t *pPair);
+
+XSTATUS XRSA_SetPubKey(xrsa_key_t *pPair, const uint8_t *pPubKey, size_t nLength);
+XSTATUS XRSA_SetPrivKey(xrsa_key_t *pPair, const uint8_t *pPrivKey, size_t nLength);
 #endif /* XCRYPT_USE_SSL */
 
 typedef enum
