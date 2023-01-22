@@ -993,6 +993,162 @@ uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
     return buffer.pData;
 }
 
+#ifdef XCRYPT_USE_SSL
+int XRSA_GeneratePair(xrsa_pair_t *pPair, size_t nKeyLength, size_t nPubKeyExp)
+{
+    if (pPair == NULL) return XSTDINV;
+    pPair->pPrivateKey = NULL;
+    pPair->pPublicKey = NULL;
+    pPair->pKeyPair = NULL;
+    pPair->nPrivKeyLen = 0;
+    pPair->nPubKeyLen = 0;
+
+    BIGNUM *pBigNum = BN_new();
+    int nRetVal = BN_set_word(pBigNum, nPubKeyExp);
+
+    if (nRetVal != XSTDOK)
+    {
+        BN_free(pBigNum);
+        return XSTDERR;
+    }
+
+    pPair->pKeyPair = RSA_new();
+    if (pPair->pKeyPair == NULL)
+    {
+        BN_free(pBigNum);
+        return XSTDERR;
+    }
+
+    nRetVal = RSA_generate_key_ex(pPair->pKeyPair, nKeyLength, pBigNum, NULL);
+    if (nRetVal != XSTDOK)
+    {
+        RSA_free(pPair->pKeyPair);
+        BN_free(pBigNum);
+        return XSTDERR;
+    }
+
+    BIO *pBioPriv = BIO_new(BIO_s_mem());
+    if (pBioPriv == NULL)
+    {
+        RSA_free(pPair->pKeyPair);
+        BN_free(pBigNum);
+        return XSTDERR;
+    }
+
+    BIO *pBioPub = BIO_new(BIO_s_mem());
+    if (pBioPriv == NULL)
+    {
+        RSA_free(pPair->pKeyPair);
+        BIO_free(pBioPriv);
+        BN_free(pBigNum);
+        return XSTDERR;
+    }
+
+    PEM_write_bio_RSAPrivateKey(pBioPriv, pPair->pKeyPair, NULL, NULL, 0, NULL, NULL);
+    PEM_write_bio_RSAPublicKey(pBioPub, pPair->pKeyPair);
+
+    pPair->nPrivKeyLen = BIO_pending(pBioPriv);
+    pPair->nPubKeyLen = BIO_pending(pBioPub);
+
+    pPair->pPrivateKey = malloc(pPair->nPrivKeyLen + 1);
+    pPair->pPublicKey = malloc(pPair->nPubKeyLen + 1);
+
+    if (pPair->pPrivateKey == NULL || pPair->pPublicKey == NULL)
+    {
+        XRSA_FreePair(pPair);
+        BIO_free(pBioPriv);
+        BIO_free(pBioPub);
+        BN_free(pBigNum);
+        return XSTDERR;
+    }
+
+    BIO_read(pBioPriv, pPair->pPrivateKey, pPair->nPrivKeyLen);
+    BIO_read(pBioPub, pPair->pPublicKey, pPair->nPubKeyLen);
+
+    pPair->pPrivateKey[pPair->nPrivKeyLen] = '\0';
+    pPair->pPublicKey[pPair->nPubKeyLen] = '\0';
+
+    BIO_free(pBioPriv);
+    BIO_free(pBioPub);
+    BN_free(pBigNum);
+
+    return XSTDOK;
+}
+
+uint8_t* XRSA_Crypt(xrsa_pair_t *pPair, const uint8_t *pData, size_t nLength, size_t *pOutLength)
+{
+    XASSERT_RET((pPair && pData && nLength), NULL);
+    if (pOutLength) *pOutLength = 0;
+    size_t nOutLength = 0;
+
+    uint8_t *pOutput = malloc(RSA_size(pPair->pKeyPair));
+    XASSERT_RET(pOutput, NULL);
+
+    nOutLength = RSA_public_encrypt(
+        nLength,
+        pData,
+        pOutput,
+        pPair->pKeyPair,
+        RSA_PKCS1_OAEP_PADDING
+    );
+
+    if(nOutLength < 0)
+    {
+        free(pOutput);
+        return NULL;
+    }
+
+    if (pOutLength) *pOutLength = nOutLength;
+    return pOutput;
+}
+
+uint8_t* XRSA_Decrypt(xrsa_pair_t *pPair, const uint8_t *pData, size_t nLength, size_t *pOutLength)
+{
+    XASSERT_RET((pPair && pData && nLength), NULL);
+    if (pOutLength) *pOutLength = 0;
+    size_t nOutLength = 0;
+
+    uint8_t *pOutput = malloc(nLength + 1);
+    XASSERT_RET(pOutput, NULL);
+
+    nOutLength = RSA_private_decrypt(
+        nLength,
+        pData,
+        pOutput,
+        pPair->pKeyPair,
+        RSA_PKCS1_OAEP_PADDING
+    );
+
+    if (nOutLength < 0)
+    {
+        free(pOutput);
+        return NULL;
+    }
+
+    if (pOutLength) *pOutLength = nOutLength;
+    size_t nTermPos = nOutLength < nLength ?
+                    nOutLength : nLength;
+
+    pOutput[nTermPos] = '\0';
+    return pOutput;
+}
+
+void XRSA_FreePair(xrsa_pair_t *pPair)
+{
+    if (pPair == NULL) return;
+    RSA_free(pPair->pKeyPair);
+    free(pPair->pPrivateKey);
+    free(pPair->pPublicKey);
+
+    pPair->pPrivateKey = NULL;
+    pPair->pPublicKey = NULL;
+    pPair->pKeyPair = NULL;
+
+    pPair->nPrivKeyLen = 0;
+    pPair->nPubKeyLen = 0;
+}
+#endif /* XCRYPT_USE_SSL */
+
 xcrypt_chipher_t XCrypt_GetCipher(const char *pCipher)
 {
     if (!strncmp(pCipher, "aes", 3)) return XC_AES;

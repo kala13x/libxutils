@@ -27,6 +27,7 @@ extern "C" {
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
+#define XSOCK_USE_SSL       XTRUE
 #endif
 
 /* MacOS Compatibility */

@@ -14,6 +14,16 @@
 extern "C" {
 #endif
 
+#ifdef _XUTILS_USE_SSL
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/err.h>
+
+#define XCRYPT_USE_SSL      XTRUE
+#define XRSA_KEY_SIZE       2048
+#define XRSA_PUB_EXP        65537
+#endif
+
 #include "xstd.h"
 #include "xstr.h"
 #include "xtype.h"
@@ -91,6 +101,22 @@ uint8_t* XDecrypt_AES(const uint8_t *pInput, size_t *pLength, const uint8_t *pKe
 
 uint8_t* XCrypt_HEX(const uint8_t *pInput, size_t *pLength, const char* pSpace, size_t nColumns, xbool_t bLowCase);
 uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase);
+
+#ifdef XCRYPT_USE_SSL
+typedef struct XRSAKeys {
+    char *pPrivateKey;
+    char *pPublicKey;
+    size_t nPrivKeyLen;
+    size_t nPubKeyLen;
+    RSA *pKeyPair;
+} xrsa_pair_t;
+
+int XRSA_GeneratePair(xrsa_pair_t *pPair, size_t nKeyLength, size_t nPubKeyExp);
+void XRSA_FreePair(xrsa_pair_t *pPair);
+
+uint8_t* XRSA_Crypt(xrsa_pair_t *pPair, const uint8_t *pData, size_t nSize, size_t *pOutLength);
+uint8_t* XRSA_Decrypt(xrsa_pair_t *pPair, const uint8_t *pData, size_t nSize, size_t *pOutLength);
+#endif /* XCRYPT_USE_SSL */
 
 typedef enum
 {

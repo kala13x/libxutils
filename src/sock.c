@@ -58,7 +58,7 @@ xbool_t XSockType_IsSSL(xsock_type_t eType)
     return XFALSE;
 }
 
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
 typedef struct XSocketPriv {
     xbool_t nShutdown;
     void *pSSLCTX;
@@ -195,7 +195,7 @@ static const SSL_METHOD* XSock_GetSSLMethod(xsock_t *pSock)
 
 void XSock_InitSSL(void)
 {
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     if (XSYNC_ATOMIC_GET(&g_nSSLInit)) return;
 
 #if OPENSSLVERSION_NUMBER < 0x10100000L
@@ -212,7 +212,7 @@ void XSock_InitSSL(void)
 
 void XSock_DeinitSSL(void)
 {
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     if (!XSYNC_ATOMIC_GET(&g_nSSLInit)) return;
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -233,7 +233,7 @@ int XSock_LastSSLError(char *pDst, size_t nSize)
     int nLength = 0;
     pDst[0] = XSTR_NUL;
 
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     BIO *pBIO = BIO_new(BIO_s_mem());
     ERR_print_errors(pBIO);
 
@@ -421,7 +421,7 @@ XSTATUS XSock_Init(xsock_t *pSock, xsock_type_t eType, XSOCKET nFD, uint8_t nNB)
     pSock->nFD = nFD;
     pSock->nNB = nNB;
 
- #ifdef _XUTILS_USE_SSL
+ #ifdef XSOCK_USE_SSL
     eType = XSock_GetPrefredSSL(eType);
 
     if (XSockType_IsSSL(eType))
@@ -441,7 +441,7 @@ XSTATUS XSock_Init(xsock_t *pSock, xsock_type_t eType, XSOCKET nFD, uint8_t nNB)
 
 void XSock_Close(xsock_t *pSock)
 {
- #ifdef _XUTILS_USE_SSL
+ #ifdef XSOCK_USE_SSL
     if (pSock->pPrivate != NULL)
     {
         xsock_priv_t *pPriv = (xsock_priv_t*)pSock->pPrivate;
@@ -478,7 +478,7 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
     if (!XSock_Check(pSock)) return XSOCK_ERROR;
     if (!nSize || pData == NULL) return XSOCK_NONE;
 
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     SSL *pSSL = XSock_GetSSL(pSock);
     if (pSSL == NULL)
     {
@@ -546,7 +546,7 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
     if (!XSock_Check(pSock)) return XSOCK_ERROR;
     if (!nLength || pData == NULL) return XSOCK_NONE;
 
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     SSL *pSSL = XSock_GetSSL(pSock);
     if (pSSL == NULL)
     {
@@ -769,7 +769,7 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
         return XSOCK_INVALID;
     }
 
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     SSL_CTX* pSSLCtx = XSock_GetSSLCTX(pSock);
     if (pSock->nSSL && pSSLCtx != NULL)
     {
@@ -1148,7 +1148,7 @@ XSOCKET XSock_AddMembership(xsock_t* pSock, const char* pGroup)
 XSTATUS XSock_LoadPKCS12(xsocket_ssl_cert_t *pCert, const char *p12Path, const char *p12Pass)
 {
     pCert->nStatus = 0;
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     FILE *p12File = fopen(p12Path, "rb");
     if (p12File == NULL) return XSOCK_ERROR;
 
@@ -1183,7 +1183,7 @@ XSTATUS XSock_LoadPKCS12(xsocket_ssl_cert_t *pCert, const char *p12Path, const c
 
 XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
 {
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     SSL_CTX *pSSLCtx = XSock_GetSSLCTX(pSock);
     if (pSSLCtx == NULL)
     {
@@ -1270,7 +1270,7 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
 
 XSOCKET XSock_InitSSLServer(xsock_t *pSock)
 {
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     const SSL_METHOD *pMethod = XSock_GetSSLMethod(pSock);
     if (pMethod == NULL)
     {
@@ -1298,7 +1298,7 @@ XSOCKET XSock_InitSSLServer(xsock_t *pSock)
 
 XSOCKET XSock_InitSSLClient(xsock_t *pSock)
 {
-#ifdef _XUTILS_USE_SSL
+#ifdef XSOCK_USE_SSL
     const SSL_METHOD *pMethod = XSock_GetSSLMethod(pSock);
     if (pMethod == NULL)
     {
