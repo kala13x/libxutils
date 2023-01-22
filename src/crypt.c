@@ -1028,25 +1028,26 @@ int XRSA_GenerateKeys(xrsa_key_t *pPair, size_t nKeyLength, size_t nPubKeyExp)
     XRSA_InitKey(pPair);
 
     BIGNUM *pBigNum = BN_new();
+    XASSERT(pBigNum, XSTDERR);
+
     int nRetVal = BN_set_word(pBigNum, nPubKeyExp);
-
     if (nRetVal != XSTDOK)
     {
         BN_free(pBigNum);
         return XSTDERR;
     }
 
-    pPair->pKeyPair = RSA_new();
-    if (pPair->pKeyPair == NULL)
+    RSA *pKeyPair = RSA_new();
+    if (pKeyPair == NULL)
     {
         BN_free(pBigNum);
         return XSTDERR;
     }
 
-    nRetVal = RSA_generate_key_ex(pPair->pKeyPair, nKeyLength, pBigNum, NULL);
+    nRetVal = RSA_generate_key_ex(pKeyPair, nKeyLength, pBigNum, NULL);
     if (nRetVal != XSTDOK)
     {
-        RSA_free(pPair->pKeyPair);
+        RSA_free(pKeyPair);
         BN_free(pBigNum);
         return XSTDERR;
     }
@@ -1054,7 +1055,7 @@ int XRSA_GenerateKeys(xrsa_key_t *pPair, size_t nKeyLength, size_t nPubKeyExp)
     BIO *pBioPriv = BIO_new(BIO_s_mem());
     if (pBioPriv == NULL)
     {
-        RSA_free(pPair->pKeyPair);
+        RSA_free(pKeyPair);
         BN_free(pBigNum);
         return XSTDERR;
     }
@@ -1062,17 +1063,25 @@ int XRSA_GenerateKeys(xrsa_key_t *pPair, size_t nKeyLength, size_t nPubKeyExp)
     BIO *pBioPub = BIO_new(BIO_s_mem());
     if (pBioPriv == NULL)
     {
-        RSA_free(pPair->pKeyPair);
+        RSA_free(pKeyPair);
         BIO_free(pBioPriv);
         BN_free(pBigNum);
         return XSTDERR;
     }
 
-    PEM_write_bio_RSAPrivateKey(pBioPriv, pPair->pKeyPair, NULL, NULL, 0, NULL, NULL);
-    PEM_write_bio_RSAPublicKey(pBioPub, pPair->pKeyPair);
+    if (PEM_write_bio_RSAPrivateKey(pBioPriv, pKeyPair, NULL, NULL, 0, NULL, NULL) != XSTDOK ||
+        PEM_write_bio_RSAPublicKey(pBioPub, pKeyPair) != XSTDOK)
+    {
+        RSA_free(pKeyPair);
+        BIO_free(pBioPriv);
+        BIO_free(pBioPub);
+        BN_free(pBigNum);
+        return XSTDERR;
+    }
 
     pPair->nPrivKeyLen = BIO_pending(pBioPriv);
     pPair->nPubKeyLen = BIO_pending(pBioPub);
+    pPair->pKeyPair = pKeyPair;
 
     pPair->pPrivateKey = malloc(pPair->nPrivKeyLen + 1);
     pPair->pPublicKey = malloc(pPair->nPubKeyLen + 1);
@@ -1086,8 +1095,25 @@ int XRSA_GenerateKeys(xrsa_key_t *pPair, size_t nKeyLength, size_t nPubKeyExp)
         return XSTDERR;
     }
 
-    BIO_read(pBioPriv, pPair->pPrivateKey, pPair->nPrivKeyLen);
-    BIO_read(pBioPub, pPair->pPublicKey, pPair->nPubKeyLen);
+    int nRead = BIO_read(pBioPriv, pPair->pPrivateKey, pPair->nPrivKeyLen);
+    if ((size_t)nRead != pPair->nPrivKeyLen)
+    {
+        XRSA_FreeKey(pPair);
+        BIO_free(pBioPriv);
+        BIO_free(pBioPub);
+        BN_free(pBigNum);
+        return XSTDERR;
+    }
+
+    nRead = BIO_read(pBioPub, pPair->pPublicKey, pPair->nPubKeyLen);
+    if ((size_t)nRead != pPair->nPubKeyLen)
+    {
+        XRSA_FreeKey(pPair);
+        BIO_free(pBioPriv);
+        BIO_free(pBioPub);
+        BN_free(pBigNum);
+        return XSTDERR;
+    }
 
     pPair->pPrivateKey[pPair->nPrivKeyLen] = '\0';
     pPair->pPublicKey[pPair->nPubKeyLen] = '\0';
@@ -1105,12 +1131,12 @@ uint8_t* XRSA_Crypt(xrsa_key_t *pPair, const uint8_t *pData, size_t nLength, siz
     if (pOutLength) *pOutLength = 0;
 
     size_t nRSASize = RSA_size(pPair->pKeyPair);
-    size_t nOutLength = 0;
+    XASSERT(nRSASize, NULL);
 
-    uint8_t *pOutput = malloc(nRSASize);
+    uint8_t *pOutput = malloc(nRSASize + 1);
     XASSERT(pOutput, NULL);
 
-    nOutLength = RSA_public_encrypt(
+    size_t nOutLength = RSA_public_encrypt(
         nLength,
         pData,
         pOutput,
@@ -1118,13 +1144,16 @@ uint8_t* XRSA_Crypt(xrsa_key_t *pPair, const uint8_t *pData, size_t nLength, siz
         RSA_PKCS1_OAEP_PADDING
     );
 
-    if(nOutLength < 0)
+    if (nOutLength < 0 ||
+        nOutLength > nRSASize)
     {
         free(pOutput);
         return NULL;
     }
 
     if (pOutLength) *pOutLength = nOutLength;
+    pOutput[nOutLength] = '\0';
+
     return pOutput;
 }
 
@@ -1132,12 +1161,11 @@ uint8_t* XRSA_Decrypt(xrsa_key_t *pPair, const uint8_t *pData, size_t nLength, s
 {
     XASSERT((pPair && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
-    size_t nOutLength = 0;
 
     uint8_t *pOutput = malloc(nLength + 1);
     XASSERT(pOutput, NULL);
 
-    nOutLength = RSA_private_decrypt(
+    size_t nOutLength = RSA_private_decrypt(
         nLength,
         pData,
         pOutput,
@@ -1175,7 +1203,8 @@ XSTATUS XRSA_LoadPrivKey(xrsa_key_t *pPair)
     RSA *pRSA = PEM_read_bio_RSAPrivateKey(pBIO, &pPair->pKeyPair, NULL, NULL);
     BIO_free(pBIO);
 
-    return pRSA == NULL ? XSTDERR : XSTDOK;
+    XASSERT(pRSA, XSTDERR);
+    return XSTDOK;
 }
 
 XSTATUS XRSA_LoadPubKey(xrsa_key_t *pPair)
@@ -1194,10 +1223,11 @@ XSTATUS XRSA_LoadPubKey(xrsa_key_t *pPair)
     RSA *pRSA = PEM_read_bio_RSAPublicKey(pBIO, &pPair->pKeyPair, NULL, NULL);
     BIO_free(pBIO);
 
-    return pRSA == NULL ? XSTDERR : XSTDOK;
+    XASSERT(pRSA, XSTDERR);
+    return XSTDOK;
 }
 
-XSTATUS XRSA_SetPubKey(xrsa_key_t *pPair, const uint8_t *pPubKey, size_t nLength)
+XSTATUS XRSA_SetPubKey(xrsa_key_t *pPair, const char *pPubKey, size_t nLength)
 {
     XASSERT(pPair && pPubKey && nLength, XSTDINV);
     if (pPair->pPublicKey) free(pPair->pPublicKey);
@@ -1212,7 +1242,7 @@ XSTATUS XRSA_SetPubKey(xrsa_key_t *pPair, const uint8_t *pPubKey, size_t nLength
     return XRSA_LoadPubKey(pPair);
 }
 
-XSTATUS XRSA_SetPrivKey(xrsa_key_t *pPair, const uint8_t *pPrivKey, size_t nLength)
+XSTATUS XRSA_SetPrivKey(xrsa_key_t *pPair, const char *pPrivKey, size_t nLength)
 {
     XASSERT(pPair && pPrivKey && nLength, XSTDINV);
     if (pPair->pPrivateKey) free(pPair->pPrivateKey);
@@ -1229,8 +1259,7 @@ XSTATUS XRSA_SetPrivKey(xrsa_key_t *pPair, const uint8_t *pPrivKey, size_t nLeng
 
 XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath)
 {
-    XASSERT(pPair && pPath, XSTDINV);
-
+    XASSERT(pPair, XSTDINV);
     if (pPair->pPublicKey)
     {
         free(pPair->pPublicKey);
@@ -1238,6 +1267,7 @@ XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath)
         pPair->nPubKeyLen = 0;
     }
 
+    XASSERT(pPath, XSTDINV);
     if (pPair->pKeyPair == NULL)
     {
         pPair->pKeyPair = RSA_new();
@@ -1258,7 +1288,7 @@ XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath)
     }
 
     int nRead = BIO_read(pBIO, pPair->pPublicKey, pPair->nPubKeyLen);
-    if (nRead != pPair->nPubKeyLen)
+    if ((size_t)nRead != pPair->nPubKeyLen)
     {
         free(pPair->pPublicKey);
         pPair->pPublicKey = NULL;
@@ -1270,16 +1300,16 @@ XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath)
 
     pPair->pPublicKey[pPair->nPubKeyLen] = '\0';
 
-    RSA *pRSA = PEM_read_bio_RSAPrivateKey(pBIO, &pPair->pKeyPair, NULL, NULL);
+    RSA *pRSA = PEM_read_bio_RSAPublicKey(pBIO, &pPair->pKeyPair, NULL, NULL);
     BIO_free(pBIO);
 
-    return pRSA == NULL ? XSTDERR : XSTDOK;
+    XASSERT(pRSA, XSTDERR);
+    return XSTDOK;
 }
 
 XSTATUS XRSA_LoadPrivKeyFile(xrsa_key_t *pPair, const char *pPath)
 {
-    XASSERT(pPair && pPath, XSTDINV);
-
+    XASSERT(pPair, XSTDINV);
     if (pPair->pPrivateKey)
     {
         free(pPair->pPrivateKey);
@@ -1287,6 +1317,7 @@ XSTATUS XRSA_LoadPrivKeyFile(xrsa_key_t *pPair, const char *pPath)
         pPair->nPrivKeyLen = 0;
     }
 
+    XASSERT(pPath, XSTDINV);
     if (pPair->pKeyPair == NULL)
     {
         pPair->pKeyPair = RSA_new();
@@ -1307,7 +1338,7 @@ XSTATUS XRSA_LoadPrivKeyFile(xrsa_key_t *pPair, const char *pPath)
     }
 
     int nRead = BIO_read(pBIO, pPair->pPrivateKey, pPair->nPrivKeyLen);
-    if (nRead != pPair->nPrivKeyLen)
+    if ((size_t)nRead != pPair->nPrivKeyLen)
     {
         free(pPair->pPrivateKey);
         pPair->pPrivateKey = NULL;
@@ -1322,7 +1353,8 @@ XSTATUS XRSA_LoadPrivKeyFile(xrsa_key_t *pPair, const char *pPath)
     RSA *pRSA = PEM_read_bio_RSAPrivateKey(pBIO, &pPair->pKeyPair, NULL, NULL);
     BIO_free(pBIO);
 
-    return pRSA == NULL ? XSTDERR : XSTDOK;
+    XASSERT(pRSA, XSTDERR);
+    return XSTDOK;
 }
 
 XSTATUS XRSA_LoadKeyFiles(xrsa_key_t *pPair, const char *pPrivPath, const char *pPubPath)
@@ -1332,6 +1364,7 @@ XSTATUS XRSA_LoadKeyFiles(xrsa_key_t *pPair, const char *pPrivPath, const char *
 
     if (pPrivPath != NULL) nStatus = XRSA_LoadPrivKeyFile(pPair, pPrivPath);
     if (pPubPath != NULL) nStatus = XRSA_LoadPubKeyFile(pPair, pPubPath);
+    if (nStatus != XSTDOK) XRSA_FreeKey(pPair);
 
     return nStatus;
 }

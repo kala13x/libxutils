@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-#ifdef _XUTILS_USE_SSL
+//#ifdef _XUTILS_USE_SSL
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
@@ -22,7 +22,7 @@ extern "C" {
 #define XCRYPT_USE_SSL      XTRUE
 #define XRSA_KEY_SIZE       2048
 #define XRSA_PUB_EXP        65537
-#endif
+//#endif
 
 #include "xstd.h"
 #include "xstr.h"
@@ -124,8 +124,8 @@ XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath);
 XSTATUS XRSA_LoadPrivKey(xrsa_key_t *pPair);
 XSTATUS XRSA_LoadPubKey(xrsa_key_t *pPair);
 
-XSTATUS XRSA_SetPubKey(xrsa_key_t *pPair, const uint8_t *pPubKey, size_t nLength);
-XSTATUS XRSA_SetPrivKey(xrsa_key_t *pPair, const uint8_t *pPrivKey, size_t nLength);
+XSTATUS XRSA_SetPubKey(xrsa_key_t *pPair, const char *pPubKey, size_t nLength);
+XSTATUS XRSA_SetPrivKey(xrsa_key_t *pPair, const char *pPrivKey, size_t nLength);
 #endif /* XCRYPT_USE_SSL */
 
 typedef enum

@@ -20,6 +20,7 @@ EXECS = array \
 	list \
 	ntp \
 	jwt \
+	rsa \
 	api
 
 all: $(EXECS)
