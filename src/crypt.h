@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-//#ifdef _XUTILS_USE_SSL
+#ifdef _XUTILS_USE_SSL
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
@@ -22,7 +22,7 @@ extern "C" {
 #define XCRYPT_USE_SSL      XTRUE
 #define XRSA_KEY_SIZE       2048
 #define XRSA_PUB_EXP        65537
-//#endif
+#endif
 
 #include "xstd.h"
 #include "xstr.h"
