@@ -27,9 +27,9 @@
 #endif
 
 #ifdef LINE_MAX
-#define XLINE_MAX       LINE_MAX
+# define XLINE_MAX      LINE_MAX
 #else
-#define XLINE_MAX       2048
+# define XLINE_MAX      2048
 #endif
 
 #ifndef XADDR_MAX
@@ -97,9 +97,9 @@
     while (XSTDNON)
 
 #ifdef _XUTILS_DEBUG
-#define XASSERT XASSERT_DBG
+# define XASSERT XASSERT_DBG
 #else
-#define XASSERT XASSERT_RET
+# define XASSERT XASSERT_RET
 #endif
 
 #ifndef XSTD_MIN
@@ -112,6 +112,12 @@
 
 #ifndef XSTD_FIRSTOF
 #define XSTD_FIRSTOF(a,b)(a?a:b)
+#endif
+
+#ifdef _XUTILS_USE_SSL
+# define XSSL_MINIMAL_API 0x10000000L
+#else
+# define XSSL_MINIMAL_API 0
 #endif
 
 typedef int XSTATUS;
