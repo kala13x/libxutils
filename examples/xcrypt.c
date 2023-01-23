@@ -22,7 +22,7 @@
 
 #define XCRYPT_VER_MAX      0
 #define XCRYPT_VER_MIN      1
-#define XCRYPT_BUILD_NUM    18
+#define XCRYPT_BUILD_NUM    19
 
 #define XCRYPT_HEX_COLUMNS  16
 #define XAES_KEY_LENGTH     128
@@ -52,7 +52,7 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
         case XC_HEX:
         case XC_XOR:
         case XC_BASE64:
-        case XC_BASE64URL:
+        case XC_B64URL:
         case XC_CASEAR:
         case XC_REVERSE:
 #ifdef _XUTILS_USE_SSL
@@ -120,13 +120,13 @@ static void XCrypt_DisplayUsage(const char *pName)
 #ifdef _XUTILS_USE_SSL
     xlog("   rsa");
 #endif
-    xlog("   crc32");
-    xlog("   crc32b");
-    xlog("   casear");
-    xlog("   base64");
-    xlog("   base64url");
-    xlog("   sha256");
     xlog("   hs256");
+    xlog("   sha256");
+    xlog("   base64");
+    xlog("   b64url");
+    xlog("   casear");
+    xlog("   crc32b");
+    xlog("   crc32");
     xlog("   hmacmd5");
     xlog("   reverse\n");
 

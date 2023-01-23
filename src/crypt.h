@@ -145,7 +145,7 @@ typedef enum
     XC_CRC32B,
     XC_CASEAR,
     XC_BASE64,
-    XC_BASE64URL,
+    XC_B64URL,
     XC_SHA256,
     XC_HS256,
     XC_HMD5,

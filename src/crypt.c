@@ -1425,7 +1425,7 @@ xcrypt_chipher_t XCrypt_GetCipher(const char *pCipher)
     else if (!strncmp(pCipher, "crc32", 5)) return XC_CRC32;
     else if (!strncmp(pCipher, "crc32b", 6)) return XC_CRC32B;
     else if (!strncmp(pCipher, "casear", 6)) return XC_CASEAR;
-    else if (!strncmp(pCipher, "base64url", 9)) return XC_BASE64URL;
+    else if (!strncmp(pCipher, "b64url", 6)) return XC_B64URL;
     else if (!strncmp(pCipher, "base64", 6)) return XC_BASE64;
     else if (!strncmp(pCipher, "hs256", 5)) return XC_HS256;
     else if (!strncmp(pCipher, "sha256", 6)) return XC_SHA256;
@@ -1444,14 +1444,14 @@ const char* XCrypt_GetCipherStr(xcrypt_chipher_t eCipher)
         case XC_HEX: return "hex";
         case XC_XOR: return "xor";
         case XC_MD5: return "md5";
+        case XC_HMD5: return "hmacmd5";
         case XC_CRC32: return "crc32";
         case XC_CRC32B: return "crc32b";
         case XC_CASEAR: return "casear";
         case XC_BASE64: return "base64";
-        case XC_BASE64URL: return "base64url";
+        case XC_B64URL: return "b64url";
         case XC_HS256: return "h256";
         case XC_SHA256: return "sha256";
-        case XC_HMD5: return "hmacmd5";
         case XC_REVERSE: return "reverse";
         case XC_MULTY: return "multy";
 #ifdef XCRYPT_USE_SSL
@@ -1481,7 +1481,7 @@ static xbool_t XCrypt_NeedsKey(xcrypt_chipher_t eCipher)
         case XC_MD5:
         case XC_CRC32:
         case XC_BASE64:
-        case XC_BASE64URL:
+        case XC_B64URL:
         case XC_SHA256:
         case XC_REVERSE:
             return XFALSE;
@@ -1549,7 +1549,7 @@ uint8_t* XCrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uint8
         case XC_HS256: pCrypted = (uint8_t*)XCrypt_HS256(pInput, *pLength, pKey, nKeyLength); *pLength = XSHA256_LENGTH; break;
         case XC_CASEAR: pCrypted = (uint8_t*)XCrypt_Casear((const char*)pInput, *pLength, atoi(encKey.sKey)); break;
         case XC_BASE64: pCrypted = (uint8_t*)XCrypt_Base64(pInput, pLength); break;
-        case XC_BASE64URL: pCrypted = (uint8_t*)XCrypt_Base64Url(pInput, pLength); break;
+        case XC_B64URL: pCrypted = (uint8_t*)XCrypt_Base64Url(pInput, pLength); break;
         case XC_REVERSE: pCrypted = (uint8_t*)XCrypt_Reverse((const char*)pInput, *pLength); break;
 #ifdef XCRYPT_USE_SSL
         case XC_RSA: pCrypted = XCrypt_RSA(pInput, *pLength, (const char*)pKey, nKeyLength, pLength); break;
@@ -1597,7 +1597,7 @@ uint8_t* XDecrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uin
         case XC_XOR: pDecrypted = XCrypt_XOR(pInput, *pLength, pKey, nKeyLength); break;
         case XC_CASEAR: pDecrypted = (uint8_t*)XDecrypt_Casear((const char*)pInput, *pLength, atoi(decKey.sKey)); break;
         case XC_BASE64: pDecrypted = (uint8_t*)XDecrypt_Base64(pInput, pLength); break;
-        case XC_BASE64URL: pDecrypted = (uint8_t*)XDecrypt_Base64Url(pInput, pLength); break;
+        case XC_B64URL: pDecrypted = (uint8_t*)XDecrypt_Base64Url(pInput, pLength); break;
         case XC_REVERSE: pDecrypted = (uint8_t*)XCrypt_Reverse((const char*)pInput, *pLength); break;
 #ifdef XCRYPT_USE_SSL
         case XC_RSA: pDecrypted = XDecrypt_RSA(pInput, *pLength, (const char*)pKey, nKeyLength, pLength); break;
