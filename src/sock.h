@@ -20,12 +20,12 @@ extern "C" {
 #include "xtype.h"
 
 #ifdef _XUTILS_USE_SSL
-#include <openssl/opensslv.h>
+#if OPENSSL_VERSION_NUMBER >= 0x10102000L
+#define OPENSSL_API_COMPAT 0x10101000L
+#endif
+
 #include <openssl/pkcs12.h>
-#include <openssl/x509.h>
 #include <openssl/ssl.h>
-#include <openssl/rsa.h>
-#include <openssl/evp.h>
 #include <openssl/err.h>
 #define XSOCK_USE_SSL       XTRUE
 #endif

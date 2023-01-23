@@ -22,7 +22,7 @@
 
 #define XCRYPT_VER_MAX      0
 #define XCRYPT_VER_MIN      1
-#define XCRYPT_BUILD_NUM    19
+#define XCRYPT_BUILD_NUM    20
 
 #define XCRYPT_HEX_COLUMNS  16
 #define XAES_KEY_LENGTH     128
@@ -95,30 +95,33 @@ static void XCrypt_DisplayUsage(const char *pName)
     bRSA = XTRUE;
 #endif
 
+    const char *pRSAOption = bRSA ? "[-g <pub:priv>]" : XSTR_EMPTY;
+    const char *pRSADesc = bRSA ? "and RSA" : XSTR_EMPTY;
+
     xlog("==============================================================");
     xlog(" Crypt/Decrypt file or text - v%d.%d build %d (%s)",
         XCRYPT_VER_MAX, XCRYPT_VER_MIN, XCRYPT_BUILD_NUM, __DATE__);
     xlog("==============================================================");
 
     xlog("Usage: %s [-c <ciphers>] [-i <input>] [-o <output>]", pName);
-    xlog(" %s [-t <text>] [-d] [-f] [-p] [-s] [-h] [-v]", XCrypt_WhiteSpace(nLength));
-    xlog(" %s [-K <keyfile>] [-k <key>] %s\n", XCrypt_WhiteSpace(nLength), bRSA ? "[-g <pub:priv>]" : XSTR_EMPTY);
+    xlog(" %s [-K <keyfile>] [-k <key>] %s", XCrypt_WhiteSpace(nLength), pRSAOption);
+    xlog(" %s [-t <text>] [-d] [-f] [-p] [-s] [-h] [-v]\n", XCrypt_WhiteSpace(nLength));
 
     xlog("Options are:");
-    xlog("   -c <ciphers>        # Encrypt/Decrypt ciphers (%s*%s)", XSTR_CLR_RED, XSTR_FMT_RESET);
+    xlog("   -c <ciphers>        # Encryption or decryption ciphers (%s*%s)", XSTR_CLR_RED, XSTR_FMT_RESET);
     xlog("   -i <input>          # Input file path to encrtypt/decrypt");
     xlog("   -o <output>         # Output file path to write data");
 #ifdef _XUTILS_USE_SSL
-    xlog("   -g <pub:priv>       # Gemerate key pair for RSA");
+    xlog("   -g <pub:priv>       # Generate key pair for RSA");
 #endif
-    xlog("   -K <keyfile>        # Encrypt/Decrypt key file");
-    xlog("   -k <key>            # Encrypt/Decrypt key");
-    xlog("   -t <text>           # Text to encrtypt/decrypt");
+    xlog("   -K <keyfile>        # File path containing the key");
+    xlog("   -k <key>            # The key to pass as an argument");
+    xlog("   -t <text>           # Input text to pass as an argument");
     xlog("   -d                  # Decryption mode");
     xlog("   -f                  # Force overwrite output");
-    xlog("   -s                  # Key size for AES %s", bRSA ? "and RSA" : XSTR_EMPTY);
+    xlog("   -s                  # Key size for AES %s", pRSADesc);
     xlog("   -h                  # Display output as a HEX");
-    xlog("   -p                  # Printf output to stdout");
+    xlog("   -p                  # Print output to stdout");
     xlog("   -v                  # Version and usage\n");
 
     xlog("Supported ciphers:");
@@ -425,17 +428,17 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
         return XSTDERR;
     }
 
-    if (XPath_Write(pPubKeyPath, "cw", (uint8_t*)pair.pPublicKey, pair.nPubKeyLen) <= 0)
+    if (XPath_Write(pPubKeyPath, "cwt", (uint8_t*)pair.pPublicKey, pair.nPubKeyLen) <= 0)
     {
-        xloge("Failed to public key file: %s (%s)", pPubKeyPath, strerror(errno));
+        xloge("Failed to write public key file: %s (%s)", pPubKeyPath, strerror(errno));
         XRSA_FreeKey(&pair);
         XArray_Clear(pArr);
         return XSTDERR;
     }
 
-    if (XPath_Write(pPrivKeyPath, "cw", (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen) <= 0)
+    if (XPath_Write(pPrivKeyPath, "cwt", (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen) <= 0)
     {
-        xloge("Failed to private key file: %s (%s)", pPrivKeyPath, strerror(errno));
+        xloge("Failed to write private key file: %s (%s)", pPrivKeyPath, strerror(errno));
         XRSA_FreeKey(&pair);
         XArray_Clear(pArr);
         return XSTDERR;

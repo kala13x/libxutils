@@ -15,7 +15,10 @@ extern "C" {
 #endif
 
 #ifdef _XUTILS_USE_SSL
+#if OPENSSL_VERSION_NUMBER >= 0x10102000L
 #define OPENSSL_API_COMPAT 0x10101000L
+#endif
+
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>

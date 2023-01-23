@@ -11,6 +11,7 @@
 #include "xstr.h"
 #include "xaes.h"
 #include "xbuf.h"
+#include "xfs.h"
 #include "crypt.h"
 
 #ifdef _WIN32
@@ -1274,37 +1275,10 @@ XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath)
         XASSERT(pPair->pKeyPair, XSTDERR);
     }
 
-    BIO* pBIO = BIO_new_file(pPath, "r");
-    XASSERT(pBIO, XSTDERR);
+    pPair->pPublicKey = (char*)XPath_Load(pPath, &pPair->nPubKeyLen);
+    XASSERT(pPair->pPublicKey, XSTDERR);
 
-    pPair->nPubKeyLen = BIO_pending(pBIO);
-    pPair->pPublicKey = malloc(pPair->nPubKeyLen + 1);
-
-    if (pPair->pPublicKey == NULL)
-    {
-        pPair->nPubKeyLen = 0;
-        BIO_free(pBIO);
-        return XSTDERR;
-    }
-
-    int nRead = BIO_read(pBIO, pPair->pPublicKey, pPair->nPubKeyLen);
-    if ((size_t)nRead != pPair->nPubKeyLen)
-    {
-        free(pPair->pPublicKey);
-        pPair->pPublicKey = NULL;
-        pPair->nPubKeyLen = 0;
-
-        BIO_free(pBIO);
-        return XSTDERR;
-    }
-
-    pPair->pPublicKey[pPair->nPubKeyLen] = '\0';
-
-    RSA *pRSA = PEM_read_bio_RSAPublicKey(pBIO, &pPair->pKeyPair, NULL, NULL);
-    BIO_free(pBIO);
-
-    XASSERT(pRSA, XSTDEXC);
-    return XSTDOK;
+    return XRSA_LoadPubKey(pPair);
 }
 
 XSTATUS XRSA_LoadPrivKeyFile(xrsa_key_t *pPair, const char *pPath)
@@ -1324,37 +1298,10 @@ XSTATUS XRSA_LoadPrivKeyFile(xrsa_key_t *pPair, const char *pPath)
         XASSERT(pPair->pKeyPair, XSTDERR);
     }
 
-    BIO* pBIO = BIO_new_file(pPath, "r");
-    XASSERT(pBIO, XSTDERR);
+    pPair->pPrivateKey = (char*)XPath_Load(pPath, &pPair->nPrivKeyLen);
+    XASSERT(pPair->pPrivateKey, XSTDERR);
 
-    pPair->nPrivKeyLen = BIO_pending(pBIO);
-    pPair->pPrivateKey = malloc(pPair->nPrivKeyLen + 1);
-
-    if (pPair->pPrivateKey == NULL)
-    {
-        pPair->nPrivKeyLen = 0;
-        BIO_free(pBIO);
-        return XSTDERR;
-    }
-
-    int nRead = BIO_read(pBIO, pPair->pPrivateKey, pPair->nPrivKeyLen);
-    if ((size_t)nRead != pPair->nPrivKeyLen)
-    {
-        free(pPair->pPrivateKey);
-        pPair->pPrivateKey = NULL;
-        pPair->nPrivKeyLen = 0;
-
-        BIO_free(pBIO);
-        return XSTDEXC;
-    }
-
-    pPair->pPrivateKey[pPair->nPrivKeyLen] = '\0';
-
-    RSA *pRSA = PEM_read_bio_RSAPrivateKey(pBIO, &pPair->pKeyPair, NULL, NULL);
-    BIO_free(pBIO);
-
-    XASSERT(pRSA, XSTDERR);
-    return XSTDOK;
+    return XRSA_LoadPrivKey(pPair);
 }
 
 XSTATUS XRSA_LoadKeyFiles(xrsa_key_t *pPair, const char *pPrivPath, const char *pPubPath)
