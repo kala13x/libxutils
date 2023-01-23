@@ -14,6 +14,9 @@
 #define _XUTILS_USE_SSL
 #include <xutils/crypt.h>
 
+#define XKEY_PRIV   "rsa_priv.pem"
+#define XKEY_PUB   "rsa_pub.pem"
+
 int main()
 {
     xlog_defaults();
@@ -43,8 +46,8 @@ int main()
 
     /* Save generated keys in the files (just for testing) */
     xfile_t privFile, pubFile;
-    XFile_Open(&privFile, "id_rsa.priv", "cw", NULL);
-    XFile_Open(&pubFile, "id_rsa.pub", "cw", NULL);
+    XFile_Open(&privFile, XKEY_PRIV, "cw", NULL);
+    XFile_Open(&pubFile, XKEY_PUB, "cw", NULL);
     XFile_Write(&privFile, (uint8_t*)anotherKey.pPrivateKey, anotherKey.nPrivKeyLen);
     XFile_Write(&pubFile, (uint8_t*)anotherKey.pPublicKey, anotherKey.nPubKeyLen);
 
@@ -56,7 +59,7 @@ int main()
     /* Load  private/public keys from the file */
     xrsa_key_t keyPair;
     XRSA_InitKey(&keyPair);
-    XRSA_LoadKeyFiles(&keyPair, "id_rsa.priv", "id_rsa.pub");
+    XRSA_LoadKeyFiles(&keyPair, XKEY_PRIV, XKEY_PUB);
 
     /* Crypt and decrypt message with private/public key pair */
     pCrypted = XRSA_Crypt(&keyPair, (uint8_t*)"another-message", 15, &nCryptedLen);
@@ -67,10 +70,6 @@ int main()
     XRSA_FreeKey(&keyPair);
     free(pDecrypted);
     free(pCrypted);
-
-    /* Remove temp files */
-    remove("id_rsa.priv");
-    remove("id_rsa.pub");
 
     return 0;
 }

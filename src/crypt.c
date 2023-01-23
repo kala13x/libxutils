@@ -606,7 +606,7 @@ XSTATUS XCrypt_MD5H(char *pOutput, size_t nSize, const uint8_t* pData, size_t nL
     uint8_t kIpad[XMD5_BLOCK] = {0};
     uint8_t kOpad[XMD5_BLOCK] = {0};
 
-    /* if key is longer than 64 bytes reset it to key=SHA256(key) */
+    /* if key is longer than 64 bytes reset it to key=MD5(key) */
     if (nKeyLen > XMD5_BLOCK)
     {
         uint8_t key[XMD5_DIGGEST] = {0};
@@ -1295,7 +1295,7 @@ XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath)
         pPair->nPubKeyLen = 0;
 
         BIO_free(pBIO);
-        return XSTDEXC;
+        return XSTDERR;
     }
 
     pPair->pPublicKey[pPair->nPubKeyLen] = '\0';
@@ -1303,7 +1303,7 @@ XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath)
     RSA *pRSA = PEM_read_bio_RSAPublicKey(pBIO, &pPair->pKeyPair, NULL, NULL);
     BIO_free(pBIO);
 
-    XASSERT(pRSA, XSTDERR);
+    XASSERT(pRSA, XSTDEXC);
     return XSTDOK;
 }
 
@@ -1368,6 +1368,48 @@ XSTATUS XRSA_LoadKeyFiles(xrsa_key_t *pPair, const char *pPrivPath, const char *
 
     return nStatus;
 }
+
+uint8_t* XCrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPubKey, size_t nKeyLen, size_t *pOutLen)
+{
+    XASSERT(pInput && nLength && pPubKey && nKeyLen, NULL);
+    if (pOutLen) *pOutLen = 0;
+
+    xrsa_key_t key;
+    XRSA_InitKey(&key);
+
+    XSTATUS nStat = XRSA_SetPubKey(&key, pPubKey, nKeyLen);
+    if (nStat != XSTDOK)
+    {
+        XRSA_FreeKey(&key);
+        return NULL;
+    }
+
+    uint8_t *pCrypted = XRSA_Crypt(&key, pInput, nLength, pOutLen);
+    XRSA_FreeKey(&key);
+
+    return pCrypted;
+}
+
+uint8_t* XDecrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen)
+{
+    XASSERT(pInput && nLength && pPrivKey && nKeyLen, NULL);
+    if (pOutLen) *pOutLen = 0;
+
+    xrsa_key_t key;
+    XRSA_InitKey(&key);
+
+    XSTATUS nStat = XRSA_SetPrivKey(&key, pPrivKey, nKeyLen);
+    if (nStat != XSTDOK)
+    {
+        XRSA_FreeKey(&key);
+        return NULL;
+    }
+
+    uint8_t *pDecrypted = XRSA_Decrypt(&key, pInput, nLength, pOutLen);
+    XRSA_FreeKey(&key);
+
+    return pDecrypted;
+}
 #endif /* XCRYPT_USE_SSL */
 ////////////////////////////////////////////////////////////////
 // END OF: RSA implementation with openssl library
@@ -1388,6 +1430,9 @@ xcrypt_chipher_t XCrypt_GetCipher(const char *pCipher)
     else if (!strncmp(pCipher, "hs256", 5)) return XC_HS256;
     else if (!strncmp(pCipher, "sha256", 6)) return XC_SHA256;
     else if (!strncmp(pCipher, "reverse", 7)) return XC_REVERSE;
+#ifdef XCRYPT_USE_SSL
+    else if (!strncmp(pCipher, "rsa", 3)) return XC_RSA;
+#endif
     return XC_INVALID;
 }
 
@@ -1409,6 +1454,9 @@ const char* XCrypt_GetCipherStr(xcrypt_chipher_t eCipher)
         case XC_HMAC_MD5: return "hmacmd5";
         case XC_REVERSE: return "reverse";
         case XC_MULTY: return "multy";
+#ifdef XCRYPT_USE_SSL
+        case XC_RSA: return "rsa";
+#endif
         default:
             break;
     }
@@ -1425,6 +1473,9 @@ static xbool_t XCrypt_NeedsKey(xcrypt_chipher_t eCipher)
         case XC_CASEAR:
         case XC_HS256:
         case XC_HMAC_MD5:
+#ifdef XCRYPT_USE_SSL
+        case XC_RSA:
+#endif
             return XTRUE;
         case XC_HEX:
         case XC_MD5:
@@ -1500,6 +1551,9 @@ uint8_t* XCrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uint8
         case XC_BASE64: pCrypted = (uint8_t*)XCrypt_Base64(pInput, pLength); break;
         case XC_BASE64URL: pCrypted = (uint8_t*)XCrypt_Base64Url(pInput, pLength); break;
         case XC_REVERSE: pCrypted = (uint8_t*)XCrypt_Reverse((const char*)pInput, *pLength); break;
+#ifdef XCRYPT_USE_SSL
+        case XC_RSA: pCrypted = XCrypt_RSA(pInput, *pLength, (const char*)pKey, nKeyLength, pLength); break;
+#endif
         default: break;
     }
 
@@ -1545,6 +1599,9 @@ uint8_t* XDecrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uin
         case XC_BASE64: pDecrypted = (uint8_t*)XDecrypt_Base64(pInput, pLength); break;
         case XC_BASE64URL: pDecrypted = (uint8_t*)XDecrypt_Base64Url(pInput, pLength); break;
         case XC_REVERSE: pDecrypted = (uint8_t*)XCrypt_Reverse((const char*)pInput, *pLength); break;
+#ifdef XCRYPT_USE_SSL
+        case XC_RSA: pDecrypted = XDecrypt_RSA(pInput, *pLength, (const char*)pKey, nKeyLength, pLength); break;
+#endif
         default: break;
     }
 

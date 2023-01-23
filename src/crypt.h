@@ -127,6 +127,9 @@ XSTATUS XRSA_LoadPubKey(xrsa_key_t *pPair);
 
 XSTATUS XRSA_SetPubKey(xrsa_key_t *pPair, const char *pPubKey, size_t nLength);
 XSTATUS XRSA_SetPrivKey(xrsa_key_t *pPair, const char *pPrivKey, size_t nLength);
+
+uint8_t* XCrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPubKey, size_t nKeyLen, size_t *pOutLen);
+uint8_t* XDecrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen);
 #endif /* XCRYPT_USE_SSL */
 
 typedef enum
@@ -135,6 +138,9 @@ typedef enum
     XC_HEX,
     XC_XOR,
     XC_MD5,
+#ifdef _XUTILS_USE_SSL
+    XC_RSA,
+#endif
     XC_CRC32,
     XC_CRC32B,
     XC_CASEAR,

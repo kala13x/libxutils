@@ -9,13 +9,16 @@
 
 #include <xutils/xstd.h>
 #include <xutils/array.h>
-#include <xutils/crypt.h>
 #include <xutils/xtype.h>
 #include <xutils/xaes.h>
 #include <xutils/xlog.h>
 #include <xutils/xstr.h>
 #include <xutils/xcli.h>
 #include <xutils/xfs.h>
+
+/* Remove this definiton if there is no OpenSSL library support */
+#define _XUTILS_USE_SSL
+#include <xutils/crypt.h>
 
 #define XCRYPT_VER_MAX      0
 #define XCRYPT_VER_MIN      1
@@ -27,6 +30,7 @@ extern char *optarg;
 
 typedef struct
 {
+    char sKeyFile[XSTR_MID];
     char sCiphers[XSTR_MIN];
     char sOutput[XPATH_MAX];
     char sInput[XPATH_MAX];
@@ -51,6 +55,9 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
         case XC_BASE64URL:
         case XC_CASEAR:
         case XC_REVERSE:
+#ifdef _XUTILS_USE_SSL
+        case XC_RSA:
+#endif
             return XTRUE;
         case XC_MD5:
         case XC_HMAC_MD5:
@@ -87,14 +94,16 @@ static void XCrypt_DisplayUsage(const char *pName)
         XCRYPT_VER_MAX, XCRYPT_VER_MIN, XCRYPT_BUILD_NUM, __DATE__);
     xlog("==============================================================");
 
-    xlog("Usage: %s [-c <ciphers>] [-i <input>] [-o <output>] [-h]", pName);
-    xlog(" %s [-k <key>] [-t <text>] [-a] [-d] [-f] [-p] [-v]\n", XCrypt_WhiteSpace(nLength));
+    xlog("Usage: %s [-c <ciphers>] [-i <input>] [-o <output>]", pName);
+    xlog(" %s [-k <key>] [-t <text>] [-K <key-file>]", XCrypt_WhiteSpace(nLength));
+    xlog(" %s [-a] [-d] [-f] [-p] [-h] [-v]\n", XCrypt_WhiteSpace(nLength));
 
     xlog("Options are:");
     xlog("   -c <ciphers>        # Encrypt/Decrypt ciphers (%s*%s)", XSTR_CLR_RED, XSTR_FMT_RESET);
     xlog("   -i <input>          # Input file path to encrtypt/decrypt");
     xlog("   -o <output>         # Output file path to write data");
     xlog("   -k <key>            # Encrypt/Decrypt key");
+    xlog("   -K <key-file>       # Encrypt/Decrypt key file");
     xlog("   -t <text>           # Text to encrtypt/decrypt");
     xlog("   -a                  # AES key length (default: 128)");
     xlog("   -d                  # Decryption mode");
@@ -108,6 +117,9 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   hex");
     xlog("   md5");
     xlog("   xor");
+#ifdef _XUTILS_USE_SSL
+    xlog("   rsa");
+#endif
     xlog("   crc32");
     xlog("   crc32b");
     xlog("   casear");
@@ -123,13 +135,22 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("%s -dc aes -i crypted.bin -o decrypted.txt", pName);
     xlog("%s -dc hex:aes -i crypted.txt -o decrypted.bin\n", pName);
 
-    xlog("%sNote:%s", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
+    xlog("%sNotes:%s", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
     xlog("%s1%s) If you do not specify an argument key (-k <key>),", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     xlog("the program will prompt you to enter the it securely.\n");
+    xlog("%s2%s) You can use key file for RSA encrypt/decrypt with -K argument,", XSTR_FMT_BOLD, XSTR_FMT_RESET);
+    xlog("%s%s -dc rsa -i crypted.bin -o decrypted.txt -K rsa_priv.pem%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
 }
 
 static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
 {
+    if (xstrused(pArgs->sKeyFile))
+    {
+        pKey->nLength = XPath_Read(pArgs->sKeyFile, (uint8_t*)pArgs->sKey, sizeof(pArgs->sKey));
+        if (pKey->nLength && pKey->eCipher == XC_AES) pKey->nLength = pArgs->nAESKeyLen;
+        pArgs->sKeyFile[0] = XSTR_NUL;
+    }
+
     if (xstrused(pArgs->sKey))
     {
         pKey->nLength = xstrncpy(pKey->sKey, sizeof(pKey->sKey), pArgs->sKey);
@@ -239,7 +260,7 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
     pArgs->nAESKeyLen = XAES_KEY_LENGTH; 
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "c:i:o:k:t:a:d1:f1:h1:p1:s1:v1")) != -1)
+    while ((nChar = getopt(argc, argv, "c:i:o:k:K:t:a:d1:f1:h1:p1:s1:v1")) != -1)
     {
         switch (nChar)
         {
@@ -254,6 +275,9 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
                 break;
             case 'k':
                 xstrncpy(pArgs->sKey, sizeof(pArgs->sKey), optarg);
+                break;
+            case 'K':
+                xstrncpy(pArgs->sKeyFile, sizeof(pArgs->sKeyFile), optarg);
                 break;
             case 't':
                 xstrncpy(pArgs->sText, sizeof(pArgs->sText), optarg);
