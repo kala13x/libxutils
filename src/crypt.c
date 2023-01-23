@@ -1421,7 +1421,7 @@ xcrypt_chipher_t XCrypt_GetCipher(const char *pCipher)
     else if (!strncmp(pCipher, "hex", 3)) return XC_HEX;
     else if (!strncmp(pCipher, "xor", 3)) return XC_XOR;
     else if (!strncmp(pCipher, "md5", 3)) return XC_MD5;
-    else if (!strncmp(pCipher, "hmacmd5", 7)) return XC_HMAC_MD5;
+    else if (!strncmp(pCipher, "hmacmd5", 7)) return XC_HMD5;
     else if (!strncmp(pCipher, "crc32", 5)) return XC_CRC32;
     else if (!strncmp(pCipher, "crc32b", 6)) return XC_CRC32B;
     else if (!strncmp(pCipher, "casear", 6)) return XC_CASEAR;
@@ -1451,7 +1451,7 @@ const char* XCrypt_GetCipherStr(xcrypt_chipher_t eCipher)
         case XC_BASE64URL: return "base64url";
         case XC_HS256: return "h256";
         case XC_SHA256: return "sha256";
-        case XC_HMAC_MD5: return "hmacmd5";
+        case XC_HMD5: return "hmacmd5";
         case XC_REVERSE: return "reverse";
         case XC_MULTY: return "multy";
 #ifdef XCRYPT_USE_SSL
@@ -1472,7 +1472,7 @@ static xbool_t XCrypt_NeedsKey(xcrypt_chipher_t eCipher)
         case XC_XOR:
         case XC_CASEAR:
         case XC_HS256:
-        case XC_HMAC_MD5:
+        case XC_HMD5:
 #ifdef XCRYPT_USE_SSL
         case XC_RSA:
 #endif
@@ -1544,7 +1544,7 @@ uint8_t* XCrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uint8
         case XC_HEX: pCrypted = XCrypt_HEX(pInput, pLength, XSTR_SPACE, pCtx->nColumns, XFALSE); break;
         case XC_XOR: pCrypted = XCrypt_XOR(pInput, *pLength, pKey, nKeyLength); break;
         case XC_MD5: pCrypted = (uint8_t*)XCrypt_MD5(pInput, *pLength); *pLength = XMD5_LENGTH; break;
-        case XC_HMAC_MD5: pCrypted = (uint8_t*)XCrypt_HMD5(pInput, *pLength, pKey, nKeyLength); *pLength = XMD5_LENGTH; break;
+        case XC_HMD5: pCrypted = (uint8_t*)XCrypt_HMD5(pInput, *pLength, pKey, nKeyLength); *pLength = XMD5_LENGTH; break;
         case XC_SHA256: pCrypted = (uint8_t*)XCrypt_SHA256(pInput, *pLength); *pLength = XSHA256_LENGTH; break;
         case XC_HS256: pCrypted = (uint8_t*)XCrypt_HS256(pInput, *pLength, pKey, nKeyLength); *pLength = XSHA256_LENGTH; break;
         case XC_CASEAR: pCrypted = (uint8_t*)XCrypt_Casear((const char*)pInput, *pLength, atoi(encKey.sKey)); break;

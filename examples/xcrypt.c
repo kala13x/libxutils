@@ -60,7 +60,7 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
 #endif
             return XTRUE;
         case XC_MD5:
-        case XC_HMAC_MD5:
+        case XC_HMD5:
         case XC_CRC32:
         case XC_HS256:
         case XC_SHA256:

@@ -148,7 +148,7 @@ typedef enum
     XC_BASE64URL,
     XC_SHA256,
     XC_HS256,
-    XC_HMAC_MD5,
+    XC_HMD5,
     XC_REVERSE,
     XC_MULTY,
     XC_INVALID
