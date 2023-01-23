@@ -35,9 +35,10 @@ typedef struct
     char sOutput[XPATH_MAX];
     char sInput[XPATH_MAX];
     char sText[XSTR_MID];
+    char sPair[XSTR_MID];
     char sKey[XSTR_MID];
 
-    size_t nAESKeyLen;
+    size_t nKeySize;
     xbool_t bDecrypt;
     xbool_t bForce;
     xbool_t bPrint;
@@ -88,6 +89,11 @@ static char *XCrypt_WhiteSpace(const int nLength)
 static void XCrypt_DisplayUsage(const char *pName)
 {
     int nLength = strlen(pName) + 6;
+    xbool_t bRSA = XFALSE;
+
+#ifdef _XUTILS_USE_SSL
+    bRSA = XTRUE;
+#endif
 
     xlog("==============================================================");
     xlog(" Crypt/Decrypt file or text - v%d.%d build %d (%s)",
@@ -95,19 +101,22 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("==============================================================");
 
     xlog("Usage: %s [-c <ciphers>] [-i <input>] [-o <output>]", pName);
-    xlog(" %s [-k <key>] [-t <text>] [-K <key-file>]", XCrypt_WhiteSpace(nLength));
-    xlog(" %s [-a] [-d] [-f] [-p] [-h] [-v]\n", XCrypt_WhiteSpace(nLength));
+    xlog(" %s [-t <text>] [-d] [-f] [-p] [-s] [-h] [-v]", XCrypt_WhiteSpace(nLength));
+    xlog(" %s [-K <keyfile>] [-k <key>] %s\n", XCrypt_WhiteSpace(nLength), bRSA ? "[-g <pub:priv>]" : XSTR_EMPTY);
 
     xlog("Options are:");
     xlog("   -c <ciphers>        # Encrypt/Decrypt ciphers (%s*%s)", XSTR_CLR_RED, XSTR_FMT_RESET);
     xlog("   -i <input>          # Input file path to encrtypt/decrypt");
     xlog("   -o <output>         # Output file path to write data");
+#ifdef _XUTILS_USE_SSL
+    xlog("   -g <pub:priv>       # Gemerate key pair for RSA");
+#endif
+    xlog("   -K <keyfile>        # Encrypt/Decrypt key file");
     xlog("   -k <key>            # Encrypt/Decrypt key");
-    xlog("   -K <key-file>       # Encrypt/Decrypt key file");
     xlog("   -t <text>           # Text to encrtypt/decrypt");
-    xlog("   -a                  # AES key length (default: 128)");
     xlog("   -d                  # Decryption mode");
     xlog("   -f                  # Force overwrite output");
+    xlog("   -s                  # Key size for AES %s", bRSA ? "and RSA" : XSTR_EMPTY);
     xlog("   -h                  # Display output as a HEX");
     xlog("   -p                  # Printf output to stdout");
     xlog("   -v                  # Version and usage\n");
@@ -138,8 +147,13 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("%sNotes:%s", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
     xlog("%s1%s) If you do not specify an argument key (-k <key>),", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     xlog("the program will prompt you to enter the it securely.\n");
+#ifdef _XUTILS_USE_SSL
     xlog("%s2%s) You can use key file for RSA encrypt/decrypt with -K argument,", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     xlog("%s%s -dc rsa -i crypted.bin -o decrypted.txt -K rsa_priv.pem%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
+    xlog("%s3%s) You can generate a pair of RSA private and public keys with -g argument.", XSTR_FMT_BOLD, XSTR_FMT_RESET);
+    xlog("Option for -g argument is two path of public/private keys separated by \":\",");
+    xlog("%s%s -g \"./id_rsa.pub:./id_rsa.priv\" -s 2048%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
+#endif
 }
 
 static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
@@ -147,14 +161,14 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
     if (xstrused(pArgs->sKeyFile))
     {
         pKey->nLength = XPath_Read(pArgs->sKeyFile, (uint8_t*)pArgs->sKey, sizeof(pArgs->sKey));
-        if (pKey->nLength && pKey->eCipher == XC_AES) pKey->nLength = pArgs->nAESKeyLen;
+        if (pKey->nLength && pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
         pArgs->sKeyFile[0] = XSTR_NUL;
     }
 
     if (xstrused(pArgs->sKey))
     {
         pKey->nLength = xstrncpy(pKey->sKey, sizeof(pKey->sKey), pArgs->sKey);
-        if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nAESKeyLen;
+        if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
         return pKey->nLength ? XTRUE : XFALSE;
     }
 
@@ -185,7 +199,7 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
         }
     }
 
-    if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nAESKeyLen;
+    if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
     else pKey->nLength = strlen(pKey->sKey);
 
     return XTRUE;
@@ -193,6 +207,18 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
 
 static XSTATUS XCrypt_ValidateArgs(xcrypt_args_t *pArgs)
 {
+    if (xstrused(pArgs->sPair))
+    {
+        if (xstrsrc(pArgs->sPair, ":") <= 0)
+        {
+            xlogw("Invalid option for -g argument: %s", pArgs->sPair);
+            xlogi("Specify private and public key paths separated by \":\"");
+            return XSTDERR;
+        }
+
+        return XSTDOK;
+    }
+
     if ((!pArgs->bPrint &&
         !xstrused(pArgs->sOutput)) ||
         (!xstrused(pArgs->sText) && 
@@ -257,10 +283,9 @@ static XSTATUS XCrypt_ValidateArgs(xcrypt_args_t *pArgs)
 static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
 {
     memset(pArgs, 0, sizeof(xcrypt_args_t));
-    pArgs->nAESKeyLen = XAES_KEY_LENGTH; 
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "c:i:o:k:K:t:a:d1:f1:h1:p1:s1:v1")) != -1)
+    while ((nChar = getopt(argc, argv, "c:i:o:g:k:K:t:s:d1:f1:h1:p1:s1:v1")) != -1)
     {
         switch (nChar)
         {
@@ -273,6 +298,11 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
             case 'o':
                 xstrncpy(pArgs->sOutput, sizeof(pArgs->sOutput), optarg);
                 break;
+#ifdef _XUTILS_USE_SSL
+            case 'g':
+                xstrncpy(pArgs->sPair, sizeof(pArgs->sPair), optarg);
+                break;
+#endif
             case 'k':
                 xstrncpy(pArgs->sKey, sizeof(pArgs->sKey), optarg);
                 break;
@@ -282,8 +312,8 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
             case 't':
                 xstrncpy(pArgs->sText, sizeof(pArgs->sText), optarg);
                 break;
-            case 'a':
-                pArgs->nAESKeyLen = atoi(optarg);
+            case 's':
+                pArgs->nKeySize = atoi(optarg);
                 break;
             case 'd':
                 pArgs->bDecrypt = XTRUE;
@@ -302,6 +332,16 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
                 XCrypt_DisplayUsage(argv[0]);
                 return XFALSE;
         }
+    }
+
+    if (!pArgs->nKeySize)
+    {
+#ifdef _XUTILS_USE_SSL
+        pArgs->nKeySize = xstrused(pArgs->sPair) ?
+            XRSA_KEY_SIZE : XAES_KEY_LENGTH;
+#else
+        pArgs->nKeySize = XAES_KEY_LENGTH;
+#endif
     }
 
     XSTATUS nStatus = XCrypt_ValidateArgs(pArgs);
@@ -341,6 +381,75 @@ xbool_t XCrypt_Callback(xcrypt_cb_type_t eType, void *pData, void *pCtx)
     return XFALSE;
 }
 
+#ifdef _XUTILS_USE_SSL
+XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
+{
+    xarray_t *pArr = xstrsplit(pArgs->sPair, ":");
+    if (pArr == NULL || pArr->nUsed < 2)
+    {
+        xloge("Failed to parse RSA key pair option: %s", pArgs->sPair);
+        XArray_Clear(pArr);
+        return XSTDERR;
+    }
+
+    xrsa_key_t pair;
+    XRSA_InitKey(&pair);
+
+    if (XRSA_GenerateKeys(&pair, pArgs->nKeySize, XRSA_PUB_EXP) <= 0)
+    {
+        xloge("Failed to generate RSA key pair: %s", pArgs->sPair);
+        XArray_Clear(pArr);
+        return XSTDERR;
+    }
+
+    const char *pPubKeyPath = XArray_GetData(pArr, 0);
+    const char *pPrivKeyPath = XArray_GetData(pArr, 1);
+
+    if (XPath_Exists(pPubKeyPath) && pArgs->bForce == XFALSE)
+    {
+        xlogw("File already exists: %s", pPubKeyPath);
+        xlogi("Use option -f to force overwrite output");
+
+        XRSA_FreeKey(&pair);
+        XArray_Clear(pArr);
+        return XSTDERR;
+    }
+
+    if (XPath_Exists(pPrivKeyPath) && pArgs->bForce == XFALSE)
+    {
+        xlogw("File already exists: %s", pPubKeyPath);
+        xlogi("Use option -f to force overwrite output");
+
+        XRSA_FreeKey(&pair);
+        XArray_Clear(pArr);
+        return XSTDERR;
+    }
+
+    if (XPath_Write(pPubKeyPath, "cw", (uint8_t*)pair.pPublicKey, pair.nPubKeyLen) <= 0)
+    {
+        xloge("Failed to public key file: %s (%s)", pPubKeyPath, strerror(errno));
+        XRSA_FreeKey(&pair);
+        XArray_Clear(pArr);
+        return XSTDERR;
+    }
+
+    if (XPath_Write(pPrivKeyPath, "cw", (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen) <= 0)
+    {
+        xloge("Failed to private key file: %s (%s)", pPrivKeyPath, strerror(errno));
+        XRSA_FreeKey(&pair);
+        XArray_Clear(pArr);
+        return XSTDERR;
+    }
+
+    xlogi("Generated public key: %s", pPubKeyPath);
+    xlogi("Generated private key: %s", pPrivKeyPath);
+
+    XRSA_FreeKey(&pair);
+    XArray_Clear(pArr);
+    return XSTDOK;
+}
+#endif
+
 int main(int argc, char* argv[])
 {
     xlog_defaults();
@@ -348,6 +457,10 @@ int main(int argc, char* argv[])
 
     xcrypt_args_t args;
     if (!XCrypt_ParseArgs(&args, argc, argv)) return XSTDERR;
+
+#ifdef _XUTILS_USE_SSL
+    if (xstrused(args.sPair)) return XCrypt_GeneratePair(&args);
+#endif
 
     xbyte_buffer_t buffer;
     XByteBuffer_Init(&buffer, 0, 0);
