@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #ifdef _XUTILS_USE_SSL
+#define OPENSSL_API_COMPAT 0x10101000L
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
