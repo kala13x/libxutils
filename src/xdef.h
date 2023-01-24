@@ -114,11 +114,7 @@
 #define XSTD_FIRSTOF(a,b)(a?a:b)
 #endif
 
-#ifdef _XUTILS_USE_SSL
-# define XSSL_MINIMAL_API 0x10000000L
-#else
-# define XSSL_MINIMAL_API 0
-#endif
+#define XSSL_MINIMAL_API 0x10000000L
 
 typedef int XSTATUS;
 

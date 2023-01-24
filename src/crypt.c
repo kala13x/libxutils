@@ -1260,19 +1260,12 @@ XSTATUS XRSA_SetPrivKey(xrsa_key_t *pPair, const char *pPrivKey, size_t nLength)
 
 XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath)
 {
-    XASSERT(pPair, XSTDINV);
+    XASSERT(pPair && pPath, XSTDINV);
     if (pPair->pPublicKey)
     {
         free(pPair->pPublicKey);
         pPair->pPublicKey = NULL;
         pPair->nPubKeyLen = 0;
-    }
-
-    XASSERT(pPath, XSTDINV);
-    if (pPair->pKeyPair == NULL)
-    {
-        pPair->pKeyPair = RSA_new();
-        XASSERT(pPair->pKeyPair, XSTDERR);
     }
 
     pPair->pPublicKey = (char*)XPath_Load(pPath, &pPair->nPubKeyLen);
@@ -1283,19 +1276,12 @@ XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath)
 
 XSTATUS XRSA_LoadPrivKeyFile(xrsa_key_t *pPair, const char *pPath)
 {
-    XASSERT(pPair, XSTDINV);
+    XASSERT(pPair && pPath, XSTDINV);
     if (pPair->pPrivateKey)
     {
         free(pPair->pPrivateKey);
         pPair->pPrivateKey = NULL;
         pPair->nPrivKeyLen = 0;
-    }
-
-    XASSERT(pPath, XSTDINV);
-    if (pPair->pKeyPair == NULL)
-    {
-        pPair->pKeyPair = RSA_new();
-        XASSERT(pPair->pKeyPair, XSTDERR);
     }
 
     pPair->pPrivateKey = (char*)XPath_Load(pPath, &pPair->nPrivKeyLen);
