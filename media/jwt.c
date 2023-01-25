@@ -47,20 +47,20 @@ static char* XJWT_CreateSignature(
                 size_t nPayloadLength,
                 const uint8_t *pSecret,
                 size_t nSecretLength,
-                size_t *pSignatureLength)
+                size_t *pOutLength)
 {
     size_t nJointSize = nHeaderLength + nPayloadLength + 2;
     char *pJointData = (char*)malloc(nJointSize);
-    if (pJointData == NULL) return NULL;
 
+    if (pJointData == NULL) return NULL;
     uint8_t hash[XJWT_HASH_LENGTH];
-    *pSignatureLength = sizeof(hash);
 
     size_t nJointLength = xstrncpyf(pJointData, nJointSize, "%s.%s", pHeader, pPayload);
-    XCrypt_HS256U(hash, sizeof(hash), (const uint8_t*)pJointData, nJointLength, pSecret, nSecretLength);
-
+    XCrypt_HS256U(hash, sizeof(hash), (uint8_t*)pJointData, nJointLength, (uint8_t*)pSecret, nSecretLength);
     free(pJointData);
-    return XCrypt_Base64Url(hash, pSignatureLength);
+
+    *pOutLength = sizeof(hash);
+    return XCrypt_Base64Url(hash, pOutLength);
 }
 
 char* XJWT_CreateAdv(

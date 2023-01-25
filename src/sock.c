@@ -235,14 +235,20 @@ int XSock_LastSSLError(char *pDst, size_t nSize)
 
 #ifdef XSOCK_USE_SSL
     BIO *pBIO = BIO_new(BIO_s_mem());
+    if (pBIO == NULL) return 0;
+
     ERR_print_errors(pBIO);
-
     char *pErrBuff = NULL;
-    size_t nErrSize = BIO_get_mem_data(pBIO, &pErrBuff);
-    if (!nErrSize || pErrBuff == NULL) return 0;
 
-    nLength = nSize < nErrSize ?
-        nSize - 1 : nErrSize - 1;
+    int nErrSize = BIO_get_mem_data(pBIO, &pErrBuff);
+    if (nErrSize <= 0 && pErrBuff == NULL)
+    {
+        BIO_free(pBIO);
+        return 0;
+    }
+
+    nLength = nSize < (size_t)nErrSize ?
+        nSize - 1 : (size_t)nErrSize - 1;
 
     strncpy(pDst, pErrBuff, nLength);
     pDst[nLength] = 0;

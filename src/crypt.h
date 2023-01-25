@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-#ifdef _XUTILS_USE_SSL
+//#ifdef _XUTILS_USE_SSL
 #define OPENSSL_API_COMPAT XSSL_MINIMAL_API
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
@@ -23,7 +23,7 @@ extern "C" {
 #define XCRYPT_USE_SSL      XTRUE
 #define XRSA_KEY_SIZE       2048
 #define XRSA_PUB_EXP        65537
-#endif
+//#endif
 
 #include "xstd.h"
 #include "xstr.h"
@@ -31,7 +31,7 @@ extern "C" {
 
 #define XMD5_BLOCK                  64
 #define XMD5_LENGTH                 32
-#define XMD5_DIGGEST                16
+#define XMD5_DIGEST                16
 
 #define XCHAR_MAP_SIZE              52
 #define XCRC32_MAX_SIZE             16
@@ -105,31 +105,47 @@ uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase);
 
 #ifdef XCRYPT_USE_SSL
 typedef struct XRSAKeys {
-    char *pPrivateKey;
-    char *pPublicKey;
-    size_t nPrivKeyLen;
-    size_t nPubKeyLen;
     RSA *pKeyPair;
-} xrsa_key_t;
+    uint8_t nPadding;
 
-void XRSA_InitKey(xrsa_key_t *pPair);
-void XRSA_FreeKey(xrsa_key_t *pPair);
-int XRSA_GenerateKeys(xrsa_key_t *pPair, size_t nKeyLength, size_t nPubKeyExp);
+    char *pPrivateKey;
+    size_t nPrivKeyLen;
 
-uint8_t* XRSA_Crypt(xrsa_key_t *pPair, const uint8_t *pData, size_t nLength, size_t *pOutLength);
-uint8_t* XRSA_Decrypt(xrsa_key_t *pPair, const uint8_t *pData, size_t nLength, size_t *pOutLength);
+    char *pPublicKey;
+    size_t nPubKeyLen;
 
-XSTATUS XRSA_LoadKeyFiles(xrsa_key_t *pPair, const char *pPrivPath, const char *pPubPath);
-XSTATUS XRSA_LoadPrivKeyFile(xrsa_key_t *pPair, const char *pPath);
-XSTATUS XRSA_LoadPubKeyFile(xrsa_key_t *pPair, const char *pPath);
-XSTATUS XRSA_LoadPrivKey(xrsa_key_t *pPair);
-XSTATUS XRSA_LoadPubKey(xrsa_key_t *pPair);
+    char *pErrorStr;
+    size_t nErrorLen;
+} xrsa_ctx_t;
 
-XSTATUS XRSA_SetPubKey(xrsa_key_t *pPair, const char *pPubKey, size_t nLength);
-XSTATUS XRSA_SetPrivKey(xrsa_key_t *pPair, const char *pPrivKey, size_t nLength);
+void XRSA_Init(xrsa_ctx_t *pCtx);
+void XRSA_Destroy(xrsa_ctx_t *pCtx);
+char* XRSA_LastError(size_t *pOutLen);
+
+uint8_t* XRSA_Crypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength);
+uint8_t* XRSA_Decrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength);
+
+uint8_t* XRSA_PrivCrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength);
+uint8_t* XRSA_PubDecrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength);
+
+XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp);
+XSTATUS XRSA_LoadKeyFiles(xrsa_ctx_t *pCtx, const char *pPrivPath, const char *pPubPath);
+XSTATUS XRSA_LoadPrivKeyFile(xrsa_ctx_t *pCtx, const char *pPath);
+XSTATUS XRSA_LoadPubKeyFile(xrsa_ctx_t *pCtx, const char *pPath);
+XSTATUS XRSA_LoadPrivKey(xrsa_ctx_t *pCtx);
+XSTATUS XRSA_LoadPubKey(xrsa_ctx_t *pCtx);
+
+XSTATUS XRSA_SetPubKey(xrsa_ctx_t *pCtx, const char *pPubKey, size_t nLength);
+XSTATUS XRSA_SetPrivKey(xrsa_ctx_t *pCtx, const char *pPrivKey, size_t nLength);
 
 uint8_t* XCrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPubKey, size_t nKeyLen, size_t *pOutLen);
+uint8_t* XCrypt_PrivRSA(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen);
+
 uint8_t* XDecrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen);
+uint8_t* XDecrypt_PubRSA(const uint8_t *pInput, size_t nLength, const char *pPubKey, size_t nKeyLen, size_t *pOutLen);
+
+uint8_t* XCrypt_RS256(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen);
+
 #endif /* XCRYPT_USE_SSL */
 
 typedef enum
@@ -140,6 +156,7 @@ typedef enum
     XC_MD5,
 #ifdef _XUTILS_USE_SSL
     XC_RSA,
+    XC_RS256,
 #endif
     XC_CRC32,
     XC_CRC32B,

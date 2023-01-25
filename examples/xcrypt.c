@@ -57,6 +57,7 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
         case XC_CASEAR:
         case XC_REVERSE:
 #ifdef _XUTILS_USE_SSL
+        case XC_RS256:
         case XC_RSA:
 #endif
             return XTRUE;
@@ -131,6 +132,7 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   xor");
 #ifdef _XUTILS_USE_SSL
     xlog("   rsa");
+    xlog("   rs256");
 #endif
     xlog("   hs256");
     xlog("   sha256");
@@ -395,8 +397,8 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
         return XSTDERR;
     }
 
-    xrsa_key_t pair;
-    XRSA_InitKey(&pair);
+    xrsa_ctx_t pair;
+    XRSA_Init(&pair);
 
     if (XRSA_GenerateKeys(&pair, pArgs->nKeySize, XRSA_PUB_EXP) <= 0)
     {
@@ -413,7 +415,7 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
         xlogw("File already exists: %s", pPubKeyPath);
         xlogi("Use option -f to force overwrite output");
 
-        XRSA_FreeKey(&pair);
+        XRSA_Destroy(&pair);
         XArray_Clear(pArr);
         return XSTDERR;
     }
@@ -423,7 +425,7 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
         xlogw("File already exists: %s", pPubKeyPath);
         xlogi("Use option -f to force overwrite output");
 
-        XRSA_FreeKey(&pair);
+        XRSA_Destroy(&pair);
         XArray_Clear(pArr);
         return XSTDERR;
     }
@@ -431,7 +433,7 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
     if (XPath_Write(pPubKeyPath, "cwt", (uint8_t*)pair.pPublicKey, pair.nPubKeyLen) <= 0)
     {
         xloge("Failed to write public key file: %s (%s)", pPubKeyPath, strerror(errno));
-        XRSA_FreeKey(&pair);
+        XRSA_Destroy(&pair);
         XArray_Clear(pArr);
         return XSTDERR;
     }
@@ -439,7 +441,7 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
     if (XPath_Write(pPrivKeyPath, "cwt", (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen) <= 0)
     {
         xloge("Failed to write private key file: %s (%s)", pPrivKeyPath, strerror(errno));
-        XRSA_FreeKey(&pair);
+        XRSA_Destroy(&pair);
         XArray_Clear(pArr);
         return XSTDERR;
     }
@@ -447,7 +449,7 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
     xlogi("Generated public key: %s", pPubKeyPath);
     xlogi("Generated private key: %s", pPrivKeyPath);
 
-    XRSA_FreeKey(&pair);
+    XRSA_Destroy(&pair);
     XArray_Clear(pArr);
     return XSTDOK;
 }
