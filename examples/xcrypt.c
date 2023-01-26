@@ -157,7 +157,7 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("%s%s -dc rsa -i crypted.bin -o decrypted.txt -K rsa_priv.pem%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
     xlog("%s3%s) You can generate a pair of RSA private and public keys with -g argument.", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     xlog("Option for -g argument is two path of public/private keys separated by \":\",");
-    xlog("%s%s -g \"./id_rsa.pub:./id_rsa.priv\" -s 2048%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
+    xlog("%s%s -g \"./rsa_pub.pem:./rsa_priv.pem\" -s 2048%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
 #endif
 }
 

@@ -998,35 +998,7 @@ uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
 // RSA implementation with openssl library
 ////////////////////////////////////////////////////////////////
 #ifdef XCRYPT_USE_SSL
-
-void XRSA_Init(xrsa_ctx_t *pCtx)
-{
-    XASSERT_VOID(pCtx);
-    pCtx->nPadding = RSA_PKCS1_PADDING;
-    pCtx->nPrivKeyLen = 0;
-    pCtx->nPubKeyLen = 0;
-
-    pCtx->pPrivateKey = NULL;
-    pCtx->pPublicKey = NULL;
-    pCtx->pKeyPair = NULL;
-}
-
-void XRSA_Destroy(xrsa_ctx_t *pCtx)
-{
-    XASSERT_VOID(pCtx);
-    RSA_free(pCtx->pKeyPair);
-    free(pCtx->pPrivateKey);
-    free(pCtx->pPublicKey);
-
-    pCtx->pPrivateKey = NULL;
-    pCtx->pPublicKey = NULL;
-    pCtx->pKeyPair = NULL;
-
-    pCtx->nPrivKeyLen = 0;
-    pCtx->nPubKeyLen = 0;
-}
-
-char* XRSA_LastError(size_t *pOutLen)
+char* XSSL_LastError(size_t *pOutLen)
 {
     if (pOutLen) *pOutLen = 0;
 
@@ -1055,6 +1027,33 @@ char* XRSA_LastError(size_t *pOutLen)
 
     BIO_free(pBIO);
     return pOutput;
+}
+
+void XRSA_Init(xrsa_ctx_t *pCtx)
+{
+    XASSERT_VOID(pCtx);
+    pCtx->nPadding = RSA_PKCS1_PADDING;
+    pCtx->nPrivKeyLen = 0;
+    pCtx->nPubKeyLen = 0;
+
+    pCtx->pPrivateKey = NULL;
+    pCtx->pPublicKey = NULL;
+    pCtx->pKeyPair = NULL;
+}
+
+void XRSA_Destroy(xrsa_ctx_t *pCtx)
+{
+    XASSERT_VOID(pCtx);
+    RSA_free(pCtx->pKeyPair);
+    free(pCtx->pPrivateKey);
+    free(pCtx->pPublicKey);
+
+    pCtx->pPrivateKey = NULL;
+    pCtx->pPublicKey = NULL;
+    pCtx->pKeyPair = NULL;
+
+    pCtx->nPrivKeyLen = 0;
+    pCtx->nPubKeyLen = 0;
 }
 
 XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp)

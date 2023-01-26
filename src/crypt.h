@@ -104,6 +104,8 @@ uint8_t* XCrypt_HEX(const uint8_t *pInput, size_t *pLength, const char* pSpace, 
 uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase);
 
 #ifdef XCRYPT_USE_SSL
+char* XSSL_LastError(size_t *pOutLen);
+
 typedef struct XRSAKeys {
     RSA *pKeyPair;
     uint8_t nPadding;
@@ -120,7 +122,6 @@ typedef struct XRSAKeys {
 
 void XRSA_Init(xrsa_ctx_t *pCtx);
 void XRSA_Destroy(xrsa_ctx_t *pCtx);
-char* XRSA_LastError(size_t *pOutLen);
 
 uint8_t* XRSA_Crypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength);
 uint8_t* XRSA_Decrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength);

@@ -8,7 +8,6 @@
  */
 
 #include <xutils/xstd.h>
-#include <xutils/crypt.h>
 #include <xutils/xjson.h>
 #include <xutils/xlog.h>
 #include <xutils/jwt.h>
@@ -33,10 +32,7 @@ int main()
     char *pJWTStr = XJWT_Create(pPayload, nPayloadLen, (uint8_t*)pSecret, nSecretLen, &nJWTLen);
     if (pJWTStr == NULL)
     {
-        char *pError = XRSA_LastError(NULL);
-        xloge("Failed to create JWT: %s", pError ? pError : strerror(errno));
-
-        free(pError);
+        xloge("Failed to create JWT: %s", strerror(errno));
         return -1;
     }
 
