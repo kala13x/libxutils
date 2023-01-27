@@ -148,8 +148,8 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   reverse    (Simple reverse of input buffer)\n");
 
     xlog("Examples:");
-    xlog("%s -c aes -i rawFile.txt -o crypted.bin", pName);
-    xlog("%s -dc aes -i crypted.bin -o decrypted.txt", pName);
+    xlog("%s%s -c aes -i rawFile.txt -o crypted.bin", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
+    xlog("%s%s -dc aes -i crypted.bin -o decrypted.txt\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
 
     xlog("%sNotes:%s", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
     xlog("%s1%s) If you do not specify an argument key (-k <key>),", XSTR_FMT_BOLD, XSTR_FMT_RESET);
