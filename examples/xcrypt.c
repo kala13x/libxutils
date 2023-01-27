@@ -22,7 +22,7 @@
 
 #define XCRYPT_VER_MAX      0
 #define XCRYPT_VER_MIN      1
-#define XCRYPT_BUILD_NUM    20
+#define XCRYPT_BUILD_NUM    21
 
 #define XCRYPT_HEX_COLUMNS  16
 #define XAES_KEY_LENGTH     128
@@ -101,10 +101,10 @@ static void XCrypt_DisplayUsage(const char *pName)
     const char *pRSAOption = bRSA ? "[-g <pub:priv>]" : XSTR_EMPTY;
     const char *pRSADesc = bRSA ? "and RSA" : XSTR_EMPTY;
 
-    xlog("==============================================================");
+    xlog("==========================================================");
     xlog(" Crypt/Decrypt file or text - v%d.%d build %d (%s)",
         XCRYPT_VER_MAX, XCRYPT_VER_MIN, XCRYPT_BUILD_NUM, __DATE__);
-    xlog("==============================================================");
+    xlog("==========================================================");
 
     xlog("Usage: %s [-c <ciphers>] [-i <input>] [-o <output>]", pName);
     xlog(" %s [-K <keyfile>] [-k <key>] %s", XCrypt_WhiteSpace(nLength), pRSAOption);
