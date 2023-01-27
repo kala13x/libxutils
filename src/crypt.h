@@ -29,9 +29,9 @@ extern "C" {
 #include "xstr.h"
 #include "xtype.h"
 
-#define XMD5_BLOCK                  64
+#define XMD5_DIGEST_SIZE            16
+#define XMD5_BLOCK_SIZE             64
 #define XMD5_LENGTH                 32
-#define XMD5_DIGEST                16
 
 #define XCHAR_MAP_SIZE              52
 #define XCRC32_MAX_SIZE             16
@@ -74,12 +74,13 @@ char* XCrypt_HS256(const uint8_t* pData, size_t nLength, const uint8_t* pKey, si
 
 XSTATUS XCrypt_SHA256U(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
 XSTATUS XCrypt_SHA256H(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
+uint8_t* XCrypt_RawSHA256(const uint8_t *pInput, size_t nLength);
 char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength);
 
 XSTATUS XCrypt_MD5H(char *pOutput, size_t nSize, const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen);
-char* XCrypt_HMD5(const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen);
-
 XSTATUS XCrypt_MD5U(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
+uint8_t* XCrypt_RawMD5(const uint8_t *pInput, size_t nLength);
+char* XCrypt_HMD5(const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen);
 char* XCrypt_MD5(const uint8_t *pInput, size_t nLength);
 
 char* XCrypt_Reverse(const char *pInput, size_t nLength);
@@ -155,6 +156,7 @@ typedef enum
     XC_HEX,
     XC_XOR,
     XC_MD5,
+    XC_MD5U,
 #ifdef _XUTILS_USE_SSL
     XC_RSA,
     XC_RS256,
@@ -165,6 +167,7 @@ typedef enum
     XC_BASE64,
     XC_B64URL,
     XC_SHA256,
+    XC_SHA256U,
     XC_HS256,
     XC_HMD5,
     XC_REVERSE,

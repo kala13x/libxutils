@@ -63,9 +63,11 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
             return XTRUE;
         case XC_MD5:
         case XC_HMD5:
+        case XC_MD5U:
         case XC_CRC32:
         case XC_HS256:
         case XC_SHA256:
+        case XC_SHA256U:
             return XFALSE;
         default:
             break;
@@ -126,37 +128,43 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   -v                  # Version and usage\n");
 
     xlog("Supported ciphers:");
-    xlog("   aes");
-    xlog("   hex");
-    xlog("   md5");
-    xlog("   xor");
-#ifdef _XUTILS_USE_SSL
-    xlog("   rsa");
-    xlog("   rs256");
+    xlog("   aes        (Advanced Encryption Standard)");
+    xlog("   hex        (Hexadecimal a.k.a Base 16)");
+    xlog("   xor        (Exclusively-OR a.k.a EOR)");
+    xlog("   md5        (32 characters of HEXed MD5 hash)");
+    xlog("   md5u       (128 bits of raw MD5 hash)");
+    xlog("   hmd5       (HMAC by using raw MD5 hash)");
+    xlog("   sha256     (64 characters of HEXed SHA256 hash)");
+    xlog("   sha256u    (256 bits of raw SHA256 hash)");
+    xlog("   hs256      (HMAC by using raw SHA-256 hash)");
+#ifdef _XUTILS_USE_SSL1
+    xlog("   rsa        (Rivest-Shamir-Adleman)");
+    xlog("   rs256      (RSA Signature with SHA-256)");
 #endif
-    xlog("   hs256");
-    xlog("   sha256");
-    xlog("   base64");
-    xlog("   b64url");
-    xlog("   casear");
-    xlog("   crc32b");
-    xlog("   crc32");
-    xlog("   hmacmd5");
-    xlog("   reverse\n");
+    xlog("   base64     (Base64 Encode and Decode)");
+    xlog("   b64url     (Base64Url Encode and Decode)");
+    xlog("   casear     (Casear Cipher Encode and Decode)");
+    xlog("   crc32      (Cyclic redundancy check)");
+    xlog("   reverse    (Simple reverse of input buffer)\n");
 
     xlog("Examples:");
     xlog("%s -c aes -i rawFile.txt -o crypted.bin", pName);
     xlog("%s -dc aes -i crypted.bin -o decrypted.txt", pName);
-    xlog("%s -dc hex:aes -i crypted.txt -o decrypted.bin\n", pName);
 
     xlog("%sNotes:%s", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
     xlog("%s1%s) If you do not specify an argument key (-k <key>),", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     xlog("the program will prompt you to enter the it securely.\n");
+
+    xlog("%s2%s) You can specify multiple ciphers with -c argument.", XSTR_FMT_BOLD, XSTR_FMT_RESET);
+    xlog("The ciphers in the list must be separated separated by \":\".");
+    xlog("%s%s -dc hex:aes:xor -i crypted.txt -o decrypted.bin%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
+
 #ifdef _XUTILS_USE_SSL
-    xlog("%s2%s) You can use key file for RSA encrypt/decrypt with -K argument,", XSTR_FMT_BOLD, XSTR_FMT_RESET);
+    xlog("%s3%s) You can use key file for RSA encrypt/decrypt with -K argument.", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     xlog("%s%s -dc rsa -i crypted.bin -o decrypted.txt -K rsa_priv.pem%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
-    xlog("%s3%s) You can generate a pair of RSA private and public keys with -g argument.", XSTR_FMT_BOLD, XSTR_FMT_RESET);
-    xlog("Option for -g argument is two path of public/private keys separated by \":\",");
+
+    xlog("%s4%s) You can generate a pair of RSA private and public keys with -g argument.", XSTR_FMT_BOLD, XSTR_FMT_RESET);
+    xlog("Option for -g argument is two path of public/private keys separated by \":\".");
     xlog("%s%s -g \"./rsa_pub.pem:./rsa_priv.pem\" -s 2048%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
 #endif
 }

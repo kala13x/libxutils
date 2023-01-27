@@ -366,6 +366,18 @@ char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength)
     return pHash;
 }
 
+uint8_t* XCrypt_RawSHA256(const uint8_t *pInput, size_t nLength)
+{
+    size_t nSize = XSHA256_DIGEST_SIZE + 1;
+    uint8_t *pHash = (uint8_t*)malloc(nSize);
+    if (pHash == NULL) return NULL;
+
+    XCrypt_SHA256U(pHash, nSize, pInput, nLength);
+    pHash[XSHA256_DIGEST_SIZE] = '\0';
+
+    return pHash;
+}
+
 ////////////////////////////////////////////////////////////////
 // HMAC SHA-256 algorithm implementation for C/C++ based on
 // MD5 sample code from https://www.rfc-editor.org/rfc/rfc2104
@@ -491,7 +503,7 @@ uint32_t XCrypt_CRC32B(const uint8_t *pInput, size_t nLength)
 
 XSTATUS XCrypt_MD5U(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
-    XASSERT((nSize >= XMD5_DIGEST &&
+    XASSERT((nSize >= XMD5_DIGEST_SIZE &&
         nLength && pOutput && pInput), XSTDINV);
 
     uint32_t hash0 = 0x67452301;
@@ -577,7 +589,7 @@ char* XCrypt_MD5(const uint8_t *pInput, size_t nLength)
     char *pOutput = (char*)malloc(nHashSize);
     XASSERT(pOutput, NULL);
 
-    uint8_t digest[XMD5_DIGEST];
+    uint8_t digest[XMD5_DIGEST_SIZE];
     XCrypt_MD5U(digest, sizeof(digest), pInput, nLength);
 
     xstrncpyf(pOutput, nHashSize,
@@ -587,6 +599,18 @@ char* XCrypt_MD5(const uint8_t *pInput, size_t nLength)
         digest[4], digest[5], digest[6], digest[7],
         digest[8], digest[9], digest[10], digest[11],
         digest[12], digest[13], digest[14], digest[15]);
+
+    return pOutput;
+}
+
+uint8_t* XCrypt_RawMD5(const uint8_t *pInput, size_t nLength)
+{
+    size_t nDigestSize = XMD5_DIGEST_SIZE + 1;
+    uint8_t *pOutput = (uint8_t*)malloc(nDigestSize);
+    XASSERT(pOutput, NULL);
+
+    XCrypt_MD5U(pOutput, nDigestSize, pInput, nLength);
+    pOutput[XMD5_DIGEST_SIZE] = '\0';
 
     return pOutput;
 }
@@ -602,19 +626,19 @@ XSTATUS XCrypt_MD5H(char *pOutput, size_t nSize, const uint8_t* pData, size_t nL
         nLength && nKeyLen && pOutput &&
         pData && pKey), XSTDINV);
 
-    uint8_t i, digest[XMD5_DIGEST];
-    uint8_t hash[XMD5_DIGEST] = {0};
-    uint8_t kIpad[XMD5_BLOCK] = {0};
-    uint8_t kOpad[XMD5_BLOCK] = {0};
+    uint8_t i, digest[XMD5_DIGEST_SIZE];
+    uint8_t hash[XMD5_DIGEST_SIZE] = {0};
+    uint8_t kIpad[XMD5_BLOCK_SIZE] = {0};
+    uint8_t kOpad[XMD5_BLOCK_SIZE] = {0};
 
     /* if key is longer than 64 bytes reset it to key=MD5(key) */
-    if (nKeyLen > XMD5_BLOCK)
+    if (nKeyLen > XMD5_BLOCK_SIZE)
     {
-        uint8_t key[XMD5_DIGEST] = {0};
+        uint8_t key[XMD5_DIGEST_SIZE] = {0};
         XCrypt_MD5U(key, sizeof(key), pKey, nKeyLen);
 
-        memcpy(kIpad, pKey, XMD5_DIGEST);
-        memcpy(kOpad, pKey, XMD5_DIGEST);
+        memcpy(kIpad, pKey, XMD5_DIGEST_SIZE);
+        memcpy(kOpad, pKey, XMD5_DIGEST_SIZE);
     }
     else
     {
@@ -623,7 +647,7 @@ XSTATUS XCrypt_MD5H(char *pOutput, size_t nSize, const uint8_t* pData, size_t nL
     }
 
     /* XOR key with ipad and opad values */
-    for (i = 0; i < XMD5_BLOCK; i++)
+    for (i = 0; i < XMD5_BLOCK_SIZE; i++)
     {
         kIpad[i] ^= 0x36;
         kOpad[i] ^= 0x5c;
@@ -1475,15 +1499,17 @@ xcrypt_chipher_t XCrypt_GetCipher(const char *pCipher)
     if (!strncmp(pCipher, "aes", 3)) return XC_AES;
     else if (!strncmp(pCipher, "hex", 3)) return XC_HEX;
     else if (!strncmp(pCipher, "xor", 3)) return XC_XOR;
+    else if (!strncmp(pCipher, "hmd5", 4)) return XC_HMD5;
+    else if (!strncmp(pCipher, "md5u", 4)) return XC_MD5U;
     else if (!strncmp(pCipher, "md5", 3)) return XC_MD5;
-    else if (!strncmp(pCipher, "hmacmd5", 7)) return XC_HMD5;
     else if (!strncmp(pCipher, "crc32", 5)) return XC_CRC32;
     else if (!strncmp(pCipher, "crc32b", 6)) return XC_CRC32B;
     else if (!strncmp(pCipher, "casear", 6)) return XC_CASEAR;
     else if (!strncmp(pCipher, "b64url", 6)) return XC_B64URL;
     else if (!strncmp(pCipher, "base64", 6)) return XC_BASE64;
-    else if (!strncmp(pCipher, "hs256", 5)) return XC_HS256;
+    else if (!strncmp(pCipher, "sha256u", 7)) return XC_SHA256U;
     else if (!strncmp(pCipher, "sha256", 6)) return XC_SHA256;
+    else if (!strncmp(pCipher, "hs256", 5)) return XC_HS256;
     else if (!strncmp(pCipher, "reverse", 7)) return XC_REVERSE;
 #ifdef XCRYPT_USE_SSL
     else if (!strncmp(pCipher, "rs256", 5)) return XC_RS256;
@@ -1500,7 +1526,8 @@ const char* XCrypt_GetCipherStr(xcrypt_chipher_t eCipher)
         case XC_HEX: return "hex";
         case XC_XOR: return "xor";
         case XC_MD5: return "md5";
-        case XC_HMD5: return "hmacmd5";
+        case XC_MD5U: return "md5u";
+        case XC_HMD5: return "hmd5";
         case XC_CRC32: return "crc32";
         case XC_CRC32B: return "crc32b";
         case XC_CASEAR: return "casear";
@@ -1508,6 +1535,7 @@ const char* XCrypt_GetCipherStr(xcrypt_chipher_t eCipher)
         case XC_B64URL: return "b64url";
         case XC_HS256: return "h256";
         case XC_SHA256: return "sha256";
+        case XC_SHA256U: return "sha256u";
         case XC_REVERSE: return "reverse";
         case XC_MULTY: return "multy";
 #ifdef XCRYPT_USE_SSL
@@ -1537,10 +1565,12 @@ static xbool_t XCrypt_NeedsKey(xcrypt_chipher_t eCipher)
             return XTRUE;
         case XC_HEX:
         case XC_MD5:
+        case XC_MD5U:
         case XC_CRC32:
         case XC_BASE64:
         case XC_B64URL:
         case XC_SHA256:
+        case XC_SHA256U:
         case XC_REVERSE:
             return XFALSE;
         default:
@@ -1601,6 +1631,8 @@ uint8_t* XCrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uint8
         case XC_AES: pCrypted = XCrypt_AES(pInput, pLength, pKey, nKeyLength, NULL); break;
         case XC_HEX: pCrypted = XCrypt_HEX(pInput, pLength, XSTR_SPACE, pCtx->nColumns, XFALSE); break;
         case XC_XOR: pCrypted = XCrypt_XOR(pInput, *pLength, pKey, nKeyLength); break;
+        case XC_MD5U: pCrypted = XCrypt_RawMD5(pInput, *pLength); *pLength = XMD5_DIGEST_SIZE; break;
+        case XC_SHA256U: pCrypted = XCrypt_RawSHA256(pInput, *pLength); *pLength = XSHA256_DIGEST_SIZE; break;
         case XC_MD5: pCrypted = (uint8_t*)XCrypt_MD5(pInput, *pLength); *pLength = XMD5_LENGTH; break;
         case XC_HMD5: pCrypted = (uint8_t*)XCrypt_HMD5(pInput, *pLength, pKey, nKeyLength); *pLength = XMD5_LENGTH; break;
         case XC_SHA256: pCrypted = (uint8_t*)XCrypt_SHA256(pInput, *pLength); *pLength = XSHA256_LENGTH; break;
