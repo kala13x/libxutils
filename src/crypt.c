@@ -1513,6 +1513,7 @@ xcrypt_chipher_t XCrypt_GetCipher(const char *pCipher)
     else if (!strncmp(pCipher, "reverse", 7)) return XC_REVERSE;
 #ifdef XCRYPT_USE_SSL
     else if (!strncmp(pCipher, "rs256", 5)) return XC_RS256;
+    else if (!strncmp(pCipher, "rsapr", 5)) return XC_RSAPR;
     else if (!strncmp(pCipher, "rsa", 3)) return XC_RSA;
 #endif
     return XC_INVALID;
@@ -1540,6 +1541,7 @@ const char* XCrypt_GetCipherStr(xcrypt_chipher_t eCipher)
         case XC_MULTY: return "multy";
 #ifdef XCRYPT_USE_SSL
         case XC_RS256: return "rs256";
+        case XC_RSAPR: return "rsapr";
         case XC_RSA: return "rsa";
 #endif
         default:
@@ -1560,6 +1562,7 @@ static xbool_t XCrypt_NeedsKey(xcrypt_chipher_t eCipher)
         case XC_HMD5:
 #ifdef XCRYPT_USE_SSL
         case XC_RS256:
+        case XC_RSAPR:
         case XC_RSA:
 #endif
             return XTRUE;
@@ -1643,6 +1646,7 @@ uint8_t* XCrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uint8
         case XC_REVERSE: pCrypted = (uint8_t*)XCrypt_Reverse((const char*)pInput, *pLength); break;
 #ifdef XCRYPT_USE_SSL
         case XC_RS256: pCrypted = XCrypt_RS256(pInput, *pLength, (const char*)pKey, nKeyLength, pLength); break;
+        case XC_RSAPR: pCrypted = XCrypt_PrivRSA(pInput, *pLength, (const char*)pKey, nKeyLength, pLength); break;
         case XC_RSA: pCrypted = XCrypt_RSA(pInput, *pLength, (const char*)pKey, nKeyLength, pLength); break;
 #endif
         default: break;
@@ -1691,6 +1695,7 @@ uint8_t* XDecrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uin
         case XC_B64URL: pDecrypted = (uint8_t*)XDecrypt_Base64Url(pInput, pLength); break;
         case XC_REVERSE: pDecrypted = (uint8_t*)XCrypt_Reverse((const char*)pInput, *pLength); break;
 #ifdef XCRYPT_USE_SSL
+        case XC_RSAPR: pDecrypted = XDecrypt_PubRSA(pInput, *pLength, (const char*)pKey, nKeyLength, pLength); break;
         case XC_RSA: pDecrypted = XDecrypt_RSA(pInput, *pLength, (const char*)pKey, nKeyLength, pLength); break;
 #endif
         default: break;

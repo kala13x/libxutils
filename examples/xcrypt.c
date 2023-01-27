@@ -138,7 +138,8 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   sha256u    (256 bits of raw SHA256 hash)");
     xlog("   hs256      (HMAC by using raw SHA-256 hash)");
 #ifdef _XUTILS_USE_SSL1
-    xlog("   rsa        (Rivest-Shamir-Adleman)");
+    xlog("   rsa        (Rivest-Shamir-Adleman Encode and Decode)");
+    xlog("   rsapr      (Priv key encode & pub key decode)");
     xlog("   rs256      (RSA Signature with SHA-256)");
 #endif
     xlog("   base64     (Base64 Encode and Decode)");
