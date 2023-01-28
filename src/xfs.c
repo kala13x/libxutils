@@ -896,7 +896,7 @@ void XFile_CreateEntry(xfile_entry_t *pEntry, const char *pName, const char *pPa
 
     pEntry->eType = XFile_GetType(pStat->st_mode);
     pEntry->nLinkCount = pStat->st_nlink;
-    pEntry->nTime = pStat->st_atime;
+    pEntry->nTime = pStat->st_mtime;
     pEntry->nSize = pStat->st_size;
     pEntry->nGID = pStat->st_gid;
     pEntry->nUID = pStat->st_uid;

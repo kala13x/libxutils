@@ -239,6 +239,16 @@ static const uint32_t g_Radians[] =
             6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
         };
 
+#ifdef XCRYPT_USE_SSL
+static const uint8_t g_rsaPadding[19] =
+        {
+            0x30, 0x31, 0x30, 0x0d, 0x06,
+            0x09, 0x60, 0x86, 0x48, 0x01,
+            0x65, 0x03, 0x04, 0x02, 0x01,
+            0x05, 0x00, 0x04, 0x20
+        };
+#endif
+
 ////////////////////////////////////////////////////////
 // SHA-256 computing implementation for C/C++ based on
 // pseudocode for the SHA-256 algorithm from Wikipedia.
@@ -1483,11 +1493,16 @@ uint8_t* XDecrypt_PubRSA(const uint8_t *pInput, size_t nLength, const char *pPub
 uint8_t* XCrypt_RS256(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen)
 {
     XASSERT(pInput && nLength, NULL);
-    uint8_t hash[XSHA256_DIGEST_SIZE];
     if (pOutLen) *pOutLen = 0;
 
+    uint8_t hash[XSHA256_DIGEST_SIZE];
     XCrypt_SHA256U(hash, sizeof(hash), pInput, nLength);
-    return XCrypt_PrivRSA(hash, sizeof(hash), pPrivKey, nKeyLen, pOutLen);
+
+    uint8_t paddingHash[XSHA256_DIGEST_SIZE + sizeof(g_rsaPadding)];
+    memcpy(paddingHash, g_rsaPadding, sizeof(g_rsaPadding));
+    memcpy(paddingHash + sizeof(g_rsaPadding), hash, sizeof(hash));
+
+    return XCrypt_PrivRSA(paddingHash, sizeof(paddingHash), pPrivKey, nKeyLen, pOutLen);
 }
 #endif /* XCRYPT_USE_SSL */
 ////////////////////////////////////////////////////////////////

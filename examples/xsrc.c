@@ -14,7 +14,7 @@
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0
-#define XSEARCH_BUILD_NUMBER    9
+#define XSEARCH_BUILD_NUMBER    10
 
 #define XSEARCH_INFO_LEN        128
 #define XSEARCH_TIME_LEN        12
@@ -309,7 +309,7 @@ static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
     const char *pUname = pws ? pws->pw_name : XSTR_EMPTY;
     const char *pGname = grp ? grp->gr_name : XSTR_EMPTY;
 
-    /* Get last access time */
+    /* Get last modification time */
     const char *pTime = ctime(&pEntry->nTime);
     if (pTime != NULL) xstrncpy(sTime, sizeof(sTime), &pTime[4]);
 
