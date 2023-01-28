@@ -157,7 +157,7 @@ typedef enum
     XC_XOR,
     XC_MD5,
     XC_MD5U,
-#ifdef _XUTILS_USE_SSL
+#ifdef XCRYPT_USE_SSL
     XC_RSA,
     XC_RSAPR,
     XC_RS256,

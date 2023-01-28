@@ -23,13 +23,15 @@ int main()
 //////////////////////////////////////////////////////////////////////////////////////////////
 
     const char *pPayload = "{\"test\":\"value\"}";
-    const char *pSecret = "myHiddenSecret";
+    //const char *pSecret = "myHiddenSecret";
 
     size_t nPayloadLen = strlen(pPayload);
-    size_t nSecretLen = strlen(pSecret);
+    size_t nSecretLen = 0;//strlen(pSecret);
     size_t nHeaderLen = 0, nJWTLen = 0;
 
-    char *pJWTStr = XJWT_Create(pPayload, nPayloadLen, (uint8_t*)pSecret, nSecretLen, &nJWTLen);
+    char *pSecret = (char*)XPath_Load("/opt/temp/rsa/rsa_priv.pem", &nSecretLen);
+
+    char *pJWTStr = XJWT_Create(XJWT_ALG_RS256, pPayload, nPayloadLen, (uint8_t*)pSecret, nSecretLen, &nJWTLen);
     if (pJWTStr == NULL)
     {
         xloge("Failed to create JWT: %s", strerror(errno));
@@ -85,7 +87,7 @@ int main()
 //////////////////////////////////////////////////////////////////////////////////////////////
 
     xjwt_t newJwt;
-    newJwt.pHeaderObj = XJWT_CreateHeaderObj("HS256");
+    newJwt.pHeaderObj = XJWT_CreateHeaderObj(XJWT_ALG_HS256);
     newJwt.pPayloadObj = XJSON_NewObject(NULL, 0);
 
     XJSON_AddObject(newJwt.pPayloadObj, XJSON_NewString("sub", "1234567890"));
@@ -103,5 +105,7 @@ int main()
     XJWT_Destroy(&newJwt);
     free(pJWTStr);
 
+
+    free(pSecret);
     return 0;
 }
