@@ -55,6 +55,7 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
         case XC_REVERSE:
 #ifdef _XUTILS_USE_SSL
         case XC_RS256:
+        case XC_RSAPR:
         case XC_RSA:
 #endif
             return XTRUE;
@@ -163,7 +164,7 @@ static void XCrypt_DisplayUsage(const char *pName)
 
     xlog("%s4%s) You can generate a pair of RSA private and public keys with -g argument.", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     xlog("Option for -g argument is two path of public/private keys separated by \":\".");
-    xlog("%s%s -g \"./rsa_pub.pem:./rsa_priv.pem\" -s 2048%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
+    xlog("%s%s -g \"./rsa_priv.pem:./rsa_pub.pem:\" -s 2048%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
 #endif
 }
 
@@ -413,8 +414,8 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
         return XSTDERR;
     }
 
-    const char *pPubKeyPath = XArray_GetData(pArr, 0);
-    const char *pPrivKeyPath = XArray_GetData(pArr, 1);
+    const char *pPrivKeyPath = XArray_GetData(pArr, 0);
+    const char *pPubKeyPath = XArray_GetData(pArr, 1);
 
     if (XPath_Exists(pPubKeyPath) && pArgs->bForce == XFALSE)
     {
@@ -452,8 +453,8 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
         return XSTDERR;
     }
 
-    xlogi("Generated public key: %s", pPubKeyPath);
     xlogi("Generated private key: %s", pPrivKeyPath);
+    xlogi("Generated public key: %s", pPubKeyPath);
 
     XRSA_Destroy(&pair);
     XArray_Clear(pArr);

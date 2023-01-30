@@ -78,30 +78,73 @@
 
 #define _XUTILS_DEBUG
 
-#define XLOCATION_LVL1(line) #line
-#define XLOCATION_LVL2(line) XLOCATION_LVL1(line)
-#define XTHROW_LOCATION __FILE__ ":" XLOCATION_LVL2(__LINE__)
+#define XCLR_RED        "\x1B[31m"
+#define XCLR_RES        "\x1B[0m"
+
+#define XLOCATION_LVL1(line)    #line
+#define XLOCATION_LVL2(line)    XLOCATION_LVL1(line)
+#define __XLOCATION__           XLOCATION_LVL2(__LINE__)
+
+#define XTROW_LOCATION                          \
+            printf("%s<error>%s "               \
+                "Assert failed: "               \
+                "%s:%s():%s\n",                 \
+                XCLR_RED, XCLR_RES,             \
+                __FILE__,                       \
+                __FUNCTION__,                   \
+                __XLOCATION__);                 \
 
 #define XASSERT_RET(condition, value)           \
     if (!condition) return value
 
-#define XASSERT_VOID(condition)                 \
-    if (!condition) return
-
-#define XASSERT_DBG(condition, value)           \
+#define XASSERT_LOG(condition, value)           \
     do {                                        \
         if (!condition) {                       \
-            printf("Assert failed at: %s\n",    \
-                        XTHROW_LOCATION);       \
+            XTROW_LOCATION                      \
+            return value;                       \
+        }                                       \
+    }                                           \
+    while (XSTDNON)
+
+#define XASSERT_VOID_RET(condition)             \
+    if (!condition) return
+
+#define XASSERT_VOID_LOG(condition)             \
+    do {                                        \
+        if (!condition) {                       \
+            XTROW_LOCATION                      \
+            return;                             \
+        }                                       \
+    }                                           \
+    while (XSTDNON)
+
+#define XASSERT_FREE_RET(condition, var, value) \
+    do {                                        \
+        if (!condition) {                       \
+            free(var);                          \
+            return value;                       \
+        }                                       \
+    }                                           \
+    while (XSTDNON)
+
+#define XASSERT_FREE_LOG(condition, var, value) \
+    do {                                        \
+        if (!condition) {                       \
+            XTROW_LOCATION                      \
+            free(var);                          \
             return value;                       \
         }                                       \
     }                                           \
     while (XSTDNON)
 
 #ifdef _XUTILS_DEBUG
-# define XASSERT XASSERT_DBG
+# define XASSERT        XASSERT_LOG
+# define XASSERT_VOID   XASSERT_VOID_LOG
+# define XASSERT_FREE   XASSERT_FREE_LOG
 #else
-# define XASSERT XASSERT_RET
+# define XASSERT        XASSERT_RET
+# define XASSERT_VIOD   XASSERT_VOID_RET
+# define XASSERT_FREE   XASSERT_FREE_RET
 #endif
 
 #ifndef XSTD_MIN

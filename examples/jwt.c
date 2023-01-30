@@ -44,17 +44,43 @@ int main()
     }
 
     xlogi("Created HS256 JWT:\n%s\n", pJWTStr);
+    XJWT_Destroy(&jwt);
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+// Parse and verify JWT with HS256 signature
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+    XSTATUS nStatus = XJWT_Parse(&jwt, pJWTStr, nJWTLen, (uint8_t*)pSecret, nSecretLen);
+    if (nStatus != XSTDOK)
+    {
+        xloge("Failed to parse JWT%s", !jwt.bVerified ?
+            ": Invalid JWT signature!" : XSTR_EMPTY);
+
+        XJWT_Destroy(&jwt);
+        free(pJWTStr);
+        return -1;
+    }
+
+    char *pHeaderRaw = XJWT_GetHeader(&jwt, XTRUE, NULL);
+    xlogi("Parsed JWT header: %s", pHeaderRaw);
+    free(pHeaderRaw);
+
+    char *pPayloadRaw = XJWT_GetPayload(&jwt, XTRUE, NULL);
+    xlogi("Parsed JWT payload: %s\n", pPayloadRaw);
+    free(pPayloadRaw);
 
     XJWT_Destroy(&jwt);
     free(pJWTStr);
 
+#ifdef XCRYPT_USE_SSL
 //////////////////////////////////////////////////////////////////////////////////////////////
 // Create JWT using RS256 signature
 //////////////////////////////////////////////////////////////////////////////////////////////
-#ifdef XCRYPT_USE_SSL
+
     xrsa_ctx_t pair;
     XRSA_Init(&pair);
     XRSA_GenerateKeys(&pair, XRSA_KEY_SIZE, XRSA_PUB_EXP);
+    //XRSA_LoadKeyFiles(&pair, "/opt/temp/rsa/rsa_priv.pem", "/opt/temp/rsa/rsa_pub.pem");
 
     xlogi("Generated keys:\n%s\n%s", pair.pPrivateKey, pair.pPublicKey);
 
@@ -70,6 +96,38 @@ int main()
     }
 
     xlogi("Created RS256 JWT:\n%s\n", pJWTStr);
+    XJWT_Destroy(&jwt);
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+// Parse and verify JWT with RS256 signature
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+    nStatus = XJWT_Parse(&jwt, pJWTStr, nJWTLen, (uint8_t*)pair.pPublicKey, pair.nPubKeyLen);
+    if (nStatus != XSTDOK)
+    {
+        xloge("Failed to parse JWT%s", !jwt.bVerified ?
+            ": Signature is not verified" : XSTR_EMPTY);
+
+        char *pSSLErrors = XSSL_LastErrors(NULL);
+        if (pSSLErrors != NULL)
+        {
+            printf("%s\n", pSSLErrors);
+            free(pSSLErrors);
+        }
+
+        XRSA_Destroy(&pair);
+        XJWT_Destroy(&jwt);
+        free(pJWTStr);
+        return -1;
+    }
+
+    pHeaderRaw = XJWT_GetHeader(&jwt, XTRUE, NULL);
+    xlogi("Parsed JWT header: %s", pHeaderRaw);
+    free(pHeaderRaw);
+
+    pPayloadRaw = XJWT_GetPayload(&jwt, XTRUE, NULL);
+    xlogi("Parsed JWT payload: %s\n", pPayloadRaw);
+    free(pPayloadRaw);
 
     XRSA_Destroy(&pair);
     XJWT_Destroy(&jwt);

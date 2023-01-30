@@ -41,11 +41,12 @@ typedef struct XJWT {
     xbool_t bVerified;
 } xjwt_t;
 
-const char* XJWT_GetAlgStr(xjwt_alg_t eAlg);
-xjwt_alg_t XJWT_GetAlg(const char *pAlgStr);
-
 void XJWT_Init(xjwt_t *pJWT, xjwt_alg_t eAlg);
 void XJWT_Destroy(xjwt_t *pJWT);
+
+const char* XJWT_GetAlgStr(xjwt_alg_t eAlg);
+xjwt_alg_t XJWT_GetAlg(const char *pAlgStr);
+xjwt_alg_t XJWT_GetAlgorithm(xjwt_t *pJWT);
 
 XSTATUS XJWT_AddPayload(xjwt_t *pJWT, const char *pPayload, size_t nPayloadLen, xbool_t bIsEncoded);
 char* XJWT_GetPayload(xjwt_t *pJWT, xbool_t bDecode, size_t *pPayloadLen);
@@ -58,6 +59,7 @@ xjson_obj_t* XJWT_GetHeaderObj(xjwt_t *pJWT);
 
 char* XJWT_Create(xjwt_t *pJWT, const uint8_t *pSecret, size_t nSecretLen, size_t *pJWTLen);
 XSTATUS XJWT_Parse(xjwt_t *pJWT, const char *pJWTStr, size_t nLength, const uint8_t *pSecret, size_t nSecretLen);
+XSTATUS XJWT_Verify(xjwt_t *pJWT, const char *pSignature, size_t nSignatureLen, const uint8_t *pSecret, size_t nSecretLen);
 
 #ifdef __cplusplus
 }

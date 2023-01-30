@@ -88,42 +88,6 @@ static const unsigned char g_base64DecTable[XBASE64_TABLE_SIZE] =
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
         };
 
-static const unsigned char g_base64UrlDecTable[XBASE64_TABLE_SIZE] =
-        {
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b,
-            0x3c, 0x3d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
-            0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
-            0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
-            0x17, 0x18, 0x19, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
-            0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
-            0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30,
-            0x31, 0x32, 0x33, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-        };
-
 static const uint32_t g_crc32Table[] = {
       0x00000000L, 0x77073096L, 0xee0e612cL, 0x990951baL, 0x076dc419L,
       0x706af48fL, 0xe963a535L, 0x9e6495a3L, 0x0edb8832L, 0x79dcb8a4L,
@@ -239,15 +203,13 @@ static const uint32_t g_Radians[] =
             6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
         };
 
-#ifdef XCRYPT_USE_SSL
-static const uint8_t g_rsaPadding[19] =
+static const uint8_t g_shaPadding[XSHA256_PADDING_SIZE] =
         {
             0x30, 0x31, 0x30, 0x0d, 0x06,
             0x09, 0x60, 0x86, 0x48, 0x01,
             0x65, 0x03, 0x04, 0x02, 0x01,
             0x05, 0x00, 0x04, 0x20
         };
-#endif
 
 ////////////////////////////////////////////////////////
 // SHA-256 computing implementation for C/C++ based on
@@ -363,6 +325,19 @@ XSTATUS XCrypt_SHA256H(char *pOutput, size_t nSize, const uint8_t *pInput, size_
         xstrncpyf(pOutput + i * 2, 3, "%02x", (unsigned int)nDigest[i]);
 
     pOutput[XSHA256_LENGTH] = XSTR_NUL;
+    return XSTDOK;
+}
+
+XSTATUS XCrypt_PadSHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
+{
+    size_t nFinalSize = XSHA256_DIGEST_SIZE + XSHA256_PADDING_SIZE;
+    XASSERT((pInput && nSize >= nFinalSize), XSTDERR);
+
+    uint8_t hash[XSHA256_DIGEST_SIZE];
+    XCrypt_SHA256U(hash, sizeof(hash), pInput, nLength);
+
+    memcpy(pOutput, g_shaPadding, sizeof(g_shaPadding));
+    memcpy(pOutput + sizeof(g_shaPadding), hash, sizeof(hash));
     return XSTDOK;
 }
 
@@ -797,13 +772,12 @@ uint8_t* XCrypt_XOR(const uint8_t *pInput, size_t nLength, const uint8_t *pKey, 
 
 char *XCrypt_Base64(const uint8_t *pInput, size_t *pLength)
 {
-    if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
+    XASSERT((pInput && pLength && (*pLength)), NULL);
+    size_t nOutLength = ((*pLength + 2) / 3) * 4;
     size_t i, j, nLength = *pLength;
-    size_t nOutLength = ((nLength + 2) / 3) * 4;
-    if (nOutLength < nLength) return NULL;
 
     char *pEncodedData = (char *)calloc(1, nOutLength + 1);
-    if (pEncodedData == NULL) return NULL;
+    XASSERT(pEncodedData, NULL);
 
     for (i = 0, j = 0; i < nLength;) 
     {
@@ -830,18 +804,15 @@ char *XCrypt_Base64(const uint8_t *pInput, size_t *pLength)
 
 char *XDecrypt_Base64(const uint8_t *pInput, size_t *pLength)
 {
-    if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
+    XASSERT((pInput && pLength && (*pLength)), NULL);
     size_t i, j, nLength = *pLength;
 
     while (nLength % 4 != 0) nLength++;
     size_t nOutLength = nLength / 4 * 3 + 1;
     nLength = *pLength;
 
-    while (pInput[--nLength] == '=') nOutLength--;
-    nLength = *pLength;
-
     char *pDecodedData = (char *)calloc(1, nOutLength + 1);
-    if (pDecodedData == NULL) return NULL;
+    XASSERT(pDecodedData, NULL);
 
     for (i = 0, j = 0; i < nLength;)
     {
@@ -866,50 +837,34 @@ char *XDecrypt_Base64(const uint8_t *pInput, size_t *pLength)
 
 char *XDecrypt_Base64Url(const uint8_t *pInput, size_t *pLength)
 {
-    if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
-    size_t i, j, nLength = *pLength;
+    XASSERT((pInput && pLength && (*pLength)), NULL);
+    uint8_t *pUrlDecoded = (uint8_t*)malloc(*pLength + 1);
 
-    while (nLength % 4 != 0) nLength++;
-    size_t nOutLength = nLength / 4 * 3 + 1;
-    nLength = *pLength;
+    XASSERT(pUrlDecoded, NULL);
+    size_t i;
 
-    while (pInput[--nLength] == '-') nOutLength--;
-    nLength = *pLength;
-
-    char *pDecodedData = (char *)calloc(1, nOutLength + 1);
-    if (pDecodedData == NULL) return NULL;
-
-    for (i = 0, j = 0; i < nLength;)
+    for (i = 0; i < *pLength; i++)
     {
-        uint32_t nSextetA = pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
-        uint32_t nSextetB = i >= nLength || pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
-        uint32_t nSextetC = i >= nLength || pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
-        uint32_t nSextetD = i >= nLength || pInput[i] == '-' ? 0 & i++ : g_base64UrlDecTable[pInput[i++]];
-
-        uint32_t nTriple = (nSextetA << 3 * 6) + (nSextetB << 2 * 6) 
-                         + (nSextetC << 1 * 6) + (nSextetD << 0 * 6);
-
-        if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 2 * 8) & 0xFF;
-        if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 1 * 8) & 0xFF;
-        if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 0 * 8) & 0xFF;
+        if (pInput[i] == '-') pUrlDecoded[i] = '+';
+        else if (pInput[i] == '_') pUrlDecoded[i] = '/';
+        else pUrlDecoded[i] = pInput[i];
     }
 
-    while (pDecodedData[nOutLength] == '\0') nOutLength--;
-    *pLength = nOutLength + 1;
+    pUrlDecoded[*pLength] = '\0';
+    char *pDecoded = XDecrypt_Base64(pUrlDecoded, pLength);
 
-    return pDecodedData;
+    free(pUrlDecoded);
+    return pDecoded;
 }
 
 char *XCrypt_Base64Url(const uint8_t *pInput, size_t *pLength)
 {
-    if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
+    XASSERT((pInput && pLength && (*pLength)), NULL);
+    size_t nOutLength = ((*pLength + 2) / 3) * 4;
     size_t i, j, nLength = *pLength;
 
-    size_t nOutLength = ((nLength + 2) / 3) * 4;
-    if (nOutLength < nLength) return NULL;
-
     char *pEncodedData = (char *)calloc(1, nOutLength + 1);
-    if (pEncodedData == NULL) return NULL;
+    XASSERT(pEncodedData, NULL);
 
     for (i = 0, j = 0; i < nLength;) 
     {
@@ -1032,7 +987,7 @@ uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
 // RSA implementation with openssl library
 ////////////////////////////////////////////////////////////////
 #ifdef XCRYPT_USE_SSL
-char* XSSL_LastError(size_t *pOutLen)
+char* XSSL_LastErrors(size_t *pOutLen)
 {
     if (pOutLen) *pOutLen = 0;
 
@@ -1199,20 +1154,16 @@ uint8_t* XRSA_Crypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size
     if (pOutLength) *pOutLength = 0;
     RSA *pRSA = pCtx->pKeyPair;
 
-    size_t nRSASize = RSA_size(pRSA);
+    int nRSASize = RSA_size(pRSA);
     XASSERT(nRSASize, NULL);
 
     uint8_t *pOutput = malloc(nRSASize + 1);
     XASSERT(pOutput, NULL);
 
-    size_t nOutLength = RSA_public_encrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    if (nOutLength < 0 || nOutLength > nRSASize)
-    {
-        free(pOutput);
-        return NULL;
-    }
+    int nOutLength = RSA_public_encrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
+    XASSERT_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
-    if (pOutLength) *pOutLength = nOutLength;
+    if (pOutLength) *pOutLength = (size_t)nOutLength;
     pOutput[nOutLength] = '\0';
 
     return pOutput;
@@ -1224,18 +1175,14 @@ uint8_t* XRSA_PrivCrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, 
     if (pOutLength) *pOutLength = 0;
     RSA *pRSA = pCtx->pKeyPair;
 
-    size_t nRSASize = RSA_size(pRSA);
+    int nRSASize = RSA_size(pRSA);
     XASSERT(nRSASize, NULL);
 
     uint8_t *pOutput = malloc(nRSASize + 1);
     XASSERT(pOutput, NULL);
 
     int nOutLength = RSA_private_encrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    if (nOutLength < 0 || nOutLength > nRSASize)
-    {
-        free(pOutput);
-        return NULL;
-    }
+    XASSERT_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
     pOutput[nOutLength] = '\0';
@@ -1249,20 +1196,16 @@ uint8_t* XRSA_PubDecrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength,
     if (pOutLength) *pOutLength = 0;
     RSA *pRSA = pCtx->pKeyPair;
 
-    size_t nRSASize = RSA_size(pRSA);
-    XASSERT(nRSASize, NULL);
+    int nRSASize = RSA_size(pRSA);
+    XASSERT((nRSASize > 0), NULL);
 
     uint8_t *pOutput = malloc(nRSASize + 1);
     XASSERT(pOutput, NULL);
 
-    size_t nOutLength = RSA_public_decrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    if (nOutLength < 0 || nOutLength > nRSASize)
-    {
-        free(pOutput);
-        return NULL;
-    }
+    int nOutLength = RSA_public_decrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
+    XASSERT_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
-    if (pOutLength) *pOutLength = nOutLength;
+    if (pOutLength) *pOutLength = (size_t)nOutLength;
     pOutput[nOutLength] = '\0';
 
     return pOutput;
@@ -1278,11 +1221,7 @@ uint8_t* XRSA_Decrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, si
     XASSERT(pOutput, NULL);
 
     int nOutLength = RSA_private_decrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    if (nOutLength < 0)
-    {
-        free(pOutput);
-        return NULL;
-    }
+    XASSERT_FREE((nOutLength > 0), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
     size_t nTermPos = (size_t)nOutLength < nLength ?
@@ -1495,15 +1434,35 @@ uint8_t* XCrypt_RS256(const uint8_t *pInput, size_t nLength, const char *pPrivKe
     XASSERT((pInput && nLength), NULL);
     if (pOutLen) *pOutLen = 0;
 
-    uint8_t hash[XSHA256_DIGEST_SIZE];
-    XCrypt_SHA256U(hash, sizeof(hash), pInput, nLength);
-
-    uint8_t paddingHash[XSHA256_DIGEST_SIZE + sizeof(g_rsaPadding)];
-    memcpy(paddingHash, g_rsaPadding, sizeof(g_rsaPadding));
-    memcpy(paddingHash + sizeof(g_rsaPadding), hash, sizeof(hash));
-
+    uint8_t paddingHash[XSHA256_DIGEST_SIZE + sizeof(g_shaPadding)];
+    XCrypt_PadSHA256(paddingHash, sizeof(paddingHash), pInput, nLength);
     return XCrypt_PrivRSA(paddingHash, sizeof(paddingHash), pPrivKey, nKeyLen, pOutLen);
 }
+
+XSTATUS XCrypt_VerifyRS256(const uint8_t *pSignature, size_t nSignatureLen, const uint8_t *pData, size_t nLength, const char *pPubKey, size_t nKeyLen)
+{
+    XASSERT((pData && nLength && pSignature && nSignatureLen && pPubKey && nKeyLen), XSTDINV);
+
+    uint8_t inputHash[XSHA256_DIGEST_SIZE + XSHA256_PADDING_SIZE];
+    XCrypt_PadSHA256(inputHash, sizeof(inputHash), pData, nLength);
+    size_t i, nHashLen = 0;
+
+    uint8_t *pDecrypted = XDecrypt_PubRSA(pSignature, nSignatureLen, pPubKey, nKeyLen, &nHashLen);
+    XASSERT_FREE((pDecrypted && nHashLen == sizeof(inputHash)), pDecrypted, XSTDEXC);
+
+    for (i = 0; i < nHashLen; i++)
+    {
+        if (inputHash[i] != pDecrypted[i])
+        {
+            free(pDecrypted);
+            return XSTDNON;
+        }
+    }
+
+    free(pDecrypted);
+    return XSTDOK;
+}
+
 #endif /* XCRYPT_USE_SSL */
 ////////////////////////////////////////////////////////////////
 // END OF: RSA implementation with openssl library

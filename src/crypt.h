@@ -39,6 +39,7 @@ extern "C" {
 
 #define XSHA256_BLOCK_SIZE          64
 #define XSHA256_DIGEST_SIZE         32
+#define XSHA256_PADDING_SIZE        19
 #define XSHA256_LENGTH              64
 
 typedef union
@@ -74,6 +75,7 @@ char* XCrypt_HS256(const uint8_t* pData, size_t nLength, const uint8_t* pKey, si
 
 XSTATUS XCrypt_SHA256U(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
 XSTATUS XCrypt_SHA256H(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
+XSTATUS XCrypt_PadSHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
 uint8_t* XCrypt_RawSHA256(const uint8_t *pInput, size_t nLength);
 char* XCrypt_SHA256(const uint8_t *pInput, size_t nLength);
 
@@ -105,7 +107,7 @@ uint8_t* XCrypt_HEX(const uint8_t *pInput, size_t *pLength, const char* pSpace, 
 uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase);
 
 #ifdef XCRYPT_USE_SSL
-char* XSSL_LastError(size_t *pOutLen);
+char* XSSL_LastErrors(size_t *pOutLen);
 
 typedef struct XRSAKeys {
     RSA *pKeyPair;
@@ -147,6 +149,7 @@ uint8_t* XDecrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPrivKe
 uint8_t* XDecrypt_PubRSA(const uint8_t *pInput, size_t nLength, const char *pPubKey, size_t nKeyLen, size_t *pOutLen);
 
 uint8_t* XCrypt_RS256(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen);
+XSTATUS XCrypt_VerifyRS256(const uint8_t *pSignature, size_t nSignatureLen, const uint8_t *pData, size_t nLength, const char *pPubKey, size_t nKeyLen);
 
 #endif /* XCRYPT_USE_SSL */
 
