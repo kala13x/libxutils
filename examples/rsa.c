@@ -10,8 +10,6 @@
 #include <xutils/xstd.h>
 #include <xutils/xlog.h>
 #include <xutils/xfs.h>
-
-#define _XUTILS_USE_SSL
 #include <xutils/crypt.h>
 
 #define XKEY_PRIV   "rsa_priv.pem"

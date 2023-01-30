@@ -1255,6 +1255,7 @@ int XJSON_Write(xjson_t *pJson, char *pOutput, size_t nSize)
 
 char* XJSON_DumpObj(xjson_obj_t *pJsonObj, size_t nLint, size_t *pLength)
 {
+    if (pLength) *pLength = 0;
     XASSERT(pJsonObj, NULL);
     xjson_writer_t writer;
 
@@ -1267,7 +1268,7 @@ char* XJSON_DumpObj(xjson_obj_t *pJsonObj, size_t nLint, size_t *pLength)
         return NULL;
     }
 
-    *pLength = writer.nLength;
+    if (pLength) *pLength = writer.nLength;
     return writer.pData;
 }
 

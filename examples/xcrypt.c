@@ -15,9 +15,6 @@
 #include <xutils/xstr.h>
 #include <xutils/xcli.h>
 #include <xutils/xfs.h>
-
-/* Remove this definiton if there is no OpenSSL library support */
-#define _XUTILS_USE_SSL
 #include <xutils/crypt.h>
 
 #define XCRYPT_VER_MAX      0

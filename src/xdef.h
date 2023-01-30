@@ -76,6 +76,8 @@
 #define XSTDUSR         2
 #endif
 
+#define _XUTILS_DEBUG
+
 #define XLOCATION_LVL1(line) #line
 #define XLOCATION_LVL2(line) XLOCATION_LVL1(line)
 #define XTHROW_LOCATION __FILE__ ":" XLOCATION_LVL2(__LINE__)

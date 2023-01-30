@@ -8,6 +8,7 @@
  */
 
 #include <xutils/xstd.h>
+#include <xutils/crypt.h>
 #include <xutils/xjson.h>
 #include <xutils/xlog.h>
 #include <xutils/jwt.h>
@@ -16,96 +17,64 @@
 int main()
 {
     xlog_defaults();
+    xlog_enable(XLOG_ALL);
     xlog_timing(XLOG_TIME);
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-// Create JWT from raw C strings
+// Create JWT using HS256 signature
 //////////////////////////////////////////////////////////////////////////////////////////////
 
     const char *pPayload = "{\"test\":\"value\"}";
-    //const char *pSecret = "myHiddenSecret";
+    const char *pSecret = "myHiddenSecret";
 
     size_t nPayloadLen = strlen(pPayload);
-    size_t nSecretLen = 0;//strlen(pSecret);
-    size_t nHeaderLen = 0, nJWTLen = 0;
+    size_t nSecretLen = strlen(pSecret);
+    size_t nJWTLen = 0;
 
-    char *pSecret = (char*)XPath_Load("/opt/temp/rsa/rsa_priv.pem", &nSecretLen);
+    xjwt_t jwt;
+    XJWT_Init(&jwt, XJWT_ALG_HS256);
+    XJWT_AddPayload(&jwt, pPayload, nPayloadLen, XFALSE);
 
-    char *pJWTStr = XJWT_Create(XJWT_ALG_RS256, pPayload, nPayloadLen, (uint8_t*)pSecret, nSecretLen, &nJWTLen);
+    char *pJWTStr = XJWT_Create(&jwt, (uint8_t*)pSecret, nSecretLen, &nJWTLen);
     if (pJWTStr == NULL)
     {
         xloge("Failed to create JWT: %s", strerror(errno));
+        XJWT_Destroy(&jwt);
         return -1;
     }
 
-    xlog("Created JWT: %s", pJWTStr);
+    xlogi("Created HS256 JWT:\n%s\n", pJWTStr);
 
-//////////////////////////////////////////////////////////////////////////////////////////////
-// Validate and parse JWT string
-//////////////////////////////////////////////////////////////////////////////////////////////
-
-    xjwt_t jwt;
-    XSTATUS nStatus = XJWT_Parse(&jwt, pJWTStr, nJWTLen, (uint8_t*)pSecret, nSecretLen);
-
-    if (nStatus == XSTDERR) xloge("Failed to parse JWT: %s", strerror(errno));
-    else if (nStatus == XSTDINV) xloge("Invalid arguments!");
-    else if (nStatus == XSTDNON) xloge("Invalid signature!");
-
-    char *pHeader = XJSON_DumpObj(jwt.pHeaderObj, 0, &nHeaderLen);
-    if (pHeader != NULL)
-    {
-        xlog("Parsed header: %s", pHeader);
-        free(pHeader);
-    }
-
-    char *pParsedPayload = XJSON_DumpObj(jwt.pPayloadObj, 0, &nPayloadLen);
-    if (pParsedPayload != NULL)
-    {
-        xlog("Parsed payload: %s", pParsedPayload);
-        free(pParsedPayload);
-    }
-
-    free(pJWTStr);
-
-//////////////////////////////////////////////////////////////////////////////////////////////
-// Re-create JWT again from JSON objects
-//////////////////////////////////////////////////////////////////////////////////////////////
-
-    pJWTStr = XJWT_Dump(&jwt, (uint8_t*)pSecret, nSecretLen, NULL);
-    if (pJWTStr == NULL)
-    {
-        xloge("Failed to re-create JWT: %s", strerror(errno));
-        return -1;
-    }
-
-    xlog("Re-created JWT: %s", pJWTStr);
     XJWT_Destroy(&jwt);
     free(pJWTStr);
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-// Create new JWT from JSON objects
+// Create JWT using RS256 signature
 //////////////////////////////////////////////////////////////////////////////////////////////
+#ifdef XCRYPT_USE_SSL
+    xrsa_ctx_t pair;
+    XRSA_Init(&pair);
+    XRSA_GenerateKeys(&pair, XRSA_KEY_SIZE, XRSA_PUB_EXP);
 
-    xjwt_t newJwt;
-    newJwt.pHeaderObj = XJWT_CreateHeaderObj(XJWT_ALG_HS256);
-    newJwt.pPayloadObj = XJSON_NewObject(NULL, 0);
+    xlogi("Generated keys:\n%s\n%s", pair.pPrivateKey, pair.pPublicKey);
 
-    XJSON_AddObject(newJwt.pPayloadObj, XJSON_NewString("sub", "1234567890"));
-    XJSON_AddObject(newJwt.pPayloadObj, XJSON_NewString("name", "John Doe"));
-    XJSON_AddObject(newJwt.pPayloadObj, XJSON_NewU32("iat", 1516239022));
+    XJWT_Init(&jwt, XJWT_ALG_RS256);
+    XJWT_AddPayload(&jwt, pPayload, nPayloadLen, XFALSE);
 
-    pJWTStr = XJWT_Dump(&newJwt, (uint8_t*)pSecret, nSecretLen, NULL);
+    pJWTStr = XJWT_Create(&jwt, (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen, &nJWTLen);
     if (pJWTStr == NULL)
     {
-        xloge("Failed to re-create JWT: %s", strerror(errno));
+        xloge("Failed to create JWT: %s", strerror(errno));
+        XJWT_Destroy(&jwt);
         return -1;
     }
 
-    xlog("New JWT: %s", pJWTStr);
-    XJWT_Destroy(&newJwt);
+    xlogi("Created RS256 JWT:\n%s\n", pJWTStr);
+
+    XRSA_Destroy(&pair);
+    XJWT_Destroy(&jwt);
     free(pJWTStr);
+#endif
 
-
-    free(pSecret);
     return 0;
 }
