@@ -76,8 +76,6 @@
 #define XSTDUSR         2
 #endif
 
-#define _XUTILS_DEBUG
-
 #define XCLR_RED        "\x1B[31m"
 #define XCLR_RES        "\x1B[0m"
 
@@ -92,7 +90,7 @@
                 XCLR_RED, XCLR_RES,             \
                 __FILE__,                       \
                 __FUNCTION__,                   \
-                __XLOCATION__);                 \
+                __XLOCATION__)
 
 #define XASSERT_RET(condition, value)           \
     if (!condition) return value
@@ -100,7 +98,7 @@
 #define XASSERT_LOG(condition, value)           \
     do {                                        \
         if (!condition) {                       \
-            XTROW_LOCATION                      \
+            XTROW_LOCATION;                     \
             return value;                       \
         }                                       \
     }                                           \
@@ -112,7 +110,7 @@
 #define XASSERT_VOID_LOG(condition)             \
     do {                                        \
         if (!condition) {                       \
-            XTROW_LOCATION                      \
+            XTROW_LOCATION;                     \
             return;                             \
         }                                       \
     }                                           \
@@ -130,7 +128,7 @@
 #define XASSERT_FREE_LOG(condition, var, value) \
     do {                                        \
         if (!condition) {                       \
-            XTROW_LOCATION                      \
+            XTROW_LOCATION;                     \
             free(var);                          \
             return value;                       \
         }                                       \
@@ -143,7 +141,7 @@
 # define XASSERT_FREE   XASSERT_FREE_LOG
 #else
 # define XASSERT        XASSERT_RET
-# define XASSERT_VIOD   XASSERT_VOID_RET
+# define XASSERT_VOID   XASSERT_VOID_RET
 # define XASSERT_FREE   XASSERT_FREE_RET
 #endif
 
