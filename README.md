@@ -114,7 +114,7 @@ You may notice that when you select only one module, several other modules may b
 For example, if you only mark HTTP library for a build, the socket library will be automatically enabled because HTTP uses some functionality from sockets.
 
 ### Dependencies
-The only dependency that the library uses is the `openssl-devel` package for the `SSL` implementations.\
+The only dependency that the library uses is the `openssl-devel` package for the `SSL` and `RSA` implementations.\
 You can either install the `openssl-devel` package or disable the `SSL` support in the library.
 
 #### Install OpenSSL development package
