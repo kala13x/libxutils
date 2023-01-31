@@ -80,7 +80,7 @@ int main()
     xrsa_ctx_t pair;
     XRSA_Init(&pair);
     XRSA_GenerateKeys(&pair, XRSA_KEY_SIZE, XRSA_PUB_EXP);
-    //XRSA_LoadKeyFiles(&pair, "/opt/temp/rsa/rsa_priv.pem", "/opt/temp/rsa/rsa_pub.pem");
+    //XRSA_LoadKeyFiles(&pair, "./rsa_priv.pem", "./rsa_pub.pem");
 
     xlogi("Generated keys:\n%s\n%s", pair.pPrivateKey, pair.pPublicKey);
 

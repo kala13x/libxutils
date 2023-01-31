@@ -135,14 +135,35 @@
     }                                           \
     while (XSTDNON)
 
+#define XASSERT_CALL_RET(cnd, func, var, val)   \
+    do {                                        \
+        if (!cnd) {                             \
+            func(var);                          \
+            return val;                         \
+        }                                       \
+    }                                           \
+    while (XSTDNON)
+
+#define XASSERT_CALL_LOG(cnd, func, var, val)   \
+    do {                                        \
+        if (!cnd) {                             \
+            XTROW_LOCATION;                     \
+            func(var);                          \
+            return val;                         \
+        }                                       \
+    }                                           \
+    while (XSTDNON)
+
 #ifdef _XUTILS_DEBUG
 # define XASSERT        XASSERT_LOG
 # define XASSERT_VOID   XASSERT_VOID_LOG
 # define XASSERT_FREE   XASSERT_FREE_LOG
+# define XASSERT_CALL   XASSERT_CALL_LOG
 #else
 # define XASSERT        XASSERT_RET
 # define XASSERT_VOID   XASSERT_VOID_RET
 # define XASSERT_FREE   XASSERT_FREE_RET
+# define XASSERT_CALL   XASSERT_CALL_RET
 #endif
 
 #ifndef XSTD_MIN

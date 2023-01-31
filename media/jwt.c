@@ -149,21 +149,17 @@ char* XJWT_GetPayload(xjwt_t *pJWT, xbool_t bDecode, size_t *pPayloadLen)
 xjson_obj_t* XJWT_GetPayloadObj(xjwt_t *pJWT)
 {
     XASSERT(pJWT, NULL);
-    size_t nPayloadLen = 0;
-
     if (pJWT->pPayloadObj != NULL) return pJWT->pPayloadObj;
+
+    size_t nPayloadLen = 0;
     char *pPayloadRaw = XJWT_GetPayload(pJWT, XTRUE, &nPayloadLen);
-
     XASSERT(pPayloadRaw, NULL);
+
     xjson_t json;
-
-    if (XJSON_Parse(&json, pPayloadRaw, nPayloadLen) != XJSON_SUCCESS)
-    {
-        free(pPayloadRaw);
-        return NULL;
-    }
-
+    int nStatus = XJSON_Parse(&json, pPayloadRaw, nPayloadLen);
     free(pPayloadRaw);
+
+    XASSERT((nStatus == XJSON_SUCCESS), NULL);
     pJWT->pPayloadObj = json.pRootObj;
 
     return pJWT->pPayloadObj;
@@ -211,6 +207,7 @@ char* XJWT_GetHeader(xjwt_t *pJWT, xbool_t bDecode, size_t *pHeaderLen)
             size_t nRawHeaderLen = 0;
             pJWT->pHeaderObj = XJWT_CreateHeaderObj(pJWT->eAlgorithm);
             char *pHeaderRaw = XJSON_DumpObj(pJWT->pHeaderObj, XFALSE, &nRawHeaderLen);
+            XASSERT((pHeaderRaw && nRawHeaderLen), NULL);
 
             pJWT->nHeaderLen = nRawHeaderLen;
             pJWT->pHeader = XCrypt_Base64Url((const uint8_t*)pHeaderRaw, &pJWT->nHeaderLen);
@@ -222,7 +219,6 @@ char* XJWT_GetHeader(xjwt_t *pJWT, xbool_t bDecode, size_t *pHeaderLen)
             }
 
             free(pHeaderRaw);
-
             if (pHeaderLen) *pHeaderLen = pJWT->nHeaderLen;
             return pJWT->pHeader;
         }
@@ -244,21 +240,17 @@ char* XJWT_GetHeader(xjwt_t *pJWT, xbool_t bDecode, size_t *pHeaderLen)
 xjson_obj_t* XJWT_GetHeaderObj(xjwt_t *pJWT)
 {
     XASSERT(pJWT, NULL);
-    size_t nHeaderLen = 0;
-
     if (pJWT->pHeaderObj != NULL) return pJWT->pHeaderObj;
+
+    size_t nHeaderLen = 0;
     char *nHeaderRaw = XJWT_GetHeader(pJWT, XTRUE, &nHeaderLen);
-
     XASSERT(nHeaderRaw, NULL);
+
     xjson_t json;
-
-    if (XJSON_Parse(&json, nHeaderRaw, nHeaderLen) != XJSON_SUCCESS)
-    {
-        free(nHeaderRaw);
-        return NULL;
-    }
-
+    int nStatus = XJSON_Parse(&json, nHeaderRaw, nHeaderLen);
     free(nHeaderRaw);
+
+    XASSERT((nStatus == XJSON_SUCCESS), NULL);
     pJWT->pHeaderObj = json.pRootObj;
 
     return pJWT->pHeaderObj;
@@ -327,11 +319,7 @@ XSTATUS XJWT_CreateSignature(xjwt_t *pJWT, const uint8_t *pSecret, size_t nSecre
     else if (pJWT->eAlgorithm == XJWT_ALG_RS256)
     {
         pSignature = XCrypt_RS256((uint8_t*)pJointData, nJointLength, (char*)pSecret, nSecretLen, &nOutLen);
-        if (pSignature == NULL)
-        {
-            free(pJointData);
-            return XSTDERR;
-        }
+        XASSERT_FREE(pSignature, pJointData, XSTDERR);
     }
 #endif
     else
@@ -453,38 +441,27 @@ XSTATUS XJWT_Parse(xjwt_t *pJWT, const char *pJWTStr, size_t nLength, const uint
     XASSERT((pJWTStr && nLength), XSTDINV);
 
     xarray_t *pArray = xstrsplit(pJWTStr, ".");
-    if (pArray == NULL) return XSTDERR;
+    XASSERT(pArray, XSTDERR);
 
     const char *pHeader = (const char *)XArray_GetData(pArray, 0);
     const char *pPayload = (const char *)XArray_GetData(pArray, 1);
     const char *pSignature = (const char *)XArray_GetData(pArray, 2);
+    XASSERT_CALL((pHeader && pPayload && pSignature), XArray_Destroy, pArray, XSTDERR);
 
-    if (pHeader == NULL || pPayload == NULL || pSignature == NULL)
-    {
-        XArray_Destroy(pArray);
-        return XSTDERR;
-    }
+    XSTATUS nStatus = XJWT_AddHeader(pJWT, pHeader, strlen(pHeader), XTRUE);
+    XASSERT_CALL((nStatus == XSTDOK), XArray_Destroy, pArray, XSTDERR);
 
-    if (XJWT_AddHeader(pJWT, pHeader, strlen(pHeader), XTRUE) != XSTDOK ||
-        XJWT_AddPayload(pJWT, pPayload, strlen(pPayload), XTRUE) != XSTDOK)
-    {
-        XArray_Destroy(pArray);
-        return XSTDERR;
-    }
+    nStatus = XJWT_AddPayload(pJWT, pPayload, strlen(pPayload), XTRUE);
+    XASSERT_CALL((nStatus == XSTDOK), XArray_Destroy, pArray, XSTDERR);
 
-    if (XJWT_GetHeader(pJWT, XFALSE, NULL) == NULL ||
-        XJWT_GetPayload(pJWT, XFALSE, NULL) == NULL ||
-        XJWT_GetAlgorithm(pJWT) == XJWT_ALG_INVALID)
-    {
-        XArray_Destroy(pArray);
-        return XSTDERR;
-    }
+    XASSERT_CALL((XJWT_GetHeader(pJWT, XFALSE, NULL)), XArray_Destroy, pArray, XSTDERR);
+    XASSERT_CALL((XJWT_GetPayload(pJWT, XFALSE, NULL)), XArray_Destroy, pArray, XSTDERR);
+    XASSERT_CALL((XJWT_GetAlgorithm(pJWT) != XJWT_ALG_INVALID), XArray_Destroy, pArray, XSTDERR);
 
-    XSTATUS nStatus = XSTDOK;
     if (pSecret != NULL && nSecretLen > 0)
     {
         size_t nSignatureSize = XArray_GetSize(pArray, 2);
-        if (!nSignatureSize) { XArray_Destroy(pArray); return XSTDERR; }
+        XASSERT_CALL(nSignatureSize, XArray_Destroy, pArray, XSTDERR);
         nStatus = XJWT_Verify(pJWT, pSignature, nSignatureSize, pSecret, nSecretLen);
     }
 
