@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #include "crypt.h"
+#include "xjson.h"
 #include "xtype.h"
 
 typedef enum {
