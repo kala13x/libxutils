@@ -1,7 +1,7 @@
 LIB_CRYPTO=/usr/lib64/libcrypto.so
 LIB_SSL=/usr/lib64/libssl.so
 
-if [ -f "LIB_CRYPTO" ] && [ -f "LIB_SSL"  ]; then
+if [ -f "$LIB_CRYPTO" ] && [ -f "$LIB_SSL"  ]; then
     export XUTILS_USE_SSL=y
 fi
 

@@ -1,10 +1,10 @@
 
 CFLAGS = -g -O2 -Wall
-LIBS = -lxutils -lpthread -lm
+LIBS = -lxutils -lpthread
 
-ifeq ($(XUTILS_USE_SSL),"y")
-	CFLAGS += -D_XUTILS_USE_SSL
-	LIBS += -lssl -lcrypto
+ifeq ($(XUTILS_USE_SSL),y)
+CFLAGS += -D_XUTILS_USE_SSL
+LIBS += -lssl -lcrypto
 endif
 
 EXECS = array \
