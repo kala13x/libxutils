@@ -28,7 +28,6 @@
 #include <sys/stat.h>
 
 #ifndef _WIN32
-/* Linux includes */
 #include <pthread.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -41,20 +40,21 @@
 #include <sys/time.h>
 #include <sys/mman.h>
 
+#ifndef __APPLE__
 #include <netinet/if_ether.h>
 #include <netinet/ip_icmp.h>
+#endif
+
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <netinet/ip.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
-#include <net/if.h>
-#ifdef __linux__
 #include <sys/syscall.h>
+#include <net/if.h>
 #include <grp.h>
 #include <pwd.h>
-#endif
 #else
 #include <ws2tcpip.h>
 #include <winsock2.h>

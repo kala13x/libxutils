@@ -17,10 +17,6 @@ IF(OpenSSL_FOUND)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_XUTILS_USE_SSL")
 ENDIF()
 
-IF (APPLE)
-find_package(RT REQUIRED)
-ENDIF()
-
 SET(HEADER_DST "include/xutils")
 SET(SOURCE_DIR "./src")
 SET(MEDIA_DIR "./media")

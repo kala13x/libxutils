@@ -27,7 +27,6 @@
 #endif
 
 #define XSOCK_MIN(a,b) (((a)<(b))?(a):(b))
-static XATOMIC g_nSSLInit = 0; 
 
 xsock_inaddr_t* XSock_InAddr(xsock_t *pSock) { return &pSock->inAddr; }
 xsock_status_t XSock_Status(const xsock_t *pSock) { return pSock->eStatus; }
@@ -59,6 +58,8 @@ xbool_t XSockType_IsSSL(xsock_type_t eType)
 }
 
 #ifdef XSOCK_USE_SSL
+static XATOMIC g_nSSLInit = 0; 
+
 typedef struct XSocketPriv {
     xbool_t nShutdown;
     void *pSSLCTX;

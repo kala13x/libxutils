@@ -1,6 +1,11 @@
-CFLAGS = -g -O2 -Wall -D_XUTILS_USE_SSL
+
+CFLAGS = -g -O2 -Wall
 LIBS = -lxutils -lpthread -lm
-LIBS += -lssl -lcrypto
+
+ifeq ($(XUTILS_USE_SSL),"y")
+	CFLAGS += -D_XUTILS_USE_SSL
+	LIBS += -lssl -lcrypto
+endif
 
 EXECS = array \
 	files \
@@ -30,12 +35,12 @@ $(EXECS): %: %.c
 
 .PHONY: install
 install:
-	install -m 0755 xcrypt /usr/bin/
-	install -m 0755 xpass /usr/bin/
-	install -m 0755 xjson /usr/bin/
-	install -m 0755 xhttp /usr/bin/
-	install -m 0755 xtop /usr/bin/
-	install -m 0755 xsrc /usr/bin/
+	install -m 0755 xcrypt /usr/local/bin/
+	install -m 0755 xpass /usr/local/bin/
+	install -m 0755 xjson /usr/local/bin/
+	install -m 0755 xhttp /usr/local/bin/
+	install -m 0755 xtop /usr/local/bin/
+	install -m 0755 xsrc /usr/local/bin/
 
 .PHONY: clean
 clean:

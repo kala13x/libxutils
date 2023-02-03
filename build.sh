@@ -7,7 +7,12 @@ if [ -f "LIB_CRYPTO" ] && [ -f "LIB_SSL"  ]; then
     export XUTILS_USE_SSL=y
 fi
 
-CPU_COUNT=`cat /proc/cpuinfo | grep processor -c`
+if [ $OSTYPE == 'linux'* ]; then
+    CPU_COUNT=`cat /proc/cpuinfo | grep processor -c`
+else
+    CPU_COUNT=1
+fi
+
 MAKE_TOOL=0
 
 if [ ! -z "$1" ]; then
@@ -32,9 +37,9 @@ if [ ! -z "$2" ]; then
         cd ..
     elif [ $2 == "--install" ]; then
         sudo make install
-	cd examples
-	make -j $CPU_COUNT
-	sudo make install
+        cd examples
+        make -j $CPU_COUNT
+        sudo make install
     fi
 fi
 

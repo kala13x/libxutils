@@ -18,6 +18,8 @@
 int main()
 {
     xlog_defaults();
+
+#ifdef XCRYPT_USE_SSL
     size_t nCryptedLen = 0;
 
     /* Generate keys */
@@ -69,5 +71,9 @@ int main()
     remove(XKEY_PRIV);
     remove(XKEY_PUB);
 
-    return 0;
+    return XSTDNON;
+#endif
+
+    xloge("No SSL support (probably OpenSSL is not installed in the system).");
+    return XSTDERR;
 }

@@ -412,8 +412,8 @@ static uint8_t XTop_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
 
     xproc_info_t currCpuUsage;
     sscanf(sBuffer, "%*u %*s %*c %*u %*u %*u %*u %*u %*u %*u %*u %*u %*u %lu %lu %ld %ld",
-                    &currCpuUsage.nUserSpace, &currCpuUsage.nKernelSpace, 
-                    &currCpuUsage.nUserSpaceChilds, &currCpuUsage.nKernelSpaceChilds);
+        (unsigned long*)&currCpuUsage.nUserSpace, (unsigned long*)&currCpuUsage.nKernelSpace, 
+        (unsigned long*)&currCpuUsage.nUserSpaceChilds, (unsigned long*)&currCpuUsage.nKernelSpaceChilds);
 
     currCpuUsage.nTotalTime = XSYNC_ATOMIC_GET(&pCpuStats->sum.nTotalRaw);
     uint64_t nTotalDiff = currCpuUsage.nTotalTime - lastCpuUsage.nTotalTime;

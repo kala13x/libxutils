@@ -304,7 +304,7 @@ XSTATUS XJWT_CreateSignature(xjwt_t *pJWT, const uint8_t *pSecret, size_t nSecre
 
     char *pJointData = XJWT_CreateJoint(pJWT, &nJointLength);
     XASSERT((pJointData && nJointLength), XSTDERR);
-    XASSERT(XJWT_GetAlgorithm(pJWT) != XJWT_ALG_INVALID, XSTDERR);
+    XASSERT((XJWT_GetAlgorithm(pJWT) != XJWT_ALG_INVALID), XSTDERR);
 
     size_t nOutLen = XJWT_HASH_LENGTH;
     uint8_t hash[XJWT_HASH_LENGTH];
@@ -370,7 +370,7 @@ char* XJWT_Create(xjwt_t *pJWT, const uint8_t *pSecret, size_t nSecretLen, size_
 
     XASSERT(XJWT_GetHeader(pJWT, XFALSE, NULL), NULL);
     XASSERT(XJWT_GetPayload(pJWT, XFALSE, NULL), NULL);
-    XASSERT(XJWT_GetAlgorithm(pJWT) != XJWT_ALG_INVALID, NULL);
+    XASSERT((XJWT_GetAlgorithm(pJWT) != XJWT_ALG_INVALID), NULL);
     XASSERT(XJWT_GetSignature(pJWT, pSecret, nSecretLen, XFALSE, NULL), NULL);
 
     size_t nJWTLength = pJWT->nHeaderLen + pJWT->nPayloadLen + pJWT->nSignatureLen + 2;

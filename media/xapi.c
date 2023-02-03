@@ -70,7 +70,7 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi)
 
     pData->sIPAddr[0] = XSTR_NUL;
     pData->pSessionData = NULL;
-    pData->ePktType = XAPI_NONE;
+    pData->ePktType = XPKT_INVALID;
     pData->bCancel = XFALSE;
     pData->pPacket = NULL;
     pData->pEvData = NULL;
