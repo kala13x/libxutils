@@ -37,13 +37,6 @@
 #include <sys/socket.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
-#include <sys/time.h>
-#include <sys/mman.h>
-
-#ifndef __APPLE__
-#include <netinet/if_ether.h>
-#include <netinet/ip_icmp.h>
-#endif
 
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
