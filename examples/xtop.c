@@ -360,10 +360,10 @@ int XTOPApp_FillCPUBar(xcli_bar_t *pBar, xcpu_info_t *pCore, char *pDst, size_t 
     while (fSum >= 99.95 && nSum < pBar->nBarLength) { nLow++; nSum++; }
 
     /* Fill partial results with the bar used character */
-    xstrfill(sNormal, sizeof(sNormal), nNormal, pBar->cLoader);
-    xstrfill(sKernel, sizeof(sKernel), nKernel, pBar->cLoader);
-    xstrfill(sVirt, sizeof(sVirt), nVirt, pBar->cLoader);
-    xstrfill(sLow, sizeof(sLow), nLow, pBar->cLoader);
+    xstrnfill(sNormal, sizeof(sNormal), nNormal, pBar->cLoader);
+    xstrnfill(sKernel, sizeof(sKernel), nKernel, pBar->cLoader);
+    xstrnfill(sVirt, sizeof(sVirt), nVirt, pBar->cLoader);
+    xstrnfill(sLow, sizeof(sLow), nLow, pBar->cLoader);
 
     /* Create colorized line for CPU usage bar */
     return xstrncpyf(pDst, nSize, "%s%s%s%s%s%s%s%s%s%s%s%s",
@@ -414,7 +414,7 @@ XSTATUS XTOPApp_AddCPULoadBar(xcli_wind_t *pWin, xcli_bar_t *pBar, xcpu_stats_t 
 
             if (i == nNext || nNext >= pCPU->nCoreCount)
             {
-                xstrfill(sSecond, sizeof(sSecond), pBar->frameSize.nWinColumns, XSTR_SPACE_CHAR);
+                xstrnfill(sSecond, sizeof(sSecond), pBar->frameSize.nWinColumns, XSTR_SPACE_CHAR);
                 return XWindow_AddLineFmt(pWin, "%s%s", sFirst, sSecond);
             }
 
@@ -473,10 +473,10 @@ int XTOPApp_FillMemoryBar(xcli_bar_t *pBar, xmem_info_t *pMemInfo, char *pDst, s
     if (fCached > 0. && !nCachedPct && nSum < nMaxSize) { nCachedPct++; nSum++; }
     if (fUsed > 0. && !nUsedPct && nSum < nMaxSize) nUsedPct++;
 
-    xstrfill(sBuffers, sizeof(sBuffers), nBuffersPct, pBar->cLoader);
-    xstrfill(sShared, sizeof(sShared), nSharedPct, pBar->cLoader);
-    xstrfill(sCached, sizeof(sCached), nCachedPct, pBar->cLoader);
-    xstrfill(sUsed, sizeof(sUsed), nUsedPct, pBar->cLoader);
+    xstrnfill(sBuffers, sizeof(sBuffers), nBuffersPct, pBar->cLoader);
+    xstrnfill(sShared, sizeof(sShared), nSharedPct, pBar->cLoader);
+    xstrnfill(sCached, sizeof(sCached), nCachedPct, pBar->cLoader);
+    xstrnfill(sUsed, sizeof(sUsed), nUsedPct, pBar->cLoader);
 
     return xstrncpyf(pDst, nSize, "%s%s%s%s%s%s%s%s%s%s%s%s",
         XSTR_CLR_GREEN, sUsed, XSTR_FMT_RESET,
@@ -508,8 +508,8 @@ int XTOPApp_FillSwapBar(xcli_bar_t *pBar, xmem_info_t *pMemInfo, char *pDst, siz
     if (fUsed > 0. && !nUsedPct && nSum < nMaxSize) nUsedPct++;
 
     /* Fill partial results with the bar used character */
-    xstrfill(sCached, sizeof(sCached), nCachedPct, pBar->cLoader);
-    xstrfill(sUsed, sizeof(sUsed), nUsedPct, pBar->cLoader);
+    xstrnfill(sCached, sizeof(sCached), nCachedPct, pBar->cLoader);
+    xstrnfill(sUsed, sizeof(sUsed), nUsedPct, pBar->cLoader);
 
     return xstrncpyf(pDst, nSize, "%s%s%s%s%s%s",
         XSTR_CLR_RED, sUsed, XSTR_FMT_RESET,
@@ -580,7 +580,7 @@ XSTATUS XTOPApp_AddOverallBar(xcli_wind_t *pWin, xcli_bar_t *pBar, xmem_info_t *
 
     /* Create half-empry line for pretty print */
     XProgBar_UpdateWindowSize(pBar); pBar->frameSize.nWinColumns /= 2;
-    xstrfill(sLine, sizeof(sLine), pBar->frameSize.nWinColumns, XSTR_SPACE_CHAR);
+    xstrnfill(sLine, sizeof(sLine), pBar->frameSize.nWinColumns, XSTR_SPACE_CHAR);
 
     /* Create and append process track info next to swap bar */
     XKBToUnit(sUsed, sizeof(sUsed), pMemInfo->nResidentMemory, XTRUE);
@@ -615,7 +615,7 @@ void XTOPApp_AddCPUInfoUnit(char *pLine, size_t nSize, double fPct, xbool_t bIdl
     if (nIdleLen < 8)
     {
         char sEmpty[XSTR_TINY];
-        xstrfill(sEmpty, sizeof(sEmpty), 8 - nIdleLen, XSTR_SPACE_CHAR);
+        xstrnfill(sEmpty, sizeof(sEmpty), 8 - nIdleLen, XSTR_SPACE_CHAR);
         xstrncat(pLine, nSize, "%s%s", sEmpty, sBuff);
     }
 }
@@ -727,7 +727,7 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_wind_t *pWin, xtop_args_t *pArgs, xarray_t *
 
     char sLine[XLINE_MAX], sRound[XSTR_TINY], sData[XSTR_TINY];
     size_t nPreHdr = nLength > 4 ? nLength - 4 : nLength;
-    xstrfill(sLine, sizeof(sLine), nPreHdr, XSTR_SPACE_CHAR);
+    xstrnfill(sLine, sizeof(sLine), nPreHdr, XSTR_SPACE_CHAR);
     xstrncat(sLine, sizeof(sLine), "%s", XTOP_IFACE_HEADER);
     XWindow_AddAligned(pWin, sLine, XSTR_BACK_BLUE, XCLI_LEFT);
 

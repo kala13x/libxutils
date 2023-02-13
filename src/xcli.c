@@ -147,12 +147,12 @@ XSTATUS XWindow_AddAligned(xcli_wind_t *pWin, const char *pInput, const char *pF
 
     if (nAlign == XCLI_CENTER) nSpaces = (nColumns - nInputLen) / 2;
     else if (nAlign == XCLI_RIGHT) nSpaces = nColumns - nInputLen;
-    xstrfill(sPreBuf, sizeof(sPreBuf), nSpaces, XSTR_SPACE_CHAR);
+    xstrnfill(sPreBuf, sizeof(sPreBuf), nSpaces, XSTR_SPACE_CHAR);
 
     if (nAlign == XCLI_RIGHT) nSpaces = 0;
     else if (nAlign == XCLI_CENTER && nColumns % 2) nSpaces++;
     else if (nAlign == XCLI_LEFT) nSpaces = nColumns - nInputLen;
-    xstrfill(sAfterBuf, sizeof(sAfterBuf), nSpaces, XSTR_SPACE_CHAR);
+    xstrnfill(sAfterBuf, sizeof(sAfterBuf), nSpaces, XSTR_SPACE_CHAR);
 
     if (pFmt == NULL) return XWindow_AddLineFmt(pWin, "%s%s%s", sPreBuf, pInput, sAfterBuf);
     return XWindow_AddLineFmt(pWin, "%s%s%s%s%s", pFmt, sPreBuf, pInput, sAfterBuf, XSTR_FMT_RESET);
@@ -362,7 +362,7 @@ void XProgBar_Finish(xcli_bar_t *pCtx)
     if (pCtx->fPercent < 0.) xstrncpy(sPercent, sizeof(sPercent), " N/A ");
     else xstrncpyf(sPercent, sizeof(sPercent), "%.1f%%", pCtx->fPercent);
 
-    xstrfill(sSpaces, sizeof(sSpaces), pCtx->nBarLength, XSTR_SPACE_CHAR);
+    xstrnfill(sSpaces, sizeof(sSpaces), pCtx->nBarLength, XSTR_SPACE_CHAR);
     printf("%s%s %s %s\r\n", pCtx->sPrefix, sSpaces, sPercent, pCtx->sSuffix);
 }
 

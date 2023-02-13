@@ -271,6 +271,31 @@ void XLog_Display(xlog_flag_t eFlag, uint8_t nNewLine, const char *pFormat, ...)
     XSync_Unlock(&g_xlog.lock);
 }
 
+XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
+{
+    int nFlag = (nRetVal < 0) ?
+        XLOG_ERROR : XLOG_NONE;
+
+    if (pFmt == NULL)
+    {
+        xlogfl(nFlag, "%s", strerror(errno));
+        return nRetVal;
+    }
+
+    size_t nSize = 0;
+    va_list args;
+
+    va_start(args, pFmt);
+    char *pDest = xstracpyargs(pFmt, args, &nSize);
+    va_end(args);
+
+    XASSERT(pDest, XSTDERR);
+    xlogfl(nFlag, "%s", pDest);
+
+    free(pDest);
+    return nRetVal;
+}
+
 size_t XLog_Version(char *pDest, size_t nSize, int nMin)
 {
     size_t nLength = 0;

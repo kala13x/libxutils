@@ -15,6 +15,25 @@
 #include "xstr.h"
 #include "sync.h"
 
+#define XSTR_KEYMAP_SIZE 33
+
+static const char *g_keyMapGe[XSTR_KEYMAP_SIZE] =
+    {
+        "ა", "ბ", "გ", "დ", "ე", "ვ", "ზ", "თ", "ი", 
+        "კ", "ლ", "მ", "ნ", "ო", "პ", "ჟ", "რ", 
+        "ს", "ტ", "უ", "ფ", "ქ", "ღ", "ყ", "შ", 
+        "ჩ", "ც", "ძ", "წ", "ჭ", "ხ", "ჯ", "ჰ"
+    };
+
+
+static const char *g_keyMapEn[XSTR_KEYMAP_SIZE] =
+    {
+        "a", "b", "g", "d", "e", "v", "z", "T", "i",
+        "k", "l", "m", "n", "o", "p", "J", "r",
+        "s", "t", "u", "f", "q", "R", "y", "S",
+        "C", "c", "Z", "w", "W", "x", "j", "h"
+    };
+
 /////////////////////////////////////////////////////////////////////////
 // C string functions
 /////////////////////////////////////////////////////////////////////////
@@ -145,7 +164,7 @@ size_t xstrrand(char *pDst, size_t nSize, size_t nLength, xbool_t bUpper, xbool_
     return nCharCount;
 }
 
-size_t xstrfill(char *pDst, size_t nSize, size_t nLength, char cFill)
+size_t xstrnfill(char *pDst, size_t nSize, size_t nLength, char cFill)
 {
     if (pDst == NULL || !nSize) return XSTDNON;
 
@@ -154,6 +173,19 @@ size_t xstrfill(char *pDst, size_t nSize, size_t nLength, char cFill)
 
     pDst[nFillLength] = XSTR_NUL;
     return nFillLength;
+}
+
+char *xstrfill(size_t nLength, char cFill)
+{
+    static char sRetVal[XSTR_MAX];
+    xstrnul(sRetVal);
+    int i = 0;
+
+    int nLen = XSTD_MIN(nLength, sizeof(sRetVal) - 1);
+    for (i = 0; i < nLen; i++) sRetVal[i] = ' ';
+
+    sRetVal[i] = '\0';
+    return sRetVal;
 }
 
 int xstrncpyarg(char *pDest, size_t nSize, const char *pFmt, va_list args)
@@ -264,9 +296,7 @@ size_t xstrncpy(char *pDst, size_t nSize, const char* pSrc)
 {
     if (pDst == NULL || pSrc == NULL || !nSize) return 0;
     size_t nCopySize = strnlen(pSrc, nSize - 1);
-    if (!nCopySize) return 0;
-
-    memcpy(pDst, pSrc, nCopySize);
+    if (nCopySize) memcpy(pDst, pSrc, nCopySize);
     pDst[nCopySize] = XSTR_NUL;
     return nCopySize;
 }
@@ -275,9 +305,7 @@ size_t xstrncpys(char *pDst, size_t nDstSize, const char *pSrc, size_t nSrcLen)
 {
     if (pDst == NULL || pSrc == NULL || !nDstSize) return 0;
     size_t nCopySize = XSTD_MIN(nSrcLen, nDstSize - 1);
-    if (!nCopySize) return 0;
-
-    memcpy(pDst, pSrc, nCopySize);
+    if (nCopySize) memcpy(pDst, pSrc, nCopySize);
     pDst[nCopySize] = XSTR_NUL;
     return nCopySize;
 }
@@ -304,7 +332,7 @@ size_t xstrncpyfl(char *pDst, size_t nSize, size_t nFLen, char cFChar, const cha
     nSize -= nBytes;
     nFLen -= nBytes;
     pDst += nBytes;
-    nBytes += xstrfill(pDst, nSize, nFLen, cFChar);
+    nBytes += xstrnfill(pDst, nSize, nFLen, cFChar);
 
     return nBytes;
 }
@@ -336,7 +364,7 @@ size_t xstrnlcpyf(char *pDst, size_t nSize, size_t nFLen, char cFChar, const cha
     nFLen -= nBytes;
     nBytes = 0;
 
-    nBytes += xstrfill(pDst, nSize, nFLen, cFChar);
+    nBytes += xstrnfill(pDst, nSize, nFLen, cFChar);
     nBytes = xstrncpyarg(&pDst[nBytes], nSize - nBytes, pFmt, args);
 
     va_end(args);
@@ -587,20 +615,48 @@ int xstrsrcp(const char *pStr, const char *pSrc, size_t nPos)
     return xstrnsrc(pStr, strlen(pStr), pSrc, nPos);
 }
 
-int xstrntok(char *pDst, size_t nSize, const char *pStr, size_t nPosit, const char *pDlmt)
+int xstrntokn(char *pDst, size_t nSize, const char *pStr, size_t nLen, size_t nPosit, const char *pDlmt)
 {
     if (pDst != NULL) pDst[0] = XSTR_NUL;
-    if (nPosit >= strlen(pStr)) return XSTDERR;
+    if (nPosit >= nLen) return XSTDERR;
+    int nDlmtLen = (int)strlen(pDlmt);
 
     int nOffset = xstrsrc(&pStr[nPosit], pDlmt);
-    if (nOffset <= 0)
+    if (nOffset < 0)
     {
         xstrncpy(pDst, nSize, &pStr[nPosit]);
         return 0;
     }
+    else if (!nOffset)
+    {
+        if (pDst != NULL) pDst[0] = '\0';
+        return (int)nPosit + nDlmtLen;
+    }
 
     xstrncpys(pDst, nSize, &pStr[nPosit], nOffset);
-    return (int)nPosit + nOffset + (int)strlen(pDlmt);
+    return (int)nPosit + nOffset + nDlmtLen;
+}
+
+int xstrntok(char *pDst, size_t nSize, const char *pStr, size_t nPosit, const char *pDlmt)
+{
+    if (pDst != NULL) pDst[0] = XSTR_NUL;
+    if (nPosit >= strlen(pStr)) return XSTDERR;
+    int nDlmtLen = (int)strlen(pDlmt);
+
+    int nOffset = xstrsrc(&pStr[nPosit], pDlmt);
+    if (nOffset < 0)
+    {
+        xstrncpy(pDst, nSize, &pStr[nPosit]);
+        return 0;
+    }
+    else if (!nOffset)
+    {
+        pDst[0] = '\0';
+        return (int)nPosit + nDlmtLen;
+    }
+
+    xstrncpys(pDst, nSize, &pStr[nPosit], nOffset);
+    return (int)nPosit + nOffset + nDlmtLen;
 }
 
 size_t xstrncuts(char *pDst, size_t nSize, const char *pSrc, const char *pStart, const char *pEnd)
@@ -702,36 +758,77 @@ char *xstrrep(const char *pOrig, const char *pRep, const char *pWith)
     size_t nRepLen = strlen(pRep);
     int nNext = 0, nCount = 0;
 
-    while ((nNext = xstrntok(NULL, 0, pOrig, nNext, pRep)) > 0) nCount++;
-    size_t nFreeBytes = ((nWithLen - nRepLen) * nCount) + nOrigLen + 1;
-    char *pResult = (char*)malloc(nFreeBytes);
+    while ((nNext = xstrntokn(NULL, 0, pOrig, nOrigLen, nNext, pRep)) > 0) nCount++;
+    size_t nSpaceAvail = ((nWithLen - nRepLen) * nCount) + nOrigLen + 1;
 
-    if (pResult == NULL) return NULL;
+    char *pResult = (char*)malloc(nSpaceAvail);
+    XASSERT(pResult, NULL);
     char *pOffset = pResult;
 
     while (nCount--)
     {
-        int nCopyLen = xstrsrc(pOrig, pRep);
-        if (nCopyLen <= 0) break;
-    
-        xstrncpyf(pOffset, nFreeBytes, "%s", pOrig);
-        nFreeBytes -= nCopyLen;
-        pOffset += nCopyLen;
+        int nFirstPartLen = xstrsrc(pOrig, pRep);
+        if (nFirstPartLen < 0) break;
 
-        xstrncpyf(pOffset, nFreeBytes, "%s", pWith);
-        nFreeBytes -= nWithLen;
+        if (nFirstPartLen)
+        {
+            xstrncpys(pOffset, nSpaceAvail, pOrig, nFirstPartLen);
+            nSpaceAvail -= nFirstPartLen;
+            pOffset += nFirstPartLen;
+        }
+
+        xstrncpys(pOffset, nSpaceAvail, pWith, nWithLen);
+        nSpaceAvail -= nWithLen;
         pOffset += nWithLen;
-        pOrig += nCopyLen + nRepLen;
+        pOrig += nFirstPartLen + nRepLen;
     }
 
-    xstrncpyf(pOffset, nFreeBytes, "%s", pOrig);
+    xstrncpyf(pOffset, nSpaceAvail, "%s", pOrig);
     return pResult;
+}
+
+int xstrnrep(char *pDst, size_t nSize, const char *pOrig, const char *pRep, const char *pWith)
+{
+    XASSERT(pDst, XSTDINV);
+    char *pOffset = pDst;
+
+    size_t nOrigLen = strlen(pOrig);
+    size_t nWithLen = strlen(pWith);
+    size_t nRepLen = strlen(pRep);
+
+    int nAvail = (int)nSize;   
+    int nNext = 0, nCount = 0;
+
+    while ((nNext = xstrntokn(NULL, 0, pOrig, nOrigLen, nNext, pRep)) > 0) nCount++;
+
+    while (nCount--)
+    {
+        int nFirstPartLen = xstrsrc(pOrig, pRep);
+        if (nFirstPartLen < 0) break;
+
+        if (nFirstPartLen)
+        {
+            xstrncpys(pOffset, nAvail, pOrig, nFirstPartLen);
+            pOffset += nFirstPartLen;
+            nAvail -= nFirstPartLen;
+            if (nAvail <= 0) return XSTDNON;
+        }
+
+        xstrncpys(pOffset, nAvail, pWith, nWithLen);
+        pOrig += (size_t)nFirstPartLen + nRepLen;
+        nAvail -= nWithLen;
+        pOffset += nWithLen;
+        if (nAvail <= 0) return XSTDNON;
+    }
+
+    xstrncpyf(pOffset, nAvail, "%s", pOrig);
+    return XSTDOK;
 }
 
 char *xstrdup(const char *pStr)
 {
+    if (pStr == NULL) return NULL;
     size_t nLength = strlen(pStr);
-    if (!nLength) return NULL;
 
     char *pDst = (char*)malloc(++nLength);
     if (pDst == NULL) return NULL;
@@ -768,11 +865,9 @@ xarray_t* xstrsplit(const char *pString, const char *pDlmt)
     if (pArray == NULL) return NULL;
 
     char sToken[XSTR_MAX];
-    size_t nPosit = 0;
     int nNext = 0;
 
-    while (!strncmp(&pString[nPosit], pDlmt, nDlmtLen)) nPosit += nDlmtLen;
-    while((nNext = xstrntok(sToken, sizeof(sToken), &pString[nPosit], nNext, pDlmt)) >= 0)
+    while((nNext = xstrntok(sToken, sizeof(sToken), pString, nNext, pDlmt)) >= 0)
     {
         XArray_AddData(pArray, sToken, strlen(sToken)+1);
         if (!nNext) break;
@@ -785,6 +880,42 @@ xarray_t* xstrsplit(const char *pString, const char *pDlmt)
     }
 
     return pArray;
+}
+
+char* xstrtoge(char *pBuffer, size_t nSize, const char *pLine)
+{
+    if (pLine == NULL) return NULL;
+    char sInputLine[XSTR_MAX];
+    xbool_t bStarted = XFALSE;
+    size_t i;
+
+    for (i = 0; i < XSTR_KEYMAP_SIZE; i++) 
+    {
+        const char *pInput = bStarted ? sInputLine : pLine;
+        xstrnrep(pBuffer, nSize, pInput, g_keyMapEn[i], g_keyMapGe[i]);
+        xstrncpy(sInputLine, sizeof(sInputLine), pBuffer);
+        bStarted = XTRUE;
+    }
+
+    return pBuffer;
+}
+
+char* xstrtoen(char *pBuffer, size_t nSize, const char *pLine)
+{
+    if (pLine == NULL) return NULL;
+    char sInputLine[XSTR_MAX];
+    xbool_t bStarted = XFALSE;
+    size_t i;
+
+    for (i = 0; i < XSTR_KEYMAP_SIZE; i++) 
+    {
+        const char *pInput = bStarted ? sInputLine : pLine;
+        xstrnrep(pBuffer, nSize, pInput, g_keyMapGe[i], g_keyMapEn[i]);
+        xstrncpy(sInputLine, sizeof(sInputLine), pBuffer);
+        bStarted = XTRUE;
+    }
+
+    return pBuffer;
 }
 
 /////////////////////////////////////////////////////////////////////////

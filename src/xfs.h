@@ -27,9 +27,9 @@ extern "C" {
 #define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
 #endif
 
-#define XFILE_INVALID -1
-#define XFILE_UNSETRC 0
-#define XFILE_SUCCESS 1
+#define XFILE_INVALID XSTDERR
+#define XFILE_UNSETRC XSTDNON
+#define XFILE_SUCCESS XSTDOK
 
 typedef struct XFile {
     uint64_t nPosit;
@@ -70,6 +70,8 @@ int xclose(int nFD);
 
 int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms);
 xfile_t* XFile_New(const char *pPath, const char *pFlags, const char *pPerms);
+
+xbool_t XFile_IsOpen(xfile_t *pFile);
 void XFile_Close(xfile_t *pFile);
 void XFile_Clean(xfile_t *pFile);
 
@@ -81,11 +83,11 @@ int XFile_GetStats(xfile_t *pFile);
 int XFile_Copy(xfile_t *pIn, xfile_t *pOut);
 int XFile_GetLine(xfile_t *pFile, char* pLine, size_t nSize);
 int XFile_GetLineCount(xfile_t *pFile);
-int XFile_ReadLine(xfile_t *pFile, char* pLine, size_t nSize, int nLineNumber);
+int XFile_ReadLine(xfile_t *pFile, char* pLine, size_t nSize, size_t nLineNum);
 uint8_t* XFile_Load(xfile_t *pFile, size_t *pSize);
 
+xbool_t XPath_Exists(const char *pPath);
 char XPath_GetType(xmode_t nMode);
-int XPath_Exists(const char *pPath);
 int XPath_Parse(xpath_t *pPath, const char *pPathStr);
 int XPath_SetPerm(const char *pPath, const char *pPerm);
 int XPath_GetPerm(char *pOutput, size_t nSize, const char *pPath);

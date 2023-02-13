@@ -65,9 +65,11 @@ int XArray_Add(xarray_t *pArr, xarray_data_t *pNewData);
 int XArray_AddData(xarray_t *pArr, void* pData, size_t nSize);
 int XArray_PushData(xarray_t *pArr, void *pData, size_t nSize);
 int XArray_AddDataKey(xarray_t *pArr, void* pData, size_t nSize, uint64_t nKey);
+void* XArray_GetDataOr(xarray_t *pArr, size_t nIndex, void *pRet);
 void* XArray_GetData(xarray_t *pArr, size_t nIndex);
 size_t XArray_GetSize(xarray_t *pArr, size_t nIndex);
 uint64_t XArray_GetKey(xarray_t *pArr, size_t nIndex);
+uint8_t XArray_Contains(xarray_t *pArr, size_t nIndex);
 
 xarray_data_t* XArray_Remove(xarray_t *pArr, size_t nIndex);
 void XArray_Delete(xarray_t *pArr, size_t nIndex);

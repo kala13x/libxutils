@@ -74,7 +74,6 @@ typedef enum {
     XJSON_ERR_ALLOC
 } xjson_error_t;
 
-xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc);
 xjson_obj_t* XJSON_CreateObject(const char *pName, void *pValue, xjson_type_t nType);
 xjson_obj_t* XJSON_NewObject(const char *pName, uint8_t nAllowUpdate);
 xjson_obj_t* XJSON_NewArray(const char *pName, uint8_t nAllowUpdate);
@@ -87,6 +86,7 @@ xjson_obj_t* XJSON_NewBool(const char *pName, int nValue);
 xjson_obj_t* XJSON_NewNull(const char *pName);
 void XJSON_FreeObject(xjson_obj_t *pObj);
 
+xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc);
 xjson_error_t XJSON_AddU64(xjson_obj_t *pObject, const char *pName, uint64_t nValue);
 xjson_error_t XJSON_AddU32(xjson_obj_t *pObject, const char *pName, uint32_t nValue);
 xjson_error_t XJSON_AddInt(xjson_obj_t *pObject, const char *pName, int nValue);

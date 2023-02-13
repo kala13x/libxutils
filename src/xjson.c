@@ -535,6 +535,7 @@ xjson_obj_t* XJSON_NewString(const char *pName, const char *pValue)
 
 xjson_error_t XJSON_AddString(xjson_obj_t *pObject, const char *pName, const char *pValue)
 {
+    if (pValue == NULL) return XJSON_AddNull(pObject, pName);
     xjson_obj_t *pNewObj = XJSON_NewString(pName, pValue);
     if (pNewObj == NULL) return XJSON_ERR_ALLOC;
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);

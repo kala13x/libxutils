@@ -132,14 +132,14 @@ int XFile_ParseFlags(const char *pFlags)
 
 int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms)
 {
-    if (pFile == NULL || pPath == NULL) return XFILE_INVALID;
+    if (pFile == NULL || pPath == NULL) return XSTDERR;
     pFile->nFlags = (pFlags != NULL) ? XFile_ParseFlags(pFlags) : 0;
     pFile->nBlockSize = XFILE_BUF_SIZE;
     pFile->nSize = 0;
     pFile->nFD = -1;
 
     const char *pPerm = (pPerms != NULL) ? pPerms : XFILE_DEFAULT_PERM;
-    if (!XPath_PermToMode(pPerm, &pFile->nMode)) return XFILE_INVALID;
+    if (!XPath_PermToMode(pPerm, &pFile->nMode)) return XSTDERR;
 
 #ifdef _WIN32
     _sopen_s(&pFile->nFD, pPath, pFile->nFlags, _SH_DENYNO, pFile->nMode);
@@ -164,6 +164,13 @@ xfile_t* XFile_New(const char *pPath, const char *pFlags, const char *pPerms)
 
     pFile->nAlloc = 1;
     return pFile;
+}
+
+xbool_t XFile_IsOpen(xfile_t *pFile)
+{
+    XASSERT(pFile, XFALSE);
+    return (pFile->nFD >= 0) ?
+            XTRUE : XFALSE;
 }
 
 void XFile_Close(xfile_t *pFile)
@@ -194,7 +201,7 @@ void XFile_Clean(xfile_t *pFile)
 
 size_t XFile_Seek(xfile_t *pFile, uint64_t nPosit, int nOffset)
 {
-    if (pFile->nFD < 0) return XFILE_INVALID;
+    XASSERT(XFile_IsOpen(pFile), XSTDERR);
 #ifdef _WIN32
     return (int)_lseek(pFile->nFD, (long)nPosit, nOffset);
 #else
@@ -204,7 +211,7 @@ size_t XFile_Seek(xfile_t *pFile, uint64_t nPosit, int nOffset)
 
 int XFile_Write(xfile_t *pFile, const void *pBuff, size_t nSize)
 {
-    if (pFile->nFD < 0) return XFILE_INVALID;
+    XASSERT(XFile_IsOpen(pFile), XSTDERR);
 #ifdef _WIN32
     return _write(pFile->nFD, pBuff, (unsigned int)nSize);
 #else
@@ -214,7 +221,7 @@ int XFile_Write(xfile_t *pFile, const void *pBuff, size_t nSize)
 
 int XFile_Read(xfile_t *pFile, void *pBuff, size_t nSize)
 {
-    if (pFile->nFD < 0) return XFILE_INVALID;
+    XASSERT(XFile_IsOpen(pFile), XSTDERR);
 #ifdef _WIN32
     return _read(pFile->nFD, pBuff, (unsigned int)nSize);
 #else
@@ -224,7 +231,7 @@ int XFile_Read(xfile_t *pFile, void *pBuff, size_t nSize)
 
 int XFile_GetStats(xfile_t *pFile)
 {
-    if (pFile->nFD < 0) return XSTDERR;
+    XASSERT(XFile_IsOpen(pFile), XSTDERR);
 
     struct stat fileStat;
     if (fstat(pFile->nFD, &fileStat) < 0) return XSTDERR;
@@ -243,7 +250,7 @@ int XFile_GetStats(xfile_t *pFile)
 
 uint8_t* XFile_Load(xfile_t *pFile, size_t *pSize)
 {
-    *pSize = 0;
+    if (pSize) *pSize = 0;
     if (XFile_GetStats(pFile) <= 0 || !S_ISREG(pFile->nMode)) return NULL;
 
     uint8_t *pBuffer = (uint8_t*)malloc(pFile->nSize + 1);
@@ -270,15 +277,15 @@ uint8_t* XFile_Load(xfile_t *pFile, size_t *pSize)
     }
 
     pBuffer[nOffset] = '\0';
-    *pSize = nOffset;
+    if (pSize) *pSize = nOffset;
 
     return pBuffer;
 }
 
 int XFile_Copy(xfile_t *pIn, xfile_t *pOut)
 {
-    if (XFile_GetStats(pIn) < 0 ||
-        pOut->nFD < 0) return XSTDERR;
+    XASSERT((XFile_GetStats(pIn) > 0), XSTDERR);
+    XASSERT((XFile_IsOpen(pOut)), XSTDERR);
 
     uint8_t *pBlock = (uint8_t*)malloc(pIn->nBlockSize);
     if (pBlock == NULL) return XSTDERR;
@@ -299,82 +306,56 @@ int XFile_Copy(xfile_t *pIn, xfile_t *pOut)
 
 int XFile_GetLine(xfile_t *pFile, char* pLine, size_t nSize)
 {
-    if (pLine != NULL && nSize) pLine[0] = XSTR_NUL;
-    if (pFile->nFD < 0) return XFILE_INVALID;
+    XASSERT((pLine && nSize), XSTDINV);
+    pLine[0] = '\0';
 
-    char *pReadBuff = (char*)malloc(nSize);
-    if (pReadBuff == NULL) return XSTDERR;
-
-    int nAvail = (int)nSize;
+    XASSERT(XFile_IsOpen(pFile), XSTDERR);
+    int nAvail = (int)nSize - 1;
     int nRead = 0;
     char cByte;
 
-    int nBytes = XFile_Read(pFile, &cByte, sizeof(char));
-    pReadBuff[nRead] = cByte;
-    nAvail -= nBytes;
-    nRead += nBytes;
-
-    while (nBytes > 0 && nRead < nAvail)
+    while (nRead < nAvail)
     {
-        if (pReadBuff[nRead-nBytes] == '\n')
-        {
-            if (pLine != NULL && nSize > 0)
-            {
-                pReadBuff[nRead-nBytes] = '\0';
-                xstrncpy(pLine, nSize, pReadBuff);
-            }
-
-            free(pReadBuff);
-            return XFILE_SUCCESS;
-        }
-
-        nBytes = XFile_Read(pFile, &cByte, sizeof(char));
-        pReadBuff[nRead] = cByte;
-        nAvail -= nBytes;
-        nRead += nBytes;
+        if (XFile_Read(pFile, &cByte, sizeof(char)) <= 0) break;
+        pLine[nRead++] = cByte;
+        pLine[nRead] = '\0';
+        if (pLine[nRead-1] == '\n') break;
     }
 
-    free(pReadBuff);
-    return XFILE_INVALID;
+    return nRead;
 }
 
 int XFile_GetLineCount(xfile_t *pFile)
 {
-    if (XFile_GetStats(pFile) <= 0) return XFILE_INVALID;
-    int nLineNumber = 0;
+    char sLine[XLINE_MAX];
+    int nLineNum = 0;
 
-    int nRet = XFile_GetLine(pFile, NULL, pFile->nSize);
-    while (nRet == XFILE_SUCCESS)
-    {
-        nLineNumber++;
-        nRet = XFile_GetLine(pFile, NULL, pFile->nSize);
-    }
+    XASSERT((XFile_GetStats(pFile) > 0), XSTDERR);
+    while (XFile_GetLine(pFile, sLine, sizeof(sLine)) > 0) nLineNum++;
 
-    return nLineNumber;
+    return nLineNum;
 }
 
-int XFile_ReadLine(xfile_t *pFile, char* pLine, size_t nSize, int nLineNumber)
+int XFile_ReadLine(xfile_t *pFile, char* pLine, size_t nSize, size_t nLineNum)
 {
-    if (pFile->nFD < 0) return XFILE_INVALID;
-    int nReadNumber = 0;
+    size_t nRet, nLine = 0;
 
-    int nRet = XFile_GetLine(pFile, pLine, nSize);
-    while (nRet == XFILE_SUCCESS)
+    while (XTRUE)
     {
-        nReadNumber++;
-        if (nLineNumber == nReadNumber) return XFILE_SUCCESS;
         nRet = XFile_GetLine(pFile, pLine, nSize);
+        if (nRet <= 0) return XSTDERR;
+        if (++nLine == nLineNum) return nRet;
     }
 
-    return XFILE_INVALID;
+    return XSTDERR;
 }
 
-int XPath_Exists(const char *pPath)
+xbool_t XPath_Exists(const char *pPath)
 {
     struct stat st;
     memset(&st, 0, sizeof(struct stat));
-    if (stat(pPath, &st) == -1) return 0;
-    return 1;
+    if (stat(pPath, &st) < 0) return XFALSE;
+    return XTRUE;
 }
 
 char XPath_GetType(xmode_t nMode)
@@ -596,7 +577,7 @@ int XPath_CopyFile(const char *pSrc, const char *pDst)
 
     if (XFile_Open(&srcFile, pSrc, NULL, NULL) >= 0)
     {
-        int nRet = XFILE_INVALID;
+        int nRet = XSTDERR;
         xfile_t dstFile;
 
         if (XFile_Open(&dstFile, pDst, "cwt", NULL) >= 0)
@@ -609,7 +590,7 @@ int XPath_CopyFile(const char *pSrc, const char *pDst)
         return nRet;
     }
 
-    return XFILE_INVALID;
+    return XSTDERR;
 }
 
 int XPath_Read(const char *pPath, uint8_t *pBuffer, size_t nSize)
@@ -627,8 +608,8 @@ int XPath_Read(const char *pPath, uint8_t *pBuffer, size_t nSize)
 
 uint8_t* XPath_Load(const char *pPath, size_t* pSize)
 {
+    if (pSize) *pSize = 0;
     xfile_t file;
-    *pSize = 0;
 
     if (XFile_Open(&file, pPath, NULL, NULL) < 0) return NULL;
     uint8_t *pData = XFile_Load(&file, pSize);
@@ -834,13 +815,13 @@ int XDir_Unlink(const char *pPath)
             XDir_Remove(pPath) : xunlink(pPath);
     }
 
-    return XFILE_INVALID;
+    return XSTDERR;
 }
 
 int XDir_Remove(const char *pPath)
 {
     size_t nLength = strlen(pPath);
-    int nStatus = XFILE_INVALID;
+    int nStatus = XSTDERR;
     xdir_t dir;
 
     if (XDir_Open(&dir, pPath) > 0)
@@ -853,7 +834,7 @@ int XDir_Remove(const char *pPath)
             if (pNewPath == NULL)
             {
                 XDir_Close(&dir);
-                return XFILE_INVALID;
+                return XSTDERR;
             }
 
             size_t nLen = xstrncpyf(pNewPath, nSize, "%s/%s", pPath, dir.pCurrEntry);

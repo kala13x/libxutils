@@ -136,6 +136,12 @@ void XArray_Destroy(xarray_t *pArr)
         free(pArr);
 }
 
+uint8_t XArray_Contains(xarray_t *pArr, size_t nIndex)
+{
+    if (pArr == NULL || nIndex >= pArr->nSize) return 0;
+    return pArr->pData[nIndex] != NULL ? 1 : 0;
+}
+
 size_t XArray_Realloc(xarray_t *pArr)
 {
     if (pArr->nFixed) return pArr->nSize;
@@ -250,6 +256,13 @@ void* XArray_GetData(xarray_t *pArr, size_t nIndex)
     if (nIndex >= pArr->nSize) return NULL;
     xarray_data_t *pArrData = pArr->pData[nIndex];
     return pArrData ? pArrData->pData : NULL;
+}
+
+void* XArray_GetDataOr(xarray_t *pArr, size_t nIndex, void *pRet)
+{
+    if (nIndex >= pArr->nSize) return pRet;
+    xarray_data_t *pArrData = pArr->pData[nIndex];
+    return pArrData ? pArrData->pData : pRet;
 }
 
 size_t XArray_GetSize(xarray_t *pArr, size_t nIndex)

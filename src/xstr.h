@@ -89,6 +89,7 @@ typedef enum {
 
 xarray_t* xstrsplit(const char *pString, const char *pDlmt);
 char* xstrrep(const char *pOrig, const char *pRep, const char *pWith);
+int xstrnrep(char *pDst, size_t nSize, const char *pOrig, const char *pRep, const char *pWith);
 char* xstrdup(const char *pStr);
 char* xstracpy(const char *pFmt, ...);
 char* xstracpyn(size_t *nSize, const char *pFmt, ...);
@@ -113,8 +114,9 @@ size_t xstrrand(char *pDst, size_t nSize, size_t nLength, xbool_t bUpper, xbool_
 size_t xstrextra(const char *pStr, size_t nLength, size_t nMaxChars, size_t *pChars, size_t *pPosit);
 size_t xstrncpyfl(char *pDst, size_t nSize, size_t nFLen, char cFChar, const char* pFmt, ...);
 size_t xstrnlcpyf(char *pDst, size_t nSize, size_t nFLen, char cFChar, const char* pFmt, ...);
-size_t xstrfill(char *pDst, size_t nSize, size_t nLength, char cFill);
+size_t xstrnfill(char *pDst, size_t nSize, size_t nLength, char cFill);
 size_t xstrisextra(const char *pOffset);
+char *xstrfill(size_t nLength, char cFill);
 
 int xstrnsrc(const char *pStr, size_t nLen, const char *pSrc, size_t nPos);
 int xstrsrcp(const char *pStr, const char *pSrc, size_t nPos);
@@ -138,6 +140,9 @@ size_t xstrnrm(char *pStr, size_t nPosit, size_t nSize);
 void xstrnull(char *pString, size_t nLength);
 void xstrnul(char *pString);
 xbool_t xstrused(const char *pStr);
+
+char* xstrtoen(char *pBuffer, size_t nSize, const char *pLine);
+char* xstrtoge(char *pBuffer, size_t nSize, const char *pLine);
 
 /////////////////////////////////////////////////////////////////////////
 // XString Implementation

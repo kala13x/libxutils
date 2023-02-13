@@ -483,7 +483,7 @@ static void XPass_PrintEntry(xpass_ctx_t *pCtx, const char *pName, const char *p
 
     if (nFillSize > nBytes)
     {
-        xstrfill(sFill, sizeof(sFill), nFillSize - nBytes, ' ');
+        xstrnfill(sFill, sizeof(sFill), nFillSize - nBytes, ' ');
         nFreeSpace -= xstrncat(sBuffer, nFreeSpace, "%s", sFill);
     }
 
