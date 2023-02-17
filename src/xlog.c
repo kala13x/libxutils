@@ -26,11 +26,12 @@ typedef struct XLogCtx {
 } xlog_ctx_t;
 
 static xlog_t g_xlog;
+static xbool_t g_bInit = XFALSE;
 
 static const char *XLog_GetIndent(xlog_flag_t eFlag)
 {
     xlog_cfg_t *pCfg = &g_xlog.config;
-    if (!pCfg->nIndent) return XSTR_EMPTY;
+    if (!pCfg->bIndent) return XSTR_EMPTY;
 
     switch (eFlag)
     {
@@ -110,7 +111,7 @@ static void XLog_CreateTag(char *pOut, int nSize, xlog_flag_t eFlag, const char 
 
     if (pTag == NULL)
     {
-        if (pCfg->nIndent)
+        if (pCfg->bIndent)
             xstrncpy(pOut, nSize, pIndent);
 
         return;
@@ -144,15 +145,15 @@ static void XLog_DisplayMessage(const xlog_ctx_t *pCtx, const char *pInfo, size_
         if (pLog != NULL) nCbVal = pCfg->logCallback(pLog, nLength, pCtx->eFlag, pCfg->pCbCtx);
     }
 
-    if (pCfg->nToScreen && nCbVal > 0)
+    if (pCfg->bToScreen && nCbVal > 0)
     {
         if (pLog != NULL) printf("%s", pLog);
         else printf("%s%s%s%s%s", pInfo, pSeparator, pMessage, pReset, pNewLine);
 
-        if (pCfg->nFlush) fflush(stdout);
+        if (pCfg->bFlush) fflush(stdout);
     }
 
-    if (!pCfg->nToFile || nCbVal < 0)
+    if (!pCfg->bToFile || nCbVal < 0)
     {
         free(pLog);
         return;
@@ -216,7 +217,7 @@ static size_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSiz
     const char *pColorCode = XLog_GetColor(pCtx->eFlag);
     const char *pColor = pCtx->nFullColor ? pColorCode : XSTR_EMPTY;
 
-    XLog_CreateTid(sTid, sizeof(sTid), pCfg->nTraceTid);
+    XLog_CreateTid(sTid, sizeof(sTid), pCfg->bTraceTid);
     XLog_CreateTag(sTag, sizeof(sTag), pCtx->eFlag, pColorCode);
     return xstrncpyf(pOut, nSize, "%s%s%s%s", pColor, sTid, sDate, sTag);
 }
@@ -245,11 +246,12 @@ static void XLog_DisplayStack(const xlog_ctx_t *pCtx, va_list args)
 
 void XLog_Display(xlog_flag_t eFlag, uint8_t nNewLine, const char *pFormat, ...)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
     xlog_cfg_t *pCfg = &g_xlog.config;
 
     if ((XLOG_FLAGS_CHECK(g_xlog.config.nFlags, eFlag)) &&
-       (g_xlog.config.nToScreen || g_xlog.config.nToFile))
+       (g_xlog.config.bToScreen || g_xlog.config.bToFile))
     {
         xlog_ctx_t ctx;
         XTime_Get(&ctx.time);
@@ -260,7 +262,7 @@ void XLog_Display(xlog_flag_t eFlag, uint8_t nNewLine, const char *pFormat, ...)
         ctx.nFullColor = pCfg->eColorFormat == XLOG_COLORING_FULL ? 1 : 0;
 
         void(*XLog_DisplayArgs)(const xlog_ctx_t *pCtx, va_list args);
-        XLog_DisplayArgs = pCfg->nUseHeap ? XLog_DisplayHeap : XLog_DisplayStack;
+        XLog_DisplayArgs = pCfg->bUseHeap ? XLog_DisplayHeap : XLog_DisplayStack;
 
         va_list args;
         va_start(args, pFormat);
@@ -273,6 +275,7 @@ void XLog_Display(xlog_flag_t eFlag, uint8_t nNewLine, const char *pFormat, ...)
 
 XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
 {
+    XASSERT_RET(nRetVal, g_bInit);
     int nFlag = (nRetVal < 0) ?
         XLOG_ERROR : XLOG_NONE;
 
@@ -289,7 +292,7 @@ XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
     char *pDest = xstracpyargs(pFmt, args, &nSize);
     va_end(args);
 
-    XASSERT(pDest, XSTDERR);
+    XASSERT(pDest, nRetVal);
     xlogfl(nFlag, "%s", pDest);
 
     free(pDest);
@@ -313,6 +316,7 @@ size_t XLog_Version(char *pDest, size_t nSize, int nMin)
 
 void XLog_ConfigGet(struct XLogConfig *pCfg)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
     *pCfg = g_xlog.config;
     XSync_Unlock(&g_xlog.lock);
@@ -320,6 +324,7 @@ void XLog_ConfigGet(struct XLogConfig *pCfg)
 
 void XLog_ConfigSet(struct XLogConfig *pCfg)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
     g_xlog.config = *pCfg;
     XSync_Unlock(&g_xlog.lock);
@@ -327,6 +332,7 @@ void XLog_ConfigSet(struct XLogConfig *pCfg)
 
 void XLog_FlagEnable(xlog_flag_t eFlag)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
 
     if (eFlag == XLOG_NONE || eFlag == XLOG_ALL)
@@ -339,6 +345,7 @@ void XLog_FlagEnable(xlog_flag_t eFlag)
 
 void XLog_FlagDisable(xlog_flag_t eFlag)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
 
     if (XLOG_FLAGS_CHECK(g_xlog.config.nFlags, eFlag))
@@ -349,16 +356,21 @@ void XLog_FlagDisable(xlog_flag_t eFlag)
 
 void XLog_CallbackSet(xlog_cb_t callback, void *pContext)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
+
     xlog_cfg_t *pCfg = &g_xlog.config;
     pCfg->pCbCtx = pContext;
     pCfg->logCallback = callback;
+
     XSync_Unlock(&g_xlog.lock);
 }
 
 void XLog_SeparatorSet(const char *pSeparator)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
+
     xlog_cfg_t *pCfg = &g_xlog.config;
 
     if (snprintf(pCfg->sSeparator, 
@@ -374,6 +386,7 @@ void XLog_SeparatorSet(const char *pSeparator)
 
 void XLog_ColorFormatSet(xlog_coloring_t eFmt)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
     g_xlog.config.eColorFormat = eFmt;
     XSync_Unlock(&g_xlog.lock);
@@ -381,55 +394,63 @@ void XLog_ColorFormatSet(xlog_coloring_t eFmt)
 
 void XLog_TimeFormatSet(xlog_timing_t eFmt)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
     g_xlog.config.eTimeFormat = eFmt;
     XSync_Unlock(&g_xlog.lock);
 }
 
-void XLog_IndentSet(uint8_t nEnable)
+void XLog_IndentSet(xbool_t bEnable)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
-    g_xlog.config.nIndent = nEnable;
+    g_xlog.config.bIndent = bEnable;
     XSync_Unlock(&g_xlog.lock);
 }
 
-void XLog_FlushSet(uint8_t nEnable)
+void XLog_FlushSet(xbool_t bEnable)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
-    g_xlog.config.nFlush = nEnable;
+    g_xlog.config.bFlush = bEnable;
     XSync_Unlock(&g_xlog.lock);
 }
 
-void XLog_FileLogSet(uint8_t nEnable)
+void XLog_FileLogSet(xbool_t bEnable)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
-    g_xlog.config.nToFile = nEnable;
+    g_xlog.config.bToFile = bEnable;
     XSync_Unlock(&g_xlog.lock);
 }
 
-void XLog_ScreenLogSet(uint8_t nEnable)
+void XLog_ScreenLogSet(xbool_t bEnable)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
-    g_xlog.config.nToScreen = nEnable;
+    g_xlog.config.bToScreen = bEnable;
     XSync_Unlock(&g_xlog.lock);
 }
 
-void XLog_TraceTid(uint8_t nEnable)
+void XLog_TraceTid(xbool_t bEnable)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
-    g_xlog.config.nTraceTid = nEnable;
+    g_xlog.config.bTraceTid = bEnable;
     XSync_Unlock(&g_xlog.lock);
 }
 
-void XLog_UseHeap(uint8_t nEnable)
+void XLog_UseHeap(xbool_t bEnable)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
-    g_xlog.config.nUseHeap = nEnable;
+    g_xlog.config.bUseHeap = bEnable;
     XSync_Unlock(&g_xlog.lock);
 }
 
 void XLog_FlagsSet(uint16_t nFlags)
 {
+    XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
     g_xlog.config.nFlags = nFlags;
     XSync_Unlock(&g_xlog.lock);
@@ -437,15 +458,16 @@ void XLog_FlagsSet(uint16_t nFlags)
 
 uint16_t XLog_FlagsGet(void)
 {
-    uint16_t nFlags = 0;
+    XASSERT_RET(XSTDNON, g_bInit);
     XSync_Lock(&g_xlog.lock);
-    nFlags = g_xlog.config.nFlags;
+    uint16_t nFlags = g_xlog.config.nFlags;
     XSync_Unlock(&g_xlog.lock);
     return nFlags;
 }
 
 size_t XLog_PathSet(const char *pPath)
 {
+    XASSERT_RET(XSTDNON, g_bInit);
     xlog_cfg_t *pCfg = &g_xlog.config;
     size_t nLength = 0;
 
@@ -458,6 +480,7 @@ size_t XLog_PathSet(const char *pPath)
 
 size_t XLog_NameSet(const char *pName)
 {
+    XASSERT_RET(XSTDNON, g_bInit);
     xlog_cfg_t *pCfg = &g_xlog.config;
     size_t nLength = 0;
 
@@ -468,9 +491,11 @@ size_t XLog_NameSet(const char *pName)
     return nLength;
 }
 
-void XLog_Init(const char* pName, uint16_t nFlags, uint8_t nTdSafe)
+void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe)
 {
+    XASSERT_VOID_RET(!g_bInit);
     xlog_cfg_t *pCfg = &g_xlog.config;
+
     pCfg->eColorFormat = XLOG_COLORING_TAG;
     pCfg->eTimeFormat = XLOG_DISABLE;
     pCfg->pCbCtx = NULL;
@@ -481,20 +506,22 @@ void XLog_Init(const char* pName, uint16_t nFlags, uint8_t nTdSafe)
     pCfg->sFilePath[0] = '.';
     pCfg->sFilePath[1] = '\0';
 
-    pCfg->nTraceTid = 0;
-    pCfg->nToScreen = 1;
-    pCfg->nUseHeap = 0;
-    pCfg->nToFile = 0;
-    pCfg->nIndent = 0;
-    pCfg->nFlush = 0;
+    pCfg->bTraceTid = XFALSE;
+    pCfg->bToScreen = XTRUE;
+    pCfg->bUseHeap = XFALSE;
+    pCfg->bToFile = XFALSE;
+    pCfg->bIndent = XFALSE;
+    pCfg->bFlush = XFALSE;
     pCfg->nFlags = nFlags;
 
     const char *pFileName = (pName != NULL) ? pName : XLOG_NAME_DEFAULT;
     xstrncpyf(pCfg->sFileName, sizeof(pCfg->sFileName), "%s", pFileName);
 
     /* Init mutex sync */
-    if (nTdSafe) XSync_Init(&g_xlog.lock);
+    if (bTdSafe) XSync_Init(&g_xlog.lock);
     else g_xlog.lock.bEnabled = XFALSE;
+
+    g_bInit = XTRUE;
 }
 
 void XLog_Destroy(void)

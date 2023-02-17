@@ -482,8 +482,8 @@ int main(int argc, char* argv[])
 
     xlog_get(&xcfg);
     xcfg.eColorFormat = XLOG_COLORING_FULL;
-    xcfg.nUseHeap = XTRUE;
-    xcfg.nIndent = XTRUE;
+    xcfg.bUseHeap = XTRUE;
+    xcfg.bIndent = XTRUE;
     xcfg.nFlags |= XLOG_INFO;
     xlog_set(&xcfg);
 

@@ -181,12 +181,12 @@ typedef struct XLogConfig {
     xlog_cb_t logCallback;
     void* pCbCtx;
 
-    uint8_t nTraceTid;
-    uint8_t nToScreen;
-    uint8_t nUseHeap;
-    uint8_t nToFile;
-    uint8_t nIndent;
-    uint8_t nFlush;
+    xbool_t bTraceTid;
+    xbool_t bToScreen;
+    xbool_t bUseHeap;
+    xbool_t bToFile;
+    xbool_t bIndent;
+    xbool_t bFlush;
     uint16_t nFlags;
 
     char sFileName[XLOG_NAME_MAX];
@@ -205,22 +205,22 @@ void XLog_CallbackSet(xlog_cb_t callback, void *pContext);
 void XLog_SeparatorSet(const char *pSeparator);
 void XLog_ColorFormatSet(xlog_coloring_t eFmt);
 void XLog_TimeFormatSet(xlog_timing_t eFmt);
-void XLog_IndentSet(uint8_t nEnable);
+void XLog_IndentSet(xbool_t nEnable);
 
 size_t XLog_PathSet(const char *pPath);
 size_t XLog_NameSet(const char *pName);
-void XLog_ScreenLogSet(uint8_t nEnable);
-void XLog_FileLogSet(uint8_t nEnable);
-void XLog_FlushSet(uint8_t nEnable);
-void XLog_TraceTid(uint8_t nEnable);
-void XLog_UseHeap(uint8_t nEnable);
+void XLog_ScreenLogSet(xbool_t bEnable);
+void XLog_FileLogSet(xbool_t bEnable);
+void XLog_FlushSet(xbool_t bEnable);
+void XLog_TraceTid(xbool_t bEnable);
+void XLog_UseHeap(xbool_t bEnable);
 void XLog_FlagsSet(uint16_t nFlags);
 uint16_t XLog_FlagsGet(void);
 
-void XLog_Init(const char* pName, uint16_t nFlags, uint8_t nTdSafe);
+void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe);
 void XLog_Destroy(void);
 
-void XLog_Display(xlog_flag_t nFlag, uint8_t nNewLine, const char *pFormat, ...);
+void XLog_Display(xlog_flag_t nFlag, xbool_t bNewLine, const char *pFormat, ...);
 XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...);
 
 #ifdef __cplusplus

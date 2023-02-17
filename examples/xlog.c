@@ -58,7 +58,7 @@ int main()
     xlog_cfg_t slgCfg;
     xlog_get(&slgCfg);
     slgCfg.eColorFormat = XLOG_COLORING_FULL;
-    slgCfg.nToFile = 1;
+    slgCfg.bToFile = 1;
     xlog_set(&slgCfg);
 
     /* Log and print something with char argument */
@@ -69,14 +69,14 @@ int main()
 
     slgCfg.eTimeFormat = XLOG_DATE;
     slgCfg.logCallback = logCallback;
-    slgCfg.nUseHeap = 1;
+    slgCfg.bUseHeap = 1;
     xlog_set(&slgCfg);
 
     /* Print message and save log in the file */
     XLog_Debug("Debug message in the file with int argument: %d", int_arg);
 
     /* On the fly change parameters (enable file logger) */
-    slgCfg.nToFile = 1;
+    slgCfg.bToFile = 1;
     xlog_set(&slgCfg);
 
     /* Log with user specified tag */

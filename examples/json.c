@@ -17,8 +17,8 @@ int main(int argc, char *argv[])
     xlog_cfg_t cfg;
 
     xlog_get(&cfg);
-    cfg.nUseHeap = 1;
-    cfg.nFlush = 1;
+    cfg.bUseHeap = 1;
+    cfg.bFlush = 1;
     xlog_set(&cfg);
 
     if (argc < 2)
