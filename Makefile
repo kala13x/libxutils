@@ -3,7 +3,7 @@
 # https://github.com/kala13x/smake #
 ####################################
 
-CFLAGS = -g -O2 -Wall -D_XUTILS_USE_SSL -I./src -I./media
+CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_SSL -I./src -I./media
 LIBS = -lpthread -lssl -lcrypto
 NAME = libxutils.a
 ODIR = ./obj

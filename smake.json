@@ -2,7 +2,7 @@
     "build": {
         "name": "libxutils.a",
         "outputDir": "./obj",
-        "flags": "-g -O2 -Wall -D_XUTILS_USE_SSL",
+        "flags": "-g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_SSL",
         "libs": "-lpthread -lssl -lcrypto",
         "overwrite": true,
         "excludes": [

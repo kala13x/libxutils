@@ -854,6 +854,39 @@ int XJSON_Parse(xjson_t *pJson, const char *pData, size_t nSize)
     return XJSON_UnexpectedToken(pJson);
 }
 
+xjson_obj_t *XJSON_FromStr(const char *pFmt, ...)
+{
+    size_t nSize = 0;
+    va_list args;
+
+    va_start(args, pFmt);
+    char *pJson = xstracpyargs(pFmt, args, &nSize);
+    va_end(args);
+
+    XASSERT(pJson, NULL);
+    xjson_t json;
+
+    printf("oee: %s\n", pJson);
+
+    int nStatus = XJSON_Parse(&json, pJson, nSize);
+    free(pJson);
+
+    XASSERT_CALL((nStatus == XJSON_SUCCESS), XJSON_Destroy, &json, NULL);
+
+/*
+    if (nStatus == XJSON_FAILURE)
+    {
+        XJSON_Destroy(&json);
+        free(pJson);
+        return NULL;
+    }
+
+    free(pJson);
+*/
+
+    return json.pRootObj;
+}
+
 void XJSON_Init(xjson_t *pJson)
 {
     pJson->pRootObj = NULL;
