@@ -1396,11 +1396,27 @@ char* XJSON_Format(xjson_t *pJson, size_t nTabSize, xjson_format_t *pFormat, siz
 
 char* XJSON_DumpObj(xjson_obj_t *pJsonObj, size_t nTabSize, size_t *pLength)
 {
-    return XJSON_FormatObj(pJsonObj, nTabSize, NULL, pLength);
+    if (pLength) *pLength = 0;
+    XASSERT(pJsonObj, NULL);
+
+    xjson_writer_t writer;
+    XASSERT(XJSON_InitWriter(&writer, NULL, 1), NULL);
+
+    writer.nTabSize = nTabSize;
+    writer.nPretty = 0;
+
+    if (!XJSON_WriteObject(pJsonObj, &writer))
+    {
+        XJSON_DestroyWriter(&writer);
+        return NULL;
+    }
+
+    if (pLength) *pLength = writer.nLength;
+    return writer.pData;
 }
 
 char* XJSON_Dump(xjson_t *pJson, size_t nTabSize, size_t *pLength)
 {
     XASSERT(pJson, NULL);
-    return XJSON_FormatObj(pJson->pRootObj, nTabSize, NULL, pLength);
+    return XJSON_DumpObj(pJson->pRootObj, nTabSize, NULL, pLength);
 }
