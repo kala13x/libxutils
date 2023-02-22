@@ -1418,5 +1418,5 @@ char* XJSON_DumpObj(xjson_obj_t *pJsonObj, size_t nTabSize, size_t *pLength)
 char* XJSON_Dump(xjson_t *pJson, size_t nTabSize, size_t *pLength)
 {
     XASSERT(pJson, NULL);
-    return XJSON_DumpObj(pJson->pRootObj, nTabSize, NULL, pLength);
+    return XJSON_DumpObj(pJson->pRootObj, nTabSize, pLength);
 }
