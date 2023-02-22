@@ -279,7 +279,7 @@ int XHTTPApp_DumpResponse(xhttp_t *pHandle, xhttp_ctx_t *pCbCtx)
     XTime_Get(&currTime);
     pArgs->nBytes += pCbCtx->nLength;
 
-    int nDiff = XTime_Diff(&currTime, &pArgs->lastTime);
+    int nDiff = XTime_DiffSec(&currTime, &pArgs->lastTime);
     if (nDiff > XHTTP_INTERVAL_SEC)
     {
         char sPerSec[XSTR_MIN], sSpeed[XSTR_MIN];

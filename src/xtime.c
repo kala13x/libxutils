@@ -81,6 +81,22 @@ int XTime_FromLstr(xtime_t *pTime, const char *pStr)
 #endif
 }
 
+int XTime_FromRstr(xtime_t *pTime, const char *pStr)
+{
+    XTime_Init(pTime);
+#ifdef _WIN32
+    return sscanf_s(pStr, "%02d/%02d/%04d %02d:%02d:%02d.%02d",
+        (int*)&pTime->nMonth, (int*)&pTime->nDay, (int*)&pTime->nYear,
+        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
+        (int*)&pTime->nFraq);
+#else
+    return sscanf(pStr, "%02d/%02d/%04d %02d:%02d:%02d.%02d",
+        (int*)&pTime->nMonth, (int*)&pTime->nDay, (int*)&pTime->nYear,
+        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
+        (int*)&pTime->nFraq);
+#endif
+}
+
 void XTime_FromEpoch(xtime_t *pTime, const time_t nTime)
 {
     struct tm timeinfo;
@@ -125,21 +141,28 @@ time_t XTime_ToEpoch(const xtime_t *pTime)
 size_t XTime_ToStr(const xtime_t *pTime, char *pStr, size_t nSize)
 {
     return xstrncpyf(pStr, nSize, "%04d%02d%02d%02d%02d%02d%02d",
-        pTime->nYear, pTime->nMonth, pTime->nDay, pTime->nHour, 
+        pTime->nYear, pTime->nMonth, pTime->nDay, pTime->nHour,
         pTime->nMin, pTime->nSec, pTime->nFraq);
 }
 
 size_t XTime_ToHstr(const xtime_t *pTime, char *pStr, size_t nSize)
 {
     return xstrncpyf(pStr, nSize, "%04d.%02d.%02d-%02d:%02d:%02d.%02d",
-        pTime->nYear, pTime->nMonth, pTime->nDay, pTime->nHour, 
+        pTime->nYear, pTime->nMonth, pTime->nDay, pTime->nHour,
         pTime->nMin, pTime->nSec, pTime->nFraq);
 }
 
 size_t XTime_ToLstr(const xtime_t *pTime, char *pStr, size_t nSize)
 {
     return xstrncpyf(pStr, nSize, "%04d/%02d/%02d/%02d/%02d/%02d",
-        pTime->nYear, pTime->nMonth, pTime->nDay, 
+        pTime->nYear, pTime->nMonth, pTime->nDay,
+        pTime->nHour, pTime->nMin, pTime->nSec);
+}
+
+size_t XTime_ToRstr(const xtime_t *pTime, char *pStr, size_t nSize)
+{
+    return xstrncpyf(pStr, nSize, "%02d/%02d/%04d %02d:%02d:%02d",
+        pTime->nMonth, pTime->nDay, pTime->nYear,
         pTime->nHour, pTime->nMin, pTime->nSec);
 }
 
@@ -214,12 +237,31 @@ int XTime_LeapYear(const xtime_t *pTime)
     return XTime_GetLeapYear(pTime->nYear);
 }
 
-double XTime_Diff(const xtime_t *pSrc1, const xtime_t *pSrc2)
+double XTime_DiffSec(const xtime_t *pSrc1, const xtime_t *pSrc2)
 {
     struct tm tm1, tm2;
     XTime_ToTm(pSrc1, &tm1);
     XTime_ToTm(pSrc2, &tm2);
     return difftime(mktime(&tm1), mktime(&tm2));
+}
+
+double XTime_Diff(const xtime_t *pSrc1, const xtime_t *pSrc2, xtime_diff_t eDiff)
+{
+    double fSeconds = XTime_DiffSec(pSrc1, pSrc2);
+
+    switch (eDiff)
+    {
+        case XTIME_DIFF_YEAR: return fSeconds / XSECS_IN_YEAR;
+        case XTIME_DIFF_MONTH: return fSeconds / XSECS_IN_MONTH;
+        case XTIME_DIFF_WEEK: return fSeconds / XSECS_IN_WEEK;
+        case XTIME_DIFF_DAY: return fSeconds / XSECS_IN_DAY;
+        case XTIME_DIFF_HOUR: return fSeconds / XSECS_IN_HOUR;
+        case XTIME_DIFF_MIN: return fSeconds / XSECS_IN_MIN;
+        case XTIME_DIFF_SEC: return fSeconds;
+        default: break;
+    }
+
+    return fSeconds;
 }
 
 void XTime_Copy(xtime_t *pDst, const xtime_t *pSrc) 
