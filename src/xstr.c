@@ -882,16 +882,16 @@ xarray_t* xstrsplit(const char *pString, const char *pDlmt)
     return pArray;
 }
 
-char* xstrtoge(char *pBuffer, size_t nSize, const char *pLine)
+char* xstrtoge(char *pBuffer, size_t nSize, const char *pStr)
 {
-    if (pLine == NULL) return NULL;
+    if (pStr == NULL) return NULL;
     char sInputLine[XSTR_MAX];
     xbool_t bStarted = XFALSE;
     size_t i;
 
     for (i = 0; i < XSTR_KEYMAP_SIZE; i++) 
     {
-        const char *pInput = bStarted ? sInputLine : pLine;
+        const char *pInput = bStarted ? sInputLine : pStr;
         xstrnrep(pBuffer, nSize, pInput, g_keyMapEn[i], g_keyMapGe[i]);
         xstrncpy(sInputLine, sizeof(sInputLine), pBuffer);
         bStarted = XTRUE;
@@ -900,16 +900,16 @@ char* xstrtoge(char *pBuffer, size_t nSize, const char *pLine)
     return pBuffer;
 }
 
-char* xstrtoen(char *pBuffer, size_t nSize, const char *pLine)
+char* xstrtoen(char *pBuffer, size_t nSize, const char *pStr)
 {
-    if (pLine == NULL) return NULL;
+    if (pStr == NULL) return NULL;
     char sInputLine[XSTR_MAX];
     xbool_t bStarted = XFALSE;
     size_t i;
 
     for (i = 0; i < XSTR_KEYMAP_SIZE; i++) 
     {
-        const char *pInput = bStarted ? sInputLine : pLine;
+        const char *pInput = bStarted ? sInputLine : pStr;
         xstrnrep(pBuffer, nSize, pInput, g_keyMapGe[i], g_keyMapEn[i]);
         xstrncpy(sInputLine, sizeof(sInputLine), pBuffer);
         bStarted = XTRUE;

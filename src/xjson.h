@@ -125,7 +125,24 @@ uint8_t XJSON_GetBool(xjson_obj_t *pObj);
 double XJSON_GetFloat(xjson_obj_t *pObj);
 int XJSON_GetInt(xjson_obj_t *pObj);
 
+typedef struct xjson_format_ {
+    char *pNameFmt;
+    char *pNameClr;
+    char *pFloatFmt;
+    char *pFloatClr;
+    char *pBoolFmt;
+    char *pBoolClr;
+    char *pStrFmt;
+    char *pStrClr;
+    char *pNumFmt;
+    char *pNumClr;
+    char *pNullFmt;
+    char *pNullClr;
+} xjson_format_t;
+
 typedef struct xjson_writer_ {
+    xjson_format_t format;
+    uint8_t nPretty;
     size_t nTabSize;
     size_t nIdents;
     size_t nLength;
@@ -140,8 +157,12 @@ int XJSON_InitWriter(xjson_writer_t *pWriter, char *pOutput, size_t nSize);
 int XJSON_WriteObject(xjson_obj_t *pObj, xjson_writer_t *pWriter);
 int XJSON_Write(xjson_t *pJson, char *pOutput, size_t nSize);
 
-char* XJSON_DumpObj(xjson_obj_t *pJsonObj, size_t nLint, size_t *pLength);
-char* XJSON_Dump(xjson_t *pJson, size_t nLint, size_t *pLength);
+void XJSON_FormatInit(xjson_format_t *pFormat);
+char* XJSON_FormatObj(xjson_obj_t *pJsonObj, size_t nTabSize, xjson_format_t *pFormat, size_t *pLength);
+char* XJSON_Format(xjson_t *pJson, size_t nTabSize, xjson_format_t *pFormat, size_t *pLength);
+
+char* XJSON_DumpObj(xjson_obj_t *pJsonObj, size_t nTabSize, size_t *pLength);
+char* XJSON_Dump(xjson_t *pJson, size_t nTabSize, size_t *pLength);
 
 #ifdef __cplusplus
 }

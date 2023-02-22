@@ -141,8 +141,8 @@ void xstrnull(char *pString, size_t nLength);
 void xstrnul(char *pString);
 xbool_t xstrused(const char *pStr);
 
-char* xstrtoen(char *pBuffer, size_t nSize, const char *pLine);
-char* xstrtoge(char *pBuffer, size_t nSize, const char *pLine);
+char* xstrtoen(char *pBuffer, size_t nSize, const char *pStr);
+char* xstrtoge(char *pBuffer, size_t nSize, const char *pStr);
 
 /////////////////////////////////////////////////////////////////////////
 // XString Implementation

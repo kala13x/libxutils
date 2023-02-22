@@ -17,28 +17,30 @@
 extern char *optarg;
 
 #define XJSON_LINT_VER_MAX  0
-#define XJSON_LINT_VER_MIN  2
+#define XJSON_LINT_VER_MIN  3
 
 typedef struct xjson_args_ {
     char sFile[XPATH_MAX];
     uint16_t nTabSize;
     uint8_t nMinify;
+    uint8_t nPretty;
 } xjson_args_t;
 
 void XJSON_DisplayUsage(const char *pName)
 {
-    xlog("================================================");
-    xlog(" Lint and Minify JSON file - v%d.%d (%s)",
+    xlog("======================================================");
+    xlog(" XJSON - Lint / Minify JSON file - v%d.%d (%s)",
         XJSON_LINT_VER_MAX, XJSON_LINT_VER_MIN, __DATE__);
-    xlog("================================================");
+    xlog("======================================================");
 
-    xlog("Usage: %s [-f <file>] [-l <size>] [-m] [-h]\n", pName);
+    xlog("Usage: %s [-i <path>] [-l <size>] [-m] [-p] [-h]\n", pName);
     xlog("Options are:");
-    xlog("  -f <file>           # JSON file path (%s*%s)", XSTR_CLR_RED, XSTR_FMT_RESET);
+    xlog("  -i <path>           # Input file path (%s*%s)", XSTR_CLR_RED, XSTR_FMT_RESET);
     xlog("  -l <size>           # Linter tab size");
     xlog("  -m                  # Minify json file");
+    xlog("  -p                  # Pretty print");
     xlog("  -h                  # Version and usage\n");
-    xlog("Example: %s -f example.json -l 4\n", pName);
+    xlog("Example: %s -i example.json -pl 4\n", pName);
 }
 
 int XJSON_ParseArgs(xjson_args_t *pArgs, int argc, char *argv[])
@@ -46,13 +48,14 @@ int XJSON_ParseArgs(xjson_args_t *pArgs, int argc, char *argv[])
     xstrnul(pArgs->sFile);
     pArgs->nTabSize = 4;
     pArgs->nMinify = 0;
+    pArgs->nPretty = 0;
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "f:l:m1:h1")) != -1) 
+    while ((nChar = getopt(argc, argv, "i:l:m1:p1:h1")) != -1)
     {
         switch (nChar)
         {
-            case 'f':
+            case 'i':
                 xstrncpy(pArgs->sFile, sizeof(pArgs->sFile), optarg);
                 break;
             case 'l':
@@ -60,6 +63,9 @@ int XJSON_ParseArgs(xjson_args_t *pArgs, int argc, char *argv[])
                 break;
             case 'm':
                 pArgs->nMinify = 1;
+                break;
+            case 'p':
+                pArgs->nPretty = 1;
                 break;
             case 'h':
             default:
@@ -102,7 +108,8 @@ int main(int argc, char *argv[])
 
     xjson_writer_t writer;
     XJSON_InitWriter(&writer, NULL, buffer.nUsed);
-    if (!args.nMinify) writer.nTabSize = args.nTabSize;
+    writer.nTabSize = !args.nMinify ? args.nTabSize : 0;
+    writer.nPretty = args.nPretty;
 
     if (XJSON_WriteObject(json.pRootObj, &writer)) printf("%s\n", writer.pData);
     else xloge("Failed to serialize json: errno(%d) %s", errno, writer.pData ? writer.pData : "");
