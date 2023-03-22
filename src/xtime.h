@@ -62,6 +62,9 @@ typedef struct XTime {
     uint8_t nFraq;
 } xtime_t;
 
+/* Empty initializer of xtime_t structure */
+#define XTIME_EMPTY     (xtime_t){ 0, 0, 0, 0, 0, 0, 0}
+
 #ifdef __cplusplus
 extern "C" {
 #endif

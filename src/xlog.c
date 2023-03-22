@@ -275,7 +275,7 @@ void XLog_Display(xlog_flag_t eFlag, uint8_t nNewLine, const char *pFormat, ...)
 
 XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
 {
-    XASSERT_RET(nRetVal, g_bInit);
+    XASSERT_RET(g_bInit, nRetVal);
     int nFlag = (nRetVal <= 0) ?
         XLOG_ERROR : XLOG_NONE;
 
@@ -297,6 +297,30 @@ XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
 
     free(pDest);
     return nRetVal;
+}
+
+void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...)
+{
+    XASSERT_RET(g_bInit, pRetVal);
+
+    if (pFmt == NULL)
+    {
+        xloge("%s", strerror(errno));
+        return pRetVal;
+    }
+
+    size_t nSize = 0;
+    va_list args;
+
+    va_start(args, pFmt);
+    char *pDest = xstracpyargs(pFmt, args, &nSize);
+    va_end(args);
+
+    XASSERT(pDest, pRetVal);
+    xloge("%s", pDest);
+
+    free(pDest);
+    return pRetVal;
 }
 
 size_t XLog_Version(char *pDest, size_t nSize, int nMin)
