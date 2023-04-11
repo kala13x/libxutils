@@ -73,7 +73,7 @@ void XTime_Init(xtime_t *pTime);
 void XTime_Get(xtime_t *pTime);
 void XTime_GetTm(struct tm *pTm);
 uint64_t XTime_GetU64(void);
-uint32_t XTime_GetUsec(void);
+uint64_t XTime_GetUsec(void);
 int XTime_GetClock(xtime_spec_t *pTs);
 size_t XTime_GetStr(char *pDst, size_t nSize, xtime_fmt_t eFmt);
 
