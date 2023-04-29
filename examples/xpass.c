@@ -766,7 +766,7 @@ static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
     sAnswer[0] = XSTR_NUL;
 
     XASSERT((fgets(sAnswer, sizeof(sAnswer), stdin)), XFALSE);
-    XASSERT((sAnswer[0] == 'Y' && sAnswer[0] == 'y'), XFALSE);
+    XASSERT((sAnswer[0] == 'Y' || sAnswer[0] == 'y'), XFALSE);
 
     xpath_t path;
     XPath_Parse(&path, pCtx->sConf);
@@ -830,7 +830,7 @@ static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
         XJSON_FreeObject(pLayoutObj);
         return XFALSE;
     }
-    
+
     xjson_writer_t writer;
     XJSON_InitWriter(&writer, NULL, XSTR_MIN);
     writer.nTabSize = 4; // Enable linter

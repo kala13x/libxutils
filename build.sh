@@ -7,8 +7,8 @@ if [ -f "$LIB_CRYPTO" ] && [ -f "$LIB_SSL"  ]; then
     export XUTILS_USE_SSL=y
 fi
 
-if [ $OSTYPE == 'linux-gnu'* ]; then
-    CPU_COUNT=`cat /proc/cpuinfo | grep processor -c`
+if [ $OSTYPE == linux-gnu ]; then
+    CPU_COUNT=$(nproc)
 else
     CPU_COUNT=1
 fi
