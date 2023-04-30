@@ -619,7 +619,7 @@ int xstrntokn(char *pDst, size_t nSize, const char *pStr, size_t nLen, size_t nP
 {
     if (pDst != NULL) pDst[0] = XSTR_NUL;
     if (nPosit >= nLen) return XSTDERR;
-    int nDlmtLen = (int)strlen(pDlmt);
+    size_t nDlmtLen = xstrused(pDlmt) ? strlen(pDlmt) : 0;
 
     int nOffset = xstrsrc(&pStr[nPosit], pDlmt);
     if (nOffset < 0)
@@ -630,18 +630,18 @@ int xstrntokn(char *pDst, size_t nSize, const char *pStr, size_t nLen, size_t nP
     else if (!nOffset)
     {
         if (pDst != NULL) pDst[0] = '\0';
-        return (int)nPosit + nDlmtLen;
+        return (int)(nPosit + nDlmtLen);
     }
 
     xstrncpys(pDst, nSize, &pStr[nPosit], nOffset);
-    return (int)nPosit + nOffset + nDlmtLen;
+    return (int)(nPosit + nOffset + nDlmtLen);
 }
 
 int xstrntok(char *pDst, size_t nSize, const char *pStr, size_t nPosit, const char *pDlmt)
 {
     if (pDst != NULL) pDst[0] = XSTR_NUL;
     if (nPosit >= strlen(pStr)) return XSTDERR;
-    int nDlmtLen = (int)strlen(pDlmt);
+    size_t nDlmtLen = xstrused(pDlmt) ? strlen(pDlmt) : 0;
 
     int nOffset = xstrsrc(&pStr[nPosit], pDlmt);
     if (nOffset < 0)
@@ -652,11 +652,11 @@ int xstrntok(char *pDst, size_t nSize, const char *pStr, size_t nPosit, const ch
     else if (!nOffset)
     {
         pDst[0] = '\0';
-        return (int)nPosit + nDlmtLen;
+        return (int)(nPosit + nDlmtLen);
     }
 
     xstrncpys(pDst, nSize, &pStr[nPosit], nOffset);
-    return (int)nPosit + nOffset + nDlmtLen;
+    return (int)(nPosit + nOffset + nDlmtLen);
 }
 
 size_t xstrncuts(char *pDst, size_t nSize, const char *pSrc, const char *pStart, const char *pEnd)
@@ -664,17 +664,17 @@ size_t xstrncuts(char *pDst, size_t nSize, const char *pSrc, const char *pStart,
     pDst[0] = XSTR_NUL;
     if (pStart == NULL)
     {
-        if (pEnd == NULL) return 0;
+        if (pEnd == NULL) return XSTDNON;
         int nStatus = xstrntok(pDst, nSize, pSrc, 0, pEnd);
-        return (nStatus >= 0) ? strnlen(pDst, nSize - 1) : 0;
+        return (nStatus >= 0) ? strnlen(pDst, nSize - 1) : XSTDNON;
     }
 
     int nPosit = xstrsrc(pSrc, pStart);
-    if (nPosit < 0) return 0;
+    if (nPosit < 0) return XSTDNON;
     nPosit += (int)strlen(pStart);
 
     int nStatus = xstrntok(pDst, nSize, pSrc, nPosit, pEnd);
-    return (nStatus >= 0) ? strnlen(pDst, nSize - 1) : 0;
+    return (nStatus >= 0) ? strnlen(pDst, nSize - 1) : XSTDNON;
 }
 
 char* xstrcut(char *pData, const char *pStart, const char *pEnd)

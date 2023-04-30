@@ -870,6 +870,7 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
         if (nBytes <= 0)
         {
             if ((!pHttp->nContentLength && !XHTTP_GetBodySize(pHttp)) ||
+                (pHttp->nContentLength == XHTTP_GetBodySize(pHttp)) ||
                 XSock_Status(pSock) == XSOCK_EOF) return XHTTP_COMPLETE;
 
             return XHTTP_StatusCb(pHttp, XHTTP_ERRREAD);

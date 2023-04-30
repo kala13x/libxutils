@@ -1336,6 +1336,10 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
     SSL_set_connect_state(pSSL);
     SSL_set_fd(pSSL, pSock->nFD);
 
+    long nOpts = SSL_get_options(pSSL);
+    nOpts |= SSL_OP_IGNORE_UNEXPECTED_EOF;
+    SSL_set_options(pSSL, nOpts);
+
     if (SSL_connect(pSSL) < 0)
     {
         if (pSSL != NULL) SSL_free(pSSL);

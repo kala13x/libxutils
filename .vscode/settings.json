@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "random": "c"
+        "random": "c",
+        "memory_resource": "c"
     }
 }
