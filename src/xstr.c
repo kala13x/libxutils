@@ -869,7 +869,10 @@ xarray_t* xstrsplit(const char *pString, const char *pDlmt)
 
     while((nNext = xstrntok(sToken, sizeof(sToken), pString, nNext, pDlmt)) >= 0)
     {
-        XArray_AddData(pArray, sToken, strlen(sToken)+1);
+        size_t nLength = strlen(sToken);
+        if (!nLength) continue;
+
+        XArray_AddData(pArray, sToken, nLength+1);
         if (!nNext) break;
     }
 
