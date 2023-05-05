@@ -46,7 +46,7 @@ libxutils is available for both Linux/Unix and Windows operating systems and is 
 
 #### Miscellaneous:
 - [JSON parser and writer library with lint and minify support](https://github.com/kala13x/libxutils/blob/main/src/data/xjson.h)
-- [Implementation of JSON Web Tokens with HS256 and RS256](https://github.com/kala13x/libxutils/blob/main/data/jwt.h)
+- [Implementation of JSON Web Tokens with HS256 and RS256](https://github.com/kala13x/libxutils/blob/main/src/data/jwt.h)
 - [Command-Line interface manipulations](https://github.com/kala13x/libxutils/blob/main/src/sys/xcli.h)
 - [Cross-platform synchronization library](https://github.com/kala13x/libxutils/blob/main/src/sys/sync.h)
 - [Cross-platform multithreading library](https://github.com/kala13x/libxutils/blob/main/src/sys/thread.h)
