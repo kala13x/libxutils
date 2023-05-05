@@ -34,6 +34,7 @@ uint8_t *XByteData_Dup(const uint8_t *pBuff, size_t nSize);
 xbyte_buffer_t* XByteBuffer_New(size_t nSize, int nFastAlloc);
 void XByteBuffer_Clear(xbyte_buffer_t *pBuffer);
 void XByteBuffer_Reset(xbyte_buffer_t *pBuffer);
+void XByteBuffer_Recycle(xbyte_buffer_t *pBuffer);
 int XByteBuffer_Terminate(xbyte_buffer_t *pBuffer, size_t nPosit);
 int XByteBuffer_Resize(xbyte_buffer_t *pBuffer, size_t nSize);
 int XByteBuffer_Reserve(xbyte_buffer_t *pBuffer, size_t nSize);

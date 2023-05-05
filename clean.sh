@@ -4,7 +4,9 @@ cd examples
 make clean
 cd ..
 
-make clean
+if [ -f ./Makefile ]; then
+    make clean
+fi
 
 if [ -d ./obj ]; then
     rm -rf ./obj

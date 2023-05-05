@@ -25,7 +25,13 @@ uint8_t *XByteData_Dup(const uint8_t *pBuff, size_t nLength)
 
 int XByteBuffer_Resize(xbyte_buffer_t *pBuffer, size_t nSize)
 {
-    if (pBuffer->pData == NULL && nSize)
+    if (!nSize)
+    {
+        XByteBuffer_Recycle(pBuffer);
+        return pBuffer->nSize;
+    }
+
+    if (pBuffer->pData == NULL)
     {
         pBuffer->pData = (uint8_t*)malloc(nSize);
         if (pBuffer->pData == NULL)
@@ -48,9 +54,6 @@ int XByteBuffer_Resize(xbyte_buffer_t *pBuffer, size_t nSize)
         return pBuffer->nStatus;
     }
 
-    if (!nSize) return pBuffer->nUsed ? (int)pBuffer->nUsed : XSTDERR;
-    pBuffer->nUsed = (pBuffer->nUsed >= nSize) ? (nSize - 1) : pBuffer->nUsed;
-
     uint8_t* pOldData = pBuffer->pData;
     pBuffer->pData = (uint8_t*)realloc(pBuffer->pData, nSize);
 
@@ -61,8 +64,8 @@ int XByteBuffer_Resize(xbyte_buffer_t *pBuffer, size_t nSize)
         return pBuffer->nStatus;
     }
 
-    if (pBuffer->nUsed < nSize)
-        pBuffer->pData[pBuffer->nUsed] = XSTR_NUL;
+    pBuffer->nUsed = (pBuffer->nUsed >= nSize) ? (nSize - 1) : pBuffer->nUsed;
+    if (pBuffer->nUsed < nSize) pBuffer->pData[pBuffer->nUsed] = XSTR_NUL;
 
     pBuffer->nSize = nSize;
     return (int)pBuffer->nSize;
@@ -114,7 +117,7 @@ int XByteBuffer_Init(xbyte_buffer_t *pBuffer, size_t nSize, int nFastAlloc)
 
 void XByteBuffer_Clear(xbyte_buffer_t *pBuffer)
 {
-    if (pBuffer == NULL) return;
+    XASSERT_VOID(pBuffer);
 
     if (pBuffer->pData != NULL &&
         pBuffer->nSize > 0)
@@ -129,8 +132,18 @@ void XByteBuffer_Clear(xbyte_buffer_t *pBuffer)
         free(pBuffer);
 }
 
+void XByteBuffer_Recycle(xbyte_buffer_t *pBuffer)
+{
+    XASSERT_VOID(pBuffer);
+    uint8_t nAlloc = pBuffer->nAlloc;
+    pBuffer->nAlloc = XSTDNON;
+    XByteBuffer_Clear(pBuffer);
+    pBuffer->nAlloc = nAlloc;
+}
+
 void XByteBuffer_Reset(xbyte_buffer_t *pBuffer)
 {
+    XASSERT_VOID(pBuffer);
     if (pBuffer->pData == NULL)
         pBuffer->nSize = 0;
 
@@ -140,16 +153,13 @@ void XByteBuffer_Reset(xbyte_buffer_t *pBuffer)
 
 int XByteBuffer_Set(xbyte_buffer_t *pBuffer, uint8_t *pData, size_t nUsed)
 {
+    XASSERT(pBuffer, XSTDINV);
     pBuffer->nStatus = 1;
     pBuffer->nAlloc = 0;
     pBuffer->nFast = 0;
     pBuffer->nSize = 0;
     pBuffer->nUsed = nUsed;
     pBuffer->pData = pData;
-
-    if (pBuffer->pData != NULL)
-        pBuffer->pData[nUsed] = '\0';
-
     return (int)pBuffer->nUsed;
 }
 

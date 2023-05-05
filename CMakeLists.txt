@@ -32,7 +32,6 @@ include_directories(
 
 add_library(xutils STATIC
     ${SOURCE_DIR}/xver.c
-
     ${DATA_DIR}/array.c
     ${DATA_DIR}/xjson.c
     ${DATA_DIR}/xbuf.c
@@ -41,7 +40,6 @@ add_library(xutils STATIC
     ${DATA_DIR}/xstr.c
     ${DATA_DIR}/map.c
     ${DATA_DIR}/jwt.c
-
     ${CRYPT_DIR}/crypt.c
     ${CRYPT_DIR}/aes.c
     ${CRYPT_DIR}/base64.c
@@ -50,7 +48,6 @@ add_library(xutils STATIC
     ${CRYPT_DIR}/hmac.c
     ${CRYPT_DIR}/md5.c
     ${CRYPT_DIR}/rsa.c
-
     ${NET_DIR}/event.c
     ${NET_DIR}/addr.c
     ${NET_DIR}/http.c
@@ -60,7 +57,6 @@ add_library(xutils STATIC
     ${NET_DIR}/ntp.c
     ${NET_DIR}/rtp.c
     ${NET_DIR}/ws.c
-
     ${SYS_DIR}/thread.c
     ${SYS_DIR}/xtype.c
     ${SYS_DIR}/xtime.c
