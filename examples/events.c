@@ -10,7 +10,7 @@
 
 #include <xutils/xstd.h>
 #include <xutils/event.h>
-#include <xutils/errex.h>
+#include <xutils/xsig.h>
 #include <xutils/http.h>
 #include <xutils/sock.h>
 #include <xutils/xbuf.h>

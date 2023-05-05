@@ -9,14 +9,17 @@
 
 #include <xutils/xstd.h>
 #include <xutils/xjson.h>
-#include <xutils/crypt.h>
 #include <xutils/xtype.h>
-#include <xutils/xaes.h>
 #include <xutils/xlog.h>
 #include <xutils/xstr.h>
 #include <xutils/xcli.h>
 #include <xutils/xver.h>
 #include <xutils/xfs.h>
+#include <xutils/crypt.h>
+#include <xutils/crc32.h>
+#include <xutils/md5.h>
+#include <xutils/rsa.h>
+#include <xutils/aes.h>
 
 #define XPASS_VER_MAX       0
 #define XPASS_VER_MIN       2
@@ -230,7 +233,7 @@ static xbool_t XPass_GetKey(xpass_ctx_t *pCtx)
         }
     }
 
-    char *pCrypted = XCrypt_MD5((uint8_t*)sPwd, strlen(sPwd));
+    char *pCrypted = XMD5_EncryptHex((uint8_t*)sPwd, strlen(sPwd));
     if (pCrypted == NULL)
     {
         xloge("Failed to crypt master password: %d", errno);
@@ -633,7 +636,7 @@ static xbool_t XPass_LoadDatabase(xpass_ctx_t *pCtx)
     size_t nKeyLength = strlen(pCtx->sKey);
 
     uint32_t nDecryptedCRC = XJSON_GetU32(pCrcObj);
-    uint32_t nCurrentCRC = XCrypt_CRC32(pKey, nKeyLength);
+    uint32_t nCurrentCRC = XCRC32_Compute(pKey, nKeyLength);
 
     if (nDecryptedCRC != nCurrentCRC)
     {
@@ -739,7 +742,7 @@ static xbool_t XPass_InitDatabase(xpass_ctx_t *pCtx)
     const char *pXUtils = XUtils_VersionShort();
 
     size_t nKeyLength = strlen(pCtx->sKey);
-    uint32_t nCRC32 = XCrypt_CRC32(pKey, nKeyLength);
+    uint32_t nCRC32 = XCRC32_Compute(pKey, nKeyLength);
 
     char sVersion[XSTR_TINY];
     xstrncpyf(sVersion, sizeof(sVersion), "%d.%d.%d",

@@ -11,37 +11,46 @@ libxutils is a cross-platform C library that provides safer implementations of v
 libxutils is available for both Linux/Unix and Windows operating systems and is released under the MIT License. To check the version of libxutils you have, you can refer to the file `src/xver.h`. Please note that the list of features provided in the README is incomplete. For more information about the full range of features offered by libxutils, you can refer to the individual header files linked below or browse the library's source code.
 
 #### Containrers:
-- [Dynamically allocated array with sort and search features](https://github.com/kala13x/libxutils/blob/main/src/array.h)
-- [Dynamically allocated byte and data buffers](https://github.com/kala13x/libxutils/blob/main/src/xbuf.h)
-- [Dynamically allocated key-value pair map](https://github.com/kala13x/libxutils/blob/main/src/xmap.h)
-- [Dynamically allocated hash map](https://github.com/kala13x/libxutils/blob/main/src/hash.h)
-- [Implementation of linked list](https://github.com/kala13x/libxutils/blob/main/src/list.h)
+- [Dynamically allocated array with sort and search features](https://github.com/kala13x/libxutils/blob/main/src/data/array.h)
+- [Dynamically allocated byte and data buffers](https://github.com/kala13x/libxutils/blob/main/src/data/xbuf.h)
+- [Dynamically allocated key-value pair map](https://github.com/kala13x/libxutils/blob/main/src/data/map.h)
+- [Dynamically allocated hash map](https://github.com/kala13x/libxutils/blob/main/src/data/hash.h)
+- [Dynamically allocated C string](https://github.com/kala13x/libxutils/blob/main/src/data/xstr.h)
+- [Implementation of linked list](https://github.com/kala13x/libxutils/blob/main/src/data/list.h)
 
 #### Network:
-- [Cross-platform event library based on poll(), epoll() and WSAPoll()](https://github.com/kala13x/libxutils/blob/main/src/event.h)
-- [Cross-platform socket library with TCP, UDP and SSL support](https://github.com/kala13x/libxutils/blob/main/src/sock.h)
-- [Event based high performance REST API client/server library](https://github.com/kala13x/libxutils/blob/main/media/xapi.h)
-- [HTTP client/server library](https://github.com/kala13x/libxutils/blob/main/src/http.h)
-- [MDTP client/server library](https://github.com/kala13x/libxutils/blob/main/media/mdtp.h)
-- [RTP packet parser library](https://github.com/kala13x/libxutils/blob/main/media/rtp.h)
+- [Cross-platform event library based on poll(), epoll() and WSAPoll()](https://github.com/kala13x/libxutils/blob/main/src/net/event.h)
+- [Cross-platform socket library with TCP, UDP and SSL support](https://github.com/kala13x/libxutils/blob/main/src/net/sock.h)
+- [Event based high performance REST API client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/api.h)
+- [HTTP client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/http.h)
+- [MDTP client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/mdtp.h)
+- [RTP packet parser library](https://github.com/kala13x/libxutils/blob/main/src/net/rtp.h)
+
+#### Cryptography:
+- [Implementation of various encrypt/decrypt algorithms](https://github.com/kala13x/libxutils/blob/main/src/crypt/crypt.h)
+- [Base64 and Base64Url encrypt/decrypt functions](https://github.com/kala13x/libxutils/blob/main/src/crypt/base64.h)
+- [AES based on FIPS-197 implementation by Christophe Devine](https://github.com/kala13x/libxutils/blob/main/src/crypt/aes.h)
+- [Implementation of HMAC algorithm with SHA256 and MD5](https://github.com/kala13x/libxutils/blob/main/src/crypt/hmac.h)
+- [RSA implementation based on openssl library](https://github.com/kala13x/libxutils/blob/main/src/crypt/rsa.h)
+- [Implementation of SHA256 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/sha256.h)
+- [Implementation of CRC32 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/crc32.h)
+- [Implementation of MD5 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/md5.h)
 
 #### System:
-- [Cross-platform file and directory manipulations](https://github.com/kala13x/libxutils/blob/main/src/xfs.h)
-- [Cross-platform CPU affinity manipulation API](https://github.com/kala13x/libxutils/blob/main/src/xcpu.h)
-- [Implementation of advanced file search API](https://github.com/kala13x/libxutils/blob/main/src/xfs.h)
-- [System time manipulation library](https://github.com/kala13x/libxutils/blob/main/src/xtime.h)
-- [Performance monitoring library](https://github.com/kala13x/libxutils/blob/main/src/xtop.h)
-- [Advanced logging library](https://github.com/kala13x/libxutils/blob/main/src/xlog.h)
+- [Cross-platform file and directory manipulations](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
+- [Cross-platform CPU affinity manipulation API](https://github.com/kala13x/libxutils/blob/main/src/sys/xcpu.h)
+- [Implementation of advanced file search API](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
+- [System time manipulation library](https://github.com/kala13x/libxutils/blob/main/src/sys/xtime.h)
+- [Performance monitoring library](https://github.com/kala13x/libxutils/blob/main/src/sys/xtop.h)
+- [Advanced logging library](https://github.com/kala13x/libxutils/blob/main/src/sys/xlog.h)
 
 #### Miscellaneous:
-- [JSON parser and writer library with lint and minify support](https://github.com/kala13x/libxutils/blob/main/src/xjson.h)
-- [Implementation of various encrypt/decrypt algorithms](https://github.com/kala13x/libxutils/blob/main/src/crypt.h)
-- [Implementation of JSON Web Tokens with HS256 and RS256](https://github.com/kala13x/libxutils/blob/main/media/jwt.h)
-- [Command-Line interface manipulations](https://github.com/kala13x/libxutils/blob/main/src/xcli.h)
-- [Cross-platform synchronization library](https://github.com/kala13x/libxutils/blob/main/src/sync.h)
-- [Cross-platform multithreading library](https://github.com/kala13x/libxutils/blob/main/src/thread.h)
-- [String manipulation library](https://github.com/kala13x/libxutils/blob/main/src/xstr.h)
-
+- [JSON parser and writer library with lint and minify support](https://github.com/kala13x/libxutils/blob/main/src/data/xjson.h)
+- [Implementation of JSON Web Tokens with HS256 and RS256](https://github.com/kala13x/libxutils/blob/main/data/jwt.h)
+- [Command-Line interface manipulations](https://github.com/kala13x/libxutils/blob/main/src/sys/xcli.h)
+- [Cross-platform synchronization library](https://github.com/kala13x/libxutils/blob/main/src/sys/sync.h)
+- [Cross-platform multithreading library](https://github.com/kala13x/libxutils/blob/main/src/sys/thread.h)
+- [String manipulation library](https://github.com/kala13x/libxutils/blob/main/src/data/xstr.h)
 
 ### Installation
 There are several ways to build and install the project.
@@ -77,41 +86,6 @@ cd libxutils
 make
 sudo make install
 ```
-
-### Build particular files only
-If you want to use particular files and functions, you can configure the library and select only that functionality for the build. In this way, it is possible not to increase the size of the program and to avoid the linkage of unused code.
-
-The `libxutils` project has a config file that contains a list of modules that will be included in the build. This file is used by the `generate.sh` script, which resolves dependencies for each enabled module and generates a `CMakeList.txt` file.
-
-Open `xutils.conf` file with a text editor and mark only the functionality you want to include in the build. Use a low-case `y` symbol to enable and any other symbol to disable modules. Removing a related line from the list will also disable the module.
-
-Example:
-```
-...
-USE_ARRAY=n
-USE_CRYPT=n
-USE_XTIME=n
-USE_EVENT=y
-USE_LIST=n
-USE_XBUF=n
-USE_HASH=n
-USE_SOCK=n
-USE_XLOG=y
-USE_XSTR=n
-...
-```
-After updating the configuration, use the `generate.sh` script to generate the `CMakeLists.txt` file and then build the project using the `CMake` tool as in this example:
-
-```bash
-./generate.sh
-mkdir build
-cd build
-cmake .. && make
-```
-
-You may notice that when you select only one module, several other modules may be also included in the build. Because some files depend on other files in the project, the `generate.sh` script will automatically resolve these dependencies and include required files in the build as well.
-
-For example, if you only mark HTTP library for a build, the socket library will be automatically enabled because HTTP uses some functionality from sockets.
 
 ### Dependencies
 The only dependency that the library uses is the `openssl-devel` package for the `SSL` and `RSA` implementations.\

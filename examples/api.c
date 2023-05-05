@@ -9,10 +9,10 @@
  */
 
 #include <xutils/xstd.h>
-#include <xutils/errex.h>
-#include <xutils/xapi.h>
-#include <xutils/xlog.h>
 #include <xutils/xver.h>
+#include <xutils/xlog.h>
+#include <xutils/xsig.h>
+#include <xutils/api.h>
 
 static int g_nInterrupted = 0;
 

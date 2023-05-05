@@ -3,37 +3,43 @@
 # https://github.com/kala13x/smake #
 ####################################
 
-CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_SSL -I./src -I./media
+CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_SSL -I./src -I./src/sys -I./src/crypt -I./src/net -I./src/data
 LIBS = -lpthread -lssl -lcrypto
 NAME = libxutils.a
 ODIR = ./obj
 OBJ = o
 
 OBJS = addr.$(OBJ) \
+	aes.$(OBJ) \
+	api.$(OBJ) \
 	array.$(OBJ) \
+	base64.$(OBJ) \
+	crc32.$(OBJ) \
 	crypt.$(OBJ) \
-	errex.$(OBJ) \
 	event.$(OBJ) \
 	hash.$(OBJ) \
+	hmac.$(OBJ) \
 	http.$(OBJ) \
 	jwt.$(OBJ) \
 	list.$(OBJ) \
+	map.$(OBJ) \
+	md5.$(OBJ) \
 	mdtp.$(OBJ) \
 	ntp.$(OBJ) \
+	rsa.$(OBJ) \
 	rtp.$(OBJ) \
+	sha256.$(OBJ) \
 	sock.$(OBJ) \
 	sync.$(OBJ) \
 	thread.$(OBJ) \
-	ts.$(OBJ) \
-	xaes.$(OBJ) \
-	xapi.$(OBJ) \
+	ws.$(OBJ) \
 	xbuf.$(OBJ) \
 	xcli.$(OBJ) \
 	xcpu.$(OBJ) \
 	xfs.$(OBJ) \
 	xjson.$(OBJ) \
 	xlog.$(OBJ) \
-	xmap.$(OBJ) \
+	xsig.$(OBJ) \
 	xstr.$(OBJ) \
 	xtime.$(OBJ) \
 	xtop.$(OBJ) \
@@ -43,7 +49,7 @@ OBJS = addr.$(OBJ) \
 OBJECTS = $(patsubst %,$(ODIR)/%,$(OBJS))
 INSTALL_INC = /usr/local/include/xutils
 INSTALL_BIN = /usr/local/lib
-VPATH = ./src:./media
+VPATH = ./src:./src/sys:./src/crypt:./src/net:./src/data
 
 .c.$(OBJ):
 	@test -d $(ODIR) || mkdir -p $(ODIR)
@@ -58,7 +64,10 @@ install:
 	@install -m 0755 $(ODIR)/$(NAME) $(INSTALL_BIN)/
 	@test -d $(INSTALL_INC) || mkdir -p $(INSTALL_INC)
 	@cp -r ./src/*.h $(INSTALL_INC)/
-	@cp -r ./media/*.h $(INSTALL_INC)/
+	@cp -r ./src/sys/*.h $(INSTALL_INC)/
+	@cp -r ./src/crypt/*.h $(INSTALL_INC)/
+	@cp -r ./src/net/*.h $(INSTALL_INC)/
+	@cp -r ./src/data/*.h $(INSTALL_INC)/
 
 .PHONY: clean
 clean:

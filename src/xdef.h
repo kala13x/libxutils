@@ -10,6 +10,29 @@
 #ifndef __XUTILS_STDDEF_H__
 #define __XUTILS_STDDEF_H__
 
+#ifdef _WIN32
+typedef int                 xsocklen_t;
+typedef long                xatomic_t;
+typedef int                 xmode_t;
+typedef int                 xpid_t;
+#else
+typedef socklen_t           xsocklen_t;
+typedef uint32_t            xatomic_t;
+typedef mode_t              xmode_t;
+typedef pid_t               xpid_t;
+#endif
+
+typedef uint8_t             xbool_t;
+#define XTRUE               1
+#define XFALSE              0
+
+#define XATOMIC             volatile xatomic_t
+
+#define XCHAR(var,size) char var[size] = {'\0'}
+#define XARG_SIZE(val)  val, sizeof(val)
+
+#define XFTON(x) ((x)>=0.0f?(int)((x)+0.5f):(int)((x)-0.5f))
+
 #ifndef XMSG_MIN
 #define XMSG_MIN        2048
 #endif

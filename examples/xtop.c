@@ -9,16 +9,16 @@
  */
 
 #include <xutils/xstd.h>
-#include <xutils/errex.h>
+#include <xutils/xsig.h>
 #include <xutils/xjson.h>
 #include <xutils/xstr.h>
 #include <xutils/xcli.h>
-#include <xutils/xapi.h>
 #include <xutils/xlog.h>
 #include <xutils/xtop.h>
 #include <xutils/addr.h>
 #include <xutils/xver.h>
 #include <xutils/xfs.h>
+#include <xutils/api.h>
 
 #define XTOP_VERSION_MAJ    1
 #define XTOP_VERSION_MIN    1

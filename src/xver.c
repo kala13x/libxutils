@@ -8,10 +8,9 @@
  */
 
 #include "xstd.h"
+#include "xver.h"
 #include "xstr.h"
 #include "sync.h"
-#include "xver.h"
-#include "xtype.h"
 
 static XATOMIC g_nHaveVerShort = 0;
 static XATOMIC g_nHaveVerLong = 0;

@@ -10,19 +10,21 @@
 #include <xutils/xstd.h>
 #include <xutils/array.h>
 #include <xutils/xtype.h>
-#include <xutils/xaes.h>
 #include <xutils/xlog.h>
 #include <xutils/xstr.h>
 #include <xutils/xcli.h>
 #include <xutils/xfs.h>
 #include <xutils/crypt.h>
+#include <xutils/crc32.h>
+#include <xutils/aes.h>
+#include <xutils/rsa.h>
 
 #define XCRYPT_VER_MAX      0
 #define XCRYPT_VER_MIN      1
 #define XCRYPT_BUILD_NUM    21
 
-#define XCRYPT_HEX_COLUMNS  16
 #define XAES_KEY_LENGTH     128
+#define XHEX_COLUMNS        16
 extern char *optarg;
 
 typedef struct
@@ -361,7 +363,7 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
     return nStatus == XSTDOK ? XTRUE : XFALSE;
 }
 
-static void XCrypt_HEXDump(const uint8_t *pData, size_t nSize)
+static void XHEX_EncryptDump(const uint8_t *pData, size_t nSize)
 {
     uint8_t *pHex = XCrypt_HEX(pData, &nSize, XSTR_SPACE, 16, XFALSE);
     if (pHex != NULL)
@@ -376,7 +378,7 @@ static void XCrypt_Print(xcrypt_args_t *pArgs, uint8_t *pData, size_t nLength)
     if (!pArgs->bPrint) return;
     pData[nLength] = XSTR_NUL;
 
-    if (pArgs->bHex) XCrypt_HEXDump(pData, nLength);
+    if (pArgs->bHex) XHEX_EncryptDump(pData, nLength);
     else printf("%s\n", (char*)pData);
 }
 
@@ -490,7 +492,7 @@ int main(int argc, char* argv[])
 
     xcrypt_ctx_t crypter;
     XCrypt_Init(&crypter, args.bDecrypt, args.sCiphers, XCrypt_Callback, &args);
-    crypter.nColumns = XCRYPT_HEX_COLUMNS;
+    crypter.nColumns = XHEX_COLUMNS;
 
     size_t nLength = buffer.nUsed;
     uint8_t *pData = XCrypt_Multy(&crypter, buffer.pData, &nLength);

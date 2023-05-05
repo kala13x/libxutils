@@ -12,6 +12,7 @@
 #include <xutils/xcpu.h>
 #include <xutils/xlog.h>
 #include <xutils/xtime.h>
+#include <xutils/md5.h>
 #include <xutils/crypt.h>
 
 void packet_callback(xpacket_t *pPacket, uint8_t nType)
@@ -84,7 +85,7 @@ int main(int argc, char *argv[])
             const char *pTestString = "test_password";
             size_t nLength = strlen(pTestString);
 
-            char *pCrypted = XCrypt_MD5((const uint8_t*)pTestString, nLength);
+            char *pCrypted = XMD5_EncryptHex((const uint8_t*)pTestString, nLength);
             if (pCrypted == NULL)
             {
                 xloge("Failed to encrypt payload");

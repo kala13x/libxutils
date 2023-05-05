@@ -8,6 +8,7 @@
  */
 
 #include <xutils/xstd.h>
+#include <xutils/xtype.h>
 #include <xutils/xstr.h>
 #include <xutils/xlog.h>
 #include <xutils/xfs.h>
