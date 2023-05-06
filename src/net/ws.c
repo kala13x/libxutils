@@ -39,7 +39,7 @@ xws_frame_type_t XWS_FrameType(uint8_t nOpCode)
 {
     unsigned int i;
 
-    for (i = 0; sizeof(g_wsFrameCodes) / sizeof(g_wsFrameCodes[0]); i++)
+    for (i = 0; i < sizeof(g_wsFrameCodes) / sizeof(g_wsFrameCodes[0]); i++)
         if (g_wsFrameCodes[i].nOpCode == nOpCode) return g_wsFrameCodes[i].eType;
 
     return XWS_INVALID;
@@ -49,7 +49,7 @@ uint8_t XWS_OpCode(xws_frame_type_t eType)
 {
     unsigned int i;
 
-    for (i = 0; sizeof(g_wsFrameCodes) / sizeof(g_wsFrameCodes[0]); i++)
+    for (i = 0; i < sizeof(g_wsFrameCodes) / sizeof(g_wsFrameCodes[0]); i++)
         if (g_wsFrameCodes[i].eType == eType) return g_wsFrameCodes[i].nOpCode;
 
     return 0;
@@ -57,7 +57,7 @@ uint8_t XWS_OpCode(xws_frame_type_t eType)
 
 uint8_t* XWS_CreateFrame(uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize)
 {
-    if (*pFrameSize) pFrameSize = 0;
+    if (pFrameSize) pFrameSize = 0;
     XASSERT((pPayload && nLength), NULL);
 
     uint8_t nFIN = bFin ? XSTDOK : XSTDNON;
@@ -100,7 +100,7 @@ uint8_t* XWS_CreateFrame(uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbo
     }
 
     memcpy(pFrame + nHeaderSize, pPayload, nLength);
-    if (*pFrameSize) *pFrameSize = nFrameSize;
+    if (pFrameSize) *pFrameSize = nFrameSize;
 
     pFrame[nFrameSize] = '\0';
     return pFrame;
@@ -172,13 +172,6 @@ size_t XWSFrame_GetPayloadLength(xws_frame_t *pFrame)
     return nDataSize - pFrame->nHeaderSize;
 }
 
-XSTATUS XWSFrame_AddData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize)
-{
-    XASSERT((pFrame && pData && nSize), XSTDINV);
-    xbyte_buffer_t *pBuffer = &pFrame->rawData;
-    return XByteBuffer_Add(pBuffer, pData, nSize);
-}
-
 XSTATUS XWSFrame_Parse(xws_frame_t *pFrame)
 {
     XASSERT(pFrame, XSTDINV);
@@ -225,4 +218,18 @@ XSTATUS XWSFrame_Parse(xws_frame_t *pFrame)
 
     pFrame->bComplete = XTRUE;
     return XSTDOK;
+}
+
+XSTATUS XWSFrame_AppendData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize)
+{
+    XASSERT((pFrame && pData && nSize), XSTDINV);
+    xbyte_buffer_t *pBuffer = &pFrame->rawData;
+    return XByteBuffer_Add(pBuffer, pData, nSize);
+}
+
+XSTATUS XWSFrame_ParseData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize)
+{
+    XWSFrame_Init(pFrame);
+    XSTATUS nStatus = XWSFrame_AppendData(pFrame, pData, nSize);
+    return (nStatus > 0) ? XWSFrame_Parse(pFrame) : nStatus;
 }

@@ -61,7 +61,8 @@ xbyte_buffer_t* XWSFrame_Create(xws_frame_t *pFrame, uint8_t *pPayload, size_t n
 const uint8_t* XWSFrame_GetPayload(xws_frame_t *pFrame);
 size_t XWSFrame_GetPayloadLength(xws_frame_t *pFrame);
 
-XSTATUS XWSFrame_AddData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize);
+XSTATUS XWSFrame_AppendData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize);
+XSTATUS XWSFrame_ParseData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize);
 XSTATUS XWSFrame_Parse(xws_frame_t *pFrame);
 
 #ifdef __cplusplus
