@@ -76,7 +76,6 @@ const uint8_t* XWebFrame_GetPayload(xweb_frame_t *pFrame);
 XSTATUS XWebFrame_GetExtraData(xweb_frame_t *pFrame, xbyte_buffer_t *pBuffer, xbool_t bAppend);
 XSTATUS XWebFrame_CutExtraData(xweb_frame_t *pFrame);
 
-
 #ifdef __cplusplus
 }
 #endif
