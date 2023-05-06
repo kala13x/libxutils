@@ -27,8 +27,8 @@ int XByteBuffer_Resize(xbyte_buffer_t *pBuffer, size_t nSize)
 {
     if (!nSize)
     {
-        XByteBuffer_Recycle(pBuffer);
-        return pBuffer->nSize;
+        XByteBuffer_Clear(pBuffer);
+        return XSTDNON;
     }
 
     if (pBuffer->pData == NULL)
@@ -127,18 +127,13 @@ void XByteBuffer_Clear(xbyte_buffer_t *pBuffer)
     pBuffer->nSize = 0;
     pBuffer->nUsed = 0;
     pBuffer->pData = NULL;
-
-    if (pBuffer->nAlloc)
-        free(pBuffer);
 }
 
-void XByteBuffer_Recycle(xbyte_buffer_t *pBuffer)
+void XByteBuffer_Free(xbyte_buffer_t *pBuffer)
 {
     XASSERT_VOID(pBuffer);
-    uint8_t nAlloc = pBuffer->nAlloc;
-    pBuffer->nAlloc = XSTDNON;
     XByteBuffer_Clear(pBuffer);
-    pBuffer->nAlloc = nAlloc;
+    if (pBuffer->nAlloc) free(pBuffer);
 }
 
 void XByteBuffer_Reset(xbyte_buffer_t *pBuffer)
@@ -151,16 +146,25 @@ void XByteBuffer_Reset(xbyte_buffer_t *pBuffer)
     pBuffer->nUsed = 0;
 }
 
-int XByteBuffer_Set(xbyte_buffer_t *pBuffer, uint8_t *pData, size_t nUsed)
+int XByteBuffer_Set(xbyte_buffer_t *pBuffer, uint8_t *pData, size_t nSize)
 {
     XASSERT(pBuffer, XSTDINV);
     pBuffer->nStatus = 1;
     pBuffer->nAlloc = 0;
     pBuffer->nFast = 0;
     pBuffer->nSize = 0;
-    pBuffer->nUsed = nUsed;
+    pBuffer->nUsed = nSize;
     pBuffer->pData = pData;
     return (int)pBuffer->nUsed;
+}
+
+int XByteBuffer_Own(xbyte_buffer_t *pBuffer, uint8_t *pData, size_t nSize)
+{
+    XASSERT(pBuffer, XSTDINV);
+    XByteBuffer_Clear(pBuffer);
+    XByteBuffer_Set(pBuffer, pData, nSize);
+    pBuffer->nSize = nSize;
+    return pBuffer->nSize;
 }
 
 int XByteBuffer_Add(xbyte_buffer_t *pBuffer, const uint8_t *pData, size_t nSize)

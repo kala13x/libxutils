@@ -22,6 +22,7 @@ libxutils is available for both Linux/Unix and Windows operating systems and is 
 - [Cross-platform event library based on poll(), epoll() and WSAPoll()](https://github.com/kala13x/libxutils/blob/main/src/net/event.h)
 - [Cross-platform socket library with TCP, UDP and SSL support](https://github.com/kala13x/libxutils/blob/main/src/net/sock.h)
 - [Event based high performance REST API client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/api.h)
+- [Web Socket client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/ws.h)
 - [HTTP client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/http.h)
 - [MDTP client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/mdtp.h)
 - [RTP packet parser library](https://github.com/kala13x/libxutils/blob/main/src/net/rtp.h)

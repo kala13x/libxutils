@@ -4,8 +4,8 @@
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
  *
- * @brief Implementation of Web Socket server
- * and client functionality based on xhttp_t.
+ * @brief Implementation of Web Socket server and
+ * client functionality based on xevents and xsock.
  */
 
 #ifndef __XUTILS_XWS_H__
@@ -51,15 +51,18 @@ typedef struct {
 xws_frame_type_t XWS_FrameType(uint8_t nOpCode);
 uint8_t XWS_OpCode(xws_frame_type_t eType);
 
-void XWS_InitFrame(xws_frame_t *pFrame);
-void XWS_ClearFrame(xws_frame_t *pFrame);
-void XWS_ResetFrame(xws_frame_t *pFrame);
+void XWSFrame_Init(xws_frame_t *pFrame);
+void XWSFrame_Clear(xws_frame_t *pFrame);
+void XWSFrame_Reset(xws_frame_t *pFrame);
 
 uint8_t* XWS_CreateFrame(uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize);
-xbyte_buffer_t* XWS_Create(xws_frame_t *pFrame, uint8_t *pPayload, size_t nPayloadLength);
+xbyte_buffer_t* XWSFrame_Create(xws_frame_t *pFrame, uint8_t *pPayload, size_t nPayloadLength);
 
-XSTATUS XWS_Parse(xws_frame_t *pFrame);
-const uint8_t* XWS_GetPayload(xws_frame_t *pFrame);
+const uint8_t* XWSFrame_GetPayload(xws_frame_t *pFrame);
+size_t XWSFrame_GetPayloadLength(xws_frame_t *pFrame);
+
+XSTATUS XWSFrame_AddData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize);
+XSTATUS XWSFrame_Parse(xws_frame_t *pFrame);
 
 #ifdef __cplusplus
 }

@@ -4,18 +4,18 @@
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
  *
- * @brief Implementation of Web Socket server
- * and client functionality based on xhttp_t.
+ * @brief Implementation of Web Socket server and
+ * client functionality based on xevents and xsock.
  */
 
 #include "ws.h"
 
-typedef struct XHTTPCode {
+typedef struct xws_frame_code_ {
     const xws_frame_type_t eType;
     const uint8_t nOpCode;
-} xhttp_code_t;
+} xws_frame_code_t;
 
-static const xhttp_code_t g_wsFrameTypes[] =
+static const xws_frame_code_t g_wsFrameCodes[] =
 {
     { 0x0, XWS_CONTINUATION },
     { 0x1, XWS_TEXT },
@@ -39,8 +39,8 @@ xws_frame_type_t XWS_FrameType(uint8_t nOpCode)
 {
     unsigned int i;
 
-    for (i = 0; sizeof(g_wsFrameTypes) / sizeof(g_wsFrameTypes[0]); i++)
-        if (g_wsFrameTypes[i].nOpCode == nOpCode) return g_wsFrameTypes[i].eType;
+    for (i = 0; sizeof(g_wsFrameCodes) / sizeof(g_wsFrameCodes[0]); i++)
+        if (g_wsFrameCodes[i].nOpCode == nOpCode) return g_wsFrameCodes[i].eType;
 
     return XWS_INVALID;
 }
@@ -49,36 +49,10 @@ uint8_t XWS_OpCode(xws_frame_type_t eType)
 {
     unsigned int i;
 
-    for (i = 0; sizeof(g_wsFrameTypes) / sizeof(g_wsFrameTypes[0]); i++)
-        if (g_wsFrameTypes[i].eType == eType) return g_wsFrameTypes[i].nOpCode;
+    for (i = 0; sizeof(g_wsFrameCodes) / sizeof(g_wsFrameCodes[0]); i++)
+        if (g_wsFrameCodes[i].eType == eType) return g_wsFrameCodes[i].nOpCode;
 
     return 0;
-}
-
-void XWS_InitFrame(xws_frame_t *pFrame)
-{
-    XASSERT_VOID(pFrame);
-    pFrame->eType = XWS_INVALID;
-    pFrame->nPayloadLength = XSTDNON;
-    pFrame->nHeaderSize = XSTDNON;
-    pFrame->bComplete = XFALSE;
-    pFrame->nOpCode = 0;
-    pFrame->bFin = XFALSE;
-
-    xbyte_buffer_t *pRawData = &pFrame->rawData;
-    XByteBuffer_Init(pRawData, XSTDNON, XFALSE);
-}
-
-void XWS_ClearFrame(xws_frame_t *pFrame)
-{
-    XASSERT_VOID(pFrame);
-    XByteBuffer_Clear(&pFrame->rawData);
-}
-
-void XWS_ResetFrame(xws_frame_t *pFrame)
-{
-    XWS_InitFrame(pFrame);
-    XWS_InitFrame(pFrame);
 }
 
 uint8_t* XWS_CreateFrame(uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize)
@@ -132,7 +106,33 @@ uint8_t* XWS_CreateFrame(uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbo
     return pFrame;
 }
 
-xbyte_buffer_t* XWS_Create(xws_frame_t *pFrame, uint8_t *pPayload, size_t nPayloadLength)
+void XWSFrame_Init(xws_frame_t *pFrame)
+{
+    XASSERT_VOID(pFrame);
+    pFrame->eType = XWS_INVALID;
+    pFrame->nPayloadLength = XSTDNON;
+    pFrame->nHeaderSize = XSTDNON;
+    pFrame->bComplete = XFALSE;
+    pFrame->nOpCode = 0;
+    pFrame->bFin = XFALSE;
+
+    xbyte_buffer_t *pRawData = &pFrame->rawData;
+    XByteBuffer_Init(pRawData, XSTDNON, XFALSE);
+}
+
+void XWSFrame_Clear(xws_frame_t *pFrame)
+{
+    XASSERT_VOID(pFrame);
+    XByteBuffer_Clear(&pFrame->rawData);
+}
+
+void XWSFrame_Reset(xws_frame_t *pFrame)
+{
+    XWSFrame_Clear(pFrame);
+    XWSFrame_Init(pFrame);
+}
+
+xbyte_buffer_t* XWSFrame_Create(xws_frame_t *pFrame, uint8_t *pPayload, size_t nPayloadLength)
 {
     XASSERT(pFrame, NULL);
     size_t nFrameSize = 0;
@@ -145,23 +145,41 @@ xbyte_buffer_t* XWS_Create(xws_frame_t *pFrame, uint8_t *pPayload, size_t nPaylo
             pFrame->nOpCode, pFrame->bFin, &nFrameSize);
 
     XASSERT((pWsFrame != NULL), NULL);
-    XByteBuffer_Clear(&pFrame->rawData);
-    XByteBuffer_Set(&pFrame->rawData, pWsFrame, nFrameSize);
+    XASSERT_CALL((nFrameSize > nPayloadLength), free, pWsFrame, NULL);
 
-    pFrame->rawData.nSize = nFrameSize;
+    XByteBuffer_Own(&pFrame->rawData, pWsFrame, nFrameSize);
+    pFrame->nHeaderSize = nFrameSize - nPayloadLength;
+    pFrame->nPayloadLength = nPayloadLength;
+
     return &pFrame->rawData;
 }
 
-const uint8_t* XWS_GetPayload(xws_frame_t *pFrame)
+const uint8_t* XWSFrame_GetPayload(xws_frame_t *pFrame)
 {
-    XASSERT((pFrame && pFrame->rawData.pData), NULL);
-    const uint8_t *pData = pFrame->rawData.pData;
-    size_t nDataSize = pFrame->rawData.nUsed;
-    XASSERT((nDataSize > pFrame->nHeaderSize), NULL);
-    return pData + pFrame->nHeaderSize;
+    XASSERT_RET((pFrame && pFrame->rawData.pData), NULL);
+    XASSERT_RET((pFrame->nPayloadLength), NULL);
+    const size_t nDataSize = pFrame->rawData.nUsed;
+    XASSERT_RET((nDataSize > pFrame->nHeaderSize), NULL);
+    return pFrame->rawData.pData + pFrame->nHeaderSize;
 }
 
-XSTATUS XWS_Parse(xws_frame_t *pFrame)
+size_t XWSFrame_GetPayloadLength(xws_frame_t *pFrame)
+{
+    XASSERT_RET((pFrame && pFrame->rawData.pData), XSTDNON);
+    XASSERT_RET((pFrame->nPayloadLength), XSTDNON);
+    const size_t nDataSize = pFrame->rawData.nUsed;
+    XASSERT_RET((nDataSize > pFrame->nHeaderSize), XSTDNON);
+    return nDataSize - pFrame->nHeaderSize;
+}
+
+XSTATUS XWSFrame_AddData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize)
+{
+    XASSERT((pFrame && pData && nSize), XSTDINV);
+    xbyte_buffer_t *pBuffer = &pFrame->rawData;
+    return XByteBuffer_Add(pBuffer, pData, nSize);
+}
+
+XSTATUS XWSFrame_Parse(xws_frame_t *pFrame)
 {
     XASSERT(pFrame, XSTDINV);
     pFrame->bComplete = XFALSE;
@@ -180,26 +198,26 @@ XSTATUS XWS_Parse(xws_frame_t *pFrame)
 
     if (nLengthByte <= 125)
     {
-        pFrame->nHeaderSize = 2;
         pFrame->nPayloadLength = nLengthByte;
+        pFrame->nHeaderSize = 2;
     }
     else if (nLengthByte == 126)
     {
         if (nSize < 4) return XSTDNON;
-        pFrame->nHeaderSize = 4;
         uint16_t nLength16 = 0;
-
         memcpy(&nLength16, pData + 2, 2);
+
         pFrame->nPayloadLength = ntohs(nLength16);
+        pFrame->nHeaderSize = 4;
     }
     else
     {
         if (nSize < 10) return XSTDNON;
-        pFrame->nHeaderSize = 10;
         uint64_t nLength64 = 0;
-
         memcpy(&nLength64, pData + 2, 8);
+
         pFrame->nPayloadLength = be64toh(nLength64);
+        pFrame->nHeaderSize = 10;
     }
 
     size_t nFrameLength = pFrame->nHeaderSize + pFrame->nPayloadLength;
