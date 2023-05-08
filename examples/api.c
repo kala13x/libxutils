@@ -174,8 +174,11 @@ int main(int argc, char* argv[])
     xapi_t api;
     XAPI_Init(&api, service_callback, &api);
 
-    if (XAPI_StartListener(&api, XAPI_HTTP, argv[1], atoi(argv[2])) < 0) return XSTDERR;
-    xlogn("Socket started listen to port: %d", atoi(argv[2]));
+    if (XAPI_StartListener(&api, XAPI_HTTP, argv[1], atoi(argv[2])) < 0)
+    {
+        XAPI_Destroy(&api);
+        return XSTDERR;
+    }
 
     xevent_status_t status;
     do status = XAPI_Service(&api, 100);
