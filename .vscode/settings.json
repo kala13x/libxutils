@@ -33,5 +33,7 @@
         "xfs.h": "c",
         "xver.h": "c",
         "api.h": "c",
+        "http.h": "c",
+        "event.h": "c"
     }
 }

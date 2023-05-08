@@ -48,10 +48,10 @@ void clear_event(xevent_data_t *pEvData)
 int handle_request(xevent_data_t *pEvData)
 {
     xhttp_t *pHandle = (xhttp_t*)pEvData->pContext;
-    xlogn("Received request: fd(%d), buff(%zu)", (int)pEvData->nFD, pHandle->dataRaw.nUsed);
+    xlogn("Received request: fd(%d), buff(%zu)", (int)pEvData->nFD, pHandle->rawData.nUsed);
 
-    pHandle->dataRaw.pData[pHandle->nHeaderLength - 1] = XSTR_NUL;
-    xlogi("Request header:\n\n%s", (char*)pHandle->dataRaw.pData);
+    pHandle->rawData.pData[pHandle->nHeaderLength - 1] = XSTR_NUL;
+    xlogi("Request header:\n\n%s", (char*)pHandle->rawData.pData);
 
     XHTTP_Reset(pHandle, XFALSE);
     pHandle->eType = XHTTP_RESPONSE;
@@ -76,12 +76,12 @@ int handle_request(xevent_data_t *pEvData)
     }
 
     xlogn("Sending response: fd(%d), buff(%zu)",
-            (int)pEvData->nFD, pHandle->dataRaw.nUsed);
+            (int)pEvData->nFD, pHandle->rawData.nUsed);
 
-    char cSave = pHandle->dataRaw.pData[pHandle->nHeaderLength - 1];
-    pHandle->dataRaw.pData[pHandle->nHeaderLength - 1] = XSTR_NUL;
-    xlogi("Response header:\n\n%s", (char*)pHandle->dataRaw.pData);
-    pHandle->dataRaw.pData[pHandle->nHeaderLength - 1] = cSave;
+    char cSave = pHandle->rawData.pData[pHandle->nHeaderLength - 1];
+    pHandle->rawData.pData[pHandle->nHeaderLength - 1] = XSTR_NUL;
+    xlogi("Response header:\n\n%s", (char*)pHandle->rawData.pData);
+    pHandle->rawData.pData[pHandle->nHeaderLength - 1] = cSave;
 
     pEvData->pContext = pHandle;
     return XEVENTS_CONTINUE;
@@ -164,7 +164,7 @@ int read_event(xevents_t *pEvents, xevent_data_t *pEvData)
         }
 
         xlogd("RX complete: fd(%d), buff(%zu)",
-            (int)pEvData->nFD, pHandle->dataRaw.nUsed);
+            (int)pEvData->nFD, pHandle->rawData.nUsed);
     }
 
     return XEVENTS_CONTINUE;
@@ -175,7 +175,7 @@ int write_event(xevents_t *pEvents, xevent_data_t *pEvData)
     if (pEvents == NULL || pEvData == NULL) return XEVENTS_DISCONNECT;
     xhttp_t *pResponse = (xhttp_t*)pEvData->pContext;
 
-    xbyte_buffer_t *pBuffer = &pResponse->dataRaw;
+    xbyte_buffer_t *pBuffer = &pResponse->rawData;
     if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
     xsock_t socket;

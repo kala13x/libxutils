@@ -59,8 +59,8 @@ int COVID_ParseResponse(xhttp_t *pHttp, covid_cases_t *pCovCases)
 {
     if (pHttp->nStatusCode != 200)
     {
-        pHttp->dataRaw.pData[pHttp->nHeaderLength - 1] = '\0';
-        xlogi("Response header:\n%s\n", pHttp->dataRaw.pData);
+        pHttp->rawData.pData[pHttp->nHeaderLength - 1] = '\0';
+        xlogi("Response header:\n%s\n", pHttp->rawData.pData);
         return XSTDNON;
     }
 

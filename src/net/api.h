@@ -12,38 +12,36 @@
 #define __XUTILS_API_H__
 
 #include "xstd.h"
+#include "event.h"
 #include "sock.h"
 #include "http.h"
-#include "event.h"
+#include "mdtp.h"
+#include "ws.h"
 
-#define XAPI_EVENT_PEER         0
-#define XAPI_EVENT_LISTENER     1
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef enum
-{
+typedef struct xapi_ xapi_t;
+
+typedef enum {
     XAPI_CB_ERROR = 0,
     XAPI_CB_STATUS,
     XAPI_CB_INTERRUPT,
     XAPI_CB_COMPLETE,
     XAPI_CB_ACCEPTED,
-    XAPI_CB_REQUEST,
     XAPI_CB_STARTED,
     XAPI_CB_CLOSED,
     XAPI_CB_WRITE,
-    XAPI_CB_USER
+    XAPI_CB_READ,
+    XAPI_CB_PING,
+    XAPI_CB_PONG,
+    XAPI_CB_USER,
+    XAPI_CB_TIMER
 } xapi_cb_type_t;
 
-typedef enum
-{
-    XAPI_ST_EVENT = 0,
-    XAPI_ST_HTTP,
-    XAPI_ST_SOCK,
-    XAPI_ST_API
-} xapi_st_type_t;
-
-typedef enum
-{
-    XAPI_NONE = (uint8_t)0,
+typedef enum {
+    XAPI_UNKNOWN = (uint8_t)0,
     XAPI_MISSING_KEY,
     XAPI_INVALID_KEY,
     XAPI_MISSING_TOKEN,
@@ -58,44 +56,48 @@ typedef enum
 } xapi_status_t;
 
 typedef enum {
-    XPKT_INVALID = 0,
-    XPKT_MDTP,
-    XPKT_HTTP
-} xpacket_type_t;
+    XAPI_NONE = 0,
+    XAPI_EVENT,
+    XAPI_HTTP,
+    XAPI_MDTP,
+    XAPI_SOCK,
+    XAPI_WS
+} xapi_type_t;
 
-typedef struct XAPI xapi_t;
+typedef enum {
+    XAPI_INACTIVE = (int)0,
+    XAPI_SERVER,
+    XAPI_CLIENT,
+    XAPI_PEER,
+} xapi_role_t;
 
-typedef struct XAPIData
-{
-    char sIPAddr[XSOCK_ADDR_MAX];
+typedef struct XAPIData {
+    char sAddr[XSOCK_ADDR_MAX];
     xbool_t bCancel;
+    xbool_t bAlloc;
     XSOCKET nFD;
-
-    xpacket_type_t ePktType;
-    void *pPacket;
 
     xevent_data_t *pEvData;
     void *pSessionData;
+    void *pPacket;
+
+    xapi_type_t eType;
+    xapi_role_t eRole;
     xapi_t *pApi;
 } xapi_data_t;
 
-typedef struct XAPICTX
-{
+typedef struct xapi_ctx_ {
     xapi_cb_type_t eCbType;
-    xapi_st_type_t eStType;
+    xapi_type_t eStatType;
     uint8_t nStatus;
     xapi_t *pApi;
 } xapi_ctx_t;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef int(*xapi_cb_t)(xapi_ctx_t *pCtx, xapi_data_t *pData);
 
-struct XAPI {
-    xsock_t listener;
+struct xapi_ {
     xevents_t events;
+    xbool_t bHaveEvents;
     xapi_cb_t callback;
     void *pUserCtx;
 };
@@ -108,7 +110,8 @@ int XAPI_SetEvents(xapi_data_t *pData, int nEvents);
 int XAPI_SetResponse(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus);
 int XAPI_AuthorizeRequest(xapi_data_t *pApiData, const char *pToken, const char *pKey);
 
-int XAPI_StartListener(xapi_t *pApi, const char *pAddr, uint16_t nPort);
+int XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort);
+int XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs);
 void XAPI_Destroy(xapi_t *pApi);
 

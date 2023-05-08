@@ -234,9 +234,9 @@ int XHTTPApp_DisplayRequest(xhttp_t *pHandle)
 
     xlogd("Sending %s request: %zu bytes",
         XHTTP_GetMethodStr(pHandle->eMethod),
-        pHandle->dataRaw.nUsed);
+        pHandle->rawData.nUsed);
 
-    printf("%s", (char*)pHandle->dataRaw.pData);
+    printf("%s", (char*)pHandle->rawData.pData);
     if (XHTTP_GetBodySize(pHandle)) printf("\n");
 
     return XSTDOK;
@@ -311,11 +311,11 @@ int XHTTPApp_DisplayResponseHdr(xhttp_t *pHandle)
     const char *pStatus = XHTTP_GetCodeStr(pHandle->nStatusCode);
     const char *pCntType = XHTTP_GetHeader(pHandle, "Content-Type");
 
-    char cSave = pHandle->dataRaw.pData[pHandle->nHeaderLength - 1];
-    pHandle->dataRaw.pData[pHandle->nHeaderLength - 1] = XSTR_NUL;
+    char cSave = pHandle->rawData.pData[pHandle->nHeaderLength - 1];
+    pHandle->rawData.pData[pHandle->nHeaderLength - 1] = XSTR_NUL;
     xlogd("Received response header: %s", pStatus);
-    printf("%s\n", (char*)pHandle->dataRaw.pData);
-    pHandle->dataRaw.pData[pHandle->nHeaderLength - 1] = cSave;
+    printf("%s\n", (char*)pHandle->rawData.pData);
+    pHandle->rawData.pData[pHandle->nHeaderLength - 1] = cSave;
   
     xbool_t bFollowing = (pHandle->nStatusCode >= 300 && pHandle->nStatusCode < 400 &&
         pArgs->nAutoFollow && XHTTP_GetHeader(pHandle, "Location") != NULL) ? XTRUE : XFALSE;

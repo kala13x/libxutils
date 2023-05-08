@@ -172,9 +172,20 @@ XSTATUS XWebFrame_Create(xweb_frame_t *pFrame, uint8_t *pPayload, size_t nLength
     return XSTDOK;
 }
 
-xweb_frame_t* XWebFrame_New(uint8_t *pPayload, size_t nLength, xweb_frame_type_t eType, xbool_t bFin)
+xweb_frame_t* XWebFrame_Alloc()
 {
     xweb_frame_t *pFrame = (xweb_frame_t*)malloc(sizeof(xweb_frame_t));
+    XASSERT((pFrame != NULL), NULL);
+    
+    XWebFrame_Init(pFrame);
+    pFrame->bAlloc = XTRUE;
+
+    return pFrame;
+}
+
+xweb_frame_t* XWebFrame_New(uint8_t *pPayload, size_t nLength, xweb_frame_type_t eType, xbool_t bFin)
+{
+    xweb_frame_t *pFrame = XWebFrame_Alloc();
     XASSERT((pFrame != NULL), NULL);
     XSTATUS nStatus;
 

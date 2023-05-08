@@ -38,7 +38,7 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
 
     xlogn("Received request: fd(%d), buff(%zu)",
-        (int)pData->nFD, pHandle->dataRaw.nUsed);
+        (int)pData->nFD, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
     if (pHeader != NULL)
@@ -73,7 +73,7 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     xlogn("Sending response: fd(%d), buff(%zu)",
-            (int)pData->nFD, pHandle->dataRaw.nUsed);
+            (int)pData->nFD, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
     if (pHeader != NULL)
@@ -122,7 +122,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_STATUS:
             print_status(pCtx, pData);
             break;
-        case XAPI_CB_REQUEST:
+        case XAPI_CB_READ:
             return handle_request(pCtx, pData);
         case XAPI_CB_WRITE:
             return write_data(pCtx, pData);
@@ -164,10 +164,9 @@ int main(int argc, char* argv[])
     }
 
     xapi_t api;
-    api.callback = service_callback;
-    api.pUserCtx = &api;
+    XAPI_Init(&api, service_callback, &api);
 
-    if (XAPI_StartListener(&api, argv[1], atoi(argv[2])) < 0) return XSTDERR;
+    if (XAPI_StartListener(&api, XAPI_HTTP, argv[1], atoi(argv[2])) < 0) return XSTDERR;
     xlogn("Socket started listen to port: %d", atoi(argv[2]));
 
     xevent_status_t status;

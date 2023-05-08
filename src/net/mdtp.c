@@ -51,23 +51,34 @@ xpacket_type_t XPacket_GetType(const char *pType)
 
 void XPacket_Clear(xpacket_t *pPacket)
 {
-    if (pPacket != NULL)
+    XASSERT_VOID_RET(pPacket);
+
+    if (pPacket->callback != NULL)
     {
-        if (pPacket->callback != NULL)
-        {
-            pPacket->callback(pPacket, XPACKET_CB_CLEAR);
-            pPacket->callback = NULL;
-        }
+        pPacket->callback(pPacket, XPACKET_CB_CLEAR);
+        pPacket->callback = NULL;
+    }
 
-        if (pPacket->pHeaderObj != NULL)
-        {
-            XJSON_FreeObject(pPacket->pHeaderObj);
-            pPacket->pHeaderObj = NULL;
-        }
+    if (pPacket->pHeaderObj != NULL)
+    {
+        XJSON_FreeObject(pPacket->pHeaderObj);
+        pPacket->pHeaderObj = NULL;
+    }
 
-        pPacket->pUserData = NULL;
-        XByteBuffer_Clear(&pPacket->rawData);
-        if (pPacket->nAllocated) free(pPacket);
+    pPacket->pUserData = NULL;
+    XByteBuffer_Clear(&pPacket->rawData);
+}
+
+void XPacket_Free(xpacket_t **pPacket)
+{
+    XASSERT_VOID_RET((pPacket && *pPacket));
+    xpacket_t *pMDTPPacket = *pPacket;
+
+    XPacket_Clear(pMDTPPacket);
+    if (pMDTPPacket->nAllocated)
+    {
+        free(pMDTPPacket);
+        *pPacket = NULL;
     }
 }
 

@@ -86,6 +86,7 @@ const char *XPacket_GetTypeStr(xpacket_type_t eType);
 int XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize);
 xpacket_t *XPacket_New(uint8_t *pData, uint32_t nSize);
 void XPacket_Clear(xpacket_t *pPacket);
+void XPacket_Free(xpacket_t **pPacket);
 
 uint8_t *XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize);
 void XPacket_ParseHeader(xpacket_header_t *pHeader, xjson_obj_t *pHeaderObj);

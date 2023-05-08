@@ -1025,7 +1025,7 @@ void XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
     const char *pStr = XAPI_GetStatusStr(pCtx);
     int nFD = pData ? (int)pData->nFD : XSTDERR;
 
-    if (pCtx->eStType == XAPI_ST_API &&
+    if (pCtx->eStatType == XAPI_NONE &&
         pCtx->nStatus == XAPI_DESTROY)
         xlogn("%s", pStr);
     else if (pCtx->eCbType == XAPI_CB_STATUS)
@@ -1375,7 +1375,7 @@ int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     xlogn("Sending response: fd(%d), status(%d), length(%zu)",
-        (int)pData->nFD, pHandle->nStatusCode, pHandle->dataRaw.nUsed);
+        (int)pData->nFD, pHandle->nStatusCode, pHandle->rawData.nUsed);
 
     XString_Clear(&content);
     return XSTDOK;
@@ -1383,7 +1383,7 @@ int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
 int XTOPApp_CheckRequest(xhttp_t *pHttp)
 {
-    xbyte_buffer_t *pBuff = &pHttp->dataRaw;
+    xbyte_buffer_t *pBuff = &pHttp->rawData;
     if (pBuff->nUsed < 8) return XSTDOK;
 
     int nMethod = XHTTP_GetMethodType((const char *)pBuff->pData);
@@ -1428,13 +1428,13 @@ int XTOPApp_InitSessionData(xapi_data_t *pData)
     uint16_t nCallbacks = XHTTP_ERROR | XHTTP_STATUS | XHTTP_READ_HDR;
     XHTTP_SetCallback(pHandle, XTOPApp_HTTPCallback, pData, nCallbacks);
 
-    xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->nFD, pData->sIPAddr);
+    xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->nFD, pData->sAddr);
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
 int XTOPApp_ClearSessionData(xapi_data_t *pData)
 {
-    xlogn("Connection closed: fd(%d), ip(%s)", (int)pData->nFD, pData->sIPAddr);
+    xlogn("Connection closed: fd(%d), ip(%s)", (int)pData->nFD, pData->sAddr);
     free(pData->pSessionData);
     pData->pSessionData = NULL;
     return XSTDERR;
@@ -1448,7 +1448,7 @@ int XTOPApp_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_STATUS:
             XTOPApp_PrintStatus(pCtx, pData);
             break;
-        case XAPI_CB_REQUEST:
+        case XAPI_CB_READ:
             return XTOPApp_HandleRequest(pCtx, pData);
         case XAPI_CB_WRITE:
             return XTOPApp_SendResponse(pCtx, pData);
@@ -1472,11 +1472,10 @@ int XTOPApp_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
 int XTOPApp_ServerMode(xtop_args_t *pArgs, xtop_stats_t *pStats)
 {
     xapi_t api;
-    api.callback = XTOPApp_ServiceCb;
-    api.pUserCtx = pArgs;
+    XAPI_Init(&api, XTOPApp_ServiceCb, pArgs);
     pArgs->pStats = pStats;
 
-    if (XAPI_StartListener(&api, pArgs->sAddr, pArgs->nPort) < 0) return XSTDERR;
+    if (XAPI_StartListener(&api, XAPI_HTTP, pArgs->sAddr, pArgs->nPort) < 0) return XSTDERR;
     xlogn("Socket started listen to port: %d", pArgs->nPort);
 
     xevent_status_t status;

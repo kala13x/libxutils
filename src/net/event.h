@@ -118,7 +118,6 @@ typedef struct XEvents {
 
     xbool_t                 bUseHash;           /* Flag to enable/disable hash map usage*/
     xhash_t                 hashMap;            /* Hash map for events and related data */
-
 } xevents_t;
 
 const char *XEvents_Status(xevent_status_t status);

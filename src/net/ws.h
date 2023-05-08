@@ -38,7 +38,7 @@ typedef enum {
     XWS_INVALID
 } xweb_frame_type_t;
 
-typedef struct {
+typedef struct xweb_frame_ {
     xweb_frame_type_t eType;
     xbyte_buffer_t buffer;
     size_t nPayloadLength;
@@ -59,6 +59,7 @@ void XWebFrame_Reset(xweb_frame_t *pFrame);
 
 uint8_t* XWS_CreateFrame(uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize);
 xweb_frame_t* XWebFrame_New(uint8_t *pPayload, size_t nLength, xweb_frame_type_t eType, xbool_t bFin);
+xweb_frame_t* XWebFrame_Alloc();
 
 XSTATUS XWebFrame_Create(xweb_frame_t *pFrame, uint8_t *pPayload, size_t nLength, xweb_frame_type_t eType, xbool_t bFin);
 XSTATUS XWebFrame_AppendData(xweb_frame_t *pFrame, uint8_t* pData, size_t nSize);

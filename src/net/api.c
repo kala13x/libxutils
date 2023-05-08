@@ -47,46 +47,122 @@ const char* XAPI_GetStatus(xapi_status_t eStatus)
 
 const char* XAPI_GetStatusStr(xapi_ctx_t *pCtx)
 {
-    switch (pCtx->eStType)
+    switch (pCtx->eStatType)
     {
-        case XAPI_ST_EVENT:
-            return XEvents_Status((xevent_status_t)pCtx->nStatus);
-        case XAPI_ST_HTTP:
-            return XHTTP_GetStatusStr((xhttp_status_t)pCtx->nStatus);
-        case XAPI_ST_SOCK:
-            return XSock_GetStatusStr((xsock_status_t)pCtx->nStatus);
-        case XAPI_ST_API:
+        case XAPI_NONE:
             return XAPI_GetStatus((xapi_status_t)pCtx->nStatus);
+        case XAPI_EVENT:
+            return XEvents_Status((xevent_status_t)pCtx->nStatus);
+        case XAPI_HTTP:
+            return XHTTP_GetStatusStr((xhttp_status_t)pCtx->nStatus);
+        case XAPI_SOCK:
+            return XSock_GetStatusStr((xsock_status_t)pCtx->nStatus);
+        //case XAPI_WS: // TODO
+            //return XWebSock_GetStatus((xws_status_t)pCtx->nStatus);
         default: break;
     }
 
     return "Unknown status";
 }
 
-static xapi_data_t* XAPI_NewData(xapi_t *pApi)
+static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
 {
     xapi_data_t *pData = (xapi_data_t*)malloc(sizeof(xapi_data_t));
     if (pData == NULL) return NULL;
 
-    pData->sIPAddr[0] = XSTR_NUL;
+    pData->sAddr[0] = XSTR_NUL;
     pData->pSessionData = NULL;
-    pData->ePktType = XPKT_INVALID;
-    pData->bCancel = XFALSE;
     pData->pPacket = NULL;
+    pData->bCancel = XFALSE;
     pData->pEvData = NULL;
+    pData->bAlloc = XTRUE;
+    pData->eType = eType;
     pData->pApi = pApi;
     pData->nFD = XSOCK_INVALID;
+
     return pData;
 }
 
-static int XAPI_Callback(xapi_t *pApi, xapi_data_t *pApiData, xapi_cb_type_t eCbType, xapi_st_type_t eStType, uint8_t nStat)
+static void XAPI_ClearPacket(xapi_data_t *pData)
+{
+    XASSERT_VOID_RET((pData && pData->pPacket));
+
+    if (pData->eType == XAPI_HTTP)
+        XHTTP_Free((xhttp_t**)&pData->pPacket);
+    else if (pData->eType == XAPI_MDTP)
+        XPacket_Free((xpacket_t**)&pData->pPacket);
+    else if (pData->eType == XAPI_SOCK)
+        XByteBuffer_Free((xbyte_buffer_t**)&pData->pPacket);
+    else if (pData->eType == XAPI_WS)
+        XWebFrame_Free((xweb_frame_t**)&pData->pPacket);
+    else free(pData->pPacket);
+
+    pData->pPacket = NULL;
+}
+
+static void* XAPI_AllocPacket(xapi_type_t eType)
+{
+    switch (eType)
+    {
+        case XAPI_HTTP: return XHTTP_Alloc(XHTTP_DUMMY, XSTDNON);
+        case XAPI_MDTP: return XPacket_New(NULL, XSTDNON);
+        case XAPI_SOCK: return XByteBuffer_New(XSTDNON, XFALSE);
+        case XAPI_WS: return XWebFrame_Alloc();
+        default: break;
+    }
+
+    return NULL;
+}
+
+xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pData)
+{
+    XASSERT((pData && pData->pPacket), NULL);
+
+    if (pData->eType == XAPI_HTTP)
+    {
+        xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
+        return &pHandle->rawData;
+    }
+    else if (pData->eType == XAPI_MDTP)
+    {
+        xpacket_t *pHandle = (xpacket_t*)pData->pPacket;
+        return &pHandle->rawData;
+    }
+    else if (pData->eType == XAPI_WS)
+    {
+        xweb_frame_t *pHandle = (xweb_frame_t*)pData->pPacket;
+        return &pHandle->buffer;
+    }
+    else if (pData->eType == XAPI_SOCK)
+    {
+        xbyte_buffer_t *pBuff = (xbyte_buffer_t*)pData->pPacket;
+        return pBuff;
+    }
+
+    return NULL;
+}
+
+static void XAPI_FreeData(xapi_data_t **pData)
+{
+    XASSERT_VOID((pData && *pData));
+    xapi_data_t *pApiData = *pData;
+
+    XAPI_ClearPacket(pApiData);
+    if (pApiData->bAlloc)
+    {
+        free(pApiData);
+        *pData = NULL;
+    }
+}
+
+static int XAPI_Callback(xapi_t *pApi, xapi_data_t *pApiData, xapi_cb_type_t eCbType, xapi_type_t eType, uint8_t nStat)
 {
     if (pApi == NULL) return XSTDERR;
     else if (pApi->callback == NULL) return XSTDOK;
 
     xapi_ctx_t ctx;
     ctx.eCbType = eCbType;
-    ctx.eStType = eStType;
+    ctx.eStatType = eType;
     ctx.nStatus = nStat;
     ctx.pApi = pApi;
 
@@ -95,35 +171,20 @@ static int XAPI_Callback(xapi_t *pApi, xapi_data_t *pApiData, xapi_cb_type_t eCb
 
 static int XAPI_ServiceCb(xapi_t *pApi, xapi_data_t *pApiData, xapi_cb_type_t eCbType)
 {
-    return XAPI_Callback(
-        pApi,
-        pApiData,
-        eCbType,
-        XAPI_ST_API,
-        XAPI_NONE
-    );
+    return XAPI_Callback(pApi, pApiData,
+        eCbType, XAPI_NONE, XAPI_UNKNOWN);
 }
 
-static int XAPI_ErrorCb(xapi_t *pApi, xapi_data_t *pApiData, xapi_st_type_t eType, uint8_t nStat)
+static int XAPI_ErrorCb(xapi_t *pApi, xapi_data_t *pApiData, xapi_type_t eType, uint8_t nStat)
 {
-    return XAPI_Callback(
-        pApi,
-        pApiData,
-        XAPI_CB_ERROR,
-        eType,
-        nStat
-    );
+    return XAPI_Callback(pApi, pApiData,
+        XAPI_CB_ERROR, eType, nStat);
 }
 
-static int XAPI_StatusCb(xapi_t *pApi, xapi_data_t *pApiData, xapi_st_type_t eType, uint8_t nStat)
+static int XAPI_StatusCb(xapi_t *pApi, xapi_data_t *pApiData, xapi_type_t eType, uint8_t nStat)
 {
-    return XAPI_Callback(
-        pApi,
-        pApiData,
-        XAPI_CB_STATUS,
-        eType,
-        nStat
-    );
+    return XAPI_Callback(pApi, pApiData,
+        XAPI_CB_STATUS, eType, nStat);
 }
 
 int XAPI_SetEvents(xapi_data_t *pData, int nEvents)
@@ -134,18 +195,11 @@ int XAPI_SetEvents(xapi_data_t *pData, int nEvents)
     xevent_status_t eStatus = XEvents_Modify(&pApi->events, pEvData, nEvents);
     if (eStatus != XEVENT_STATUS_SUCCESS)
     {
-        XAPI_ErrorCb(pApi, pData, XAPI_ST_EVENT, eStatus);
+        XAPI_ErrorCb(pApi, pData, XAPI_EVENT, eStatus);
         return XSTDERR;
     }
 
     return XSTDOK;
-}
-
-xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pData)
-{
-    if (pData == NULL) return NULL;
-    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
-    return pHandle != NULL ? &pHandle->dataRaw : NULL;
 }
 
 static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
@@ -164,14 +218,7 @@ static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
     {
         xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
         XAPI_ServiceCb(pApi, pApiData, XAPI_CB_CLOSED);
-
-        if (pApiData->pPacket != NULL)
-        {
-            XHTTP_Clear((xhttp_t*)pApiData->pPacket);
-            pApiData->pPacket = NULL;
-        }
-
-        free(pApiData);
+        XAPI_FreeData(&pApiData);
         pEvData->pContext = NULL;
     }
 
@@ -189,7 +236,7 @@ int XAPI_SetResponse(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus)
     pHandle->eType = XHTTP_RESPONSE;
 
     size_t nLength = xstrncpyf(sContent, sizeof(sContent), "{\"status\": \"%s\"}",
-            eStatus != XAPI_NONE ? XAPI_GetStatus(eStatus) : XHTTP_GetCodeStr(nCode));
+            eStatus != XAPI_UNKNOWN ? XAPI_GetStatus(eStatus) : XHTTP_GetCodeStr(nCode));
 
     if ((eStatus == XAPI_MISSING_TOKEN &&
         XHTTP_AddHeader(pHandle, "WWW-Authenticate", "Basic realm=\"XAPI\"") < 0) ||
@@ -197,15 +244,15 @@ int XAPI_SetResponse(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus)
         XHTTP_AddHeader(pHandle, "Content-Type", "application/json") < 0 ||
         XHTTP_Assemble(pHandle, (const uint8_t*)sContent, nLength) == NULL)
     {
-        XAPI_ErrorCb(pApi, pApiData, XAPI_ST_API, XAPI_EASSEMBLE);
+        XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_EASSEMBLE);
         pApiData->bCancel = XTRUE;
         return XSTDERR;
     }
 
-    if (eStatus > XAPI_NONE && eStatus <= XAPI_EALLOC)
-        XAPI_ErrorCb(pApi, pApiData, XAPI_ST_API, eStatus);
-    else if (eStatus != XAPI_NONE)
-        XAPI_StatusCb(pApi, pApiData, XAPI_ST_API, eStatus);
+    if (eStatus > XAPI_UNKNOWN && eStatus <= XAPI_EALLOC)
+        XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, eStatus);
+    else if (eStatus != XAPI_UNKNOWN)
+        XAPI_StatusCb(pApi, pApiData, XAPI_NONE, eStatus);
 
     return XAPI_SetEvents(pApiData, XPOLLOUT) < 0 ? XSTDERR : XSTDNON;
 }
@@ -241,120 +288,164 @@ int XAPI_AuthorizeRequest(xapi_data_t *pApiData, const char *pToken, const char 
     return XSTDOK;
 }
 
-static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
+static int XAPI_ReadHTTP(xapi_t *pApi, xevent_data_t *pEvData)
 {
-    if (pEvents == NULL || pEvData == NULL) return XEVENTS_DISCONNECT;
-    xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
-    xsock_t *pListener = (xsock_t*)&pApi->listener;
     xsock_t clientSock;
+    XSock_Init(&clientSock, XSOCK_TCP_PEER, pEvData->nFD, XTRUE);
+    xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
 
-    if (pListener->nFD == pEvData->nFD &&
-        pEvData->nType == XAPI_EVENT_LISTENER)
+    xhttp_t *pHandle = (xhttp_t*)pApiData->pPacket;
+    XASSERT((pHandle != NULL), XEVENTS_DISCONNECT);
+
+    xhttp_status_t eStatus = XHTTP_Receive(pHandle, &clientSock);
+    if (eStatus == XHTTP_COMPLETE)
     {
-        if (XSock_Accept(pListener, &clientSock) == XSOCK_INVALID || 
-            XSock_NonBlock(&clientSock, XTRUE) == XSOCK_INVALID)
-        {
-            XAPI_ErrorCb(pApi, NULL, XAPI_ST_SOCK, clientSock.eStatus);
-            return XEVENTS_CONTINUE;
-        }
+        int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_READ);
+        if (nStatus < 0) return XEVENTS_DISCONNECT;
+        else if (!nStatus) return XEVENTS_CONTINUE;
 
-        xapi_data_t *pApiData = XAPI_NewData(pApi);
-        if (pApiData == NULL)
-        {
-            XAPI_ErrorCb(pApi, NULL, XAPI_ST_API, XAPI_EALLOC);
-            XSock_Close(&clientSock);
-            return XEVENTS_CONTINUE;
-        }
-
-        XSock_IPAddr(&clientSock, pApiData->sIPAddr, sizeof(pApiData->sIPAddr));
-        pApiData->nFD = clientSock.nFD;
-
-        xhttp_t *pHandle = XHTTP_Alloc(XHTTP_DUMMY, XSTDNON);
-        if (pHandle == NULL)
-        {
-            XAPI_ErrorCb(pApi, pApiData, XAPI_ST_API, XAPI_EALLOC);
-            XSock_Close(&clientSock);
-            return XEVENTS_CONTINUE;
-        }
-
-        pApiData->ePktType = XPKT_HTTP;
+        XHTTP_Reset(pHandle, XFALSE);
+        pHandle->eType = XHTTP_RESPONSE;
+        pApiData->eType = XAPI_HTTP;
         pApiData->pPacket = pHandle;
 
-        xevent_data_t *pEventData = XEvents_RegisterEvent(pEvents, pApiData, pApiData->nFD, XSTDNON, XAPI_EVENT_PEER);
-        if (pEventData == NULL)
-        {
-            XAPI_ErrorCb(pApi, pApiData, XAPI_ST_API, XAPI_EREGISTER);
-            XSock_Close(&clientSock);
-            XHTTP_Clear(pHandle);
-            free(pApiData);
-            return XEVENTS_CONTINUE;
-        }
-
-        pApiData->pSessionData = NULL;
-        pApiData->pEvData = pEventData;
-
-        if (XAPI_ServiceCb(pApi, pApiData, XAPI_CB_ACCEPTED) < 0)
-        {
-            XEvents_Delete(pEvents, pEventData);
-            return XEVENTS_CONTINUE;
-        }
-
-        return XEVENTS_ACCEPT;
+        return (nStatus == XSTDUSR) ?
+                XEVENTS_USERCB :
+                XEVENTS_CONTINUE;
     }
-    else if (pEvData->nType == XAPI_EVENT_PEER)
+    else if (eStatus == XHTTP_ERRREAD)
     {
-        xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
-        if (pApiData->bCancel) return XEVENTS_DISCONNECT;
-
-        xhttp_t *pHandle = (xhttp_t*)pApiData->pPacket;
-        if (pHandle == NULL) return XEVENTS_DISCONNECT;
-
-        XSock_Init(&clientSock, XSOCK_TCP_PEER, pEvData->nFD, XTRUE);
-        xhttp_status_t eStatus = XHTTP_Receive(pHandle, &clientSock);
-
-        if (eStatus == XHTTP_COMPLETE)
-        {
-            int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_REQUEST);
-            if (nStatus < 0) return XEVENTS_DISCONNECT;
-            else if (!nStatus) return XEVENTS_CONTINUE;
-
-            XHTTP_Reset(pHandle, XFALSE);
-            pHandle->eType = XHTTP_RESPONSE;
-            pApiData->ePktType = XPKT_HTTP;
-            pApiData->pPacket = pHandle;
-
-            return (nStatus == XSTDUSR) ?
-                    XEVENTS_USERCB :
-                    XEVENTS_CONTINUE;
-        }
-        else if (eStatus == XHTTP_ERRREAD)
-        {
-            XAPI_ErrorCb(pApi, pApiData, XAPI_ST_SOCK, clientSock.eStatus);
-            pEvData->bIsOpen = XFALSE;
-            return XEVENTS_DISCONNECT;
-        }
-        else if (eStatus != XHTTP_PARSED &&
-                 eStatus != XHTTP_INCOMPLETE)
-        {
-            XAPI_ErrorCb(pApi, pApiData, XAPI_ST_HTTP, eStatus);
-            return XEVENTS_DISCONNECT;
-        }
+        XAPI_ErrorCb(pApi, pApiData, XAPI_SOCK, clientSock.eStatus);
+        pEvData->bIsOpen = XFALSE;
+        return XEVENTS_DISCONNECT;
+    }
+    else if (eStatus != XHTTP_PARSED &&
+            eStatus != XHTTP_INCOMPLETE)
+    {
+        XAPI_ErrorCb(pApi, pApiData, XAPI_HTTP, eStatus);
+        return XEVENTS_DISCONNECT;
     }
 
     return XEVENTS_CONTINUE;
 }
 
+static int XAPI_ReadMDTP(xapi_t *pApi, xevent_data_t *pEvData)
+{
+    // TODO
+    return XEVENTS_CONTINUE;
+}
+
+static int XAPI_ReadSock(xapi_t *pApi, xevent_data_t *pEvData)
+{
+    // TODO
+    return XEVENTS_CONTINUE;
+}
+
+static int XAPI_ReadWebSock(xapi_t *pApi, xevent_data_t *pEvData)
+{
+    // TODO
+    return XEVENTS_CONTINUE;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// REVIEW IS DONE BELOW
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+static int XAPI_Accept(xapi_t *pApi, xapi_data_t *pApiData, xsock_t *pSock)
+{
+    xevents_t *pEvents = &pApi->events;
+    xsock_t clientSock;
+
+    if (XSock_Accept(pSock, &clientSock) == XSOCK_INVALID || 
+        XSock_NonBlock(&clientSock, XTRUE) == XSOCK_INVALID)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_SOCK, clientSock.eStatus);
+        return XEVENTS_CONTINUE;
+    }
+
+    xapi_data_t *pPeerData = XAPI_NewData(pApi, pApiData->eType);
+    if (pPeerData == NULL)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_EALLOC);
+        XSock_Close(&clientSock);
+        return XEVENTS_CONTINUE;
+    }
+
+    pPeerData->pPacket = XAPI_AllocPacket(pApiData->eType);
+    if (pPeerData->pPacket == NULL)
+    {
+        XAPI_ErrorCb(pApi, pPeerData, XAPI_NONE, XAPI_EALLOC);
+        XSock_Close(&clientSock);
+        return XEVENTS_CONTINUE;
+    }
+
+    XSock_IPAddr(&clientSock, pPeerData->sAddr, sizeof(pPeerData->sAddr));
+    pPeerData->nFD = clientSock.nFD;
+    pPeerData->eRole = XAPI_PEER;
+
+    xevent_data_t *pEventData = XEvents_RegisterEvent(pEvents, pPeerData, pPeerData->nFD, XSTDNON, XAPI_PEER);
+    if (pEventData == NULL)
+    {
+        XAPI_ErrorCb(pApi, pPeerData, XAPI_NONE, XAPI_EREGISTER);
+        XAPI_FreeData(&pPeerData);
+        XSock_Close(&clientSock);
+        return XEVENTS_CONTINUE;
+    }
+
+    pPeerData->pSessionData = NULL;
+    pPeerData->pEvData = pEventData;
+
+    if (XAPI_ServiceCb(pApi, pPeerData, XAPI_CB_ACCEPTED) < 0)
+    {
+        XEvents_Delete(pEvents, pEventData);
+        return XEVENTS_CONTINUE;
+    }
+
+    return XEVENTS_ACCEPT;
+}
+
+static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
+{
+    XASSERT((pEvents && pEvData), XEVENTS_DISCONNECT);
+    xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
+    XASSERT(pApi, XEVENTS_DISCONNECT);
+
+    xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
+    XASSERT((pApiData && !pApiData->bCancel), XEVENTS_DISCONNECT);
+
+    if (pApiData->eRole == XAPI_SERVER)
+    {
+        xsock_t listenerSock;
+        XSock_Init(&listenerSock, XSOCK_TCP_SERVER, pEvData->nFD, XTRUE);
+        return XAPI_Accept(pApi, pApiData, &listenerSock);
+    }
+    else if (pApiData->eRole == XAPI_PEER)
+    {
+        switch (pApiData->eType)
+        {
+            case XAPI_HTTP: return XAPI_ReadHTTP(pApi, pEvData);
+            case XAPI_MDTP: return XAPI_ReadMDTP(pApi, pEvData);
+            case XAPI_SOCK: return XAPI_ReadSock(pApi, pEvData);
+            case XAPI_WS: return XAPI_ReadWebSock(pApi, pEvData);
+            default: break;
+        }
+    }
+
+    /* Unsupported event type */
+    return XEVENTS_DISCONNECT;
+}
+
 static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 {
-    if (pEvents == NULL || pEvData == NULL) return XEVENTS_DISCONNECT;
+    XASSERT((pEvents && pEvData), XEVENTS_DISCONNECT);
     xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
-    if (pApiData->bCancel) return XEVENTS_DISCONNECT;
+    XASSERT((pApiData && !pApiData->bCancel), XEVENTS_DISCONNECT);
 
-    xhttp_t *pHandle = (xhttp_t*)pApiData->pPacket;
     xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
+    XASSERT(pApi, XEVENTS_DISCONNECT);
     XSTATUS nStatus = XSTDNON;
 
-    xbyte_buffer_t *pBuffer = &pHandle->dataRaw;
+    xbyte_buffer_t *pBuffer = XAPI_GetTxBuff(pApiData);
     if (!pBuffer->nUsed)
     {
         nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_WRITE);
@@ -370,7 +461,7 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
     int nSent = XSock_Write(&socket, pBuffer->pData, pBuffer->nUsed);
     if (nSent <= 0)
     {
-        XAPI_ErrorCb(pApi, pApiData, XAPI_ST_SOCK, socket.eStatus);
+        XAPI_ErrorCb(pApi, pApiData, XAPI_SOCK, socket.eStatus);
         pEvData->bIsOpen = XFALSE;
         return XEVENTS_DISCONNECT;
     }
@@ -380,12 +471,27 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
         nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_COMPLETE);
         if (nStatus < 0) return XEVENTS_DISCONNECT;
         else if (!nStatus) return XEVENTS_CONTINUE;
-        XHTTP_Reset(pHandle, XFALSE);
     }
     
     return nStatus == XSTDUSR ?
             XEVENTS_USERCB :
             XEVENTS_CONTINUE;
+}
+
+static int XAPI_HungedEvent(xapi_t *pApi, xevent_data_t *pData)
+{
+    xapi_data_t *pApiData = NULL;
+    if (pData) pApiData = (xapi_data_t*)pData->pContext;
+    XAPI_StatusCb(pApi, pApiData, XAPI_NONE, XAPI_HUNGED);
+    return XEVENTS_DISCONNECT;
+}
+
+static int XAPI_ClosedEvent(xapi_t *pApi, xevent_data_t *pData)
+{
+    xapi_data_t *pApiData = NULL;
+    if (pData) pApiData = (xapi_data_t*)pData->pContext;
+    XAPI_StatusCb(pApi, pApiData, XAPI_NONE, XAPI_CLOSED);
+    return XEVENTS_DISCONNECT;
 }
 
 static int XAPI_InterruptEvent(xapi_t *pApi)
@@ -410,9 +516,6 @@ static int XAPI_EventCallback(void *events, void* data, XSOCKET fd, int reason)
     xevents_t *pEvents = (xevents_t*)events;
     xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
 
-    xapi_data_t *pApiData = (pData != NULL) ?
-        (xapi_data_t*)pData->pContext : NULL;
-
     switch(reason)
     {
         case XEVENT_USER:
@@ -421,18 +524,16 @@ static int XAPI_EventCallback(void *events, void* data, XSOCKET fd, int reason)
             return XAPI_InterruptEvent(pApi);
         case XEVENT_CLEAR:
             return XAPI_ClearEvent(pApi, pData);
+        case XEVENT_HUNGED:
+            return XAPI_HungedEvent(pApi, pData);
+        case XEVENT_CLOSED:
+            return XAPI_ClosedEvent(pApi, pData);
         case XEVENT_READ:
             return XAPI_ReadEvent(pEvents, pData);
         case XEVENT_WRITE:
             return XAPI_WriteEvent(pEvents, pData);
-        case XEVENT_HUNGED:
-            XAPI_StatusCb(pApi, pApiData, XAPI_ST_API, XAPI_HUNGED);
-            return XEVENTS_DISCONNECT;
-        case XEVENT_CLOSED:
-            XAPI_StatusCb(pApi, pApiData, XAPI_ST_API, XAPI_CLOSED);
-            return XEVENTS_DISCONNECT;
         case XEVENT_DESTROY:
-            XAPI_StatusCb(pApi, NULL, XAPI_ST_API, XAPI_DESTROY);
+            XAPI_StatusCb(pApi, NULL, XAPI_NONE, XAPI_DESTROY);
             break;
         default:
             break;
@@ -441,51 +542,63 @@ static int XAPI_EventCallback(void *events, void* data, XSOCKET fd, int reason)
     return XEVENTS_CONTINUE;
 }
 
-int XAPI_StartListener(xapi_t *pApi, const char *pAddr, uint16_t nPort)
+xevents_t* XAPI_GetOrCreateEvents(xapi_t *pApi)
 {
-    /* Used variables */
     xevents_t *pEvents = &pApi->events;
-    xsock_t *pSock = &pApi->listener;
+    if (pApi->bHaveEvents) return pEvents;
+
     xevent_status_t status;
-
-    /* Create server socket */
-    XSock_Create(pSock, XSOCK_TCP_SERVER, pAddr, nPort);
-    XSock_ReuseAddr(pSock, XTRUE);
-
-    if (pSock->nFD == XSOCK_INVALID)
-    {
-        XAPI_ErrorCb(pApi, NULL, XAPI_ST_SOCK, pSock->eStatus);
-        return XSTDERR;
-    }
-
-    xapi_data_t *pApiData = XAPI_NewData(pApi);
-    if (pApiData == NULL)
-    {
-        XAPI_ErrorCb(pApi, NULL, XAPI_ST_API, XAPI_EALLOC);
-        XSock_Close(pSock);
-        return XSTDERR;
-    }
-
-    xstrncpy(pApiData->sIPAddr, sizeof(pApiData->sIPAddr), pAddr);
-    pApiData->nFD = pSock->nFD;
-
-    /* Create event instance */
     status = XEvents_Create(pEvents, XSTDNON, pApi, XAPI_EventCallback, XTRUE);
+
     if (status != XEVENT_STATUS_SUCCESS)
     {
-        XAPI_ErrorCb(pApi, pApiData, XAPI_ST_EVENT, status);
-        XSock_Close(pSock);
+        XAPI_ErrorCb(pApi, NULL, XAPI_EVENT, status);
+        return NULL;
+    }
+
+    pApi->bHaveEvents = XTRUE;
+    return pEvents;
+}
+
+XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort)
+{
+    xsock_t sock; /* Create server socket */
+    XSock_Create(&sock, XSOCK_TCP_SERVER, pAddr, nPort);
+    XSock_ReuseAddr(&sock, XTRUE);
+
+    if (sock.nFD == XSOCK_INVALID)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_SOCK, sock.eStatus);
+        return XSTDERR;
+    }
+
+    xapi_data_t *pApiData = XAPI_NewData(pApi, eType);
+    if (pApiData == NULL)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_EALLOC);
+        XSock_Close(&sock);
+        return XSTDERR;
+    }
+
+    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pAddr);
+    pApiData->eRole = XAPI_SERVER;
+    pApiData->nFD = sock.nFD;
+
+    /* Create event instance */
+    xevents_t *pEvents = XAPI_GetOrCreateEvents(pApi);
+    if (pEvents == NULL)
+    {
+        XSock_Close(&sock);
         free(pApiData);
         return XSTDERR;
     }
 
     /* Add listener socket to the event instance */
-    xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pApiData, pSock->nFD, XPOLLIN, XAPI_EVENT_LISTENER);
+    xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pApiData, sock.nFD, XPOLLIN, XAPI_SERVER);
     if (pEvData == NULL)
     {
-        XAPI_ErrorCb(pApi, pApiData, XAPI_ST_API, XAPI_EREGISTER);
-        XEvents_Destroy(pEvents);
-        XSock_Close(pSock);
+        XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_EREGISTER);
+        XSock_Close(&sock);
         free(pApiData);
         return XSTDERR;
     }
@@ -502,14 +615,25 @@ int XAPI_StartListener(xapi_t *pApi, const char *pAddr, uint16_t nPort)
     return XSTDOK;
 }
 
-xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
+int XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx)
 {
-    xevents_t *pEvents = &pApi->events;
-    return XEvents_Service(pEvents, nTimeoutMs);
+    pApi->callback = callback;
+    pApi->pUserCtx = pUserCtx;
+    pApi->bHaveEvents = XFALSE;
+
+    xevents_t *pEvents = XAPI_GetOrCreateEvents(pApi);
+    return (pEvents != NULL) ? XSTDOK : XSTDERR;
 }
 
 void XAPI_Destroy(xapi_t *pApi)
 {
+    XASSERT_VOID_RET(pApi->bHaveEvents);
     xevents_t *pEvents = &pApi->events;
     XEvents_Destroy(pEvents);
+}
+
+xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
+{
+    xevents_t *pEvents = &pApi->events;
+    return XEvents_Service(pEvents, nTimeoutMs);
 }

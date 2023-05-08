@@ -129,11 +129,17 @@ void XByteBuffer_Clear(xbyte_buffer_t *pBuffer)
     pBuffer->pData = NULL;
 }
 
-void XByteBuffer_Free(xbyte_buffer_t *pBuffer)
+void XByteBuffer_Free(xbyte_buffer_t **pBuffer)
 {
-    XASSERT_VOID(pBuffer);
-    XByteBuffer_Clear(pBuffer);
-    if (pBuffer->nAlloc) free(pBuffer);
+    XASSERT_VOID_RET((pBuffer && *pBuffer));
+    xbyte_buffer_t *pByteBuff = *pBuffer;
+
+    XByteBuffer_Clear(pByteBuff);
+    if (pByteBuff->nAlloc)
+    {
+        free(pByteBuff);
+        *pBuffer = NULL;
+    }
 }
 
 void XByteBuffer_Reset(xbyte_buffer_t *pBuffer)
