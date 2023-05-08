@@ -465,7 +465,8 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
         XSock_Init(&listenerSock, XSOCK_TCP_SERVER, pEvData->nFD, XTRUE);
         return XAPI_Accept(pApi, pApiData, &listenerSock);
     }
-    else if (pApiData->eRole == XAPI_PEER)
+    else if (pApiData->eRole == XAPI_PEER ||
+             pApiData->eRole == XAPI_CLIENT)
     {
         xsock_t clientSock;
         XSock_Init(&clientSock, XSOCK_TCP_PEER, pEvData->nFD, XTRUE);
