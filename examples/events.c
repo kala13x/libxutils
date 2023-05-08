@@ -31,7 +31,7 @@ void clear_event(xevent_data_t *pEvData)
     {
         if (pEvData->pContext != NULL)
         {
-            XHTTP_Clear((xhttp_t*)pEvData->pContext);
+            XHTTP_Free((xhttp_t**)&pEvData->pContext);
             pEvData->pContext = NULL;
         }
 
