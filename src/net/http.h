@@ -155,6 +155,7 @@ size_t XHTTP_GetBodySize(xhttp_t *pHttp);
 int XHTTP_InitParser(xhttp_t *pHttp, uint8_t* pData, size_t nSize);
 int XHTTP_AppendData(xhttp_t *pHttp, uint8_t* pData, size_t nSize);
 xhttp_status_t XHTTP_ParseData(xhttp_t *pHttp, uint8_t* pData, size_t nSize);
+xhttp_status_t XHTTP_ParseBuff(xhttp_t *pHttp, xbyte_buffer_t *pBuffer);
 xhttp_status_t XHTTP_Parse(xhttp_t *pHttp);
 
 int XHTTP_SetCallback(xhttp_t *pHttp, xhttp_cb_t callback, void *pCbCtx, uint16_t nCbTypes);

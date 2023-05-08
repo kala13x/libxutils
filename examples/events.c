@@ -138,7 +138,7 @@ int read_event(xevents_t *pEvents, xevent_data_t *pEvData)
             xevent_status_t eStatus = XEvents_Modify(pEvents, pEvData, XPOLLOUT);
             if (eStatus != XEVENT_STATUS_SUCCESS)
             {
-                xloge("%s: %s", XEvents_Status(eStatus), strerror(errno));
+                xloge("%s: %s", XEvents_GetStatusStr(eStatus), strerror(errno));
                 return XEVENTS_DISCONNECT;
             }
 
@@ -273,7 +273,7 @@ int main(int argc, char* argv[])
     status = XEvents_Create(&events, 0, &socket, event_callback, XTRUE);
     if (status != XEVENT_STATUS_SUCCESS)
     {
-        xloge("%s", XEvents_Status(status));
+        xloge("%s", XEvents_GetStatusStr(status));
         XSock_Close(&socket);
         return 1;
     }

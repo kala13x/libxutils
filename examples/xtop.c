@@ -1022,7 +1022,7 @@ int XTOPApp_GetRemoteStats(xtop_args_t *pArgs, xtop_stats_t *pStats)
 
 void XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    const char *pStr = XAPI_GetStatusStr(pCtx);
+    const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->nFD : XSTDERR;
 
     if (pCtx->eStatType == XAPI_NONE &&
@@ -1037,7 +1037,7 @@ void XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xtop_args_t *pArgs = (xtop_args_t*)pData->pApi->pUserCtx;
-    int nStatus = XAPI_AuthorizeRequest(pData, pArgs->sToken, pArgs->sKey);
+    int nStatus = XAPI_AuthorizeHTTP(pData, pArgs->sToken, pArgs->sKey);
     if (nStatus <= 0) return nStatus;
 
     xtop_request_t *pRequest = (xtop_request_t*)pData->pSessionData;
@@ -1050,14 +1050,14 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (pHandle->eMethod != XHTTP_GET)
     {
         xlogw("Invalid or not supported HTTP method: %s", XHTTP_GetMethodStr(pHandle->eMethod));
-        return XAPI_SetResponse(pData, XTOP_NOTALLOWED, XAPI_NONE);
+        return XAPI_RespondHTTP(pData, XTOP_NOTALLOWED, XAPI_NONE);
     }
 
     xarray_t *pArr = xstrsplit(pHandle->sUrl, "/");
     if (pArr == NULL)
     {
         xlogw("Invalid request URL or API endpoint: %s", pHandle->sUrl);
-        return XAPI_SetResponse(pData, XTOP_INVALID, XAPI_NONE);
+        return XAPI_RespondHTTP(pData, XTOP_INVALID, XAPI_NONE);
     }
 
     char *pDirect = (char*)XArray_GetData(pArr, 0);
@@ -1076,7 +1076,7 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (*pRequest == XTOP_NONE)
     {
         xlogw("Requested API endpoint is not found: %s", pHandle->sUrl);
-        return XAPI_SetResponse(pData, XTOP_NOTFOUND, XAPI_NONE);
+        return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NONE);
     }
 
     return XAPI_SetEvents(pData, XPOLLOUT);
@@ -1349,35 +1349,45 @@ int XTOPApp_AssembleBody(xapi_data_t *pData, xstring_t *pJsonStr)
 
 int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
-    pHandle->nStatusCode = 200;
+    xhttp_t handle;
+    if (XHTTP_InitResponse(&handle, 200, NULL) <= 0)
+    {
+        xloge("Failed initialize HTTP response: %d", errno);
+        return XSTDERR;
+    }
 
     xstring_t content;
     if (XString_Init(&content, XSTR_MID, XFALSE) < 0)
     {
         xloge("Failed to response content buffer: %d", errno);
+        XHTTP_Clear(&handle);
         return XSTDERR;
     }
 
     if (XTOPApp_AssembleBody(pData, &content) < 0)
     {
         XString_Clear(&content);
+        XHTTP_Clear(&handle);
         return XSTDERR;
     }
 
-    if (XHTTP_AddHeader(pHandle, "Content-Type", "application/json") < 0 ||
-        XHTTP_AddHeader(pHandle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
-        XHTTP_Assemble(pHandle, (const uint8_t*)content.pData, content.nLength) == NULL)
+    if (XHTTP_AddHeader(&handle, "Content-Type", "application/json") < 0 ||
+        XHTTP_AddHeader(&handle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
+        XHTTP_Assemble(&handle, (const uint8_t*)content.pData, content.nLength) == NULL)
     {
         xloge("Failed to assemble HTTP response: %s", strerror(errno));
         XString_Clear(&content);
+        XHTTP_Clear(&handle);
         return XSTDERR;
     }
 
     xlogn("Sending response: fd(%d), status(%d), length(%zu)",
-        (int)pData->nFD, pHandle->nStatusCode, pHandle->rawData.nUsed);
+        (int)pData->nFD, handle.nStatusCode, handle.rawData.nUsed);
 
+    XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
     XString_Clear(&content);
+    XHTTP_Clear(&handle);
+
     return XSTDOK;
 }
 
@@ -1473,12 +1483,18 @@ int XTOPApp_ServerMode(xtop_args_t *pArgs, xtop_stats_t *pStats)
 {
     xapi_t api;
     XAPI_Init(&api, XTOPApp_ServiceCb, pArgs);
-    pArgs->pStats = pStats;
 
-    if (XAPI_StartListener(&api, XAPI_HTTP, pArgs->sAddr, pArgs->nPort) < 0) return XSTDERR;
+    pArgs->pStats = pStats;
+    xevent_status_t status;
+
+    if (XAPI_StartListener(&api, XAPI_HTTP, pArgs->sAddr, pArgs->nPort) < 0)
+    {
+        XAPI_Destroy(&api);
+        return XSTDERR;
+    }
+
     xlogn("Socket started listen to port: %d", pArgs->nPort);
 
-    xevent_status_t status;
     do status = XAPI_Service(&api, 100);
     while (status == XEVENT_STATUS_SUCCESS);
 

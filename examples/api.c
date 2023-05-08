@@ -24,7 +24,7 @@ void signal_callback(int sig)
 
 void print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    const char *pStr = XAPI_GetStatusStr(pCtx);
+    const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->nFD : XSTDERR;
 
     if (pCtx->eCbType == XAPI_CB_STATUS)
@@ -52,35 +52,43 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
 int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
-    pHandle->eType = XHTTP_RESPONSE;
-    pHandle->nStatusCode = 200;
-
-    if (XHTTP_AddHeader(pHandle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
-        XHTTP_AddHeader(pHandle, "Content-Type", "text/plain") < 0)
+    xhttp_t handle;
+    if (XHTTP_InitResponse(&handle, 200, NULL) <= 0)
     {
         xloge("Failed to initialize HTTP response: %s", strerror(errno));
+        return XSTDERR;
+    }
+
+    if (XHTTP_AddHeader(&handle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
+        XHTTP_AddHeader(&handle, "Content-Type", "text/plain") < 0)
+    {
+        xloge("Failed to setup HTTP headers: %s", strerror(errno));
+        XHTTP_Clear(&handle);
         return XSTDERR;
     }
 
     char sBody[XSTR_TINY];
     size_t nLen = xstrncpy(sBody, sizeof(sBody), "Here is your response.");
 
-    if (XHTTP_Assemble(pHandle, (const uint8_t*)sBody, nLen) == NULL)
+    if (XHTTP_Assemble(&handle, (const uint8_t*)sBody, nLen) == NULL)
     {
         xloge("Failed to assemble HTTP response: %s", strerror(errno));
+        XHTTP_Clear(&handle);
         return XSTDERR;
     }
 
     xlogn("Sending response: fd(%d), buff(%zu)",
-            (int)pData->nFD, pHandle->rawData.nUsed);
+            (int)pData->nFD, handle.rawData.nUsed);
 
-    char *pHeader = XHTTP_GetHeaderRaw(pHandle);
+    char *pHeader = XHTTP_GetHeaderRaw(&handle);
     if (pHeader != NULL)
     {
         xlogi("Raw response header:\n\n%s", pHeader);
         free(pHeader);
     }
+
+    XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
+    XHTTP_Clear(&handle);
 
     return XSTDOK;
 }

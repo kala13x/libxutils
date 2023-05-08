@@ -26,12 +26,23 @@
 #define XPACKET_VER_MAX         8
 #define XPACKET_TZ_MAX          8
 
-#define XPACKET_CB_PARSED 0
-#define XPACKET_CB_UPDATE 1
-#define XPACKET_CB_CLEAR  2
+#define XPACKET_CB_PARSED       0
+#define XPACKET_CB_UPDATE       1
+#define XPACKET_CB_CLEAR        2
 
 typedef struct XPacket xpacket_t;
 typedef void(*xpacket_cb_t)(xpacket_t *pPacket, uint8_t nCallback);
+
+typedef enum {
+    XPACKET_ERR_NONE,
+    XPACKET_ERR_ALLOC,
+    XPACKET_INCOMPLETE,
+    XPACKET_INVALID_ARGS,
+    XPACKET_INVALID,
+    XPACKET_BIGDATA,
+    XPACKET_COMPLETE,
+    XPACKET_PARSED
+} xpacket_status_t;
 
 typedef enum {
     XPACKET_TYPE_LITE = 0,
@@ -82,18 +93,19 @@ extern "C" {
 
 xpacket_type_t XPacket_GetType(const char *pType);
 const char *XPacket_GetTypeStr(xpacket_type_t eType);
+const char* XPacket_GetStatusStr(xpacket_status_t eStatus);
 
-int XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize);
+xpacket_status_t XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize);
 xpacket_t *XPacket_New(uint8_t *pData, uint32_t nSize);
 void XPacket_Clear(xpacket_t *pPacket);
 void XPacket_Free(xpacket_t **pPacket);
 
-uint8_t *XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize);
+xpacket_status_t XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize);
+xpacket_status_t XPacket_UpdateHeader(xpacket_t *pPacket);
 void XPacket_ParseHeader(xpacket_header_t *pHeader, xjson_obj_t *pHeaderObj);
-int XPacket_UpdateHeader(xpacket_t *pPacket);
 
-int XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, size_t nHdrLen, uint8_t *pData, size_t nSize);
-xbyte_buffer_t * XPacket_Assemble(xpacket_t *pPacket);
+xpacket_status_t XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, size_t nHdrLen, uint8_t *pData, size_t nSize);
+xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket);
 
 const uint8_t *XPacket_GetHeader(xpacket_t *pPacket);
 const uint8_t *XPacket_GetPayload(xpacket_t *pPacket);

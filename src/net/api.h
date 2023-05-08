@@ -77,13 +77,16 @@ typedef struct XAPIData {
     xbool_t bAlloc;
     XSOCKET nFD;
 
+    xbyte_buffer_t rxBuffer;
+    xbyte_buffer_t txBuffer;
     xevent_data_t *pEvData;
-    void *pSessionData;
-    void *pPacket;
 
     xapi_type_t eType;
     xapi_role_t eRole;
     xapi_t *pApi;
+
+    void *pSessionData;
+    void *pPacket;
 } xapi_data_t;
 
 typedef struct xapi_ctx_ {
@@ -102,13 +105,13 @@ struct xapi_ {
     void *pUserCtx;
 };
 
-const char* XAPI_GetStatus(xapi_status_t eStatus);
-const char* XAPI_GetStatusStr(xapi_ctx_t *pCtx);
+const char* XAPI_GetStatus(xapi_ctx_t *pCtx);
+const char* XAPI_GetStatusStr(xapi_status_t eStatus);
 xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pData);
 
 int XAPI_SetEvents(xapi_data_t *pData, int nEvents);
-int XAPI_SetResponse(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus);
-int XAPI_AuthorizeRequest(xapi_data_t *pApiData, const char *pToken, const char *pKey);
+int XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus);
+int XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey);
 
 int XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort);
 int XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);

@@ -12,6 +12,31 @@
 #include "xstr.h"
 #include "mdtp.h"
 
+const char* XPacket_GetStatusStr(xpacket_status_t eStatus)
+{
+    switch (eStatus)
+    {
+        case XPACKET_COMPLETE:
+            return "Successfully parsed MDTP packet header and body";
+        case XPACKET_PARSED:
+            return "Successfully parsed MDTP packet header";
+        case XPACKET_ERR_ALLOC:
+            return "Failed to allocate memory for MDTP packet";
+        case XPACKET_BIGDATA:
+            return "Receiving MDTP packet bigger than limit";
+        case XPACKET_INCOMPLETE:
+            return "Invalid or incomplete MDTP packet";
+        case XPACKET_INVALID_ARGS:
+            return "Invalid or uninitialized arguments";
+        case XPACKET_INVALID:
+            return "Invalid MDTP packet header";
+        default:
+            break;
+    }
+
+    return "Unknown status";
+}
+
 const char *XPacket_GetTypeStr(xpacket_type_t eType)
 {
     switch(eType)
@@ -116,22 +141,22 @@ void XPacket_ParseHeader(xpacket_header_t *pHeader, xjson_obj_t *pHeaderObj)
     }
 }
 
-int XPacket_UpdateHeader(xpacket_t *pPacket)
+xpacket_status_t XPacket_UpdateHeader(xpacket_t *pPacket)
 {
-    if (pPacket == NULL) return XSTDERR;
+    XASSERT(pPacket, XPACKET_INVALID_ARGS);
     xpacket_header_t *pHeader = &pPacket->header;
 
     if (pPacket->pHeaderObj == NULL)
     {
         pPacket->pHeaderObj = XJSON_NewObject(NULL, 1);
-        if (pPacket->pHeaderObj == NULL) return XSTDERR;
+        if (pPacket->pHeaderObj == NULL) return XPACKET_ERR_ALLOC;
     }
 
     xjson_obj_t *pHeaderObj = pPacket->pHeaderObj;
     pHeaderObj->nAllowUpdate = 1;
 
     if (pPacket->callback != NULL) pPacket->callback(pPacket, XPACKET_CB_UPDATE);
-    if (pHeader->eType == XPACKET_TYPE_ERROR || pHeader->eType == XPACKET_TYPE_INVALID) return XSTDERR;
+    if (pHeader->eType == XPACKET_TYPE_ERROR || pHeader->eType == XPACKET_TYPE_INVALID) return XPACKET_INVALID;
     const char *pPacketType = pHeader->eType == XPACKET_TYPE_LITE ? NULL : XPacket_GetTypeStr(pHeader->eType);
 
     if ((xstrused(pHeader->sVersion) && XJSON_AddString(pHeaderObj, "version", pHeader->sVersion) != XJSON_ERR_NONE) ||
@@ -141,7 +166,7 @@ int XPacket_UpdateHeader(xpacket_t *pPacket)
         (pHeader->nPacketID && XJSON_AddU32(pHeaderObj, "packetId", pHeader->nPacketID) != XJSON_ERR_NONE))
     {
         pHeader->eType = XPACKET_TYPE_ERROR;
-        return XSTDERR;
+        return XPACKET_ERR_ALLOC;
     }
 
     uint8_t nHaveDataType = xstrused(pHeader->sPayloadType);
@@ -154,14 +179,14 @@ int XPacket_UpdateHeader(xpacket_t *pPacket)
         if (pExtension == NULL)
         {
             pHeader->eType = XPACKET_TYPE_ERROR;
-            return XSTDERR;
+            return XPACKET_ERR_ALLOC;
         }
 
         if ((nHaveTime && XJSON_AddString(pExtension, "time", pHeader->sTime) != XJSON_ERR_NONE) ||
             (nHaveTZ && XJSON_AddString(pExtension, "timeZone", pHeader->sTZ) != XJSON_ERR_NONE))
         {
             pHeader->eType = XPACKET_TYPE_ERROR;
-            return XSTDERR;
+            return XPACKET_ERR_ALLOC;
         }
     }
 
@@ -171,7 +196,7 @@ int XPacket_UpdateHeader(xpacket_t *pPacket)
         if (pPayloadObj == NULL)
         {
             pHeader->eType = XPACKET_TYPE_ERROR;
-            return XSTDERR;
+            return XPACKET_ERR_ALLOC;
         }
 
         if ((nHaveDataType && XJSON_AddString(pPayloadObj, "payloadType", pHeader->sPayloadType) != XJSON_ERR_NONE) ||
@@ -179,14 +204,14 @@ int XPacket_UpdateHeader(xpacket_t *pPacket)
             XJSON_AddU32(pPayloadObj, "payloadSize", pHeader->nPayloadSize) != XJSON_ERR_NONE)
         {
             pHeader->eType = XPACKET_TYPE_ERROR;
-            return XSTDERR;
+            return XPACKET_ERR_ALLOC;
         }
     }
 
-    return XSTDOK;
+    return XPACKET_ERR_NONE;
 }
 
-int XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize)
+xpacket_status_t XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize)
 {
     xpacket_header_t *pHeader = &pPacket->header;
     memset(pHeader, 0, sizeof(xpacket_header_t));
@@ -203,25 +228,23 @@ int XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize)
     pPacket->callback = NULL;
 
     pPacket->pHeaderObj = XJSON_NewObject(NULL, 1);
-    return (pPacket->pHeaderObj == NULL) ? XSTDERR : XSTDOK;
+    return (pPacket->pHeaderObj == NULL) ?
+        XPACKET_ERR_ALLOC : XPACKET_ERR_NONE;
 }
 
 xpacket_t *XPacket_New(uint8_t *pData, uint32_t nSize)
 {
     xpacket_t *pPacket = (xpacket_t*)malloc(sizeof(xpacket_t));
-    if (pPacket == NULL) return NULL;
+    XASSERT(pPacket, NULL);
 
-    if (XPacket_Init(pPacket, pData, nSize) == XSTDERR)
-    {
-        free(pPacket);
-        return NULL;
-    }
+    xpacket_status_t nStatus = XPacket_Init(pPacket, pData, nSize);
+    XASSERT_CALL((nStatus != XPACKET_ERR_NONE), free, pPacket, NULL);
 
     pPacket->nAllocated = 1;
     return pPacket;
 }
 
-int XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, size_t nHdrLen, uint8_t *pData, size_t nSize)
+xpacket_status_t XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, size_t nHdrLen, uint8_t *pData, size_t nSize)
 {
     if ((pBuffer == NULL || pHeader == NULL || !nHdrLen) ||
         (!XByteBuffer_Add(pBuffer, (uint8_t*)&nHdrLen, sizeof(nHdrLen))) ||
@@ -229,15 +252,17 @@ int XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, size_t nHdrLen,
         (pData != NULL && nSize && !XByteBuffer_Add(pBuffer, pData, nSize)))
     {
         XByteBuffer_Clear(pBuffer);
-        return XSTDERR;
+        return XPACKET_ERR_ALLOC;
     }
 
-    return XSTDOK;
+    return XPACKET_ERR_NONE;
 }
 
 xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
 {
-    if (XPacket_UpdateHeader(pPacket) == XSTDERR) return NULL;
+    xpacket_status_t nStatus = XPacket_UpdateHeader(pPacket);
+    XASSERT((nStatus != XPACKET_ERR_NONE), NULL);
+
     xpacket_header_t *pHeader = &pPacket->header;
     xjson_writer_t jsonWriter;
 
@@ -246,7 +271,7 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
 
     if (XJSON_WriteObject(pPacket->pHeaderObj, &jsonWriter))
     {
-        XPacket_Create(
+        xpacket_status_t nStatus = XPacket_Create(
             &pPacket->rawData,
             jsonWriter.pData,
             jsonWriter.nLength,
@@ -254,6 +279,7 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
             pHeader->nPayloadSize
         );
 
+        XASSERT((nStatus == XPACKET_ERR_NONE), NULL);
         pPacket->nHeaderLength = (uint32_t)jsonWriter.nLength;
         XPacket_ParseHeader(&pPacket->header, pPacket->pHeaderObj);
     }
@@ -262,13 +288,13 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
     return &pPacket->rawData;
 }
 
-uint8_t *XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize)
+xpacket_status_t XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize)
 {
     xpacket_header_t *pHdr = &pPacket->header;
     memset(pHdr, 0, sizeof(xpacket_header_t));
     pHdr->eType = XPACKET_TYPE_INVALID;
 
-    if (pData == NULL || nSize <= 0) return NULL;
+    if (pData == NULL || nSize <= 0) return XPACKET_INVALID;
     XByteBuffer_Init(&pPacket->rawData, 0, 0);
 
     pPacket->nHeaderLength = (*(uint32_t*)pData);
@@ -282,7 +308,7 @@ uint8_t *XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize)
     if ((int)(nSize - XPACKET_INFO_BYTES) < pPacket->nHeaderLength)
     {
         pHdr->eType = XPACKET_TYPE_INCOMPLETE;
-        return NULL;
+        return XPACKET_INCOMPLETE;
     }
 
     xstrncpy(pHdr->sVersion, sizeof(pHdr->sVersion), XPACKET_VERSION_STR);
@@ -294,7 +320,7 @@ uint8_t *XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize)
         if (!XJSON_Parse(&json, pHeader, pPacket->nHeaderLength))
         {
             XJSON_Destroy(&json);
-            return NULL;
+            return XPACKET_INVALID;
         }
 
         pPacket->pHeaderObj = json.pRootObj;
@@ -308,14 +334,14 @@ uint8_t *XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize)
             pHdr->eType = XPACKET_TYPE_INCOMPLETE;
             XJSON_FreeObject(pPacket->pHeaderObj);
             pPacket->pHeaderObj = NULL;
-            return NULL;
+            return XPACKET_INCOMPLETE;
         }
 
         if (pHdr->nPayloadSize) pPacket->pPayload = (uint8_t*)&pData[nPayloadOffset];
         if (pPacket->callback != NULL) pPacket->callback(pPacket, XPACKET_CB_PARSED);
     }
 
-    return pPacket->pPayload;
+    return XPACKET_COMPLETE;
 }
 
 const uint8_t *XPacket_GetHeader(xpacket_t *pPacket)

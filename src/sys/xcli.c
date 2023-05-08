@@ -174,7 +174,7 @@ XSTATUS XWindow_RenderLine(xcli_wind_t *pWin, xbyte_buffer_t *pLine, xarray_data
     if (XWindow_UpdateSize(pWin) == XSTDERR) return XSTDERR;
     size_t nChars = 0, nMaxSize = pWin->frameSize.nWinColumns;
 
-    XByteBuffer_Set(pLine, (uint8_t*)pArrData->pData, pArrData->nSize);
+    XByteBuffer_SetData(pLine, (uint8_t*)pArrData->pData, pArrData->nSize);
     pLine->nSize = pArrData->nSize;
     pArrData->nSize = 0;
 
@@ -231,6 +231,8 @@ XSTATUS XWindow_GetFrame(xcli_wind_t *pWin, xbyte_buffer_t *pFrame)
         if (pData == NULL) continue;
 
         xbyte_buffer_t lineBuff;
+        XByteBuffer_Init(&lineBuff, XSTDNON, XFALSE);
+
         if (XWindow_RenderLine(pWin, &lineBuff, pData) < 0)
         {
             XByteBuffer_Clear(pFrame);

@@ -13,7 +13,7 @@
 
 #define XEVENTS_DEFAULT_FD_MAX 1024
 
-const char *XEvents_Status(xevent_status_t status)
+const char *XEvents_GetStatusStr(xevent_status_t status)
 {
     switch(status)
     {

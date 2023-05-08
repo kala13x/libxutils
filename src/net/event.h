@@ -120,7 +120,7 @@ typedef struct XEvents {
     xhash_t                 hashMap;            /* Hash map for events and related data */
 } xevents_t;
 
-const char *XEvents_Status(xevent_status_t status);
+const char *XEvents_GetStatusStr(xevent_status_t status);
 
 xevent_status_t XEvents_Create(xevents_t *pEv, uint32_t nMax, void *pUser, xevent_cb_t callBack, xbool_t bUseHash);
 void XEvents_Destroy(xevents_t *pEvents);

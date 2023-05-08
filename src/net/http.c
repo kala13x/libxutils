@@ -276,7 +276,7 @@ int XHTTP_Init(xhttp_t *pHttp, xhttp_method_t eMethod, size_t nSize)
 int XHTTP_InitRequest(xhttp_t *pHttp, xhttp_method_t eMethod, const char *pUri, const char *pVer)
 {
     int nStatus = XHTTP_Init(pHttp, eMethod, XHTTP_HEADER_SIZE);
-    if (nStatus <= 0) return XSTDERR;
+    if (nStatus <= 0) return nStatus;
 
     const char *pVersion = pVer != NULL ? pVer : XHTTP_VER_DEFAULT;
     const char *pFixedUrl = pUri != NULL ? pUri : "\\";
@@ -773,6 +773,13 @@ xhttp_status_t XHTTP_ParseData(xhttp_t *pHttp, uint8_t* pData, size_t nSize)
 {
     int nStatus = XHTTP_InitParser(pHttp, pData, nSize);
     return nStatus > 0 ? XHTTP_Parse(pHttp) : XHTTP_ERRALLOC;
+}
+
+xhttp_status_t XHTTP_ParseBuff(xhttp_t *pHttp, xbyte_buffer_t *pBuffer)
+{
+    XHTTP_Init(pHttp, XHTTP_DUMMY, XSTDNON);
+    XByteBuffer_Set(&pHttp->rawData, pBuffer);
+    return XHTTP_Parse(pHttp);
 }
 
 xhttp_status_t XHTTP_ReadHeader(xhttp_t *pHttp, xsock_t *pSock)
