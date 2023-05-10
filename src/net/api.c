@@ -382,7 +382,7 @@ static int XAPI_Accept(xapi_t *pApi, xapi_data_t *pApiData, xsock_t *pSock)
     if (XSock_Accept(pSock, &clientSock) == XSOCK_INVALID || 
         XSock_NonBlock(&clientSock, XTRUE) == XSOCK_INVALID)
     {
-        XAPI_ErrorCb(pApi, NULL, XAPI_SOCK, clientSock.eStatus);
+        XAPI_ErrorCb(pApi, NULL, XAPI_SOCK, pSock->eStatus);
         return XEVENTS_CONTINUE;
     }
 
@@ -515,7 +515,7 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
         if (nStatus < 0) return XEVENTS_DISCONNECT;
         else if (!nStatus) return XEVENTS_CONTINUE;
     }
-    
+
     return nStatus == XSTDUSR ?
             XEVENTS_USERCB :
             XEVENTS_CONTINUE;

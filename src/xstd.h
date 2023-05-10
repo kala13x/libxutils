@@ -27,6 +27,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
+
 #ifndef _WIN32
 #include <pthread.h>
 #include <dirent.h>
@@ -44,7 +48,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
-#include <sys/syscall.h>
 #include <net/if.h>
 #include <grp.h>
 #include <pwd.h>

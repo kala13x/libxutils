@@ -22,7 +22,7 @@ void signal_callback(int sig)
     g_nInterrupted = 1;
 }
 
-void print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->nFD : XSTDERR;
@@ -31,6 +31,8 @@ void print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
         xlogn("%s: fd(%d)", pStr, nFD);
     else if (pCtx->eCbType == XAPI_CB_ERROR)
         xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
+
+    return XSTDOK;
 }
 
 int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -80,44 +82,14 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xlogn("Sending response: fd(%d), buff(%zu)",
             (int)pData->nFD, handle.rawData.nUsed);
 
-    char *pHeader = XHTTP_GetHeaderRaw(&handle);
-    if (pHeader != NULL)
-    {
-        xlogi("Raw response header:\n\n%s", pHeader);
-        free(pHeader);
-    }
-
     XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
     XHTTP_Clear(&handle);
 
     return XSTDOK;
 }
 
-int http_callback(xhttp_t *pHttp, xhttp_ctx_t *pCbCtx)
-{
-    xapi_data_t *pData = (xapi_data_t*)pHttp->pUserCtx;
-    const char *pMessage = (const char*)pCbCtx->pData;
-
-    switch (pCbCtx->eCbType)
-    {
-        case XHTTP_STATUS:
-            xlogd("%s: fd(%d)", pMessage, (int)pData->nFD);
-            return XSTDOK;
-        case XHTTP_ERROR:
-            xloge("%s: fd(%d)", pMessage, (int)pData->nFD);
-            return XSTDERR;
-        default:
-            break;
-    }
-
-    return XSTDUSR;
-}
-
 int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
-    uint16_t nCallbacks = XHTTP_ERROR | XHTTP_STATUS;
-    XHTTP_SetCallback(pHandle, http_callback, pData, nCallbacks);
     xlogn("Accepted connection: fd(%d)", (int)pData->nFD);
     return XAPI_SetEvents(pData, XPOLLIN);
 }
@@ -128,8 +100,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
     {
         case XAPI_CB_ERROR:
         case XAPI_CB_STATUS:
-            print_status(pCtx, pData);
-            break;
+            return print_status(pCtx, pData);
         case XAPI_CB_READ:
             return handle_request(pCtx, pData);
         case XAPI_CB_WRITE:

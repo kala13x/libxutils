@@ -34,6 +34,8 @@
         "xver.h": "c",
         "api.h": "c",
         "http.h": "c",
-        "event.h": "c"
+        "event.h": "c",
+        "if.h": "c",
+        "syscall.h": "c"
     }
 }

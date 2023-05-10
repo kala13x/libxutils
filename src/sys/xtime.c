@@ -309,7 +309,14 @@ int XTime_GetClock(xtime_spec_t *pTs)
     return XSTDOK;
 }
 
-uint64_t XTime_GetUsec(void)
+uint32_t XTime_GetUsec(void)
+{
+    xtime_spec_t now;
+    XTime_GetClock(&now);
+    return (uint32_t)(now.nNanoSec / 1000);
+}
+
+uint64_t XTime_GetStamp(void)
 {
     xtime_spec_t now;
     XTime_GetClock(&now);

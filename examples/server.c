@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
             xpacket_t packet;
             XPacket_Init(&packet, (uint8_t*)pCrypted, XMD5_LENGTH);
             packet.header.eType = XPACKET_TYPE_MULTY;
-            packet.header.nTimeStamp = XTime_GetUsec();
+            packet.header.nTimeStamp = XTime_GetStamp();
             packet.header.nSessionID = rand();
             packet.header.nPacketID = rand();
             packet.callback = packet_callback;

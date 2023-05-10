@@ -1020,18 +1020,19 @@ int XTOPApp_GetRemoteStats(xtop_args_t *pArgs, xtop_stats_t *pStats)
     return nStatus;
 }
 
-void XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->nFD : XSTDERR;
 
-    if (pCtx->eStatType == XAPI_NONE &&
-        pCtx->nStatus == XAPI_DESTROY)
+    if (pCtx->nStatus == XAPI_DESTROY)
         xlogn("%s", pStr);
     else if (pCtx->eCbType == XAPI_CB_STATUS)
         xlogn("%s: fd(%d)", pStr, nFD);
     else if (pCtx->eCbType == XAPI_CB_ERROR)
         xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
+
+    return XSTDOK;
 }
 
 int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -1391,37 +1392,6 @@ int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XSTDOK;
 }
 
-int XTOPApp_CheckRequest(xhttp_t *pHttp)
-{
-    xbyte_buffer_t *pBuff = &pHttp->rawData;
-    if (pBuff->nUsed < 8) return XSTDOK;
-
-    int nMethod = XHTTP_GetMethodType((const char *)pBuff->pData);
-    return nMethod != XHTTP_DUMMY ? XSTDOK : XSTDNON;
-}
-
-int XTOPApp_HTTPCallback(xhttp_t *pHttp, xhttp_ctx_t *pCbCtx)
-{
-    xapi_data_t *pData = (xapi_data_t*)pHttp->pUserCtx;
-    const char *pMessage = (const char*)pCbCtx->pData;
-
-    switch (pCbCtx->eCbType)
-    {
-        case XHTTP_READ_HDR:
-            return XTOPApp_CheckRequest(pHttp);
-        case XHTTP_STATUS:
-            xlogd("%s: fd(%d)", pMessage, (int)pData->nFD);
-            return XSTDOK;
-        case XHTTP_ERROR:
-            xloge("%s: fd(%d)", pMessage, (int)pData->nFD);
-            return XSTDERR;
-        default:
-            break;
-    }
-
-    return XSTDUSR;
-}
-
 int XTOPApp_InitSessionData(xapi_data_t *pData)
 {
     xtop_request_t *pRequest = (xtop_request_t *)malloc(sizeof(xtop_request_t));
@@ -1433,10 +1403,6 @@ int XTOPApp_InitSessionData(xapi_data_t *pData)
 
     *pRequest = XTOP_INVALID;
     pData->pSessionData = pRequest;
-
-    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
-    uint16_t nCallbacks = XHTTP_ERROR | XHTTP_STATUS | XHTTP_READ_HDR;
-    XHTTP_SetCallback(pHandle, XTOPApp_HTTPCallback, pData, nCallbacks);
 
     xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->nFD, pData->sAddr);
     return XAPI_SetEvents(pData, XPOLLIN);
@@ -1456,8 +1422,7 @@ int XTOPApp_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
     {
         case XAPI_CB_ERROR:
         case XAPI_CB_STATUS:
-            XTOPApp_PrintStatus(pCtx, pData);
-            break;
+            return XTOPApp_PrintStatus(pCtx, pData);
         case XAPI_CB_READ:
             return XTOPApp_HandleRequest(pCtx, pData);
         case XAPI_CB_WRITE:

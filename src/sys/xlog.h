@@ -87,34 +87,30 @@ typedef enum
 } xlog_timing_t;
 
 #define XLog(...) \
-    XLog_Display(XLOG_NONE, 1, __VA_ARGS__)
-
-#define XLog_(...) \
-    XLog_Display(XLOG_NONE, 0, __VA_ARGS__)
+    XLog_Display(XLOG_NONE, __VA_ARGS__)
 
 #define XLog_Note(...) \
-    XLog_Display(XLOG_NOTE, 1, __VA_ARGS__)
+    XLog_Display(XLOG_NOTE, __VA_ARGS__)
 
 #define XLog_Info(...) \
-    XLog_Display(XLOG_INFO, 1, __VA_ARGS__)
+    XLog_Display(XLOG_INFO, __VA_ARGS__)
 
 #define XLog_Warn(...) \
-    XLog_Display(XLOG_WARN, 1, __VA_ARGS__)
+    XLog_Display(XLOG_WARN, __VA_ARGS__)
 
 #define XLog_Debug(...) \
-    XLog_Display(XLOG_DEBUG, 1, __VA_ARGS__)
+    XLog_Display(XLOG_DEBUG, __VA_ARGS__)
 
 #define XLog_Error(...) \
-    XLog_Display(XLOG_ERROR, 1, __VA_ARGS__)
+    XLog_Display(XLOG_ERROR, __VA_ARGS__)
 
 #define XLog_Trace(...) \
-    XLog_Display(XLOG_TRACE, 1, XLOG_THROW_LOCATION __VA_ARGS__)
+    XLog_Display(XLOG_TRACE, XLOG_THROW_LOCATION __VA_ARGS__)
 
 #define XLog_Fatal(...) \
-    XLog_Display(XLOG_FATAL, 1, XLOG_THROW_LOCATION __VA_ARGS__)
+    XLog_Display(XLOG_FATAL, XLOG_THROW_LOCATION __VA_ARGS__)
 
 /* Lower case short name functions */
-#define xlog_(...) XLog_(__VA_ARGS__)
 #define xlog(...) XLog(__VA_ARGS__)
 #define xlogn(...) XLog_Note(__VA_ARGS__)
 #define xlogi(...) XLog_Info(__VA_ARGS__)
@@ -123,8 +119,7 @@ typedef enum
 #define xloge(...) XLog_Error( __VA_ARGS__)
 #define xlogt(...) XLog_Trace(__VA_ARGS__)
 #define xlogf(...) XLog_Fatal(__VA_ARGS__)
-#define xlogx(f, ...) XLog_Display(f, 0, __VA_ARGS__)
-#define xlogfl(f, ...) XLog_Display(f, 1, __VA_ARGS__)
+#define xlogfl(f, ...) XLog_Display(f, __VA_ARGS__)
 
 #define xthrowp(r, ...) XLog_ThrowPtr(r, __VA_ARGS__)
 #define xthrowr(r, ...) XLog_Throw(r, __VA_ARGS__)
@@ -140,6 +135,7 @@ typedef enum
 #define xlog_separator(sep) XLog_SeparatorSet(sep)
 #define xlog_coloring(fmt) XLog_ColorFormatSet(fmt)
 #define xlog_tracetid(fl) XLog_TraceTid(fl)
+#define xlog_newline(fl) XLog_NewLine(fl)
 #define xlog_useheap(fl) XLog_UseHeap(fl)
 #define xlog_timing(fmt) XLog_TimeFormatSet(fmt)
 #define xlog_screen(fl) XLog_ScreenLogSet(fl)
@@ -184,6 +180,7 @@ typedef struct XLogConfig {
 
     xbool_t bTraceTid;
     xbool_t bToScreen;
+    xbool_t bNewLine;
     xbool_t bUseHeap;
     xbool_t bToFile;
     xbool_t bIndent;
@@ -214,6 +211,7 @@ void XLog_ScreenLogSet(xbool_t bEnable);
 void XLog_FileLogSet(xbool_t bEnable);
 void XLog_FlushSet(xbool_t bEnable);
 void XLog_TraceTid(xbool_t bEnable);
+void XLog_NewLine(xbool_t bEnable);
 void XLog_UseHeap(xbool_t bEnable);
 void XLog_FlagsSet(uint16_t nFlags);
 uint16_t XLog_FlagsGet(void);
@@ -221,7 +219,7 @@ uint16_t XLog_FlagsGet(void);
 void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe);
 void XLog_Destroy(void);
 
-void XLog_Display(xlog_flag_t nFlag, xbool_t bNewLine, const char *pFormat, ...);
+void XLog_Display(xlog_flag_t nFlag, const char *pFormat, ...);
 XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...);
 void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...);
 
