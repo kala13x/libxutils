@@ -87,14 +87,14 @@ static const char *XLog_GetColor(xlog_flag_t eFlag)
     return XSTR_EMPTY;
 }
 
-static uint32_t XLog_GetThreadID(void)
+static size_t XLog_GetThreadID(void)
 {
 #ifdef __linux__
     return syscall(__NR_gettid);
 #elif _WIN32
-    return (uint32_t)GetCurrentThreadId();
+    return (size_t)GetCurrentThreadId();
 #else
-    return (uint32_t)pthread_self();
+    return (size_t)pthread_self();
 #endif
 }
 
@@ -121,7 +121,7 @@ static void XLog_CreateTag(char *pOut, int nSize, xlog_flag_t eFlag, const char 
 static void XLog_CreateTid(char *pOut, int nSize, uint8_t nTraceTid)
 {
     if (!nTraceTid) pOut[0] = XSTR_NUL;
-    else xstrncpyf(pOut, nSize, "(%u) ", XLog_GetThreadID());
+    else xstrncpyf(pOut, nSize, "(%zu) ", XLog_GetThreadID());
 }
 
 static void XLog_DisplayMessage(const xlog_ctx_t *pCtx, const char *pInfo, size_t nInfoLen, const char *pInput)
