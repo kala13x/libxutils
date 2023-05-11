@@ -67,7 +67,7 @@ extern "C" {
 #define XEVENTS_CONTINUE    0
 #define XEVENTS_RELOOP      1
 #define XEVENTS_ACCEPT      2
-#define XEVENTS_USERCB      3
+#define XEVENTS_USERCALL    3
 #define XEVENTS_BREAK       4
 
 #ifdef __linux__

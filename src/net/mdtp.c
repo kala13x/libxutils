@@ -360,3 +360,9 @@ const uint8_t *XPacket_GetPayload(xpacket_t *pPacket)
     if (pPacket->rawData.nUsed < nActualSize) return NULL;
     return &pPacket->rawData.pData[nPayloadOffset];
 }
+
+size_t XPacket_GetSize(xpacket_t *pPacket)
+{
+    if (pPacket == NULL) return XSTDNON;
+    return pPacket->nPacketSize;
+}

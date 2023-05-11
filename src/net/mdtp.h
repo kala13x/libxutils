@@ -109,6 +109,7 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket);
 
 const uint8_t *XPacket_GetHeader(xpacket_t *pPacket);
 const uint8_t *XPacket_GetPayload(xpacket_t *pPacket);
+size_t XPacket_GetSize(xpacket_t *pPacket);
 
 #ifdef __cplusplus
 }

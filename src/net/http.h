@@ -148,9 +148,12 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...);
 xbyte_buffer_t* XHTTP_Assemble(xhttp_t *pHttp, const uint8_t *pContent, size_t nLength);
 
 const char* XHTTP_GetHeader(xhttp_t *pHttp, const char* pHeader);
+const uint8_t* XHTTP_GetExtraData(xhttp_t *pHttp);
 const uint8_t* XHTTP_GetBody(xhttp_t *pHttp);
 char* XHTTP_GetHeaderRaw(xhttp_t *pHttp);
 size_t XHTTP_GetBodySize(xhttp_t *pHttp);
+size_t XHTTP_GetExtraSize(xhttp_t *pHttp);
+size_t XHTTP_GetPacketSize(xhttp_t *pHttp);
 
 int XHTTP_InitParser(xhttp_t *pHttp, uint8_t* pData, size_t nSize);
 int XHTTP_AppendData(xhttp_t *pHttp, uint8_t* pData, size_t nSize);

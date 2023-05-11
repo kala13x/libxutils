@@ -52,7 +52,7 @@ static int XEvents_EventCb(xevents_t *pEv, xevent_data_t *pData, XSOCKET nFD, in
 {
     int nRetVal = pEv->eventCallback(pEv, pData, nFD, nReason);
     if (nRetVal == XEVENTS_DISCONNECT) { XEvents_Delete(pEv, pData); return XEVENTS_DISCONNECT; }
-    else if (nRetVal == XEVENTS_USERCB) return pEv->eventCallback(pEv, pData, nFD, XEVENT_USER);
+    else if (nRetVal == XEVENTS_USERCALL) return pEv->eventCallback(pEv, pData, nFD, XEVENT_USER);
     else if (nRetVal == XEVENTS_ACCEPT) return XEVENTS_ACTION;
     else if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
     return XEVENTS_CONTINUE;

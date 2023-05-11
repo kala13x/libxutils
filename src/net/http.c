@@ -580,18 +580,53 @@ char* XHTTP_GetHeaderRaw(xhttp_t *pHttp)
 
 const uint8_t* XHTTP_GetBody(xhttp_t *pHttp)
 {
-    if (pHttp == NULL) return NULL;
+    XASSERT_RET((pHttp && pHttp->nHeaderLength), NULL);
     xbyte_buffer_t *pBuffer = &pHttp->rawData;
-    return (pBuffer->nUsed > pHttp->nHeaderLength) ?
-        &pBuffer->pData[pHttp->nHeaderLength] : NULL;
+
+    XASSERT_RET((pBuffer->nUsed > pHttp->nHeaderLength), NULL);
+    return &pBuffer->pData[pHttp->nHeaderLength];
 }
 
 size_t XHTTP_GetBodySize(xhttp_t *pHttp)
 {
-    if (pHttp == NULL || !pHttp->nHeaderLength) return 0;
+    XASSERT_RET((pHttp && pHttp->nHeaderLength), XSTDNON);
     const xbyte_buffer_t *pBuffer = &pHttp->rawData;
-    return (pBuffer->nUsed > pHttp->nHeaderLength) ?
-           (pBuffer->nUsed - pHttp->nHeaderLength) : 0;
+
+    XASSERT_RET((pBuffer->nUsed > pHttp->nHeaderLength), XSTDNON);
+    return pBuffer->nUsed - pHttp->nHeaderLength;
+}
+
+size_t XHTTP_GetExtraSize(xhttp_t *pHttp)
+{
+    XASSERT_RET((pHttp != NULL && pHttp->nHeaderLength), XSTDNON);
+    size_t nPayloadSize = XHTTP_GetBodySize(pHttp);
+    XASSERT_RET(nPayloadSize, XSTDNON);
+
+    const char *pCntType = XHTTP_GetHeader(pHttp, "Content-Type");
+    const char *pCntLen = XHTTP_GetHeader(pHttp, "Content-Length");
+    XASSERT_RET((pCntType != NULL && pCntLen != NULL), nPayloadSize);
+
+    XASSERT_RET((nPayloadSize > pHttp->nContentLength), XSTDNON);
+    return nPayloadSize - pHttp->nContentLength;
+}
+
+const uint8_t* XHTTP_GetExtraData(xhttp_t *pHttp)
+{
+    size_t nExtraSize = XHTTP_GetExtraSize(pHttp);
+    XASSERT_RET(nExtraSize, NULL);
+
+    size_t nPacketLen = pHttp->nHeaderLength + pHttp->nContentLength;
+    const xbyte_buffer_t *pBuffer = &pHttp->rawData;
+
+    XASSERT_RET((pBuffer->nUsed > nPacketLen), NULL);
+    return &pBuffer->pData[nPacketLen];
+}
+
+size_t XHTTP_GetPacketSize(xhttp_t *pHttp)
+{
+    XASSERT_RET((pHttp != NULL), XSTDNON);
+    const xbyte_buffer_t *pBuffer = &pHttp->rawData;
+    return pBuffer->nUsed - XHTTP_GetExtraSize(pHttp);
 }
 
 static int XHTTP_CheckComplete(xhttp_t *pHttp)
@@ -644,7 +679,7 @@ static size_t XHTTP_ParseHeaderLength(const char *pHdrStr)
 static size_t XHTTP_ParseContentLength(xhttp_t *pHttp)
 {
     const char *pHdr = XHTTP_GetHeader(pHttp, "Content-Length");
-    return (pHdr != NULL) ? atol(pHdr) : 0;
+    return (pHdr != NULL) ? atol(pHdr) : XSTDNON;
 }
 
 static size_t XHTTP_ParseUrl(xhttp_t *pHttp)

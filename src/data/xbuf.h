@@ -31,6 +31,7 @@ typedef struct XByteBuffer {
 } xbyte_buffer_t;
 
 uint8_t *XByteData_Dup(const uint8_t *pBuff, size_t nSize);
+xbool_t XByteBuffer_HasData(xbyte_buffer_t *pBuffer);
 xbyte_buffer_t* XByteBuffer_New(size_t nSize, int nFastAlloc);
 void XByteBuffer_Free(xbyte_buffer_t **pBuffer);
 void XByteBuffer_Clear(xbyte_buffer_t *pBuffer);

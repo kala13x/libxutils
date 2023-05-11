@@ -53,6 +53,8 @@ const char* XWebSock_GetStatusStr(xws_status_t eStatus)
             return "Invalid or incomplete WebSocket frame";
         case XWS_FRAME_INVALID:
             return "Invalid or unsupported WebSocket frame";
+        case XWS_INVALID_REQUEST:
+            return "Received invalid HTTP upgrade request";
         case XWS_INVALID_TYPE:
             return "Invalid or uninitialized frame type";
         case XWS_INVALID_ARGS:

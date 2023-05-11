@@ -308,6 +308,12 @@ int XByteBuffer_Advance(xbyte_buffer_t *pBuffer, size_t nSize)
     return (int)pBuffer->nUsed;
 }
 
+xbool_t XByteBuffer_HasData(xbyte_buffer_t *pBuffer)
+{
+    return (pBuffer && pBuffer->pData &&
+        pBuffer->nUsed) ? XTRUE : XFALSE;
+}
+
 int XDataBuffer_Init(xdata_buffer_t *pBuffer, size_t nSize, int nFixed)
 {
     pBuffer->pData = (void**)calloc(nSize, sizeof(void*));
