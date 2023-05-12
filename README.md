@@ -34,6 +34,7 @@ libxutils is available for both Linux/Unix and Windows operating systems and is 
 - [Implementation of HMAC algorithm with SHA256 and MD5](https://github.com/kala13x/libxutils/blob/main/src/crypt/hmac.h)
 - [RSA implementation based on openssl library](https://github.com/kala13x/libxutils/blob/main/src/crypt/rsa.h)
 - [Implementation of SHA256 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/sha256.h)
+- [Implementation of SHA1 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/sha1.h)
 - [Implementation of CRC32 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/crc32.h)
 - [Implementation of MD5 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/md5.h)
 
