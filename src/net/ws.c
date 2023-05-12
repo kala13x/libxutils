@@ -399,7 +399,9 @@ xws_status_t XWebFrame_Parse(xweb_frame_t *pFrame)
     pFrame->bFin = (nStartByte & 0x80) >> 7;
     pFrame->bMask = (nNextByte & 0x80) >> 7;
     pFrame->nOpCode = nStartByte & 0x0F;
+
     pFrame->eType = XWS_FrameType(pFrame->nOpCode);
+    XASSERT((pFrame->eType != XWS_DUMMY), XWS_INVALID_TYPE);
 
     if (nLengthByte <= 125)
     {
