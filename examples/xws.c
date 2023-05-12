@@ -28,7 +28,7 @@ session_data_t* new_session_data()
     XASSERT(pSession, xthrowp(NULL, "Failed to allocate per session data"));
 
     /*
-        Initialize additional sesion related stuf here...
+        Initialize additional sesion related stuff here...
     */
 
     pSession->nRxCount = 0;
