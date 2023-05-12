@@ -4,8 +4,10 @@
  *  This source is part of "libxutils" project
  *  2019-2021  Sun Dro (f4tb0y@protonmail.com)
  * 
- * @brief Implementation of high performance event based non-blocking REST API listener.
- * The library will use poll(), epoll() or WSAPoll() depending on the operating system.
+ * @brief Implementation of high performance, event based,
+ * non-blocking client/server API for the HTTP, WebSocket
+ * and raw TCP connections. The library will use epoll(),
+ * poll() or WSAPoll() depending on the operating system.
  */
 
 #ifndef __XUTILS_API_H__

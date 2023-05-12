@@ -4,8 +4,10 @@
  *  This source is part of "libxutils" project
  *  2019-2021  Sun Dro (f4tb0y@protonmail.com)
  * 
- * @brief Implementation of high performance event based non-blocking REST API listener.
- * The library will use poll(), epoll() or WSAPoll() depending on the operating system.
+ * @brief Implementation of high performance, event based,
+ * non-blocking client/server API for the HTTP, WebSocket
+ * and raw TCP connections. The library will use epoll(),
+ * poll() or WSAPoll() depending on the operating system.
  */
 
 #include "api.h"
@@ -56,6 +58,8 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
 
 const char* XAPI_GetStatus(xapi_ctx_t *pCtx)
 {
+    XASSERT(pCtx, "Invalid API context");
+
     switch (pCtx->eStatType)
     {
         case XAPI_NONE:
@@ -79,7 +83,7 @@ const char* XAPI_GetStatus(xapi_ctx_t *pCtx)
 static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
 {
     xapi_data_t *pData = (xapi_data_t*)malloc(sizeof(xapi_data_t));
-    if (pData == NULL) return NULL;
+    XASSERT((pData != NULL), NULL);
 
     XByteBuffer_Init(&pData->rxBuffer, XSTDNON, XFALSE);
     XByteBuffer_Init(&pData->txBuffer, XSTDNON, XFALSE);
@@ -127,8 +131,8 @@ static void XAPI_FreeData(xapi_data_t **pData)
 
 static int XAPI_Callback(xapi_t *pApi, xapi_data_t *pApiData, xapi_cb_type_t eCbType, xapi_type_t eType, uint8_t nStat)
 {
-    if (pApi == NULL) return XSTDERR;
-    else if (pApi->callback == NULL) return XSTDOK;
+    XASSERT((pApi != NULL), XSTDERR);
+    XASSERT_RET(pApi->callback, XSTDOK);
 
     xapi_ctx_t ctx;
     ctx.eCbType = eCbType;
@@ -159,7 +163,7 @@ static int XAPI_StatusCb(xapi_t *pApi, xapi_data_t *pApiData, xapi_type_t eType,
 
 static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
 {
-    if (pEvData == NULL) return XEVENTS_CONTINUE;
+    XASSERT_RET(pEvData, XEVENTS_CONTINUE);
 
     if (pEvData->nFD >= 0 && pEvData->bIsOpen)
     {
@@ -182,6 +186,7 @@ static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
 
 XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
 {
+    XASSERT_RET((pData && pData->pEvData), XSTDERR);
     xevent_data_t *pEvData = pData->pEvData;
     xapi_t *pApi = pData->pApi;
 
@@ -197,12 +202,13 @@ XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
 
 XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus)
 {
+    XASSERT((pApiData && pApiData->pApi), XSTDERR);
+    xapi_t *pApi = pApiData->pApi;
+
     xhttp_t handle;
     XHTTP_InitResponse(&handle, nCode, NULL);
 
-    xapi_t *pApi = pApiData->pApi;
     char sContent[XSTR_MIN];
-
     size_t nLength = xstrncpyf(sContent, sizeof(sContent), "{\"status\": \"%s\"}",
         eStatus != XAPI_UNKNOWN ? XAPI_GetStatusStr(eStatus) : XHTTP_GetCodeStr(nCode));
 
@@ -233,7 +239,7 @@ XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus
 
 XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey)
 {
-    if (pApiData == NULL) return XSTDERR;
+    XASSERT((pApiData && pApiData->pPacket), XSTDERR);
     xhttp_t *pHandle = (xhttp_t*)pApiData->pPacket;
 
     size_t nTokenLength = xstrused(pToken) ? strlen(pToken) : XSTDNON;
@@ -491,7 +497,7 @@ static int XAPI_HandleWS(xapi_t *pApi, xapi_data_t *pApiData)
         XASSERT_RET((nRetVal == XEVENTS_CONTINUE && pBuffer->nUsed), nRetVal);
     }
 
-    xweb_frame_t frame;
+    xws_frame_t frame;
     eStatus = XWebFrame_ParseBuff(&frame, pBuffer);
 
     if (eStatus == XWS_FRAME_COMPLETE)
@@ -783,6 +789,7 @@ static int XAPI_EventCallback(void *events, void* data, XSOCKET fd, int reason)
 
 xevents_t* XAPI_GetOrCreateEvents(xapi_t *pApi)
 {
+    XASSERT((pApi != NULL), NULL);
     xevents_t *pEvents = &pApi->events;
     if (pApi->bHaveEvents) return pEvents;
 
@@ -801,6 +808,8 @@ xevents_t* XAPI_GetOrCreateEvents(xapi_t *pApi)
 
 XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort)
 {
+    XASSERT((pApi && pAddr && nPort), XSTDINV);
+
     xsock_t sock; /* Create server socket */
     XSock_Create(&sock, XSOCK_TCP_SERVER, pAddr, nPort);
     XSock_ReuseAddr(&sock, XTRUE);
@@ -857,6 +866,7 @@ XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
 
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx, size_t nRxSize)
 {
+    XASSERT((pApi != NULL), XSTDINV);
     pApi->bAllowMissingKey = XFALSE;
     pApi->bHaveEvents = XFALSE;
     pApi->callback = callback;
@@ -876,6 +886,7 @@ void XAPI_Destroy(xapi_t *pApi)
 
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
 {
+    XASSERT(pApi, XEVENT_STATUS_EINVALID);
     xevents_t *pEvents = &pApi->events;
     return XEvents_Service(pEvents, nTimeoutMs);
 }

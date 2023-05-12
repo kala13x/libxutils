@@ -54,11 +54,11 @@ typedef enum {
     XWS_RESERVED8,
     XWS_RESERVED9,
     XWS_RESERVED10,
-    XWS_DUMMY
-} xweb_frame_type_t;
+    XWS_INVALID
+} xws_frame_type_t;
 
 typedef struct xweb_frame_ {
-    xweb_frame_type_t eType;
+    xws_frame_type_t eType;
     xbyte_buffer_t buffer;
 
     size_t nPayloadLength;
@@ -71,40 +71,40 @@ typedef struct xweb_frame_ {
     xbool_t bAlloc;
     xbool_t bMask;
     xbool_t bFin;
-} xweb_frame_t;
+} xws_frame_t;
 
 const char* XWebSock_GetStatusStr(xws_status_t eStatus);
-const char* XWS_FrameTypeStr(xweb_frame_type_t eType);
+const char* XWS_FrameTypeStr(xws_frame_type_t eType);
 
-xweb_frame_type_t XWS_FrameType(uint8_t nOpCode);
-uint8_t XWS_OpCode(xweb_frame_type_t eType);
+xws_frame_type_t XWS_FrameType(uint8_t nOpCode);
+uint8_t XWS_OpCode(xws_frame_type_t eType);
 
-void XWebFrame_Init(xweb_frame_t *pFrame);
-void XWebFrame_Free(xweb_frame_t **pFrame);
-void XWebFrame_Clear(xweb_frame_t *pFrame);
-void XWebFrame_Reset(xweb_frame_t *pFrame);
+void XWebFrame_Init(xws_frame_t *pFrame);
+void XWebFrame_Free(xws_frame_t **pFrame);
+void XWebFrame_Clear(xws_frame_t *pFrame);
+void XWebFrame_Reset(xws_frame_t *pFrame);
 
 uint8_t* XWS_CreateFrame(uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize);
-xweb_frame_t* XWebFrame_New(uint8_t *pPayload, size_t nLength, xweb_frame_type_t eType, xbool_t bFin);
-xweb_frame_t* XWebFrame_Alloc(xweb_frame_type_t eType, size_t nBuffSize);
+xws_frame_t* XWebFrame_New(uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bFin);
+xws_frame_t* XWebFrame_Alloc(xws_frame_type_t eType, size_t nBuffSize);
 
-xws_status_t XWebFrame_Create(xweb_frame_t *pFrame, uint8_t *pPayload, size_t nLength, xweb_frame_type_t eType, xbool_t bFin);
-xws_status_t XWebFrame_AppendData(xweb_frame_t *pFrame, uint8_t* pData, size_t nSize);
-xws_status_t XWebFrame_ParseData(xweb_frame_t *pFrame, uint8_t* pData, size_t nSize);
-xws_status_t XWebFrame_TryParse(xweb_frame_t *pFrame, uint8_t* pData, size_t nSize);
-xws_status_t XWebFrame_ParseBuff(xweb_frame_t *pFrame, xbyte_buffer_t *pBuffer);
-xws_status_t XWebFrame_Parse(xweb_frame_t *pFrame);
-xws_status_t XWebFrame_Unmask(xweb_frame_t *pFrame);
+xws_status_t XWebFrame_Create(xws_frame_t *pFrame, uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bFin);
+xws_status_t XWebFrame_AppendData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize);
+xws_status_t XWebFrame_ParseData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize);
+xws_status_t XWebFrame_TryParse(xws_frame_t *pFrame, uint8_t* pData, size_t nSize);
+xws_status_t XWebFrame_ParseBuff(xws_frame_t *pFrame, xbyte_buffer_t *pBuffer);
+xws_status_t XWebFrame_Parse(xws_frame_t *pFrame);
+xws_status_t XWebFrame_Unmask(xws_frame_t *pFrame);
 
-size_t XWebFrame_GetPayloadLength(xweb_frame_t *pFrame);
-size_t XWebFrame_GetFrameLength(xweb_frame_t *pFrame);
-size_t XWebFrame_GetExtraLength(xweb_frame_t *pFrame);
+size_t XWebFrame_GetPayloadLength(xws_frame_t *pFrame);
+size_t XWebFrame_GetFrameLength(xws_frame_t *pFrame);
+size_t XWebFrame_GetExtraLength(xws_frame_t *pFrame);
 
-xbyte_buffer_t* XWebFrame_GetBuffer(xweb_frame_t *pFrame);
-const uint8_t* XWebFrame_GetPayload(xweb_frame_t *pFrame);
+xbyte_buffer_t* XWebFrame_GetBuffer(xws_frame_t *pFrame);
+const uint8_t* XWebFrame_GetPayload(xws_frame_t *pFrame);
 
-XSTATUS XWebFrame_GetExtraData(xweb_frame_t *pFrame, xbyte_buffer_t *pBuffer, xbool_t bAppend);
-XSTATUS XWebFrame_CutExtraData(xweb_frame_t *pFrame);
+XSTATUS XWebFrame_GetExtraData(xws_frame_t *pFrame, xbyte_buffer_t *pBuffer, xbool_t bAppend);
+XSTATUS XWebFrame_CutExtraData(xws_frame_t *pFrame);
 
 #ifdef __cplusplus
 }

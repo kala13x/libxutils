@@ -372,6 +372,7 @@ xevent_data_t* XEvents_GetData(xevents_t *pEv, XSOCKET nFD)
 
 xevent_status_t XEvents_Service(xevents_t *pEv, int nTimeoutMs)
 {
+    XASSERT(pEv, XEVENT_STATUS_EINVALID);
     int nCount, nRet = 0;
     uint32_t i = 0;
 
