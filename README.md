@@ -6,7 +6,7 @@
 
 ## libxutils - Cross-platform C library release 2.x
 
-`libxutils` is a cross-platform `C` library that provides safer implementations of various functions to make routine tasks easier for programs written in `C` and C-compatible languages like `C++`, `Rust`, and `Objective C`. The library offers a range of features including containers, data structures, network tools, `HTTP`/`WebSocket` client/server library, cryptography algorithms, C string manipulations, `JSON` parser/serializer and system utilities. A list of key features can be found below.
+`libxutils` is a cross-platform `C` library that provides safer implementations of various functions to make routine tasks easier for programs written in `C` and C-compatible languages like `C++`, `Rust`, and `Objective C`. The library offers a range of features including containers, data structures, network tools, `HTTP`/`WebSocket` client & server library, cryptography algorithms, C string manipulations, `JSON` parser/serializer and system utilities. A list of key features can be found below.
 
 `libxutils` is available for `Linux`, `Unix` and `Windows` operating systems and is released under the `MIT` License. To check the version of libxutils you have, you can refer to the file `src/xver.h`. Please note that the list of features provided in the README is incomplete. For more information about the full range of features offered by libxutils, you can refer to the individual header files linked below or browse the library's source code.
 
