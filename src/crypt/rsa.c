@@ -7,10 +7,10 @@
  * @brief RSA implementation with openssl library
  */
 
-#ifdef XCRYPT_USE_SSL
 #include "rsa.h"
 #include "xfs.h"
 
+#ifdef XCRYPT_USE_SSL
 static const uint8_t g_shaPadding[XSHA256_PADDING_SIZE] =
     {
         0x30, 0x31, 0x30, 0x0d, 0x06,
