@@ -1447,7 +1447,7 @@ int XTOPApp_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
 int XTOPApp_ServerMode(xtop_args_t *pArgs, xtop_stats_t *pStats)
 {
     xapi_t api;
-    XAPI_Init(&api, XTOPApp_ServiceCb, pArgs);
+    XAPI_Init(&api, XTOPApp_ServiceCb, pArgs, XSTDNON);
 
     pArgs->pStats = pStats;
     xevent_status_t status;

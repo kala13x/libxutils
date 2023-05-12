@@ -27,6 +27,8 @@ typedef struct xapi_ xapi_t;
 typedef enum {
     XAPI_CB_ERROR = 0,
     XAPI_CB_STATUS,
+    XAPI_CB_HANDSHAKE_REQUEST,
+    XAPI_CB_HANDSHAKE_ANSWER,
     XAPI_CB_INTERRUPT,
     XAPI_CB_COMPLETE,
     XAPI_CB_ACCEPTED,
@@ -50,7 +52,9 @@ typedef enum {
     XAPI_AUTH_FAILURE,
     XAPI_ERR_ASSEMBLE,
     XAPI_ERR_REGISTER,
+    XAPI_ERR_CRYPT,
     XAPI_ERR_ALLOC,
+    XAPI_STATUS,
     XAPI_DESTROY,
     XAPI_HUNGED,
     XAPI_CLOSED
@@ -76,10 +80,14 @@ typedef enum {
 typedef struct XAPIData {
     char sAddr[XSOCK_ADDR_MAX];
     char sKey[XSOCK_ADDR_MAX];
+
+    uint16_t nPort;
+    XSOCKET nFD;
+
+    xbool_t bHandshakeStart;
     xbool_t bHandshakeDone;
     xbool_t bCancel;
     xbool_t bAlloc;
-    XSOCKET nFD;
 
     xbyte_buffer_t rxBuffer;
     xbyte_buffer_t txBuffer;
@@ -103,17 +111,20 @@ typedef struct xapi_ctx_ {
 typedef int(*xapi_cb_t)(xapi_ctx_t *pCtx, xapi_data_t *pData);
 
 struct xapi_ {
-    xevents_t events;
-    xbool_t bHaveEvents;
     xapi_cb_t callback;
+    xevents_t events;
+    size_t nRxSize;
     void *pUserCtx;
+
+    xbool_t bAllowMissingKey;
+    xbool_t bHaveEvents;
 };
 
 const char* XAPI_GetStatus(xapi_ctx_t *pCtx);
 const char* XAPI_GetStatusStr(xapi_status_t eStatus);
 xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pData);
 
-XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
+XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx, size_t nRxSize);
 void XAPI_Destroy(xapi_t *pApi);
 
 XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents);

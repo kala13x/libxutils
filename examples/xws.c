@@ -1,10 +1,10 @@
 /*!
- *  @file libxutils/examples/events.c
+ *  @file libxutils/examples/xws.c
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2023  Sun Dro (f4tb0y@protonmail.com)
  *
- * @brief Implementation of high performance event based non-blocking HTTP server.
+ * @brief Implementation of high performance event based non-blocking WebSocket server.
  * The xUtils library will use poll() or epoll() depending on the operating system.
  */
 
@@ -35,12 +35,12 @@ int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XSTDOK;
 }
 
-int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int handle_handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
 
-    xlogn("Received request: fd(%d), buff(%zu)",
-        (int)pData->nFD, pHandle->rawData.nUsed);
+    xlogn("Received handhshake request: fd(%d), url(%s), buff(%zu)",
+        (int)pData->nFD, pHandle->sUrl, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
     if (pHeader != NULL)
@@ -49,41 +49,60 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
         free(pHeader);
     }
 
+    return XSTDOK;
+}
+
+int handle_handshake_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
+{
+    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
+
+    xlogn("Sending handhshake answer: fd(%d), buff(%zu)",
+        (int)pData->nFD, pHandle->rawData.nUsed);
+
+    char *pHeader = XHTTP_GetHeaderRaw(pHandle);
+    if (pHeader != NULL)
+    {
+        xlogi("Raw answer header:\n\n%s", pHeader);
+        free(pHeader);
+    }
+
+    return XSTDOK;
+}
+
+int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
+{
+    xweb_frame_t *pFrame = (xweb_frame_t*)pData->pPacket;
+
+    xlogn("Received WS frame: fd(%d), type(%s), fin(%d), hdr(%zu), pl(%zu), buff(%zu)",
+        (int)pData->nFD, XWS_FrameTypeStr(pFrame->eType), pFrame->bFin,
+        pFrame->nHeaderSize, pFrame->nPayloadLength, pFrame->buffer.nUsed);
+
+    const char* pPayload = (const char*)XWebFrame_GetPayload(pFrame);
+    if (pPayload != NULL) xlogd("Frame payload: %s", pPayload);
+
     return XAPI_SetEvents(pData, XPOLLOUT);
 }
 
 int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xhttp_t handle;
-    if (XHTTP_InitResponse(&handle, 200, NULL) <= 0)
-    {
-        xloge("Failed to initialize HTTP response: %s", strerror(errno));
-        return XSTDERR;
-    }
+    xweb_frame_t frame;
+    xws_status_t status;
 
-    if (XHTTP_AddHeader(&handle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
-        XHTTP_AddHeader(&handle, "Content-Type", "text/plain") < 0)
-    {
-        xloge("Failed to setup HTTP headers: %s", strerror(errno));
-        XHTTP_Clear(&handle);
-        return XSTDERR;
-    }
+    char sPayload[XSTR_MIN];
+    size_t nLength = xstrncpyf(sPayload, sizeof(sPayload), "Here is your response.");
 
-    char sBody[XSTR_TINY];
-    size_t nLen = xstrncpy(sBody, sizeof(sBody), "Here is your response.");
-
-    if (XHTTP_Assemble(&handle, (const uint8_t*)sBody, nLen) == NULL)
+    status = XWebFrame_Create(&frame, (uint8_t*)sPayload, nLength, XWS_TEXT, XTRUE);
+    if (status != XWS_ERR_NONE)
     {
-        xloge("Failed to assemble HTTP response: %s", strerror(errno));
-        XHTTP_Clear(&handle);
+        xloge("Failed to create frame: %s", XWebSock_GetStatusStr(status));
         return XSTDERR;
     }
 
     xlogn("Sending response: fd(%d), buff(%zu)",
-            (int)pData->nFD, handle.rawData.nUsed);
+        (int)pData->nFD, frame.buffer.nUsed);
 
-    XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
-    XHTTP_Clear(&handle);
+    XByteBuffer_AddBuff(&pData->txBuffer, &frame.buffer);
+    XWebFrame_Clear(&frame);
 
     return XSTDOK;
 }
@@ -101,18 +120,25 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_ERROR:
         case XAPI_CB_STATUS:
             return print_status(pCtx, pData);
+        case XAPI_CB_HANDSHAKE_REQUEST:
+            return handle_handshake_request(pCtx, pData);
+        case XAPI_CB_HANDSHAKE_ANSWER:
+            return handle_handshake_answer(pCtx, pData);
         case XAPI_CB_READ:
-            return handle_request(pCtx, pData);
+            return handle_frame(pCtx, pData);
         case XAPI_CB_WRITE:
             return write_data(pCtx, pData);
         case XAPI_CB_ACCEPTED:
             return init_data(pCtx, pData);
+        case XAPI_CB_STARTED:
+            xlogn("Started web socket listener: %s:%u", pData->sAddr, pData->nPort);
+            break;
         case XAPI_CB_CLOSED:
             xlogn("Connection closed: fd(%d)", (int)pData->nFD);
             break;
         case XAPI_CB_COMPLETE:
             xlogn("Response sent: fd(%d)", (int)pData->nFD);
-            return XSTDERR;
+            break;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;
             break;
@@ -145,7 +171,7 @@ int main(int argc, char* argv[])
     xapi_t api;
     XAPI_Init(&api, service_callback, &api, XSTDNON);
 
-    if (XAPI_StartListener(&api, XAPI_HTTP, argv[1], atoi(argv[2])) < 0)
+    if (XAPI_StartListener(&api, XAPI_WS, argv[1], atoi(argv[2])) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

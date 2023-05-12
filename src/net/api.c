@@ -9,11 +9,13 @@
  */
 
 #include "api.h"
-#include "xbuf.h"
 #include "xver.h"
+#include "xbuf.h"
+#include "sha1.h"
+#include "base64.h"
 
+#define XAPI_RX_MAX     (5000 * 1024)
 #define XAPI_RX_SIZE    4096
-#define XAPI_RX_MAX     5000 * 1024
 
 const char* XAPI_GetStatusStr(xapi_status_t eStatus)
 {
@@ -37,6 +39,8 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
             return "Memory allocation failure";
         case XAPI_ERR_ASSEMBLE:
             return "Failed to initialize response";
+        case XAPI_ERR_CRYPT:
+            return "Failed to crypt WS Sec-Key";
         case XAPI_CLOSED:
             return "Closed remote connection";
         case XAPI_HUNGED:
@@ -83,6 +87,10 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pData->sAddr[0] = XSTR_NUL;
     pData->sKey[0] = XSTR_NUL;
 
+    pData->nPort = XSTDNON;
+    pData->nFD = XSOCK_INVALID;
+
+    pData->bHandshakeStart = XFALSE;
     pData->bHandshakeDone = XFALSE;
     pData->bCancel = XFALSE;
     pData->bAlloc = XTRUE;
@@ -90,7 +98,6 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pData->pEvData = NULL;
     pData->eType = eType;
     pData->pApi = pApi;
-    pData->nFD = XSOCK_INVALID;
 
     pData->pSessionData = NULL;
     pData->pPacket = NULL;
@@ -215,13 +222,13 @@ XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus
     XByteBuffer_AddBuff(&pApiData->txBuffer, &handle.rawData);
     XHTTP_Clear(&handle);
 
-    if (eStatus > XAPI_UNKNOWN && eStatus <= XAPI_ERR_ALLOC)
+    if (eStatus > XAPI_UNKNOWN && eStatus < XAPI_STATUS)
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, eStatus);
     else if (eStatus != XAPI_UNKNOWN)
         XAPI_StatusCb(pApi, pApiData, XAPI_NONE, eStatus);
 
-    return XAPI_SetEvents(pApiData, XPOLLOUT) ?
-        XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
+    XSTATUS nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
+    return nStatus < 0 ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
 }
 
 XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey)
@@ -236,7 +243,7 @@ XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char
     if (nKeyLength)
     {
         const char *pXKey = XHTTP_GetHeader(pHandle, "X-API-KEY");
-        if (!xstrused(pXKey)) return XAPI_RespondHTTP(pApiData, 401, XAPI_MISSING_KEY);;
+        if (!xstrused(pXKey)) return XAPI_RespondHTTP(pApiData, 401, XAPI_MISSING_KEY);
         if (strncmp(pXKey, pKey, nKeyLength)) return XAPI_RespondHTTP(pApiData, 401, XAPI_INVALID_KEY);
     }
 
@@ -281,7 +288,7 @@ static int XAPI_HandleMDTP(xapi_t *pApi, xapi_data_t *pApiData)
         XAPI_ErrorCb(pApi, pApiData, XAPI_MDTP, eStatus);
         nRetVal = XEVENTS_DISCONNECT;
     }
-    else if (eStatus == XPACKET_INCOMPLETE && pBuffer->nUsed > XAPI_RX_MAX)
+    else if (eStatus == XPACKET_INCOMPLETE && pBuffer->nUsed > pApi->nRxSize)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_MDTP, XPACKET_BIGDATA);
         nRetVal = XEVENTS_DISCONNECT;
@@ -325,7 +332,7 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_data_t *pApiData)
         XAPI_ErrorCb(pApi, pApiData, XAPI_HTTP, eStatus);
         nRetVal = XEVENTS_DISCONNECT;
     }
-    else if (eStatus == XHTTP_INCOMPLETE && pBuffer->nUsed > XAPI_RX_MAX)
+    else if (eStatus == XHTTP_INCOMPLETE && pBuffer->nUsed > pApi->nRxSize)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_HTTP, XHTTP_BIGCNT);
         nRetVal = XEVENTS_DISCONNECT;
@@ -342,9 +349,67 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_data_t *pApiData)
     return nRetVal;
 }
 
+static int XAPI_AnswerHandshake(xapi_t *pApi, xapi_data_t *pApiData)
+{
+    xhttp_t handle;
+    XHTTP_InitResponse(&handle, 101, NULL);
+
+    const char *pLibVersion = XUtils_VersionShort();
+    uint8_t uDigest[XSHA1_DIGEST_SIZE];
+    char sBuffer[XSTR_MIN];
+    size_t nLength;
+
+    nLength = xstrncpyf(sBuffer, sizeof(sBuffer), "%s%s", pApiData->sKey, XWS_GUID);
+    XSHA1_Compute(uDigest, sizeof(uDigest), (const uint8_t*)sBuffer, nLength);
+    nLength = XSHA1_DIGEST_SIZE;
+
+    char *pSecKey = XBase64_Encrypt(uDigest, &nLength);
+    if (pSecKey == NULL)
+    {
+        XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_CRYPT);
+        XHTTP_Clear(&handle);
+
+        pApiData->bCancel = XTRUE;
+        return XEVENTS_DISCONNECT;
+    }
+
+    if (XHTTP_AddHeader(&handle, "Upgrade", "websocket") < 0 ||
+        XHTTP_AddHeader(&handle, "Connection", "Upgrade") < 0 ||
+        XHTTP_AddHeader(&handle, "Sec-WebSocket-Accept", "%s", pSecKey) < 0 ||
+        XHTTP_AddHeader(&handle, "Server", "xutils/%s", pLibVersion) < 0 ||
+        XHTTP_Assemble(&handle, NULL, XSTDNON) == NULL)
+    {
+        XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_ASSEMBLE);
+        XHTTP_Clear(&handle);
+        free(pSecKey);
+
+        pApiData->bCancel = XTRUE;
+        return XEVENTS_DISCONNECT;
+    }
+
+    free(pSecKey);
+    pApiData->pPacket = &handle;
+    int nRetVal = XEVENTS_CONTINUE;
+
+    int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_HANDSHAKE_ANSWER);
+    if (nStatus == XSTDUSR) nRetVal = XEVENTS_USERCALL;
+    else if (nStatus < 0) nRetVal = XEVENTS_DISCONNECT;
+
+    XByteBuffer_AddBuff(&pApiData->txBuffer, &handle.rawData);
+    pApiData->pPacket = NULL;
+    XHTTP_Clear(&handle);
+
+    if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
+    nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
+
+    return nStatus != XSTDOK ?
+        XEVENTS_DISCONNECT :
+        XEVENTS_CONTINUE;
+}
+
 static int XAPI_ServerHandshake(xapi_t *pApi, xapi_data_t *pApiData)
 {
-    if (pApiData->eRole != XAPI_SERVER || pApiData->eType == XAPI_WS)
+    if (pApiData->eRole != XAPI_PEER || pApiData->eType != XAPI_WS)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_INVALID_ARGS);
         return XEVENTS_DISCONNECT;
@@ -361,33 +426,55 @@ static int XAPI_ServerHandshake(xapi_t *pApi, xapi_data_t *pApiData)
     if (eStatus == XHTTP_COMPLETE)
     {
         const char *pUpgrade = XHTTP_GetHeader(&handle, "Upgrade");
+        const char *pSecKey = XHTTP_GetHeader(&handle, "Sec-WebSocket-Key");
+
         if (!xstrused(pUpgrade) || strncmp(pUpgrade, "websocket", 9))
         {
             XAPI_ErrorCb(pApi, pApiData, XAPI_WS, XWS_INVALID_REQUEST);
-            nRetVal = XEVENTS_DISCONNECT;
+            XHTTP_Clear(&handle);
+            return XEVENTS_DISCONNECT;
         }
 
-        const char *pKey = XHTTP_GetHeader(&handle, "Sec-WebSocket-Key");
-        if (xstrused(pKey)) xstrncpy(pApiData->sKey, sizeof(pApiData->sKey), pKey);
+        if (xstrused(pSecKey))
+        {
+            xstrncpy(pApiData->sKey, sizeof(pApiData->sKey), pSecKey);
+            XAPI_StatusCb(pApi, pApiData, XAPI_WS, XWS_PARSED_SEC_KEY);
+        }
+        else if (!pApi->bAllowMissingKey)
+        {
+            XAPI_ErrorCb(pApi, pApiData, XAPI_WS, XWS_MISSING_SEC_KEY);
+            XHTTP_Clear(&handle);
+            return XEVENTS_DISCONNECT;
+        }
+
+        pApiData->bHandshakeStart = XTRUE;
+        pApiData->pPacket = &handle;
+
+        int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_HANDSHAKE_REQUEST);
+        if (nStatus == XSTDUSR) nRetVal = XEVENTS_USERCALL;
+        else if (nStatus < 0) nRetVal = XEVENTS_DISCONNECT;
 
         size_t nPacketSize = XHTTP_GetPacketSize(&handle);
         XByteBuffer_Advance(pBuffer, nPacketSize);
-
-        pApiData->bHandshakeDone = XTRUE;
-        nRetVal = XEVENTS_CONTINUE;
     }
     else if (eStatus != XHTTP_PARSED && eStatus != XHTTP_INCOMPLETE)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_HTTP, eStatus);
         nRetVal = XEVENTS_DISCONNECT;
     }
-    else if (eStatus == XHTTP_INCOMPLETE && pBuffer->nUsed > XAPI_RX_MAX)
+    else if (eStatus == XHTTP_INCOMPLETE && pBuffer->nUsed > pApi->nRxSize)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_HTTP, XHTTP_BIGCNT);
         nRetVal = XEVENTS_DISCONNECT;
     }
 
+    pApiData->pPacket = NULL;
     XHTTP_Clear(&handle);
+
+    if (eStatus == XHTTP_COMPLETE &&
+        nRetVal == XEVENTS_CONTINUE)
+        nRetVal = XAPI_AnswerHandshake(pApi, pApiData);
+
     return nRetVal;
 }
 
@@ -397,7 +484,8 @@ static int XAPI_HandleWS(xapi_t *pApi, xapi_data_t *pApiData)
     xws_status_t eStatus = XWS_ERR_NONE;
     int nRetVal = XEVENTS_CONTINUE;
 
-    if (!pApiData->bHandshakeDone)
+    if (!pApiData->bHandshakeStart &&
+        !pApiData->bHandshakeDone)
     {
         nRetVal = XAPI_ServerHandshake(pApi, pApiData);
         XASSERT_RET((nRetVal == XEVENTS_CONTINUE && pBuffer->nUsed), nRetVal);
@@ -423,7 +511,7 @@ static int XAPI_HandleWS(xapi_t *pApi, xapi_data_t *pApiData)
         XAPI_ErrorCb(pApi, pApiData, XAPI_WS, eStatus);
         nRetVal = XEVENTS_DISCONNECT;
     }
-    else if (eStatus == XWS_FRAME_INCOMPLETE && pBuffer->nUsed > XAPI_RX_MAX)
+    else if (eStatus == XWS_FRAME_INCOMPLETE && pBuffer->nUsed > pApi->nRxSize)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_WS, XPACKET_BIGDATA);
         nRetVal = XEVENTS_DISCONNECT;
@@ -477,8 +565,9 @@ static int XAPI_Accept(xapi_t *pApi, xapi_data_t *pApiData, xsock_t *pSock)
     }
 
     XSock_IPAddr(&clientSock, pPeerData->sAddr, sizeof(pPeerData->sAddr));
-    pPeerData->nFD = clientSock.nFD;
     pPeerData->eRole = XAPI_PEER;
+    pPeerData->nPort = pApiData->nPort;
+    pPeerData->nFD = clientSock.nFD;
 
     xevent_data_t *pEventData = XEvents_RegisterEvent(pEvents, pPeerData, pPeerData->nFD, XSTDNON, XAPI_PEER);
     if (pEventData == NULL)
@@ -591,8 +680,8 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
     {
         nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_WRITE);
         XASSERT_RET((nStatus >= XSTDNON), XEVENTS_DISCONNECT);
-        XASSERT_RET((nStatus != XSTDNON), XEVENTS_CONTINUE);
         XASSERT_RET((nStatus != XSTDUSR), XEVENTS_USERCALL);
+        XASSERT_RET((nStatus != XSTDNON), XEVENTS_CONTINUE);
         XASSERT_RET(pBuffer->nUsed, XEVENTS_CONTINUE);
     }
 
@@ -609,13 +698,22 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 
     if (!XByteBuffer_Advance(pBuffer, nSent))
     {
+        if (pApiData->bHandshakeStart)
+        {
+            pApiData->bHandshakeStart = XFALSE;
+            pApiData->bHandshakeDone = XTRUE;
+        }
+
+        nStatus = XAPI_SetEvents(pApiData, XPOLLIN);
+        XASSERT((nStatus == XSTDOK), XEVENTS_DISCONNECT);
+
         nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_COMPLETE);
         XASSERT_RET((nStatus >= XSTDNON), XEVENTS_DISCONNECT);
-        XASSERT_RET((nStatus != XSTDNON), XEVENTS_CONTINUE);
+        XASSERT_RET((nStatus != XSTDUSR), XEVENTS_USERCALL);
     }
 
-    return nStatus == XSTDUSR ?
-            XEVENTS_USERCALL :
+    return nStatus != XSTDOK ?
+            XEVENTS_DISCONNECT :
             XEVENTS_CONTINUE;
 }
 
@@ -723,6 +821,7 @@ XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
 
     xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pAddr);
     pApiData->eRole = XAPI_SERVER;
+    pApiData->nPort = nPort;
     pApiData->nFD = sock.nFD;
 
     /* Create event instance */
@@ -756,11 +855,13 @@ XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
     return XSTDOK;
 }
 
-XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx)
+XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx, size_t nRxSize)
 {
+    pApi->bAllowMissingKey = XFALSE;
+    pApi->bHaveEvents = XFALSE;
     pApi->callback = callback;
     pApi->pUserCtx = pUserCtx;
-    pApi->bHaveEvents = XFALSE;
+    pApi->nRxSize = nRxSize ? nRxSize : XAPI_RX_MAX;
 
     xevents_t *pEvents = XAPI_GetOrCreateEvents(pApi);
     return (pEvents != NULL) ? XSTDOK : XSTDERR;

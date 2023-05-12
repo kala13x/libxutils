@@ -23,6 +23,7 @@ EXECS = array \
 	xjson \
 	xsrc \
 	list \
+	xws \
 	ntp \
 	jwt \
 	rsa \

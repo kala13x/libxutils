@@ -16,6 +16,8 @@
 #include <xutils/xfs.h>
 #include <xutils/crypt.h>
 #include <xutils/crc32.h>
+#include <xutils/sha256.h>
+#include <xutils/sha1.h>
 #include <xutils/aes.h>
 #include <xutils/rsa.h>
 
@@ -66,6 +68,8 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
         case XC_MD5U:
         case XC_CRC32:
         case XC_HS256:
+        case XC_SHA1:
+        case XC_SHA1U:
         case XC_SHA256:
         case XC_SHA256U:
             return XFALSE;
@@ -134,6 +138,8 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   md5        (32 characters of HEXed MD5 hash)");
     xlog("   md5u       (128 bits of raw MD5 hash)");
     xlog("   hmd5       (HMAC by using raw MD5 hash)");
+    xlog("   sha1       (40 characters of HEXed SHA1 hash)");
+    xlog("   sha1u      (160 bits of raw SHA1 hash)");
     xlog("   sha256     (64 characters of HEXed SHA256 hash)");
     xlog("   sha256u    (256 bits of raw SHA256 hash)");
     xlog("   hs256      (HMAC by using raw SHA-256 hash)");

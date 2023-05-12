@@ -273,7 +273,7 @@ int XByteBuffer_Insert(xbyte_buffer_t *pBuffer, size_t nPosit, const uint8_t *pD
 int XByteBuffer_Remove(xbyte_buffer_t *pBuffer, size_t nPosit, size_t nSize)
 {
     if (!nSize || nPosit >= pBuffer->nUsed) return 0;
-    nSize = ((nPosit + nSize) > pBuffer->nUsed) ? 
+    nSize = ((nPosit + nSize) > pBuffer->nUsed) ?
             pBuffer->nUsed - nPosit : nSize;
 
     size_t nTailOffset = nPosit + nSize;

@@ -36,6 +36,12 @@
         "http.h": "c",
         "event.h": "c",
         "if.h": "c",
-        "syscall.h": "c"
+        "syscall.h": "c",
+        "byteswap.h": "c",
+        "array": "c",
+        "string": "c",
+        "string_view": "c",
+        "stdio.h": "c",
+        "sha1.h": "c"
     }
 }

@@ -46,6 +46,8 @@ typedef enum
     XC_CASEAR,
     XC_BASE64,
     XC_B64URL,
+    XC_SHA1,
+    XC_SHA1U,
     XC_SHA256,
     XC_SHA256U,
     XC_HS256,

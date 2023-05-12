@@ -18,6 +18,8 @@ extern "C" {
 #include "xstd.h"
 #include "xbuf.h"
 
+#define XWS_GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
 typedef enum {
     XWS_ERR_NONE,
     XWS_ERR_ALLOC,
@@ -25,6 +27,9 @@ typedef enum {
     XWS_INVALID_ARGS,
     XWS_INVALID_TYPE,
     XWS_INVALID_REQUEST,
+    XWS_MISSING_SEC_KEY,
+    XWS_MISSING_PAYLOAD,
+    XWS_PARSED_SEC_KEY,
     XWS_FRAME_TOOBIG,
     XWS_FRAME_PARSED,
     XWS_FRAME_INVALID,
@@ -55,15 +60,22 @@ typedef enum {
 typedef struct xweb_frame_ {
     xweb_frame_type_t eType;
     xbyte_buffer_t buffer;
+
     size_t nPayloadLength;
     size_t nHeaderSize;
-    xbool_t bComplete;
+
+    uint32_t nMaskKey;
     uint8_t nOpCode;
+
+    xbool_t bComplete;
     xbool_t bAlloc;
+    xbool_t bMask;
     xbool_t bFin;
 } xweb_frame_t;
 
 const char* XWebSock_GetStatusStr(xws_status_t eStatus);
+const char* XWS_FrameTypeStr(xweb_frame_type_t eType);
+
 xweb_frame_type_t XWS_FrameType(uint8_t nOpCode);
 uint8_t XWS_OpCode(xweb_frame_type_t eType);
 
@@ -82,6 +94,7 @@ xws_status_t XWebFrame_ParseData(xweb_frame_t *pFrame, uint8_t* pData, size_t nS
 xws_status_t XWebFrame_TryParse(xweb_frame_t *pFrame, uint8_t* pData, size_t nSize);
 xws_status_t XWebFrame_ParseBuff(xweb_frame_t *pFrame, xbyte_buffer_t *pBuffer);
 xws_status_t XWebFrame_Parse(xweb_frame_t *pFrame);
+xws_status_t XWebFrame_Unmask(xweb_frame_t *pFrame);
 
 size_t XWebFrame_GetPayloadLength(xweb_frame_t *pFrame);
 size_t XWebFrame_GetFrameLength(xweb_frame_t *pFrame);

@@ -40,19 +40,25 @@ const char* XWebSock_GetStatusStr(xws_status_t eStatus)
     switch (eStatus)
     {
         case XWS_FRAME_COMPLETE:
-            return "Successfully parsed WebSocket frame header and payload";
+            return "Successfully parsed web socket frame header and payload";
         case XWS_FRAME_PARSED:
-            return "Successfully parsed WebSocket frame header";
+            return "Successfully parsed web socket frame header";
+        case XWS_MISSING_SEC_KEY:
+            return "Missing web socket sec key in upgrade request";
+        case XWS_MISSING_PAYLOAD:
+            return "Missing payload in received web socket frame";
+        case XWS_PARSED_SEC_KEY:
+            return "Parsed web socket sec key from upgrade request";
         case XWS_ERR_ALLOC:
-            return "Failed to allocate memory for WebSocket frame";
+            return "Failed to allocate memory for web socket frame";
         case XWS_ERR_SIZE:
-            return "Failed WebSocket frame size calculation";
+            return "Failed web socket frame size calculation";
         case XWS_FRAME_TOOBIG:
-            return "Receiving WebSocket frame bigger than limit";
+            return "Receiving web socket frame bigger than limit";
         case XWS_FRAME_INCOMPLETE:
-            return "Invalid or incomplete WebSocket frame";
+            return "Invalid or incomplete web socket frame";
         case XWS_FRAME_INVALID:
-            return "Invalid or unsupported WebSocket frame";
+            return "Invalid or unsupported web socket frame";
         case XWS_INVALID_REQUEST:
             return "Received invalid HTTP upgrade request";
         case XWS_INVALID_TYPE:
@@ -64,6 +70,51 @@ const char* XWebSock_GetStatusStr(xws_status_t eStatus)
     }
 
     return "Unknown status";
+}
+
+const char* XWS_FrameTypeStr(xweb_frame_type_t eType)
+{
+    switch (eType)
+    {
+        case XWS_TEXT:
+            return "text";
+        case XWS_BINARY:
+            return "binary";
+        case XWS_CLOSE:
+            return "close";
+        case XWS_PING:
+            return "ping";
+        case XWS_PONG:
+            return "pong";
+        case XWS_DUMMY:
+            return "dummy";
+        case XWS_CONTINUATION:
+            return "continuation";
+        case XWS_RESERVED1:
+            return "reserved1";
+        case XWS_RESERVED2:
+            return "reserved2";
+        case XWS_RESERVED3:
+            return "reserved3";
+        case XWS_RESERVED4:
+            return "reserved4";
+        case XWS_RESERVED5:
+            return "reserved5";
+        case XWS_RESERVED6:
+            return "reserved6";
+        case XWS_RESERVED7:
+            return "reserved7";
+        case XWS_RESERVED8:
+            return "reserved8";
+        case XWS_RESERVED9:
+            return "reserved9";
+        case XWS_RESERVED10:
+            return "reserved10";
+        default:
+            break;
+    }
+
+    return "invalid";
 }
 
 xweb_frame_type_t XWS_FrameType(uint8_t nOpCode)
@@ -88,7 +139,7 @@ uint8_t XWS_OpCode(xweb_frame_type_t eType)
 
 uint8_t* XWS_CreateFrame(uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize)
 {
-    if (pFrameSize != NULL) pFrameSize = 0;
+    if (pFrameSize != NULL) *pFrameSize = 0;
     uint8_t nFIN = bFin ? XSTDOK : XSTDNON;
     uint8_t nStartByte = (nFIN << 7) | nOpCode;
 
@@ -141,11 +192,16 @@ void XWebFrame_Init(xweb_frame_t *pFrame)
 {
     XASSERT_VOID(pFrame);
     pFrame->eType = XWS_DUMMY;
+
     pFrame->nPayloadLength = XSTDNON;
     pFrame->nHeaderSize = XSTDNON;
-    pFrame->bComplete = XFALSE;
+
+    pFrame->nMaskKey = XSTDNON;
     pFrame->nOpCode = XSTDNON;
+
+    pFrame->bComplete = XFALSE;
     pFrame->bAlloc = XFALSE;
+    pFrame->bMask = XFALSE;
     pFrame->bFin = XFALSE;
 
     xbyte_buffer_t *pbuffer = &pFrame->buffer;
@@ -309,6 +365,24 @@ xbyte_buffer_t* XWebFrame_GetBuffer(xweb_frame_t *pFrame)
     return &pFrame->buffer;
 }
 
+xws_status_t XWebFrame_Unmask(xweb_frame_t *pFrame)
+{
+    XASSERT_RET(pFrame->bMask, XWS_ERR_NONE);
+    size_t i, nPayloadLen;
+
+    nPayloadLen = XWebFrame_GetPayloadLength(pFrame);
+    XASSERT_RET(nPayloadLen, XWS_MISSING_PAYLOAD);
+
+    uint8_t *pPayload = pFrame->buffer.pData + pFrame->nHeaderSize;
+    uint8_t *pMaskKey = (uint8_t*)&pFrame->nMaskKey;
+
+    for (i = 0; i < nPayloadLen; i++)
+        pPayload[i] ^= pMaskKey[i % 4];
+
+    pFrame->bMask = XFALSE;
+    return XWS_ERR_NONE;
+}
+
 xws_status_t XWebFrame_Parse(xweb_frame_t *pFrame)
 {
     XASSERT(pFrame, XWS_INVALID_ARGS);
@@ -323,6 +397,7 @@ xws_status_t XWebFrame_Parse(xweb_frame_t *pFrame)
     uint8_t nLengthByte = nNextByte & 0x7F;
 
     pFrame->bFin = (nStartByte & 0x80) >> 7;
+    pFrame->bMask = (nNextByte & 0x80) >> 7;
     pFrame->nOpCode = nStartByte & 0x0F;
     pFrame->eType = XWS_FrameType(pFrame->nOpCode);
 
@@ -350,9 +425,21 @@ xws_status_t XWebFrame_Parse(xweb_frame_t *pFrame)
         pFrame->nHeaderSize = 10;
     }
 
+    if (pFrame->bMask)
+    {
+        if (nSize < pFrame->nHeaderSize + 4) return XWS_FRAME_INCOMPLETE;
+        memcpy(&pFrame->nMaskKey, pData + pFrame->nHeaderSize, 4);
+        pFrame->nHeaderSize += 4;
+    }
+
     size_t nFrameLength = XWebFrame_GetFrameLength(pFrame);
-    return nFrameLength && pFrame->bComplete ?
-        XWS_FRAME_COMPLETE : XWS_FRAME_INCOMPLETE;
+    if (nFrameLength && pFrame->bComplete)
+    {
+        XWebFrame_Unmask(pFrame);
+        return XWS_FRAME_COMPLETE;
+    }
+
+    return XWS_FRAME_INCOMPLETE;
 }
 
 xws_status_t XWebFrame_AppendData(xweb_frame_t *pFrame, uint8_t* pData, size_t nSize)

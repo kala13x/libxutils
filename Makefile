@@ -29,6 +29,7 @@ OBJS = addr.$(OBJ) \
 	ntp.$(OBJ) \
 	rsa.$(OBJ) \
 	rtp.$(OBJ) \
+	sha1.$(OBJ) \
 	sha256.$(OBJ) \
 	sock.$(OBJ) \
 	sync.$(OBJ) \
