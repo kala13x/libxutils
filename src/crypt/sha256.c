@@ -148,7 +148,7 @@ XSTATUS XSHA256_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, s
     return XSTDOK;
 }
 
-XSTATUS XSHA256_ComputeHex(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
+XSTATUS XSHA256_ComputeSum(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
     if (nSize < XSHA256_LENGTH + 1 ||
         pOutput == NULL) return XSTDERR;
@@ -163,13 +163,13 @@ XSTATUS XSHA256_ComputeHex(char *pOutput, size_t nSize, const uint8_t *pInput, s
     return XSTDOK;
 }
 
-char* XSHA256_EncryptHex(const uint8_t *pInput, size_t nLength)
+char* XSHA256_Sum(const uint8_t *pInput, size_t nLength)
 {
     size_t nSize = XSHA256_LENGTH + 1;
     char *pHash = (char*)malloc(nSize);
     if (pHash == NULL) return NULL;
 
-    XSHA256_ComputeHex(pHash, nSize, pInput, nLength);
+    XSHA256_ComputeSum(pHash, nSize, pInput, nLength);
     return pHash;
 }
 

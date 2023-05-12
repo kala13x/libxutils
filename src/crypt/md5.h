@@ -22,7 +22,7 @@ extern "C" {
 
 XSTATUS XMD5_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
 uint8_t* XMD5_Encrypt(const uint8_t *pInput, size_t nLength);
-char* XMD5_EncryptHex(const uint8_t *pInput, size_t nLength);
+char* XMD5_Sum(const uint8_t *pInput, size_t nLength);
 
 #ifdef __cplusplus
 }

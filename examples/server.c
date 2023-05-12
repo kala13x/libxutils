@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
             const char *pTestString = "test_password";
             size_t nLength = strlen(pTestString);
 
-            char *pCrypted = XMD5_EncryptHex((const uint8_t*)pTestString, nLength);
+            char *pCrypted = XMD5_Sum((const uint8_t*)pTestString, nLength);
             if (pCrypted == NULL)
             {
                 xloge("Failed to encrypt payload");

@@ -63,15 +63,15 @@ static xbool_t XCrypt_DecriptSupport(xcrypt_chipher_t eCipher)
         case XC_RSA:
 #endif
             return XTRUE;
-        case XC_MD5:
-        case XC_HMD5:
-        case XC_MD5U:
         case XC_CRC32:
-        case XC_HS256:
+        case XC_MD5:
         case XC_SHA1:
-        case XC_SHA1U:
         case XC_SHA256:
-        case XC_SHA256U:
+        case XC_MD5_SUM:
+        case XC_SHA1_SUM:
+        case XC_SHA256_SUM:
+        case XC_MD5_HMAC:
+        case XC_HS256:
             return XFALSE;
         default:
             break;
@@ -135,14 +135,14 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   aes        (Advanced Encryption Standard)");
     xlog("   hex        (Hexadecimal a.k.a Base 16)");
     xlog("   xor        (Exclusively-OR a.k.a EOR)");
-    xlog("   md5        (32 characters of HEXed MD5 hash)");
-    xlog("   md5u       (128 bits of raw MD5 hash)");
-    xlog("   hmd5       (HMAC by using raw MD5 hash)");
-    xlog("   sha1       (40 characters of HEXed SHA1 hash)");
-    xlog("   sha1u      (160 bits of raw SHA1 hash)");
-    xlog("   sha256     (64 characters of HEXed SHA256 hash)");
-    xlog("   sha256u    (256 bits of raw SHA256 hash)");
+    xlog("   md5        (128 bits of raw MD5 hash)");
+    xlog("   sha1       (160 bits of raw SHA1 hash)");
+    xlog("   sha256     (256 bits of raw SHA256 hash)");
     xlog("   hs256      (HMAC by using raw SHA-256 hash)");
+    xlog("   md5hmac    (HMAC by using raw MD5 hash)");
+    xlog("   md5sum     (32 characters of HEXed MD5 hash)");
+    xlog("   sha1sum    (40 characters of HEXed SHA1 hash)");
+    xlog("   sha256sum  (64 characters of HEXed SHA256 hash)");
 #ifdef _XUTILS_USE_SSL
     xlog("   rsa        (Rivest-Shamir-Adleman Encode and Decode)");
     xlog("   rsapr      (Priv key encode & pub key decode)");

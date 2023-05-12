@@ -216,20 +216,20 @@ xcrypt_chipher_t XCrypt_GetCipher(const char *pCipher)
     if (!strncmp(pCipher, "aes", 3)) return XC_AES;
     else if (!strncmp(pCipher, "hex", 3)) return XC_HEX;
     else if (!strncmp(pCipher, "xor", 3)) return XC_XOR;
-    else if (!strncmp(pCipher, "hmd5", 4)) return XC_HMD5;
-    else if (!strncmp(pCipher, "md5u", 4)) return XC_MD5U;
-    else if (!strncmp(pCipher, "md5", 3)) return XC_MD5;
     else if (!strncmp(pCipher, "crc32", 5)) return XC_CRC32;
     else if (!strncmp(pCipher, "crc32b", 6)) return XC_CRC32B;
     else if (!strncmp(pCipher, "casear", 6)) return XC_CASEAR;
     else if (!strncmp(pCipher, "b64url", 6)) return XC_B64URL;
     else if (!strncmp(pCipher, "base64", 6)) return XC_BASE64;
-    else if (!strncmp(pCipher, "sha256u", 7)) return XC_SHA256U;
-    else if (!strncmp(pCipher, "sha256", 6)) return XC_SHA256;
-    else if (!strncmp(pCipher, "sha1u", 5)) return XC_SHA1U;
-    else if (!strncmp(pCipher, "sha1", 4)) return XC_SHA1;
-    else if (!strncmp(pCipher, "hs256", 5)) return XC_HS256;
     else if (!strncmp(pCipher, "reverse", 7)) return XC_REVERSE;
+    else if (!strncmp(pCipher, "sha1sum", 7)) return XC_SHA1_SUM;
+    else if (!strncmp(pCipher, "sha256sum", 9)) return XC_SHA256_SUM;
+    else if (!strncmp(pCipher, "md5hmac", 7)) return XC_MD5_HMAC;
+    else if (!strncmp(pCipher, "md5sum", 6)) return XC_MD5_SUM;
+    else if (!strncmp(pCipher, "sha256", 6)) return XC_SHA256;
+    else if (!strncmp(pCipher, "hs256", 5)) return XC_HS256;
+    else if (!strncmp(pCipher, "sha1", 4)) return XC_SHA1;
+    else if (!strncmp(pCipher, "md5", 3)) return XC_MD5;
 #ifdef XCRYPT_USE_SSL
     else if (!strncmp(pCipher, "rs256", 5)) return XC_RS256;
     else if (!strncmp(pCipher, "rsapr", 5)) return XC_RSAPR;
@@ -245,19 +245,19 @@ const char* XCrypt_GetCipherStr(xcrypt_chipher_t eCipher)
         case XC_AES: return "aes";
         case XC_HEX: return "hex";
         case XC_XOR: return "xor";
-        case XC_MD5: return "md5";
-        case XC_MD5U: return "md5u";
-        case XC_HMD5: return "hmd5";
         case XC_CRC32: return "crc32";
         case XC_CRC32B: return "crc32b";
         case XC_CASEAR: return "casear";
         case XC_BASE64: return "base64";
         case XC_B64URL: return "b64url";
-        case XC_HS256: return "h256";
+        case XC_MD5: return "md5";
         case XC_SHA1: return "sha1";
-        case XC_SHA1U: return "sha1u";
+        case XC_HS256: return "h256";
         case XC_SHA256: return "sha256";
-        case XC_SHA256U: return "sha256u";
+        case XC_MD5_SUM: return "md5sum";
+        case XC_MD5_HMAC: return "md5hmac";
+        case XC_SHA1_SUM: return "sha1sum";
+        case XC_SHA256_SUM: return "sha256sum";
         case XC_REVERSE: return "reverse";
         case XC_MULTY: return "multy";
 #ifdef XCRYPT_USE_SSL
@@ -280,7 +280,7 @@ static xbool_t XCrypt_NeedsKey(xcrypt_chipher_t eCipher)
         case XC_XOR:
         case XC_CASEAR:
         case XC_HS256:
-        case XC_HMD5:
+        case XC_MD5_HMAC:
 #ifdef XCRYPT_USE_SSL
         case XC_RS256:
         case XC_RSAPR:
@@ -288,16 +288,16 @@ static xbool_t XCrypt_NeedsKey(xcrypt_chipher_t eCipher)
 #endif
             return XTRUE;
         case XC_HEX:
-        case XC_MD5:
-        case XC_MD5U:
         case XC_CRC32:
         case XC_BASE64:
         case XC_B64URL:
+        case XC_MD5:
         case XC_SHA1:
-        case XC_SHA1U:
         case XC_SHA256:
-        case XC_SHA256U:
         case XC_REVERSE:
+        case XC_MD5_SUM:
+        case XC_SHA1_SUM:
+        case XC_SHA256_SUM:
             return XFALSE;
         default:
             break;
@@ -357,14 +357,14 @@ uint8_t* XCrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uint8
         case XC_AES: pCrypted = XCrypt_AES(pInput, pLength, pKey, nKeyLength, NULL); break;
         case XC_HEX: pCrypted = XCrypt_HEX(pInput, pLength, XSTR_SPACE, pCtx->nColumns, XFALSE); break;
         case XC_XOR: pCrypted = XCrypt_XOR(pInput, *pLength, pKey, nKeyLength); break;
-        case XC_MD5U: pCrypted = XMD5_Encrypt(pInput, *pLength); *pLength = XMD5_DIGEST_SIZE; break;
-        case XC_SHA1U: pCrypted = XSHA1_Encrypt(pInput, *pLength); *pLength = XSHA1_DIGEST_SIZE; break;
-        case XC_SHA256U: pCrypted = XSHA256_Encrypt(pInput, *pLength); *pLength = XSHA256_DIGEST_SIZE; break;
-        case XC_MD5: pCrypted = (uint8_t*)XMD5_EncryptHex(pInput, *pLength); *pLength = XMD5_LENGTH; break;
-        case XC_HMD5: pCrypted = (uint8_t*)XHMAC_MD5_Crypt(pInput, *pLength, pKey, nKeyLength); *pLength = XMD5_LENGTH; break;
-        case XC_SHA1: pCrypted = (uint8_t*)XSHA1_EncryptHex(pInput, *pLength); *pLength = XSHA1_LENGTH; break;
-        case XC_SHA256: pCrypted = (uint8_t*)XSHA256_EncryptHex(pInput, *pLength); *pLength = XSHA256_LENGTH; break;
-        case XC_HS256: pCrypted = (uint8_t*)XHMAC_SHA256_Crypt(pInput, *pLength, pKey, nKeyLength); *pLength = XSHA256_LENGTH; break;
+        case XC_MD5: pCrypted = XMD5_Encrypt(pInput, *pLength); *pLength = XMD5_DIGEST_SIZE; break;
+        case XC_SHA1: pCrypted = XSHA1_Encrypt(pInput, *pLength); *pLength = XSHA1_DIGEST_SIZE; break;
+        case XC_SHA256: pCrypted = XSHA256_Encrypt(pInput, *pLength); *pLength = XSHA256_DIGEST_SIZE; break;
+        case XC_MD5_SUM: pCrypted = (uint8_t*)XMD5_Sum(pInput, *pLength); *pLength = XMD5_LENGTH; break;
+        case XC_MD5_HMAC: pCrypted = (uint8_t*)XHMAC_MD5_NEW(pInput, *pLength, pKey, nKeyLength); *pLength = XMD5_LENGTH; break;
+        case XC_SHA1_SUM: pCrypted = (uint8_t*)XSHA1_Sum(pInput, *pLength); *pLength = XSHA1_LENGTH; break;
+        case XC_SHA256_SUM: pCrypted = (uint8_t*)XSHA256_Sum(pInput, *pLength); *pLength = XSHA256_LENGTH; break;
+        case XC_HS256: pCrypted = (uint8_t*)XHMAC_SHA256_NEW(pInput, *pLength, pKey, nKeyLength); *pLength = XSHA256_LENGTH; break;
         case XC_CASEAR: pCrypted = (uint8_t*)XCrypt_Casear((const char*)pInput, *pLength, atoi(encKey.sKey)); break;
         case XC_BASE64: pCrypted = (uint8_t*)XBase64_Encrypt(pInput, pLength); break;
         case XC_B64URL: pCrypted = (uint8_t*)XBase64_UrlEncrypt(pInput, pLength); break;

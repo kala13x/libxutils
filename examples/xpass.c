@@ -233,7 +233,7 @@ static xbool_t XPass_GetKey(xpass_ctx_t *pCtx)
         }
     }
 
-    char *pCrypted = XMD5_EncryptHex((uint8_t*)sPwd, strlen(sPwd));
+    char *pCrypted = XMD5_Sum((uint8_t*)sPwd, strlen(sPwd));
     if (pCrypted == NULL)
     {
         xloge("Failed to crypt master password: %d", errno);

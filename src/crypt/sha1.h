@@ -38,9 +38,9 @@ void XSHA1_Final(xsha1_ctx_t *pCtx, uint8_t uDigest[XSHA1_DIGEST_SIZE]);
 void XSHA1_Transform(uint32_t uState[5], const uint8_t uBuffer[64]);
 
 XSTATUS XSHA1_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
-XSTATUS XSHA1_ComputeHex(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
+XSTATUS XSHA1_ComputeSum(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
 
-char* XSHA1_EncryptHex(const uint8_t *pInput, size_t nLength);
+char* XSHA1_Sum(const uint8_t *pInput, size_t nLength);
 uint8_t* XSHA1_Encrypt(const uint8_t *pInput, size_t nLength);
 
 #ifdef __cplusplus

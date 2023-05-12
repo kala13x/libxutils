@@ -86,7 +86,7 @@ char *XHMAC_SHA256_Base64(const uint8_t *pData, size_t nLength, const uint8_t *p
     return XBase64_UrlEncrypt(hash, pOutLen);
 }
 
-char *XHMAC_SHA256_Crypt(const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
+char *XHMAC_SHA256_NEW(const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
 {
     size_t nSize = XSHA256_LENGTH + 1;
     char *pOutput = (char *)malloc(nSize);
@@ -165,7 +165,7 @@ XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLen
     return XSTDOK;
 }
 
-char *XHMAC_MD5_Crypt(const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
+char *XHMAC_MD5_NEW(const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
 {
     size_t nSize = XMD5_LENGTH + 1;
     char *pOutput = (char *)malloc(nSize);

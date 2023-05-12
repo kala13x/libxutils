@@ -49,10 +49,10 @@ void XSHA256_FinalRaw(xsha256_t *pSha, uint8_t *pDigest);
 void XSHA256_Update(xsha256_t *pSha, const uint8_t *pData, size_t nLength);
 
 XSTATUS XSHA256_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
-XSTATUS XSHA256_ComputeHex(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
+XSTATUS XSHA256_ComputeSum(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength);
 
 uint8_t* XSHA256_Encrypt(const uint8_t *pInput, size_t nLength);
-char* XSHA256_EncryptHex(const uint8_t *pInput, size_t nLength);
+char* XSHA256_Sum(const uint8_t *pInput, size_t nLength);
 
 #ifdef __cplusplus
 }
