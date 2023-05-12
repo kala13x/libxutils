@@ -809,8 +809,8 @@ xevents_t* XAPI_GetOrCreateEvents(xapi_t *pApi)
 XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort)
 {
     XASSERT((pApi && pAddr && nPort), XSTDINV);
+    xsock_t sock; /* Listener socket handle */
 
-    xsock_t sock; /* Create server socket */
     XSock_Create(&sock, XSOCK_TCP_SERVER, pAddr, nPort);
     XSock_ReuseAddr(&sock, XTRUE);
 
