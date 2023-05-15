@@ -137,9 +137,9 @@ int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
         return XSTDERR;
     }
 
-    xlogn("Sending request: fd(%d), buff(%zu)",
+    xlogn("Sending message: fd(%d), buff(%zu)",
         (int)pData->nFD, frame.buffer.nUsed);
-    xlogn("request payload: %s", sPayload);
+    xlogn("Message payload: %s", sPayload);
 
     XByteBuffer_AddBuff(&pData->txBuffer, &frame.buffer);
     XWebFrame_Clear(&frame);

@@ -292,7 +292,7 @@ XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus
 
     if (!pApiData->txBuffer.nUsed) return XEVENTS_DISCONNECT;
     XSTATUS nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
-    return nStatus < 0 ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
+    return XAPI_StatusToEvent(pApi, nStatus);
 }
 
 XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey)
@@ -472,7 +472,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     else if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
     nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
-    return nStatus < 0 ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
+    return XAPI_StatusToEvent(pApi, nStatus);
 }
 
 static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
@@ -528,7 +528,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     else if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
     nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
-    return nStatus < 0 ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
+    return XAPI_StatusToEvent(pApi, nStatus);
 }
 
 static int XAPI_ServerHandshake(xapi_t *pApi, xapi_data_t *pApiData)
