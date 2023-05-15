@@ -463,11 +463,13 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
     XAPI_PutTxBuff(pApiData, &handle.rawData);
+    xbyte_buffer_t *pBuffer = &pApiData->txBuffer;
+
     XHTTP_Clear(&handle);
     pApiData->pPacket = NULL;
 
-    if (!pApiData->txBuffer.nUsed) return XEVENTS_DISCONNECT;
-    else if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
+    if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
+    else if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
     nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
     return nStatus < 0 ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
@@ -517,11 +519,13 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
     XAPI_PutTxBuff(pApiData, &handle.rawData);
+    xbyte_buffer_t *pBuffer = &pApiData->txBuffer;
+
     XHTTP_Clear(&handle);
     pApiData->pPacket = NULL;
 
-    if (!pApiData->txBuffer.nUsed) return XEVENTS_DISCONNECT;
-    else if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
+    if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
+    else if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
     nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
     return nStatus < 0 ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
