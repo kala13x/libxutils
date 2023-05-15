@@ -12,6 +12,7 @@ EXECS = array \
 	tcp-server \
 	ws-server \
 	ws-client \
+	events \
 	files \
 	thread \
 	statcov \
@@ -27,8 +28,7 @@ EXECS = array \
 	list \
 	ntp \
 	jwt \
-	rsa \
-	api
+	rsa
 
 all: $(EXECS)
 
