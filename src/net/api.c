@@ -462,9 +462,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_HANDSHAKE_ANSWER);
     int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
-    if (!handle.rawData.nUsed) return nRetVal;
     XAPI_PutTxBuff(pApiData, &handle.rawData);
-
     XHTTP_Clear(&handle);
     pApiData->pPacket = NULL;
 
@@ -518,9 +516,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_HANDSHAKE_REQUEST);
     int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
-    if (!handle.rawData.nUsed) return nRetVal;
     XAPI_PutTxBuff(pApiData, &handle.rawData);
-
     XHTTP_Clear(&handle);
     pApiData->pPacket = NULL;
 
