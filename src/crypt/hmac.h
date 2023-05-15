@@ -19,7 +19,7 @@ extern "C" {
 
 XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen);
 XSTATUS XHMAC_SHA256_HEX(char *pOutput, size_t nSize, const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen);
-char* XHMAC_SHA256_Base64(const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen, size_t *pOutLen);
+char* XHMAC_SHA256_B64(const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen, size_t *pOutLen);
 char* XHMAC_SHA256_NEW(const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen);
 
 XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t* pData, size_t nLength, const uint8_t* pKey, size_t nKeyLen);

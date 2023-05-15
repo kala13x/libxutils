@@ -18,8 +18,7 @@ XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pData, size_
 {
     XASSERT((nSize >= XSHA256_DIGEST_SIZE &&
              nLength && nKeyLen && pOutput &&
-             pData && pKey),
-            XSTDINV);
+             pData && pKey), XSTDINV);
 
     uint8_t i, digest[XSHA256_DIGEST_SIZE];
     uint8_t kIpad[XSHA256_BLOCK_SIZE] = {0};
@@ -77,7 +76,7 @@ XSTATUS XHMAC_SHA256_HEX(char *pOutput, size_t nSize, const uint8_t *pData, size
     return XSTDOK;
 }
 
-char *XHMAC_SHA256_Base64(const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen, size_t *pOutLen)
+char *XHMAC_SHA256_B64(const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen, size_t *pOutLen)
 {
     uint8_t hash[XSHA256_DIGEST_SIZE];
     *pOutLen = sizeof(hash);
