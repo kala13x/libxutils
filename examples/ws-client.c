@@ -12,6 +12,8 @@
 #include <xutils/xver.h>
 #include <xutils/xlog.h>
 #include <xutils/xsig.h>
+#include <xutils/xcli.h>
+#include <xutils/addr.h>
 #include <xutils/api.h>
 
 static int g_nInterrupted = 0;
@@ -91,7 +93,7 @@ int handshake_response(xapi_ctx_t *pCtx, xapi_data_t *pData)
         free(pHeader);
     }
 
-    return XAPI_SetEvents(pData, XPOLLOUT | XPOLLIN);
+    return XSTDOK;
 }
 
 int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -111,7 +113,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
         xlogn("WS frame payload: %s", pPayload);
 
     pSession->nRxCount++;
-    return XAPI_SetEvents(pData, XPOLLOUT | XPOLLIN);
+    return XAPI_SetWriteable(pData);
 }
 
 int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -121,18 +123,10 @@ int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xws_frame_t frame;
 
     char sPayload[XSTR_MIN];
-    sPayload[0] = '\0';
+    XCLI_GetInput("Enter message: ", sPayload, sizeof(sPayload), XTRUE);
 
-    printf("Enter message: ");
-    fgets(sPayload, XSTR_MIN, stdin);
-
-    if (!xstrused(sPayload) ||
-        sPayload[0] == '\n') 
-            return XSTDNON;
-
-    int nLength = strlen(sPayload);
-    if (sPayload[nLength-1] == '\n')
-        sPayload[--nLength] = '\0';
+    size_t nLength = strlen(sPayload);
+    if (!nLength) return XSTDNON;
 
     status = XWebFrame_Create(&frame, (uint8_t*)sPayload, nLength, XWS_TEXT, XTRUE);
     if (status != XWS_ERR_NONE)
@@ -151,7 +145,7 @@ int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XWebFrame_Clear(&frame);
 
     pSession->nTxCount++;
-    return XSTDOK;
+    return XAPI_SetWriteable(pData);
 }
 
 int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -201,7 +195,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_STATUS:
             return print_status(pCtx, pData);
         case XAPI_CB_COMPLETE:
-            xlogn("Request sent: fd(%d)", (int)pData->nFD);
+            xlogn("TX complete: fd(%d)", (int)pData->nFD);
             break;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;
@@ -225,17 +219,27 @@ int main(int argc, char* argv[])
     nSignals[1] = SIGINT;
     XSig_Register(nSignals, 2, signal_callback);
 
-    if (argc < 4)
+    if (argc < 2)
     {
-        xlog("Usage: %s [address] [port] [uri]", argv[0]);
-        xlog("Example: %s 127.0.0.1 6969 [/websocket]", argv[0]);
+        xlog("Usage: %s [ws-url]", argv[0]);
+        xlog("Example: %s ws://127.0.0.1:6969/ws", argv[0]);
         return 1;
     }
 
     xapi_t api;
     XAPI_Init(&api, service_callback, &api, XSTDNON);
 
-    if (XAPI_ConnectClient(&api, XAPI_WS, argv[1], atoi(argv[2]), argv[3]) < 0)
+    xlink_t link;
+    if (XLink_Parse(&link, argv[1]) < 0 || !link.nPort)
+    {
+        xloge("Failed to parse link: %s", argv[1]);
+        xlogi("Example: ws://127.0.0.1:6969/ws");
+
+        XAPI_Destroy(&api);
+        return XSTDERR;
+    }
+
+    if (XAPI_ConnectClient(&api, XAPI_WS, link.sAddr, link.nPort, link.sUrl) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

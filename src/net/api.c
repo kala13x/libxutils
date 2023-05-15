@@ -216,6 +216,47 @@ XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
     return XSTDOK;
 }
 
+XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent)
+{
+    XASSERT_RET((pData && pData->pEvData), XSTDERR);
+    xevent_data_t *pEvData = pData->pEvData;
+
+    if (!(pEvData->nEvents & nEvent))
+    {
+        int nEvents = pEvData->nEvents | nEvent;
+        return XAPI_SetEvents(pData, nEvents);
+    }
+
+    return XSTDOK;
+}
+
+xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pApiData)
+{
+    XASSERT_RET(pApiData, NULL);
+    return &pApiData->txBuffer;
+}
+
+XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer)
+{
+    XASSERT_RET((pApiData && pBuffer), XSTDINV);
+    XASSERT_RET(pBuffer->nUsed, pApiData->txBuffer.nUsed);
+
+    XByteBuffer_AddBuff(&pApiData->txBuffer, pBuffer);
+    if (!pApiData->txBuffer.nUsed)
+    {
+        XAPI_ErrorCb(pApiData->pApi, pApiData, XAPI_NONE, XAPI_ERR_ALLOC);
+        return XSTDERR;
+    }
+
+    return XSTDOK;
+}
+
+XSTATUS XAPI_SetWriteable(xapi_data_t *pData)
+{
+    XASSERT_RET((pData && pData->pEvData), XSTDERR);
+    return XAPI_EnableEvent(pData, XPOLLOUT);
+}
+
 XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus)
 {
     XASSERT((pApiData && pApiData->pApi), XSTDERR);
@@ -241,14 +282,15 @@ XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus
         return XEVENTS_DISCONNECT;
     }
 
-    XByteBuffer_AddBuff(&pApiData->txBuffer, &handle.rawData);
-    XHTTP_Clear(&handle);
-
     if (eStatus > XAPI_UNKNOWN && eStatus < XAPI_STATUS)
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, eStatus);
     else if (eStatus != XAPI_UNKNOWN)
         XAPI_StatusCb(pApi, pApiData, XAPI_NONE, eStatus);
 
+    XAPI_PutTxBuff(pApiData, &handle.rawData);
+    XHTTP_Clear(&handle);
+
+    if (!pApiData->txBuffer.nUsed) return XEVENTS_DISCONNECT;
     XSTATUS nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
     return nStatus < 0 ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
 }
@@ -420,16 +462,17 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_HANDSHAKE_ANSWER);
     int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
-    XByteBuffer_AddBuff(&pApiData->txBuffer, &handle.rawData);
-    pApiData->pPacket = NULL;
+    if (!handle.rawData.nUsed) return nRetVal;
+    XAPI_PutTxBuff(pApiData, &handle.rawData);
+
     XHTTP_Clear(&handle);
+    pApiData->pPacket = NULL;
 
-    if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
+    if (!pApiData->txBuffer.nUsed) return XEVENTS_DISCONNECT;
+    else if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
+
     nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
-
-    return nStatus != XSTDOK ?
-        XEVENTS_DISCONNECT :
-        XEVENTS_CONTINUE;
+    return nStatus < 0 ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
 }
 
 static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
@@ -469,22 +512,23 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
         return XEVENTS_DISCONNECT;
     }
 
-    XByteBuffer_AddBuff(&pApiData->txBuffer, &handle.rawData);
     pApiData->bHandshakeStart = XTRUE;
     pApiData->pPacket = &handle;
 
     int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_HANDSHAKE_REQUEST);
     int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
-    pApiData->pPacket = NULL;
+    if (!handle.rawData.nUsed) return nRetVal;
+    XAPI_PutTxBuff(pApiData, &handle.rawData);
+
     XHTTP_Clear(&handle);
+    pApiData->pPacket = NULL;
 
-    if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
+    if (!pApiData->txBuffer.nUsed) return XEVENTS_DISCONNECT;
+    else if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
+
     nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
-
-    return nStatus != XSTDOK ?
-        XEVENTS_DISCONNECT :
-        XEVENTS_CONTINUE;
+    return nStatus < 0 ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
 }
 
 static int XAPI_ServerHandshake(xapi_t *pApi, xapi_data_t *pApiData)
@@ -607,7 +651,15 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_data_t *pApiData)
         pApiData->bHandshakeDone = XTRUE;
         pApiData->pPacket = &handle;
 
-        int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_HANDSHAKE_RESPONSE);
+        int nStatus = XAPI_SetWriteable(pApiData);
+        if (nStatus != XSTDOK)
+        {
+            pApiData->pPacket = NULL;
+            XHTTP_Clear(&handle);
+            return XEVENTS_DISCONNECT;
+        }
+
+        nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_HANDSHAKE_RESPONSE);
         nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
         size_t nPacketSize = XHTTP_GetPacketSize(&handle);
@@ -751,7 +803,11 @@ static int XAPI_Read(xapi_t *pApi, xevent_data_t *pEvData, xsock_t *pSock)
     int nBytes = XSock_Read(pSock, sBuffer, sizeof(sBuffer));
     if (nBytes <= 0)
     {
-        XAPI_ErrorCb(pApi, pApiData, XAPI_SOCK, pSock->eStatus);
+        if (pSock->eStatus == XSOCK_EOF)
+            XAPI_StatusCb(pApi, pApiData, XAPI_SOCK, pSock->eStatus);
+        else
+            XAPI_ErrorCb(pApi, pApiData, XAPI_SOCK, pSock->eStatus);
+
         pEvData->bIsOpen = XFALSE;
         return XEVENTS_DISCONNECT;
     }
@@ -856,16 +912,19 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 
     if (!XByteBuffer_Advance(pBuffer, nSent))
     {
+        nStatus = XAPI_SetEvents(pApiData, XPOLLIN);
+        XASSERT((nStatus == XSTDOK), XEVENTS_DISCONNECT);
+
+        if (pApiData->bHandshakeDone || pApiData->eType != XAPI_WS)
+            nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_COMPLETE);
+
         if (pApiData->eRole != XAPI_CLIENT &&
+            pApiData->eType == XAPI_WS &&
             pApiData->bHandshakeStart)
         {
             pApiData->bHandshakeStart = XFALSE;
             pApiData->bHandshakeDone = XTRUE;
         }
-
-        nStatus = XAPI_SetEvents(pApiData, XPOLLIN);
-        XASSERT((nStatus == XSTDOK), XEVENTS_DISCONNECT);
-        nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_COMPLETE);
     }
 
     return XAPI_StatusToEvent(pApi, nStatus);

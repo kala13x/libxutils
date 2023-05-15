@@ -8,14 +8,14 @@ LIBS += -lssl -lcrypto
 endif
 
 EXECS = array \
-	files \
-	events \
-	thread \
-	statcov \
-	strings \
+	http-server \
 	tcp-server \
 	ws-server \
 	ws-client \
+	files \
+	thread \
+	statcov \
+	strings \
 	json \
 	xtop \
 	xlog \

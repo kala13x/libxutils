@@ -32,12 +32,36 @@ int XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
 
     if (tcsetattr(fileno(stdin), TCSANOW, &nflags)) return XSTDERR;
     char *pRet = fgets(pPass, nSize, stdin);
-    nLength = pRet != NULL ? strlen(pPass) - 1 : 0;
+    nLength = pRet != NULL ? strlen(pPass) : 0;
+
+    if (nLength > 0 &&
+        pRet[nLength-1] == '\n')
+        pRet[--nLength] = '\0';
+
     if (tcsetattr(fileno(stdin), TCSANOW, &oflags)) return XSTDERR;
 #endif
 
     pPass[nLength] = 0;
     return (int)nLength;
+}
+
+int XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNewLine)
+{
+    XASSERT(pInput, XSTDINV);
+    pInput[0] = XSTR_NUL;
+
+    if (pText != NULL) printf("%s", pText);
+    char *pRet = fgets(pInput, nSize, stdin);
+
+    XASSERT_RET((pRet != NULL), XSTDERR);
+    if (!xstrused(pInput)) return XSTDNON;
+    else if (!bCutNewLine) return XSTDOK;
+
+    size_t nLength = strlen(pInput);
+    if (pInput[nLength-1] == '\n')
+        pInput[--nLength] = '\0';
+
+    return XSTDOK;
 }
 
 XSTATUS XCLI_GetWindowSize(xcli_size_t *pCli)

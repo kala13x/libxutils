@@ -274,6 +274,7 @@ xevent_status_t XEvents_Add(xevents_t *pEv, xevent_data_t* pData, int nEvents)
         return XEVENT_STATUS_EINSERT;
     }
 
+    pData->nEvents = nEvents;
     return XEVENT_STATUS_SUCCESS;
 }
 
@@ -288,6 +289,7 @@ xevent_data_t* XEvents_RegisterEvent(xevents_t *pEv, void *pCtx, XSOCKET nFd, in
     xevent_status_t nStatus = XEvents_Add(pEv, pData, nEvents);
     XASSERT_CALL((nStatus == XEVENT_STATUS_SUCCESS), free, pData, NULL);
 
+    pData->nEvents = nEvents;
     return pData;
 }
 
@@ -339,6 +341,8 @@ xevent_status_t XEvents_Modify(xevents_t *pEv, xevent_data_t *pData, int nEvents
     if (pData->nIndex < 0 && (uint32_t)pData->nIndex >= pEv->nEventCount) return XEVENT_STATUS_ECTL;
     pEv->pEventArray[pData->nIndex].events = (short)nEvents;
 #endif
+
+    pData->nEvents = nEvents;
     return XEVENT_STATUS_SUCCESS;
 }
 

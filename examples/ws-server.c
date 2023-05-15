@@ -111,7 +111,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
         xlogn("WS frame payload: %s", pPayload);
 
     pSession->nRxCount++;
-    return XAPI_SetEvents(pData, XPOLLOUT);
+    return XAPI_SetWriteable(pData);
 }
 
 int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -136,7 +136,7 @@ int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
         (int)pData->nFD, frame.buffer.nUsed);
     xlogn("Response payload: %s", sPayload);
 
-    XByteBuffer_AddBuff(&pData->txBuffer, &frame.buffer);
+    XAPI_PutTxBuff(pData, &frame.buffer);
     XWebFrame_Clear(&frame);
 
     pSession->nTxCount++;

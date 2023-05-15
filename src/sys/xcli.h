@@ -30,6 +30,8 @@ typedef struct xcli_size_ {
 } xcli_size_t;
 
 int XCLI_GetPass(const char *pText, char *pPass, size_t nSize);
+int XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNewLine);
+
 XSTATUS XCLI_GetWindowSize(xcli_size_t *pCli);
 size_t XCLI_CountFormat(xcli_size_t *pSize, const char *pLine, size_t nLength, size_t *pPosit);
 
