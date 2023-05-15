@@ -825,6 +825,7 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
     XSTATUS nStatus = XSTDNON;
 
     if (pApiData->eRole == XAPI_CLIENT &&
+        pApiData->eType == XAPI_WS &&
         !pApiData->bHandshakeStart &&
         !pApiData->bHandshakeDone)
     {
