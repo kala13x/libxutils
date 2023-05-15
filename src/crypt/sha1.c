@@ -111,7 +111,7 @@ void XSHA1_Transform(uint32_t uState[5], const uint8_t uBuffer[64])
     uint32_t d = uState[3];
     uint32_t e = uState[4];
 
-    /* 4 rounds of 20 operations each. Loop unXSHA1_ROLled. */
+    /* 4 rounds of 20 operations each */
     XSHA1_R0(a,b,c,d,e, 0); XSHA1_R0(e,a,b,c,d, 1); XSHA1_R0(d,e,a,b,c, 2); XSHA1_R0(c,d,e,a,b, 3);
     XSHA1_R0(b,c,d,e,a, 4); XSHA1_R0(a,b,c,d,e, 5); XSHA1_R0(e,a,b,c,d, 6); XSHA1_R0(d,e,a,b,c, 7);
     XSHA1_R0(c,d,e,a,b, 8); XSHA1_R0(b,c,d,e,a, 9); XSHA1_R0(a,b,c,d,e,10); XSHA1_R0(e,a,b,c,d,11);
@@ -139,10 +139,6 @@ void XSHA1_Transform(uint32_t uState[5], const uint8_t uBuffer[64])
     uState[2] += c;
     uState[3] += d;
     uState[4] += e;
-
-    /* Wipe variables */
-    a = b = c = d = e = 0;
-    memset(pBlock, 0, 64);
 }
 
 XSTATUS XSHA1_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
