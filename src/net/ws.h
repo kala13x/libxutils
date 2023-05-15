@@ -18,6 +18,7 @@ extern "C" {
 #include "xstd.h"
 #include "xbuf.h"
 
+#define XWS_SEC_WS_VERSION  13
 #define XWS_NONCE_LENGTH    16
 #define XWS_GUID            "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 

@@ -206,6 +206,9 @@ XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
     xevent_data_t *pEvData = pData->pEvData;
     xapi_t *pApi = pData->pApi;
 
+    XASSERT((pApi != NULL), XSTDERR);
+    XASSERT(pApi->bHaveEvents, XSTDERR);
+
     xevent_status_t eStatus = XEvents_Modify(&pApi->events, pEvData, nEvents);
     if (eStatus != XEVENT_STATUS_SUCCESS)
     {
@@ -501,6 +504,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
 
     if (XHTTP_AddHeader(&handle, "Upgrade", "websocket") < 0 ||
         XHTTP_AddHeader(&handle, "Connection", "Upgrade") < 0 ||
+        XHTTP_AddHeader(&handle, "Sec-WebSocket-Version", "%d", XWS_SEC_WS_VERSION) < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Key", "%s", pApiData->sKey) < 0 ||
         XHTTP_AddHeader(&handle, "Server", "xutils/%s", pLibVersion) < 0 ||
         XHTTP_Assemble(&handle, NULL, XSTDNON) == NULL)
@@ -750,6 +754,9 @@ static int XAPI_HandleRAW(xapi_t *pApi, xapi_data_t *pApiData)
 
 static int XAPI_Accept(xapi_t *pApi, xapi_data_t *pApiData, xsock_t *pSock)
 {
+    XASSERT((pApi && pApiData), XEVENTS_DISCONNECT);
+    XASSERT(pApi->bHaveEvents, XEVENTS_DISCONNECT);
+
     xevents_t *pEvents = &pApi->events;
     xsock_t clientSock;
 
@@ -997,7 +1004,8 @@ xevents_t* XAPI_GetOrCreateEvents(xapi_t *pApi)
     if (pApi->bHaveEvents) return pEvents;
 
     xevent_status_t status;
-    status = XEvents_Create(pEvents, XSTDNON, pApi, XAPI_EventCallback, XTRUE);
+    status = XEvents_Create(pEvents, XSTDNON, pApi,
+             XAPI_EventCallback, pApi->bUseHashMap);
 
     if (status != XEVENT_STATUS_SUCCESS)
     {
@@ -1014,12 +1022,11 @@ XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx, size_t nRxSi
     XASSERT((pApi != NULL), XSTDINV);
     pApi->bAllowMissingKey = XFALSE;
     pApi->bHaveEvents = XFALSE;
+    pApi->bUseHashMap = XTRUE;
     pApi->callback = callback;
     pApi->pUserCtx = pUserCtx;
     pApi->nRxSize = nRxSize ? nRxSize : XAPI_RX_MAX;
-
-    xevents_t *pEvents = XAPI_GetOrCreateEvents(pApi);
-    return (pEvents != NULL) ? XSTDOK : XSTDERR;
+    return XSTDOK;
 }
 
 void XAPI_Destroy(xapi_t *pApi)
@@ -1031,7 +1038,9 @@ void XAPI_Destroy(xapi_t *pApi)
 
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
 {
-    XASSERT(pApi, XEVENT_STATUS_EINVALID);
+    XASSERT((pApi != NULL), XEVENT_STATUS_EINVALID);
+    XASSERT(pApi->bHaveEvents, XEVENT_STATUS_EINVALID);
+
     xevents_t *pEvents = &pApi->events;
     return XEvents_Service(pEvents, nTimeoutMs);
 }

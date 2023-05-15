@@ -145,8 +145,9 @@ void XByteBuffer_Free(xbyte_buffer_t **pBuffer)
 void XByteBuffer_Reset(xbyte_buffer_t *pBuffer)
 {
     XASSERT_VOID(pBuffer);
-    if (pBuffer->pData == NULL)
-        pBuffer->nSize = 0;
+    if (pBuffer->pData != NULL)
+        pBuffer->pData[0] = '\0';
+    else pBuffer->nSize = 0;
 
     pBuffer->nStatus = 0;
     pBuffer->nUsed = 0;

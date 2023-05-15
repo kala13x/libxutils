@@ -124,6 +124,7 @@ struct xapi_ {
 
     xbool_t bAllowMissingKey;
     xbool_t bHaveEvents;
+    xbool_t bUseHashMap;
 };
 
 const char* XAPI_GetStatus(xapi_ctx_t *pCtx);
