@@ -13,7 +13,9 @@ EXECS = array \
 	thread \
 	statcov \
 	strings \
-	server \
+	tcp-server \
+	ws-server \
+	ws-client \
 	json \
 	xtop \
 	xlog \
@@ -23,7 +25,6 @@ EXECS = array \
 	xjson \
 	xsrc \
 	list \
-	xws \
 	ntp \
 	jwt \
 	rsa \

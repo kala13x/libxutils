@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/examples/xws.c
+ *  @file libxutils/examples/ws-server.c
  *
  *  This source is part of "libxutils" project
  *  2015-2023  Sun Dro (f4tb0y@protonmail.com)
@@ -216,7 +216,7 @@ int main(int argc, char* argv[])
     nSignals[1] = SIGINT;
     XSig_Register(nSignals, 2, signal_callback);
 
-    if (argc < 2)
+    if (argc < 3)
     {
         xlog("Usage: %s [address] [port]", argv[0]);
         xlog("Example: %s 127.0.0.1 6969", argv[0]);

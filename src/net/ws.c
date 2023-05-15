@@ -45,10 +45,10 @@ const char* XWebSock_GetStatusStr(xws_status_t eStatus)
             return "Successfully parsed web socket frame header";
         case XWS_MISSING_SEC_KEY:
             return "Missing web socket sec key in upgrade request";
+        case XWS_INVALID_SEC_KEY:
+            return "Invalid web socket sec key in upgrade response";
         case XWS_MISSING_PAYLOAD:
             return "Missing payload in received web socket frame";
-        case XWS_PARSED_SEC_KEY:
-            return "Parsed web socket sec key from upgrade request";
         case XWS_ERR_ALLOC:
             return "Failed to allocate memory for web socket frame";
         case XWS_ERR_SIZE:
@@ -61,6 +61,8 @@ const char* XWebSock_GetStatusStr(xws_status_t eStatus)
             return "Invalid or unsupported web socket frame";
         case XWS_INVALID_REQUEST:
             return "Received invalid HTTP upgrade request";
+        case XWS_INVALID_RESPONSE:
+            return "Received invalid HTTP upgrade response";
         case XWS_INVALID_TYPE:
             return "Invalid or uninitialized frame type";
         case XWS_INVALID_ARGS:

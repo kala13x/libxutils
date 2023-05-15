@@ -92,11 +92,19 @@ char *XBase64_Encrypt(const uint8_t *pInput, size_t *pLength)
     }
 
     uint8_t nModTable[3] = {0, 2, 1};
+    xbool_t bDec = XFALSE;
+
     for (i = 0; i < nModTable[nLength % 3]; i++)
         pEncodedData[nOutLength - 1 - i] = '=';
 
-    while (pEncodedData[nOutLength] == '\0') nOutLength--;
-    *pLength = nOutLength + 1;
+    while (pEncodedData[nOutLength] == '\0')
+    {
+        bDec = XTRUE;
+        nOutLength--;
+    }
+
+    *pLength = bDec ? nOutLength + 1 : nOutLength;
+    pEncodedData[*pLength] = '\0';
 
     return pEncodedData;
 }
@@ -128,8 +136,15 @@ char *XBase64_Decrypt(const uint8_t *pInput, size_t *pLength)
         if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 0 * 8) & 0xFF;
     }
 
-    while (pDecodedData[nOutLength] == '\0') nOutLength--;
-    *pLength = nOutLength + 1;
+    xbool_t bDec = XFALSE;
+    while (pDecodedData[nOutLength] == '\0')
+    {
+        bDec = XTRUE;
+        nOutLength--;
+    }
+
+    *pLength = bDec ? nOutLength + 1 : nOutLength;
+    pDecodedData[*pLength] = '\0';
 
     return pDecodedData;
 }

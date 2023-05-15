@@ -1,5 +1,5 @@
 /*
- *  examples/server.c
+ *  examples/tcp-server.c
  * 
  *  Copyleft (C) 2015  Sun Dro (a.k.a. kala13x)
  *

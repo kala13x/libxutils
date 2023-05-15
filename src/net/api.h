@@ -30,7 +30,9 @@ typedef enum {
     XAPI_CB_ERROR = 0,
     XAPI_CB_STATUS,
     XAPI_CB_HANDSHAKE_REQUEST,
+    XAPI_CB_HANDSHAKE_RESPONSE,
     XAPI_CB_HANDSHAKE_ANSWER,
+    XAPI_CB_CONNECTED,
     XAPI_CB_INTERRUPT,
     XAPI_CB_COMPLETE,
     XAPI_CB_ACCEPTED,
@@ -49,8 +51,9 @@ typedef enum {
     XAPI_MISSING_KEY,
     XAPI_INVALID_KEY,
     XAPI_INVALID_ARGS,
-    XAPI_MISSING_TOKEN,
+    XAPI_INVALID_ROLE,
     XAPI_INVALID_TOKEN,
+    XAPI_MISSING_TOKEN,
     XAPI_AUTH_FAILURE,
     XAPI_ERR_ASSEMBLE,
     XAPI_ERR_REGISTER,
@@ -82,6 +85,7 @@ typedef enum {
 typedef struct XAPIData {
     char sAddr[XSOCK_ADDR_MAX];
     char sKey[XSOCK_ADDR_MAX];
+    char sUri[XHTTP_URL_MAX];
 
     uint16_t nPort;
     XSOCKET nFD;
@@ -134,6 +138,7 @@ XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus
 XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey);
 
 XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort);
+XSTATUS XAPI_ConnectClient(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort, const char *sUri);
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs);
 
 #ifdef __cplusplus
