@@ -1048,6 +1048,7 @@ xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
 void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
 {
     pEndpt->pSessionData = NULL;
+    pEndpt->nEvents = XSTDNON;
     pEndpt->eType = XAPI_NONE;
     pEndpt->nPort = XSTDNON;
     pEndpt->pAddr = NULL;
@@ -1079,9 +1080,10 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     }
 
     const char *pEndpointUri = pEndpt->pUri ? pEndpt->pUri : "/";
-    xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
-    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pEndpt->pAddr);
+    uint32_t nEvents = pEndpt->nEvents ? pEndpt->nEvents : XPOLLIN;
 
+    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pEndpt->pAddr);
+    xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
     pApiData->pSessionData = pEndpt->pSessionData;
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_SERVER;
@@ -1097,7 +1099,7 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     }
 
     /* Add listener socket to the event instance */
-    pApiData->pEvData = XEvents_RegisterEvent(pEvents, pApiData, sock.nFD, XPOLLIN, XAPI_SERVER);
+    pApiData->pEvData = XEvents_RegisterEvent(pEvents, pApiData, sock.nFD, nEvents, XAPI_SERVER);
     if (pApiData->pEvData == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_REGISTER);
@@ -1139,9 +1141,10 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     }
 
     const char *pEndpointUri = pEndpt->pUri ? pEndpt->pUri : "/";
-    xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
-    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pEndpt->pAddr);
+    uint32_t nEvents = pEndpt->nEvents ? pEndpt->nEvents : XPOLLIO;
 
+    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pEndpt->pAddr);
+    xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
     pApiData->pSessionData = pEndpt->pSessionData;
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_CLIENT;
@@ -1157,7 +1160,7 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     }
 
     /* Add listener socket to the event instance */
-    pApiData->pEvData = XEvents_RegisterEvent(pEvents, pApiData, sock.nFD, XPOLLIN, XAPI_SERVER);
+    pApiData->pEvData = XEvents_RegisterEvent(pEvents, pApiData, sock.nFD, nEvents, XAPI_CLIENT);
     if (pApiData->pEvData == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_REGISTER);

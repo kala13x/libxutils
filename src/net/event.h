@@ -63,6 +63,8 @@ extern "C" {
 #define XPOLLIN     POLLIN
 #endif
 
+#define XPOLLIO     (XPOLLIN | XPOLLOUT)
+
 #define XEVENTS_DISCONNECT  -1
 #define XEVENTS_CONTINUE    0
 #define XEVENTS_RELOOP      1

@@ -147,7 +147,7 @@ int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
     pSession->nRxCount = 0;
     pSession->nTxCount = 0;
 
-    return XAPI_SetEvents(pData, XPOLLIN | XPOLLOUT);
+    return XAPI_SetEvents(pData, XPOLLIO);
 }
 
 int destroy_session(xapi_ctx_t *pCtx, xapi_data_t *pData)

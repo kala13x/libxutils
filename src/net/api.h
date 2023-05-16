@@ -87,6 +87,7 @@ typedef struct xapi_endpoint_ {
     void *pSessionData;
     const char *pAddr;
     const char *pUri;
+    uint32_t nEvents;
     uint16_t nPort;
 }xapi_endpoint_t;
 
