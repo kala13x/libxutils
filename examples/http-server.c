@@ -145,7 +145,13 @@ int main(int argc, char* argv[])
     xapi_t api;
     XAPI_Init(&api, service_callback, &api, XSTDNON);
 
-    if (XAPI_StartListener(&api, XAPI_HTTP, argv[1], atoi(argv[2])) < 0)
+    xapi_endpoint_t endpt;
+    XAPI_InitEndpoint(&endpt);
+    endpt.eType = XAPI_HTTP;
+    endpt.pAddr = argv[1];
+    endpt.nPort = atoi(argv[2]);
+
+    if (XAPI_Listen(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

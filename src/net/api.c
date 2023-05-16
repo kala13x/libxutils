@@ -1045,12 +1045,23 @@ xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
     return XEvents_Service(pEvents, nTimeoutMs);
 }
 
-XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort)
+void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
 {
-    XASSERT((pApi && pAddr && nPort), XSTDINV);
+    pEndpt->pSessionData = NULL;
+    pEndpt->eType = XAPI_NONE;
+    pEndpt->nPort = XSTDNON;
+    pEndpt->pAddr = NULL;
+    pEndpt->pUri = NULL;
+}
+
+XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
+{
+    XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
+    XASSERT((pEndpt->pAddr && pEndpt->nPort), XSTDINV);
+    XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
     xsock_t sock; /* Listener socket handle */
 
-    XSock_Create(&sock, XSOCK_TCP_SERVER, pAddr, nPort);
+    XSock_Create(&sock, XSOCK_TCP_SERVER, pEndpt->pAddr, pEndpt->nPort);
     XSock_ReuseAddr(&sock, XTRUE);
 
     if (sock.nFD == XSOCK_INVALID)
@@ -1059,7 +1070,7 @@ XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
         return XSTDERR;
     }
 
-    xapi_data_t *pApiData = XAPI_NewData(pApi, eType);
+    xapi_data_t *pApiData = XAPI_NewData(pApi, pEndpt->eType);
     if (pApiData == NULL)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_ERR_ALLOC);
@@ -1067,9 +1078,13 @@ XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
         return XSTDERR;
     }
 
-    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pAddr);
+    const char *pEndpointUri = pEndpt->pUri ? pEndpt->pUri : "/";
+    xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
+    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pEndpt->pAddr);
+
+    pApiData->pSessionData = pEndpt->pSessionData;
+    pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_SERVER;
-    pApiData->nPort = nPort;
     pApiData->nFD = sock.nFD;
 
     /* Create event instance */
@@ -1082,8 +1097,8 @@ XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
     }
 
     /* Add listener socket to the event instance */
-    xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pApiData, sock.nFD, XPOLLIN, XAPI_SERVER);
-    if (pEvData == NULL)
+    pApiData->pEvData = XEvents_RegisterEvent(pEvents, pApiData, sock.nFD, XPOLLIN, XAPI_SERVER);
+    if (pApiData->pEvData == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_REGISTER);
         XSock_Close(&sock);
@@ -1091,31 +1106,31 @@ XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
         return XSTDERR;
     }
 
-    pApiData->pSessionData = NULL;
-    pApiData->pEvData = pEvData;
-
-    if (XAPI_ServiceCb(pApi, pApiData, XAPI_CB_STARTED) < 0)
+    if (XAPI_ServiceCb(pApi, pApiData, XAPI_CB_LISTENING) < 0)
     {
-        XEvents_Delete(pEvents, pEvData);
+        XEvents_Delete(pEvents, pApiData->pEvData);
+        pApiData->pEvData = NULL;
         return XSTDERR;
     }
 
     return XSTDOK;
 }
 
-XSTATUS XAPI_ConnectClient(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort, const char *pUri)
+XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
-    XASSERT((pApi && pAddr && nPort), XSTDINV);
+    XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
+    XASSERT((pEndpt->pAddr && pEndpt->nPort), XSTDINV);
+    XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
     xsock_t sock; /* Client socket handle */
 
-    XSock_Create(&sock, XSOCK_TCP_CLIENT, pAddr, nPort);
+    XSock_Create(&sock, XSOCK_TCP_CLIENT, pEndpt->pAddr, pEndpt->nPort);
     if (sock.nFD == XSOCK_INVALID)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_SOCK, sock.eStatus);
         return XSTDERR;
     }
 
-    xapi_data_t *pApiData = XAPI_NewData(pApi, eType);
+    xapi_data_t *pApiData = XAPI_NewData(pApi, pEndpt->eType);
     if (pApiData == NULL)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_ERR_ALLOC);
@@ -1123,10 +1138,13 @@ XSTATUS XAPI_ConnectClient(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
         return XSTDERR;
     }
 
-    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pAddr);
-    xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pUri);
+    const char *pEndpointUri = pEndpt->pUri ? pEndpt->pUri : "/";
+    xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
+    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pEndpt->pAddr);
+
+    pApiData->pSessionData = pEndpt->pSessionData;
+    pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_CLIENT;
-    pApiData->nPort = nPort;
     pApiData->nFD = sock.nFD;
 
     /* Create event instance */
@@ -1139,8 +1157,8 @@ XSTATUS XAPI_ConnectClient(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
     }
 
     /* Add listener socket to the event instance */
-    xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pApiData, sock.nFD, XPOLLIN, XAPI_SERVER);
-    if (pEvData == NULL)
+    pApiData->pEvData = XEvents_RegisterEvent(pEvents, pApiData, sock.nFD, XPOLLIN, XAPI_SERVER);
+    if (pApiData->pEvData == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_REGISTER);
         XSock_Close(&sock);
@@ -1148,12 +1166,10 @@ XSTATUS XAPI_ConnectClient(xapi_t *pApi, xapi_type_t eType, const char *pAddr, u
         return XSTDERR;
     }
 
-    pApiData->pSessionData = NULL;
-    pApiData->pEvData = pEvData;
-
     if (XAPI_ServiceCb(pApi, pApiData, XAPI_CB_CONNECTED) < 0)
     {
-        XEvents_Delete(pEvents, pEvData);
+        XEvents_Delete(pEvents, pApiData->pEvData);
+        pApiData->pEvData = NULL;
         return XSTDERR;
     }
 

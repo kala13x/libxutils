@@ -64,7 +64,7 @@ int handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
 
-    xlogn("Received handhshake request: fd(%d), url(%s), buff(%zu)",
+    xlogn("Received handhshake request: fd(%d), uri(%s), buff(%zu)",
         (int)pData->nFD, pHandle->sUrl, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
@@ -188,7 +188,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             return print_error(pCtx, pData);
         case XAPI_CB_STATUS:
             return print_status(pCtx, pData);
-        case XAPI_CB_STARTED:
+        case XAPI_CB_LISTENING:
             xlogn("Started web socket listener: %s:%u", pData->sAddr, pData->nPort);
             break;
         case XAPI_CB_COMPLETE:
@@ -226,7 +226,13 @@ int main(int argc, char* argv[])
     xapi_t api;
     XAPI_Init(&api, service_callback, &api, XSTDNON);
 
-    if (XAPI_StartListener(&api, XAPI_WS, argv[1], atoi(argv[2])) < 0)
+    xapi_endpoint_t endpt;
+    XAPI_InitEndpoint(&endpt);
+    endpt.eType = XAPI_WS;
+    endpt.pAddr = argv[1];
+    endpt.nPort = atoi(argv[2]);
+
+    if (XAPI_Listen(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

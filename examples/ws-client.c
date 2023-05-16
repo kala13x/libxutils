@@ -22,21 +22,11 @@ static int g_nInterrupted = 0;
 typedef struct {
     size_t nRxCount;
     size_t nTxCount;
-} session_data_t;
-
-session_data_t* new_session_data()
-{
-    session_data_t *pSession = (session_data_t*)malloc(sizeof(session_data_t));
-    XASSERT(pSession, xthrowp(NULL, "Failed to allocate per session data"));
 
     /*
-        Initialize additional sesion related stuff here...
+        Session related stuff...
     */
-
-    pSession->nRxCount = 0;
-    pSession->nTxCount = 0;
-    return pSession;
-}
+} session_data_t;
 
 void signal_callback(int sig)
 {
@@ -153,23 +143,20 @@ int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xlogn("Client connected to server: fd(%d) %s:%u",
         (int)pData->nFD, pData->sAddr, pData->nPort);
 
-    /* Create session data that will be unique for each session */
-    session_data_t *pSession = new_session_data();
-    XASSERT_RET((pSession != NULL), XSTDERR);
+    session_data_t *pSession = (session_data_t*)pData->pSessionData;
+    pSession->nRxCount = 0;
+    pSession->nTxCount = 0;
 
-    pData->pSessionData = pSession;
     return XAPI_SetEvents(pData, XPOLLIN | XPOLLOUT);
 }
 
 int destroy_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
+    session_data_t *pSession = (session_data_t*)pData->pSessionData;
     xlogn("Connection closed: fd(%d)", (int)pData->nFD);
 
-    if (pData->pSessionData != NULL)
-    {
-        free(pData->pSessionData);
-        pData->pSessionData = NULL;
-    }
+    xlogi("Frame statistics: rx(%d), tx(%d)",
+        pSession->nRxCount, pSession->nTxCount);
 
     return XSTDOK;
 }
@@ -239,7 +226,18 @@ int main(int argc, char* argv[])
         return XSTDERR;
     }
 
-    if (XAPI_ConnectClient(&api, XAPI_WS, link.sAddr, link.nPort, link.sUrl) < 0)
+    xapi_endpoint_t endpt;
+    XAPI_InitEndpoint(&endpt);
+
+    endpt.eType = XAPI_WS;
+    endpt.pAddr = link.sAddr;
+    endpt.nPort = link.nPort;
+    endpt.pUri = link.sUrl;
+
+    session_data_t sessData;
+    endpt.pSessionData = &sessData;
+
+    if (XAPI_Connect(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

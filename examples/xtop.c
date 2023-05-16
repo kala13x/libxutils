@@ -1452,7 +1452,13 @@ int XTOPApp_ServerMode(xtop_args_t *pArgs, xtop_stats_t *pStats)
     pArgs->pStats = pStats;
     xevent_status_t status;
 
-    if (XAPI_StartListener(&api, XAPI_HTTP, pArgs->sAddr, pArgs->nPort) < 0)
+    xapi_endpoint_t endpt;
+    XAPI_InitEndpoint(&endpt);
+    endpt.eType = XAPI_HTTP;
+    endpt.pAddr = pArgs->sAddr;
+    endpt.nPort = pArgs->nPort;
+
+    if (XAPI_Listen(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

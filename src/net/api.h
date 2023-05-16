@@ -33,10 +33,10 @@ typedef enum {
     XAPI_CB_HANDSHAKE_RESPONSE,
     XAPI_CB_HANDSHAKE_ANSWER,
     XAPI_CB_CONNECTED,
+    XAPI_CB_LISTENING,
     XAPI_CB_INTERRUPT,
     XAPI_CB_COMPLETE,
     XAPI_CB_ACCEPTED,
-    XAPI_CB_STARTED,
     XAPI_CB_CLOSED,
     XAPI_CB_WRITE,
     XAPI_CB_READ,
@@ -81,6 +81,14 @@ typedef enum {
     XAPI_CLIENT,
     XAPI_PEER,
 } xapi_role_t;
+
+typedef struct xapi_endpoint_ {
+    xapi_type_t eType;
+    void *pSessionData;
+    const char *pAddr;
+    const char *pUri;
+    uint16_t nPort;
+}xapi_endpoint_t;
 
 typedef struct XAPIData {
     char sAddr[XSOCK_ADDR_MAX];
@@ -143,8 +151,10 @@ XSTATUS XAPI_SetWriteable(xapi_data_t *pData);
 XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus);
 XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey);
 
-XSTATUS XAPI_StartListener(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort);
-XSTATUS XAPI_ConnectClient(xapi_t *pApi, xapi_type_t eType, const char *pAddr, uint16_t nPort, const char *sUri);
+void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt);
+XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt);
+XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt);
+
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs);
 
 #ifdef __cplusplus
