@@ -31,43 +31,7 @@ include_directories(
 )
 
 add_library(xutils STATIC
-    ${SOURCE_DIR}/xver.c
-    ${DATA_DIR}/array.c
-    ${DATA_DIR}/xjson.c
-    ${DATA_DIR}/xbuf.c
-    ${DATA_DIR}/hash.c
-    ${DATA_DIR}/list.c
-    ${DATA_DIR}/xstr.c
-    ${DATA_DIR}/map.c
-    ${DATA_DIR}/jwt.c
-    ${CRYPT_DIR}/crypt.c
-    ${CRYPT_DIR}/aes.c
-    ${CRYPT_DIR}/base64.c
-    ${CRYPT_DIR}/sha256.c
-    ${CRYPT_DIR}/sha1.c
-    ${CRYPT_DIR}/crc32.c
-    ${CRYPT_DIR}/hmac.c
-    ${CRYPT_DIR}/md5.c
-    ${CRYPT_DIR}/rsa.c
-    ${NET_DIR}/event.c
-    ${NET_DIR}/addr.c
-    ${NET_DIR}/http.c
-    ${NET_DIR}/mdtp.c
-    ${NET_DIR}/sock.c
-    ${NET_DIR}/api.c
-    ${NET_DIR}/ntp.c
-    ${NET_DIR}/rtp.c
-    ${NET_DIR}/ws.c
-    ${SYS_DIR}/thread.c
-    ${SYS_DIR}/xtype.c
-    ${SYS_DIR}/xtime.c
-    ${SYS_DIR}/sync.c
-    ${SYS_DIR}/xsig.c
-    ${SYS_DIR}/xcli.c
-    ${SYS_DIR}/xcpu.c
-    ${SYS_DIR}/xlog.c
-    ${SYS_DIR}/xtop.c
-    ${SYS_DIR}/xfs.c
+    _SOURCE_LIST_
 )
 
 install(TARGETS xutils DESTINATION lib)

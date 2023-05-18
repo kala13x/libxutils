@@ -89,6 +89,41 @@ make
 sudo make install
 ```
 
+### Build particular files only
+If you want to use particular files and functions, you can configure the library and select only that functionality for the build. In this way, it is possible not to increase the size of the program and to avoid the linkage of unused code.
+
+The `libxutils` project has a config file that contains a list of modules that will be included in the build. This file is used by the `generate.sh` script, which resolves dependencies for each enabled module and generates a `CMakeList.txt` file.
+
+Open `xutils.conf` file with a text editor and mark only the functionality you want to include in the build. Use a low-case `y` symbol to enable and any other symbol to disable modules. Removing a related line from the list will also disable the module.
+
+Example:
+```
+...
+USE_ARRAY=n
+USE_CRYPT=n
+USE_XTIME=n
+USE_EVENT=y
+USE_LIST=n
+USE_XBUF=n
+USE_HASH=n
+USE_SOCK=n
+USE_XLOG=y
+USE_XSTR=n
+...
+```
+After updating the configuration, use the `generate.sh` script to generate the `CMakeLists.txt` file and then build the project using the `CMake` tool as in this example:
+
+```bash
+./generate.sh
+mkdir build
+cd build
+cmake .. && make
+```
+
+You may notice that when you select only one module, several other modules may be also included in the build. Because some files depend on other files in the project, the `generate.sh` script will automatically resolve these dependencies and include required files in the build as well.
+
+For example, if you only mark HTTP library for a build, the socket library will be automatically enabled because HTTP uses some functionality from sockets.
+
 ### Dependencies
 The only dependency that the library uses is the `openssl-devel` package for the `SSL` and `RSA` implementations.\
 You can either install the `openssl-devel` package or disable the `SSL` support in the library.

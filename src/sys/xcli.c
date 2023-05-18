@@ -9,6 +9,7 @@
 
 #include "xstd.h"
 #include "xcli.h"
+#include "xstr.h"
 #include "xtime.h"
 
 #ifdef __linux__
