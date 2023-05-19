@@ -25,7 +25,7 @@ void signal_callback(int sig)
 int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
-    int nFD = pData ? (int)pData->nFD : XSTDERR;
+    int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
 
     if (pCtx->eCbType == XAPI_CB_STATUS)
         xlogn("%s: fd(%d)", pStr, nFD);
@@ -40,7 +40,7 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
 
     xlogn("Received request: fd(%d), buff(%zu)",
-        (int)pData->nFD, pHandle->rawData.nUsed);
+        (int)pData->sock.nFD, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
     if (pHeader != NULL)
@@ -80,7 +80,7 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     xlogn("Sending response: fd(%d), buff(%zu)",
-            (int)pData->nFD, handle.rawData.nUsed);
+            (int)pData->sock.nFD, handle.rawData.nUsed);
 
     XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
     XHTTP_Clear(&handle);
@@ -90,7 +90,7 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
 int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xlogn("Accepted connection: fd(%d)", (int)pData->nFD);
+    xlogn("Accepted connection: fd(%d)", (int)pData->sock.nFD);
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
@@ -108,10 +108,10 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_ACCEPTED:
             return init_data(pCtx, pData);
         case XAPI_CB_CLOSED:
-            xlogn("Connection closed: fd(%d)", (int)pData->nFD);
+            xlogn("Connection closed: fd(%d)", (int)pData->sock.nFD);
             break;
         case XAPI_CB_COMPLETE:
-            xlogn("Response sent: fd(%d)", (int)pData->nFD);
+            xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
             return XSTDERR;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;

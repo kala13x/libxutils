@@ -1023,7 +1023,7 @@ int XTOPApp_GetRemoteStats(xtop_args_t *pArgs, xtop_stats_t *pStats)
 int XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
-    int nFD = pData ? (int)pData->nFD : XSTDERR;
+    int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
 
     if (pCtx->nStatus == XAPI_DESTROY)
         xlogn("%s", pStr);
@@ -1046,7 +1046,7 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     *pRequest = XTOP_NONE;
 
     xlogn("Received request: fd(%d), method(%s), url(%s)",
-        (int)pData->nFD, XHTTP_GetMethodStr(pHandle->eMethod), pHandle->sUrl);
+        (int)pData->sock.nFD, XHTTP_GetMethodStr(pHandle->eMethod), pHandle->sUrl);
 
     if (pHandle->eMethod != XHTTP_GET)
     {
@@ -1383,7 +1383,7 @@ int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     xlogn("Sending response: fd(%d), status(%d), length(%zu)",
-        (int)pData->nFD, handle.nStatusCode, handle.rawData.nUsed);
+        (int)pData->sock.nFD, handle.nStatusCode, handle.rawData.nUsed);
 
     XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
     XString_Clear(&content);
@@ -1404,13 +1404,13 @@ int XTOPApp_InitSessionData(xapi_data_t *pData)
     *pRequest = XTOP_INVALID;
     pData->pSessionData = pRequest;
 
-    xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->nFD, pData->sAddr);
+    xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->sock.nFD, pData->sAddr);
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
 int XTOPApp_ClearSessionData(xapi_data_t *pData)
 {
-    xlogn("Connection closed: fd(%d), ip(%s)", (int)pData->nFD, pData->sAddr);
+    xlogn("Connection closed: fd(%d), ip(%s)", (int)pData->sock.nFD, pData->sAddr);
     free(pData->pSessionData);
     pData->pSessionData = NULL;
     return XSTDERR;
@@ -1432,7 +1432,7 @@ int XTOPApp_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_CLOSED:
             return XTOPApp_ClearSessionData(pData);
         case XAPI_CB_COMPLETE:
-            xlogn("Successfully sent a response to the client: fd(%d)", (int)pData->nFD);
+            xlogn("Successfully sent a response to the client: fd(%d)", (int)pData->sock.nFD);
             return XSTDERR;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;

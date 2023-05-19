@@ -61,7 +61,7 @@ xbool_t XSockType_IsSSL(xsock_type_t eType)
 static XATOMIC g_nSSLInit = 0; 
 
 typedef struct XSocketPriv {
-    xbool_t nShutdown;
+    xbool_t bConnected;
     void *pSSLCTX;
     void *pSSL;
 } xsock_priv_t;
@@ -71,7 +71,7 @@ static xsock_priv_t* XSock_AllocPriv()
     xsock_priv_t *pPriv = (xsock_priv_t*)malloc(sizeof(xsock_priv_t));
     if (pPriv == NULL) return NULL;
 
-    pPriv->nShutdown = XFALSE;
+    pPriv->bConnected = XFALSE;
     pPriv->pSSLCTX = NULL;
     pPriv->pSSL = NULL;
     return pPriv;
@@ -124,16 +124,15 @@ static XSOCKET XSock_SetSSL(xsock_t *pSock, SSL *pSSL)
         return XSOCK_INVALID;
     }
 
-    pPriv->nShutdown = XTRUE;
     pPriv->pSSL = pSSL;
     pSock->nSSL = XTRUE;
     return pSock->nFD;
 }
 
-static void XSock_SetShutdown(xsock_t *pSock, xbool_t nShutdown)
+static void XSock_SSLConnected(xsock_t *pSock, xbool_t bConnected)
 {
     xsock_priv_t *pPriv = (xsock_priv_t*)pSock->pPrivate;
-    if (pPriv != NULL) pPriv->nShutdown = nShutdown;
+    if (pPriv != NULL) pPriv->bConnected = bConnected;
 }
 
 static xsock_type_t XSock_GetPrefredSSL(xsock_type_t eType)
@@ -330,6 +329,14 @@ const char* XSock_GetStatusStr(xsock_status_t eStatus)
             return "Can not read from SSL socket";
         case XSOCK_ERR_SSLWRITE:
             return "Can not write to SSL socket";
+        case XSOCK_ERR_INVSSL:
+            return "Invalid SSL or SSL context";
+        case XSOCK_ERR_SYSCALL:
+            return "SSL operation failed in syscall";
+        case XSOCK_WANT_READ:
+            return "Wait for read event for non-blocking operation";
+        case XSOCK_WANT_WRITE:
+            return "Wait for write event for non-blocking operation";
         case XSOCK_ERR_SSLMET:
             return "SSL method is not defined in the SSL library";
         case XSOCK_ERR_SSLERR:
@@ -456,7 +463,7 @@ void XSock_Close(xsock_t *pSock)
 
         if (pSSL != NULL)
         {
-            if (pPriv->nShutdown)
+            if (pPriv->bConnected)
                 SSL_shutdown(pSSL);
 
             SSL_free(pSSL);
@@ -483,7 +490,7 @@ void XSock_Close(xsock_t *pSock)
 int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
 {
     if (!XSock_Check(pSock)) return XSOCK_ERROR;
-    if (!nSize || pData == NULL) return XSOCK_NONE;
+    XASSERT_RET((nSize && pData), XSOCK_NONE);
 
 #ifdef XSOCK_USE_SSL
     SSL *pSSL = XSock_GetSSL(pSock);
@@ -504,28 +511,33 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
         if (nBytes <= 0)
         {
             int nError = SSL_get_error(pSSL, nBytes);
-            xsock_status_t eStat = pSock->eStatus;
             pSock->eStatus = XSOCK_ERR_SSLREAD;
 
             if (nError == SSL_ERROR_ZERO_RETURN)
             {
-                XSock_SetShutdown(pSock, XFALSE);
                 pSock->eStatus = XSOCK_EOF;
+                XSock_SSLConnected(pSock, XFALSE);
             }
             else if (nError == SSL_ERROR_SYSCALL)
             {
-                XSock_SetShutdown(pSock, XFALSE);
                 if (!nBytes) pSock->eStatus = XSOCK_EOF;
+                XSock_SSLConnected(pSock, XFALSE);
             }
             else if (nError == SSL_ERROR_SSL)
             {
-                XSock_SetShutdown(pSock, XFALSE);
                 pSock->eStatus = XSOCK_ERR_SSLERR;
+                XSock_SSLConnected(pSock, XFALSE);
             }
             else if (nError == SSL_ERROR_WANT_READ)
             {
-                pSock->eStatus = eStat;
-                continue;
+                pSock->eStatus = XSOCK_WANT_READ;
+                if (!XSock_IsNB(pSock)) continue;
+                break;
+            }
+            else if (nError == SSL_ERROR_WANT_WRITE)
+            {
+                pSock->eStatus = XSOCK_WANT_WRITE;
+                break;
             }
 
             if (pSock->eStatus != XSOCK_EOF)
@@ -537,6 +549,9 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
 
         nReceived += nBytes;
         nLeft -= nBytes;
+
+        /* Wait for read event if non-blocking */
+        if (XSock_IsNB(pSock)) break;
     }
 
     return nReceived;
@@ -572,18 +587,35 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
         if (nBytes <= 0)
         {
             int nError = SSL_get_error(pSSL, nBytes);
-            if (nError == SSL_ERROR_WANT_WRITE) continue;
-            else if (nError == SSL_ERROR_SSL ||
-                nError == SSL_ERROR_SYSCALL)
-                XSock_SetShutdown(pSock, XFALSE);
-
             pSock->eStatus = XSOCK_ERR_SSLWRITE;
+
+            if (nError == SSL_ERROR_WANT_READ)
+            {
+                pSock->eStatus = XSOCK_WANT_READ;
+                break;
+            }
+            else if (nError == SSL_ERROR_WANT_WRITE)
+            {
+                pSock->eStatus = XSOCK_WANT_WRITE;
+                if (!XSock_IsNB(pSock)) continue;
+                break;
+            }
+            else if (nError == SSL_ERROR_SSL ||
+                     nError == SSL_ERROR_SYSCALL)
+            {
+                pSock->eStatus = XSOCK_ERR_SYSCALL;
+                XSock_SSLConnected(pSock, XFALSE);
+            }
+
             XSock_Close(pSock);
             return nBytes;
         }
 
         nSent += nBytes;
         nLeft -= nBytes;
+
+        /* Wait for write event if non-blocking */
+        if (XSock_IsNB(pSock)) break;
     }
 
     return nSent;
@@ -791,16 +823,10 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
         SSL_set_accept_state(pSSL);
         SSL_set_fd(pSSL, pNewSock->nFD);
 
-        if (SSL_accept(pSSL) <= 0)
-        {
-            if (pSSL != NULL) SSL_free(pSSL);
-            pSock->eStatus = XSOCK_ERR_SSLACC;
+        XSOCKET nFD = XSock_SetSSL(pNewSock, pSSL);
+        XASSERT((nFD != XSOCK_INVALID), XSOCK_INVALID);
 
-            XSock_Close(pNewSock);
-            return XSOCK_INVALID;
-        }
-
-        return XSock_SetSSL(pNewSock, pSSL);
+        return XSock_SSLAccept(pNewSock);
     }
 #endif
 
@@ -1275,6 +1301,92 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
     return XSOCK_INVALID;
 }
 
+XSOCKET XSock_SSLConnect(xsock_t *pSock)
+{
+#ifdef XSOCK_USE_SSL
+    SSL *pSSL = XSock_GetSSL(pSock);
+    if (pSSL == NULL)
+    {
+        pSock->eStatus = XSOCK_ERR_INVSSL;
+        XSock_Close(pSock);
+        return XSOCK_INVALID;
+    }
+
+    int nStatus = SSL_connect(pSSL);
+    if (nStatus <= 0)
+    {
+        if (XSock_IsNB(pSock))
+        {
+            int nError = SSL_get_error(pSSL, nStatus);
+            if (nError == SSL_ERROR_WANT_READ)
+            {
+                pSock->eStatus = XSOCK_WANT_READ;
+                return pSock->nFD;
+            }
+            else if (nError == SSL_ERROR_WANT_WRITE)
+            {
+                pSock->eStatus = XSOCK_WANT_WRITE;
+                return pSock->nFD;
+            }
+        }
+
+        pSock->eStatus = XSOCK_ERR_SSLCNT;
+        XSock_Close(pSock);
+        return XSOCK_INVALID;
+    }
+
+    XSock_SSLConnected(pSock, XTRUE);
+    return pSock->nFD;
+#endif
+
+    pSock->eStatus = XSOCK_ERR_NOSSL;
+    XSock_Close(pSock);
+    return XSOCK_INVALID;
+}
+
+XSOCKET XSock_SSLAccept(xsock_t *pSock)
+{
+#ifdef XSOCK_USE_SSL
+    SSL *pSSL = XSock_GetSSL(pSock);
+    if (pSSL == NULL)
+    {
+        pSock->eStatus = XSOCK_ERR_INVSSL;
+        XSock_Close(pSock);
+        return XSOCK_INVALID;
+    }
+
+    int nStatus = SSL_accept(pSSL);
+    if (nStatus <= 0)
+    {
+        if (XSock_IsNB(pSock))
+        {
+            int nError = SSL_get_error(pSSL, nStatus);
+            if (nError == SSL_ERROR_WANT_READ)
+            {
+                pSock->eStatus = XSOCK_WANT_READ;
+                return pSock->nFD;
+            }
+            else if (nError == SSL_ERROR_WANT_WRITE)
+            {
+                pSock->eStatus = XSOCK_WANT_WRITE;
+                return pSock->nFD;
+            }
+        }
+
+        pSock->eStatus = XSOCK_ERR_SSLACC;
+        XSock_Close(pSock);
+        return XSOCK_INVALID;
+    }
+
+    XSock_SSLConnected(pSock, XTRUE);
+    return pSock->nFD;
+#endif
+
+    pSock->eStatus = XSOCK_ERR_NOSSL;
+    XSock_Close(pSock);
+    return XSOCK_INVALID;
+}
+
 XSOCKET XSock_InitSSLServer(xsock_t *pSock)
 {
 #ifdef XSOCK_USE_SSL
@@ -1340,19 +1452,16 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
     nOpts |= SSL_OP_IGNORE_UNEXPECTED_EOF;
     SSL_set_options(pSSL, nOpts);
 
-    if (SSL_connect(pSSL) < 0)
+    if (XSock_SetSSLCTX(pSock, pSSLCtx) < 0)
     {
-        if (pSSL != NULL) SSL_free(pSSL);
-        pSock->eStatus = XSOCK_ERR_SSLCNT;
-
         SSL_CTX_free(pSSLCtx);
-        XSock_Close(pSock);
         return XSOCK_INVALID;
     }
 
-    XSock_SetSSLCTX(pSock, pSSLCtx);
-    XSock_SetSSL(pSock, pSSL);
-    return pSock->nFD;
+    XSOCKET nFD = XSock_SetSSL(pSock, pSSL);
+    XASSERT_CALL((nFD >= 0), SSL_free, pSSL, nFD);
+
+    return XSock_SSLConnect(pSock);
 #endif
 
     pSock->eStatus = XSOCK_ERR_NOSSL;

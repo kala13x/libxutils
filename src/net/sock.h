@@ -18,6 +18,8 @@ extern "C" {
 #include "xstd.h"
 #include "xbuf.h"
 
+#define _XUTILS_USE_SSL 1 // temp
+
 #ifdef _XUTILS_USE_SSL
 #define OPENSSL_API_COMPAT XSSL_MINIMAL_API
 #include <openssl/pkcs12.h>
@@ -94,6 +96,10 @@ typedef enum {
     XSOCK_ERR_SSLERR,
     XSOCK_ERR_SSLCA,
     XSOCK_ERR_NOSSL,
+    XSOCK_ERR_INVSSL,
+    XSOCK_ERR_SYSCALL,
+    XSOCK_WANT_READ,
+    XSOCK_WANT_WRITE,
     XSOCK_EOF
 } xsock_status_t;
 
@@ -210,8 +216,12 @@ int XSock_LastSSLError(char* pDst, size_t nSize);
 
 XSTATUS XSock_LoadPKCS12(xsocket_ssl_cert_t* pCert, const char* p12Path, const char* p12Pass);
 XSOCKET XSock_SetSSLCert(xsock_t* pSock, xsock_cert_t* pCert);
+
 XSOCKET XSock_InitSSLServer(xsock_t* pSock);
 XSOCKET XSock_InitSSLClient(xsock_t* pSock);
+
+XSOCKET XSock_SSLConnect(xsock_t *pSock);
+XSOCKET XSock_SSLAccept(xsock_t *pSock);
 
 int XSock_SSLRead(xsock_t* pSock, void* pData, size_t nSize, xbool_t nExact);
 int XSock_SSLWrite(xsock_t* pSock, const void* pData, size_t nLength);

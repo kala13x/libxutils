@@ -89,6 +89,7 @@ typedef struct xapi_endpoint_ {
     const char *pUri;
     uint32_t nEvents;
     uint16_t nPort;
+    xbool_t bTLS;
 }xapi_endpoint_t;
 
 typedef struct XAPIData {
@@ -97,7 +98,7 @@ typedef struct XAPIData {
     char sUri[XHTTP_URL_MAX];
 
     uint16_t nPort;
-    XSOCKET nFD;
+    xsock_t sock;
 
     xbool_t bHandshakeStart;
     xbool_t bHandshakeDone;
