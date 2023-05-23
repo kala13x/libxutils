@@ -95,16 +95,12 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pData->sKey[0] = XSTR_NUL;
     pData->sUri[0] = XSTR_NUL;
     pData->nPort = XSTDNON;
-
-    pData->bReadOnWrite = XFALSE;
-    pData->bWriteOnRead = XFALSE;
+    pData->nEvents = XSTDNON;
 
     pData->bHandshakeStart = XFALSE;
     pData->bHandshakeDone = XFALSE;
-
-    pData->bCallbackOnWrite = XFALSE;
-    pData->bCallbackOnRead = XFALSE;
-
+    pData->bReadOnWrite = XFALSE;
+    pData->bWriteOnRead = XFALSE;
     pData->bCancel = XFALSE;
     pData->bAlloc = XTRUE;
 
@@ -216,6 +212,7 @@ XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
         return XSTDERR;
     }
 
+    pData->nEvents = nEvents;
     return XSTDOK;
 }
 
@@ -233,43 +230,24 @@ XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent)
     return XSTDOK;
 }
 
-XSTATUS XAPI_UpdateEvents(xapi_data_t *pData)
+XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent)
 {
-    XASSERT(pData, XSTDERR);
-    int nEvents = XSTDNON;
+    XASSERT((pData && pData->pEvData), XSTDERR);
+    xevent_data_t *pEvData = pData->pEvData;
 
-    if (((pData->eRole == XAPI_CLIENT && pData->eType == XAPI_WS) &&
-        (pData->bHandshakeStart && !pData->bHandshakeDone)) ||
-        pData->bCallbackOnRead) nEvents |= XPOLLIN;
-
-    if ((pData->eRole == XAPI_CLIENT && pData->eType == XAPI_WS &&
-        (!pData->bHandshakeStart && !pData->bHandshakeDone)) ||
-        (pData->txBuffer.nUsed || pData->bCallbackOnWrite))
-            nEvents |= XPOLLOUT;
-
-    return XAPI_SetEvents(pData, nEvents);
-}
-
-XSTATUS XAPI_CallbackOnRead(xapi_data_t *pData, xbool_t bEnable)
-{
-    if (pData->bCallbackOnRead != bEnable)
+    if (pEvData->nEvents & nEvent)
     {
-        pData->bCallbackOnRead = bEnable;
-        return XAPI_UpdateEvents(pData);
+        int nEvents = pEvData->nEvents & ~nEvent;
+        return XAPI_SetEvents(pData, nEvents);
     }
 
     return XSTDOK;
 }
 
-XSTATUS XAPI_CallbackOnWrite(xapi_data_t *pData, xbool_t bEnable)
+static XSTATUS XAPI_RollbackEvents(xapi_data_t *pData)
 {
-    if (pData->bCallbackOnWrite != bEnable)
-    {
-        pData->bCallbackOnWrite = bEnable;
-        return XAPI_UpdateEvents(pData);
-    }
-
-    return XSTDOK;
+    XASSERT((pData != NULL), XSTDERR);
+    return XAPI_SetEvents(pData, pData->nEvents);
 }
 
 xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pApiData)
@@ -327,7 +305,7 @@ XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus
     XHTTP_Clear(&handle);
 
     if (!pApiData->txBuffer.nUsed) return XEVENTS_DISCONNECT;
-    XSTATUS nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
+    XSTATUS nStatus = XAPI_EnableEvent(pApiData, XPOLLOUT);
     return XAPI_StatusToEvent(pApi, nStatus);
 }
 
@@ -507,7 +485,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
     else if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
-    nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
+    nStatus = XAPI_EnableEvent(pApiData, XPOLLOUT);
     return XAPI_StatusToEvent(pApi, nStatus);
 }
 
@@ -564,7 +542,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     if (nRetVal != XEVENTS_CONTINUE) return nRetVal;
     else if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
-    nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
+    nStatus = XAPI_EnableEvent(pApiData, XPOLLOUT);
     return XAPI_StatusToEvent(pApi, nStatus);
 }
 
@@ -855,10 +833,13 @@ static int XAPI_Read(xapi_t *pApi, xapi_data_t *pApiData)
         }
         else if (pSock->eStatus == XSOCK_WANT_WRITE)
         {
+            pApiData->bReadOnWrite = XTRUE;
+            int nEvents = pApiData->nEvents;
+
             XSTATUS nStatus = XAPI_SetEvents(pApiData, XPOLLOUT);
             XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);
 
-            pApiData->bReadOnWrite = XTRUE;
+            pApiData->nEvents = nEvents;
             return XEVENTS_CONTINUE;
         }
         else if (pSock->eStatus == XSOCK_WANT_READ)
@@ -904,10 +885,13 @@ static int XAPI_Write(xapi_t *pApi, xapi_data_t *pApiData)
     {
         if (pSock->eStatus == XSOCK_WANT_READ)
         {
+            pApiData->bWriteOnRead = XTRUE;
+            int nEvents = pApiData->nEvents;
+
             XSTATUS nStatus = XAPI_SetEvents(pApiData, XPOLLIN);
             XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);
 
-            pApiData->bWriteOnRead = XTRUE;
+            pApiData->nEvents = nEvents;
             return XEVENTS_CONTINUE;
         }
         else if (pSock->eStatus == XSOCK_WANT_WRITE)
@@ -921,6 +905,17 @@ static int XAPI_Write(xapi_t *pApi, xapi_data_t *pApiData)
 
     if (!XByteBuffer_Advance(pBuffer, nSent))
     {
+        nStatus = XAPI_DisableEvent(pApiData, XPOLLOUT);
+        XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);
+
+        if (pApiData->eType == XAPI_WS &&
+            pApiData->bHandshakeStart &&
+            !pApiData->bHandshakeDone)
+        {
+            nStatus = XAPI_EnableEvent(pApiData, XPOLLIN);
+            XASSERT((nStatus > 0), XEVENTS_DISCONNECT);            
+        }
+
         if (pApiData->bHandshakeDone || pApiData->eType != XAPI_WS)
             nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_COMPLETE);
 
@@ -931,9 +926,6 @@ static int XAPI_Write(xapi_t *pApi, xapi_data_t *pApiData)
             pApiData->bHandshakeStart = XFALSE;
             pApiData->bHandshakeDone = XTRUE;
         }
-
-        XSTATUS nEventStatus = XAPI_UpdateEvents(pApiData);
-        XASSERT((nEventStatus > XSTDNON), XEVENTS_DISCONNECT);
     }
 
     return XAPI_StatusToEvent(pApi, nStatus);
@@ -953,7 +945,7 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 
     if (pApiData->bReadOnWrite)
     {
-        XSTATUS nStatus = XAPI_UpdateEvents(pApiData);
+        XSTATUS nStatus = XAPI_RollbackEvents(pApiData);
         XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);
 
         pApiData->bReadOnWrite = XFALSE;
@@ -999,7 +991,7 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 
     if (pApiData->bWriteOnRead)
     {
-        XSTATUS nStatus = XAPI_UpdateEvents(pApiData);
+        XSTATUS nStatus = XAPI_RollbackEvents(pApiData);
         XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);
 
         pApiData->bWriteOnRead = XFALSE;

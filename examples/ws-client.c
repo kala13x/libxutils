@@ -103,7 +103,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
         xlogn("WS frame payload: %s", pPayload);
 
     pSession->nRxCount++;
-    return XAPI_CallbackOnWrite(pData, XTRUE);
+    return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
 int send_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -133,11 +133,9 @@ int send_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     XByteBuffer_AddBuff(&pData->txBuffer, &frame.buffer);
     XWebFrame_Clear(&frame);
-    pSession->nTxCount++;
 
-    pData->bCallbackOnRead = XTRUE;
-    pData->bCallbackOnWrite = XFALSE;
-    return XAPI_UpdateEvents(pData);
+    pSession->nTxCount++;
+    return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
 int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -185,6 +183,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             return print_status(pCtx, pData);
         case XAPI_CB_COMPLETE:
             xlogn("TX complete: fd(%d)", (int)pData->sock.nFD);
+            XAPI_SetEvents(pData, XPOLLIN);
             break;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;

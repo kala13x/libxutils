@@ -99,6 +99,7 @@ typedef struct XAPIData {
 
     uint16_t nPort;
     xsock_t sock;
+    int nEvents;
 
     xbool_t bCancel;
     xbool_t bAlloc;
@@ -110,10 +111,6 @@ typedef struct XAPIData {
     /* WebSocket handshake routine */
     xbool_t bHandshakeStart;
     xbool_t bHandshakeDone;
-
-    /* Request read/write callbacks */
-    xbool_t bCallbackOnWrite;
-    xbool_t bCallbackOnRead;
 
     xbyte_buffer_t rxBuffer;
     xbyte_buffer_t txBuffer;
@@ -156,12 +153,9 @@ XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer);
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx, size_t nRxSize);
 void XAPI_Destroy(xapi_t *pApi);
 
+XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent);
 XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent);
 XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents);
-XSTATUS XAPI_UpdateEvents(xapi_data_t *pData);
-
-XSTATUS XAPI_CallbackOnRead(xapi_data_t *pData, xbool_t bEnable);
-XSTATUS XAPI_CallbackOnWrite(xapi_data_t *pData, xbool_t bEnable);
 
 XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus);
 XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey);

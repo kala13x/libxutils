@@ -49,7 +49,7 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
         free(pHeader);
     }
 
-    return XAPI_CallbackOnWrite(pData, XTRUE);
+    return XAPI_SetEvents(pData, XPOLLOUT);
 }
 
 int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -85,13 +85,13 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
     XHTTP_Clear(&handle);
 
-    return XAPI_CallbackOnWrite(pData, XFALSE);
+    return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
 int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xlogn("Accepted connection: fd(%d)", (int)pData->sock.nFD);
-    return XAPI_CallbackOnRead(pData, XTRUE);
+    return XAPI_SetEvents(pData, XPOLLIN);
 }
 
 int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)

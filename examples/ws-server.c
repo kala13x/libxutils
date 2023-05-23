@@ -111,7 +111,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
         xlogn("WS frame payload: %s", pPayload);
 
     pSession->nRxCount++;
-    return XAPI_CallbackOnWrite(pData, XTRUE);
+    return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
 int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -140,7 +140,7 @@ int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XWebFrame_Clear(&frame);
 
     pSession->nTxCount++;
-    return XAPI_CallbackOnWrite(pData, XFALSE);
+    return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
 int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -152,7 +152,7 @@ int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XASSERT_RET((pSession != NULL), XSTDERR);
 
     pData->pSessionData = pSession;
-    return XAPI_CallbackOnRead(pData, XTRUE);
+    return XAPI_SetEvents(pData, XPOLLIN);
 }
 
 int destroy_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -193,6 +193,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             break;
         case XAPI_CB_COMPLETE:
             xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
+            XAPI_SetEvents(pData, XPOLLIN);
             break;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;
