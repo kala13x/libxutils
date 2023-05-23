@@ -1080,7 +1080,7 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
         return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NONE);
     }
 
-    return XAPI_SetEvents(pData, XPOLLOUT);
+    return XAPI_CallbackOnWrite(pData, XTRUE);
 }
 
 int XTOPApp_AppendMemoryJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
@@ -1389,7 +1389,7 @@ int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XString_Clear(&content);
     XHTTP_Clear(&handle);
 
-    return XSTDOK;
+    return XAPI_CallbackOnWrite(pData, XFALSE);
 }
 
 int XTOPApp_InitSessionData(xapi_data_t *pData)
@@ -1405,7 +1405,7 @@ int XTOPApp_InitSessionData(xapi_data_t *pData)
     pData->pSessionData = pRequest;
 
     xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->sock.nFD, pData->sAddr);
-    return XAPI_SetEvents(pData, XPOLLIN);
+    return XAPI_CallbackOnRead(pData, XTRUE);
 }
 
 int XTOPApp_ClearSessionData(xapi_data_t *pData)

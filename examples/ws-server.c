@@ -111,7 +111,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
         xlogn("WS frame payload: %s", pPayload);
 
     pSession->nRxCount++;
-    return XAPI_SetWriteable(pData);
+    return XAPI_CallbackOnWrite(pData, XTRUE);
 }
 
 int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -140,7 +140,7 @@ int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XWebFrame_Clear(&frame);
 
     pSession->nTxCount++;
-    return XSTDOK;
+    return XAPI_CallbackOnWrite(pData, XFALSE);
 }
 
 int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -152,7 +152,7 @@ int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XASSERT_RET((pSession != NULL), XSTDERR);
 
     pData->pSessionData = pSession;
-    return XAPI_SetEvents(pData, XPOLLIN);
+    return XAPI_CallbackOnRead(pData, XTRUE);
 }
 
 int destroy_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
