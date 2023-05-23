@@ -106,7 +106,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_CallbackOnWrite(pData, XTRUE);
 }
 
-int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int send_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     session_data_t *pSession = (session_data_t*)pData->pSessionData;
     xws_status_t status;
@@ -133,9 +133,11 @@ int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     XByteBuffer_AddBuff(&pData->txBuffer, &frame.buffer);
     XWebFrame_Clear(&frame);
-
     pSession->nTxCount++;
-    return XAPI_CallbackOnWrite(pData, XFALSE);
+
+    pData->bCallbackOnRead = XTRUE;
+    pData->bCallbackOnWrite = XFALSE;
+    return XAPI_UpdateEvents(pData);
 }
 
 int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -147,7 +149,7 @@ int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
     pSession->nRxCount = 0;
     pSession->nTxCount = 0;
 
-    return XAPI_CallbackOnRead(pData, XTRUE);
+    return XAPI_SetEvents(pData, XPOLLIO);
 }
 
 int destroy_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -176,7 +178,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_READ:
             return handle_frame(pCtx, pData);
         case XAPI_CB_WRITE:
-            return send_answer(pCtx, pData);
+            return send_request(pCtx, pData);
         case XAPI_CB_ERROR:
             return print_error(pCtx, pData);
         case XAPI_CB_STATUS:

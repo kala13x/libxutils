@@ -238,8 +238,9 @@ XSTATUS XAPI_UpdateEvents(xapi_data_t *pData)
     XASSERT(pData, XSTDERR);
     int nEvents = XSTDNON;
 
-    if (pData->bCallbackOnRead)
-        nEvents |= XPOLLIN;
+    if (((pData->eRole == XAPI_CLIENT && pData->eType == XAPI_WS) &&
+        (pData->bHandshakeStart && !pData->bHandshakeDone)) ||
+        pData->bCallbackOnRead) nEvents |= XPOLLIN;
 
     if ((pData->eRole == XAPI_CLIENT && pData->eType == XAPI_WS &&
         (!pData->bHandshakeStart && !pData->bHandshakeDone)) ||
