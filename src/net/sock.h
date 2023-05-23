@@ -216,6 +216,7 @@ int XSock_LastSSLError(char* pDst, size_t nSize);
 
 XSTATUS XSock_LoadPKCS12(xsocket_ssl_cert_t* pCert, const char* p12Path, const char* p12Pass);
 XSOCKET XSock_SetSSLCert(xsock_t* pSock, xsock_cert_t* pCert);
+void XSock_InitCert(xsock_cert_t *pCert);
 
 XSOCKET XSock_InitSSLServer(xsock_t* pSock);
 XSOCKET XSock_InitSSLClient(xsock_t* pSock);

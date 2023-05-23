@@ -1214,8 +1214,20 @@ XSTATUS XSock_LoadPKCS12(xsocket_ssl_cert_t *pCert, const char *p12Path, const c
     return XSOCK_NONE;
 }
 
+void XSock_InitCert(xsock_cert_t *pCert)
+{
+    pCert->pCertPath = NULL;
+    pCert->pKeyPath = NULL;
+    pCert->pCaPath = NULL;
+    pCert->p12Path = NULL;
+    pCert->p12Pass = NULL;
+    pCert->nVerifyFlags = 0;
+}
+
 XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
 {
+    if (!XSock_Check(pSock)) return XSOCK_INVALID;
+
 #ifdef XSOCK_USE_SSL
     SSL_CTX *pSSLCtx = XSock_GetSSLCTX(pSock);
     if (pSSLCtx == NULL)
@@ -1228,7 +1240,7 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
     SSL_CTX_set_ecdh_auto(pSSLCtx, 1);
     if (pCert->nVerifyFlags > 0) SSL_CTX_set_verify(pSSLCtx, pCert->nVerifyFlags, NULL);
 
-    if (pCert->pCaPath != NULL)
+    if (xstrused(pCert->pCaPath))
     {
         if (SSL_CTX_load_verify_locations(pSSLCtx, pCert->pCaPath, NULL) <= 0)
         {
@@ -1240,7 +1252,7 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
         SSL_CTX_set_client_CA_list(pSSLCtx, SSL_load_client_CA_file(pCert->pCaPath));
     }
 
-    if (pCert->p12Path != NULL)
+    if (xstrused(pCert->p12Path))
     {
         xsocket_ssl_cert_t sslCert;
         if (!XSock_LoadPKCS12(&sslCert, pCert->p12Path, pCert->p12Pass))
@@ -1269,21 +1281,21 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
     }
     else
     {
-        if (pCert->pCertPath != NULL && SSL_CTX_use_certificate_file(pSSLCtx, pCert->pCertPath, SSL_FILETYPE_PEM) <= 0)
+        if (xstrused(pCert->pCertPath) && SSL_CTX_use_certificate_file(pSSLCtx, pCert->pCertPath, SSL_FILETYPE_PEM) <= 0)
         {
             pSock->eStatus = XSOCK_ERR_SSLCRT;
             XSock_Close(pSock);
             return XSOCK_INVALID;
         }
 
-        if (pCert->pKeyPath != NULL && SSL_CTX_use_PrivateKey_file(pSSLCtx, pCert->pKeyPath, SSL_FILETYPE_PEM) <= 0)
+        if (xstrused(pCert->pKeyPath) && SSL_CTX_use_PrivateKey_file(pSSLCtx, pCert->pKeyPath, SSL_FILETYPE_PEM) <= 0)
         {
             pSock->eStatus = XSOCK_ERR_SSLKEY;
             XSock_Close(pSock);
             return XSOCK_INVALID;
         }
 
-        if (pCert->pCaPath != NULL && SSL_CTX_use_certificate_chain_file(pSSLCtx, pCert->pCaPath) <= 0)
+        if (xstrused(pCert->pCaPath) && SSL_CTX_use_certificate_chain_file(pSSLCtx, pCert->pCaPath) <= 0)
         {
             pSock->eStatus = XSOCK_ERR_SSLCA;
             XSock_Close(pSock);

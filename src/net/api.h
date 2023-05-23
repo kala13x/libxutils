@@ -57,6 +57,7 @@ typedef enum {
     XAPI_AUTH_FAILURE,
     XAPI_ERR_ASSEMBLE,
     XAPI_ERR_REGISTER,
+    XAPI_ERR_RESOLVE,
     XAPI_ERR_CRYPT,
     XAPI_ERR_ALLOC,
     XAPI_STATUS,
@@ -84,6 +85,7 @@ typedef enum {
 
 typedef struct xapi_endpoint_ {
     xapi_type_t eType;
+    xsock_cert_t certs;
     void *pSessionData;
     const char *pAddr;
     const char *pUri;

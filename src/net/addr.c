@@ -28,6 +28,8 @@ static xprotocol_ports_t g_defaultPorts[] =
     { "snmp", 161, 0 },
     { "http", 80, 0 },
     { "https", 443, 0 },
+    { "ws", 80, 0 },
+    { "wss", 443, 0 },
     { "unknown", -1, -1}
 };
 

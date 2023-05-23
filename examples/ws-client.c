@@ -16,7 +16,7 @@
 #include <xutils/addr.h>
 #include <xutils/api.h>
 
-static int g_nInterrupted = 0;
+static xbool_t g_bFinish = XFALSE;
 
 /* Unique for all sessions */
 typedef struct {
@@ -31,7 +31,7 @@ typedef struct {
 void signal_callback(int sig)
 {
     if (sig == SIGINT) printf("\n");
-    g_nInterrupted = 1;
+    g_bFinish = XTRUE;
 }
 
 int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -86,6 +86,29 @@ int handshake_response(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XSTDOK;
 }
 
+int send_pong(xapi_data_t *pData)
+{
+    xws_status_t status;
+    xws_frame_t frame;
+
+    status = XWebFrame_Create(&frame, NULL, 0, XWS_PONG, XTRUE);
+    if (status != XWS_ERR_NONE)
+    {
+        xloge("Failed to create WS PONG frame: %s",
+            XWebSock_GetStatusStr(status));
+
+        return XSTDERR;
+    }
+
+    xlogn("Sending PONG: fd(%d), buff(%zu)",
+        (int)pData->sock.nFD, frame.buffer.nUsed);
+
+    XByteBuffer_AddBuff(&pData->txBuffer, &frame.buffer);
+    XWebFrame_Clear(&frame);
+
+    return XAPI_EnableEvent(pData, XPOLLOUT);
+}
+
 int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xws_frame_t *pFrame = (xws_frame_t*)pData->pPacket;
@@ -94,6 +117,13 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xlogn("Received WS frame: fd(%d), type(%s), fin(%s), hdr(%zu), pl(%zu), buff(%zu)",
         (int)pData->sock.nFD, XWS_FrameTypeStr(pFrame->eType), pFrame->bFin?"true":"false",
         pFrame->nHeaderSize, pFrame->nPayloadLength, pFrame->buffer.nUsed);
+
+    if (pFrame->eType == XWS_PING)
+    {
+        pSession->nRxCount++;
+        pSession->nTxCount++;
+        return send_pong(pData);
+    }
 
     /* Received close request, we should destroy this session */
     if (pFrame->eType == XWS_CLOSE) return XSTDERR;
@@ -158,7 +188,8 @@ int destroy_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xlogi("Frame statistics: rx(%d), tx(%d)",
         pSession->nRxCount, pSession->nTxCount);
 
-    return XSTDOK;
+    g_bFinish = XTRUE;
+    return XSTDERR;
 }
 
 int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -186,7 +217,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             XAPI_SetEvents(pData, XPOLLIN);
             break;
         case XAPI_CB_INTERRUPT:
-            if (g_nInterrupted) return XSTDERR;
+            if (g_bFinish) return XSTDERR;
             break;
         default:
             break;
@@ -209,8 +240,8 @@ int main(int argc, char* argv[])
 
     if (argc < 2)
     {
-        xlog("Usage: %s [ws-url]", argv[0]);
-        xlog("Example: %s ws://127.0.0.1:6969/ws", argv[0]);
+        xlog("Usage: %s [ws/wss-url]", argv[0]);
+        xlog("Example: %s ws://127.0.0.1:6969/websock", argv[0]);
         return 1;
     }
 
@@ -221,7 +252,7 @@ int main(int argc, char* argv[])
     if (XLink_Parse(&link, argv[1]) < 0 || !link.nPort)
     {
         xloge("Failed to parse link: %s", argv[1]);
-        xlogi("Example: ws://127.0.0.1:6969/ws");
+        xlogi("Example: ws://127.0.0.1:6969/websock");
 
         XAPI_Destroy(&api);
         return XSTDERR;
@@ -230,6 +261,7 @@ int main(int argc, char* argv[])
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
 
+    endpt.bTLS = xstrcmp(link.sProtocol, "wss");
     endpt.eType = XAPI_WS;
     endpt.pAddr = link.sAddr;
     endpt.nPort = link.nPort;
@@ -244,9 +276,11 @@ int main(int argc, char* argv[])
         return XSTDERR;
     }
 
-    xevent_status_t status;
-    do status = XAPI_Service(&api, 100);
-    while (status == XEVENT_STATUS_SUCCESS);
+    while (!g_bFinish)
+    {
+        xevent_status_t status = XAPI_Service(&api, 100);
+        if (status != XEVENT_STATUS_SUCCESS) break;
+    }
 
     XAPI_Destroy(&api);
     return 0;

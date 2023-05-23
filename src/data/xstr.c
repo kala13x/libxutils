@@ -162,6 +162,19 @@ size_t xstrrand(char *pDst, size_t nSize, size_t nLength, xbool_t bUpper, xbool_
     return nCharCount;
 }
 
+xbool_t xstrncmp(const char *pStr, const char *pCmp, size_t nCmpLen)
+{
+    XASSERT_RET((pStr && pCmp && nCmpLen), XFALSE);
+    int nDifferent = strncmp(pStr, pCmp, nCmpLen);
+    return nDifferent ? XFALSE : XTRUE;
+}
+
+xbool_t xstrcmp(const char *pStr, const char *pCmp)
+{
+    XASSERT_RET((pStr && pCmp), XFALSE);
+    return xstrncmp(pStr, pCmp, strlen(pCmp));
+}
+
 size_t xstrnfill(char *pDst, size_t nSize, size_t nLength, char cFill)
 {
     if (pDst == NULL || !nSize) return XSTDNON;

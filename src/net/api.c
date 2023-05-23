@@ -39,6 +39,8 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
             return "Invalid X-API-KEY header";
         case XAPI_ERR_REGISTER:
             return "Failed to register event";
+        case XAPI_ERR_RESOLVE:
+            return "Failed to resolve address";
         case XAPI_ERR_ALLOC:
             return "Memory allocation failure";
         case XAPI_ERR_ASSEMBLE:
@@ -183,17 +185,19 @@ static int XAPI_StatusToEvent(xapi_t *pApi, int nStatus)
 static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
 {
     XASSERT_RET(pEvData, XEVENTS_CONTINUE);
+    XSTATUS nStatus = XSTDNON;
 
     if (pEvData->pContext != NULL)
     {
         xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
-        XAPI_ServiceCb(pApi, pApiData, XAPI_CB_CLOSED);
+        nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_CLOSED);
+
         XAPI_FreeData(&pApiData);
         pEvData->pContext = NULL;
     }
 
     pEvData->nFD = XSOCK_INVALID;
-    return XEVENTS_CONTINUE;
+    return XAPI_StatusToEvent(pApi, nStatus);
 }
 
 XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
@@ -781,7 +785,10 @@ static int XAPI_Accept(xapi_t *pApi, xapi_data_t *pApiData)
 
     if (XSock_Accept(pListener, pNewSock) == XSOCK_INVALID)
     {
-        XAPI_ErrorCb(pApi, pPeerData, XAPI_SOCK, pListener->eStatus);
+        xsock_status_t status = pListener->eStatus != XSOCK_ERR_NONE ?
+                                pListener->eStatus : pNewSock->eStatus;
+
+        XAPI_ErrorCb(pApi, pPeerData, XAPI_SOCK, status);
         XAPI_FreeData(&pPeerData);
         return XEVENTS_CONTINUE;
     }
@@ -908,16 +915,16 @@ static int XAPI_Write(xapi_t *pApi, xapi_data_t *pApiData)
         nStatus = XAPI_DisableEvent(pApiData, XPOLLOUT);
         XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);
 
-        if (pApiData->eType == XAPI_WS &&
-            pApiData->bHandshakeStart &&
-            !pApiData->bHandshakeDone)
+        if (pApiData->eType == XAPI_WS && !pApiData->bHandshakeDone)
         {
             nStatus = XAPI_EnableEvent(pApiData, XPOLLIN);
-            XASSERT((nStatus > 0), XEVENTS_DISCONNECT);            
+            XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);            
         }
-
-        if (pApiData->bHandshakeDone || pApiData->eType != XAPI_WS)
+        else
+        {
             nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_COMPLETE);
+            XASSERT_RET((nStatus >= XSTDNON), XEVENTS_DISCONNECT);
+        }
 
         if (pApiData->eRole != XAPI_CLIENT &&
             pApiData->eType == XAPI_WS &&
@@ -1127,6 +1134,7 @@ xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
 
 void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
 {
+    XSock_InitCert(&pEndpt->certs);
     pEndpt->pSessionData = NULL;
     pEndpt->nEvents = XSTDNON;
     pEndpt->eType = XAPI_NONE;
@@ -1159,7 +1167,13 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_SERVER;
 
-    XSock_Create(pSock, XSOCK_TCP_SERVER, pEndpt->pAddr, pEndpt->nPort);
+    xsock_type_t eType = pEndpt->bTLS ?
+            XSOCK_SSL_PREFERED_SERVER :
+            XSOCK_TCP_SERVER;
+
+    XSock_Create(pSock, eType, pEndpt->pAddr, pEndpt->nPort);
+    if (pEndpt->bTLS) XSock_SetSSLCert(pSock, &pEndpt->certs);
+
     XSock_ReuseAddr(pSock, XTRUE);
     XSock_NonBlock(pSock, XTRUE);
 
@@ -1203,6 +1217,13 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     XASSERT((pEndpt->pAddr && pEndpt->nPort), XSTDINV);
     XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
 
+    xsock_addr_t addrInfo;
+    if (XSock_GetAddr(&addrInfo, pEndpt->pAddr) < 0)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_ERR_RESOLVE);
+        return XSTDERR;
+    }
+
     xapi_data_t *pApiData = XAPI_NewData(pApi, pEndpt->eType);
     if (pApiData == NULL)
     {
@@ -1214,13 +1235,18 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     uint32_t nEvents = pEndpt->nEvents ? pEndpt->nEvents : XPOLLIO;
     xsock_t *pSock = &pApiData->sock;
 
-    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pEndpt->pAddr);
+    xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), addrInfo.sAddr);
     xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
+
     pApiData->pSessionData = pEndpt->pSessionData;
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_CLIENT;
+    
+    xsock_type_t eType = pEndpt->bTLS ?
+            XSOCK_SSL_PREFERED_CLIENT :
+            XSOCK_TCP_CLIENT;
 
-    XSock_Create(pSock, XSOCK_TCP_CLIENT, pEndpt->pAddr, pEndpt->nPort);
+    XSock_Create(pSock, eType, pApiData->sAddr, pEndpt->nPort);
     XSock_NonBlock(pSock, XTRUE);
 
     if (pApiData->sock.nFD == XSOCK_INVALID)

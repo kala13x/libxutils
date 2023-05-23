@@ -102,6 +102,9 @@ size_t xstrarglen(const char *pFmt, va_list args);
 size_t xstrxcpyf(char **pDst, const char *pFmt, ...);
 char* xstrxcpy(const char *pFmt, ...);
 
+xbool_t xstrncmp(const char *pStr, const char *pCmp, size_t nCmpLen);
+xbool_t xstrcmp(const char *pStr, const char *pCmp);
+
 size_t xstrncpy(char *pDst, size_t nSize, const char* pSrc);
 size_t xstrncpys(char *pDst, size_t nDstSize, const char *pSrc, size_t nSrcLen);
 size_t xstrncpyf(char *pDst, size_t nSize, const char *pFmt, ...);

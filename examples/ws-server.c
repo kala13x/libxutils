@@ -15,6 +15,16 @@
 #include <xutils/api.h>
 
 static int g_nInterrupted = 0;
+extern char *optarg;
+
+typedef struct {
+    char sCaPath[XPATH_MAX];
+    char sCertPath[XPATH_MAX];
+    char sKeyPath[XPATH_MAX];
+    char sAddr[XSOCK_ADDR_MAX];
+    uint16_t nPort;
+    xbool_t bSSL;
+} xws_args_t;
 
 /* Unique for all sessions */
 typedef struct {
@@ -94,36 +104,36 @@ int handshake_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XSTDOK;
 }
 
-int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int send_pong(xapi_data_t *pData)
 {
-    xws_frame_t *pFrame = (xws_frame_t*)pData->pPacket;
-    session_data_t *pSession = (session_data_t*)pData->pSessionData;
+    xws_status_t status;
+    xws_frame_t frame;
 
-    xlogn("Received WS frame: fd(%d), type(%s), fin(%s), hdr(%zu), pl(%zu), buff(%zu)",
-        (int)pData->sock.nFD, XWS_FrameTypeStr(pFrame->eType), pFrame->bFin?"true":"false",
-        pFrame->nHeaderSize, pFrame->nPayloadLength, pFrame->buffer.nUsed);
+    status = XWebFrame_Create(&frame, NULL, 0, XWS_PONG, XTRUE);
+    if (status != XWS_ERR_NONE)
+    {
+        xloge("Failed to create WS PONG frame: %s",
+            XWebSock_GetStatusStr(status));
 
-    /* Received close request, we should destroy this session */
-    if (pFrame->eType == XWS_CLOSE) return XSTDERR;
-    const char* pPayload = (const char*)XWebFrame_GetPayload(pFrame);
+        return XSTDERR;
+    }
 
-    if (pPayload && pFrame->eType == XWS_TEXT)
-        xlogn("WS frame payload: %s", pPayload);
+    xlogn("Sending PONG: fd(%d), buff(%zu)",
+        (int)pData->sock.nFD, frame.buffer.nUsed);
 
-    pSession->nRxCount++;
+    XAPI_PutTxBuff(pData, &frame.buffer);
+    XWebFrame_Clear(&frame);
+
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
-int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int send_response(xapi_data_t *pData, const char *pPayload, size_t nLength)
 {
     session_data_t *pSession = (session_data_t*)pData->pSessionData;
     xws_status_t status;
     xws_frame_t frame;
 
-    char sPayload[XSTR_MIN];
-    size_t nLength = xstrncpyf(sPayload, sizeof(sPayload), "Here is your response.");
-
-    status = XWebFrame_Create(&frame, (uint8_t*)sPayload, nLength, XWS_TEXT, XTRUE);
+    status = XWebFrame_Create(&frame, (uint8_t*)pPayload, nLength, XWS_TEXT, XTRUE);
     if (status != XWS_ERR_NONE)
     {
         xloge("Failed to create WS frame: %s",
@@ -134,13 +144,64 @@ int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     xlogn("Sending response: fd(%d), buff(%zu)",
         (int)pData->sock.nFD, frame.buffer.nUsed);
-    xlogn("Response payload: %s", sPayload);
+
+    xlogn("Response payload: %s", pPayload);
 
     XAPI_PutTxBuff(pData, &frame.buffer);
     XWebFrame_Clear(&frame);
 
     pSession->nTxCount++;
     return XAPI_EnableEvent(pData, XPOLLOUT);
+}
+
+int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
+{
+    xws_frame_t *pFrame = (xws_frame_t*)pData->pPacket;
+    session_data_t *pSession = (session_data_t*)pData->pSessionData;
+
+    xlogn("Received WS frame: fd(%d), type(%s), fin(%s), hdr(%zu), pl(%zu), buff(%zu)",
+        (int)pData->sock.nFD, XWS_FrameTypeStr(pFrame->eType), pFrame->bFin?"true":"false",
+        pFrame->nHeaderSize, pFrame->nPayloadLength, pFrame->buffer.nUsed);
+
+    if (pFrame->eType == XWS_CLOSE)
+    {
+        xlogd("Received CLOSE frame");
+        return XSTDERR;
+    }
+    else if (pFrame->eType == XWS_PING)
+    {
+        pSession->nRxCount++;
+        pSession->nTxCount++;
+        return send_pong(pData);
+    }
+    else if (pFrame->eType != XWS_TEXT)
+    {
+        char sPayload[XSTR_MIN];
+
+        size_t nLength = xstrncpyf(
+            sPayload, sizeof(sPayload),
+            "{\"error\":\"unsupported type\"}");
+
+        return send_response(pData, sPayload, nLength);
+    }
+
+    /* Received close request, we should destroy this session */
+    const char* pPayload = (const char*)XWebFrame_GetPayload(pFrame);
+    if (xstrused(pPayload)) xlogn("WS frame payload: %s", pPayload);
+
+    pSession->nRxCount++;
+    return XAPI_EnableEvent(pData, XPOLLOUT);
+}
+
+int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
+{
+    char sPayload[XSTR_MIN];
+
+    size_t nLength = xstrncpyf(
+        sPayload, sizeof(sPayload),
+        "{\"message\":\"here is your response\"}");
+
+    return send_response(pData, sPayload, nLength);
 }
 
 int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -205,6 +266,83 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XSTDOK;
 }
 
+void display_usage(const char *pName)
+{
+    printf("============================================================\n");
+    printf(" WS/WSS server example - xUtils: %s\n", XUtils_Version());
+    printf("============================================================\n");
+    printf("Usage: %s [options]\n\n", pName);
+    printf("Options are:\n");
+    printf("  -a <path>            # Listener address (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
+    printf("  -p <path>            # Listener port (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
+    printf("  -c <format>          # SSL Cert file path\n");
+    printf("  -k <format>          # SSL Key file path\n");
+    printf("  -r <format>          # SSL CA file path\n");
+    printf("  -s                   # SSL (WSS) mode\n");
+    printf("  -h                   # Version and usage\n\n");
+}
+
+xbool_t parse_args(xws_args_t *pArgs, int argc, char *argv[])
+{
+    pArgs->sCertPath[0] = XSTR_NUL;
+    pArgs->sKeyPath[0] = XSTR_NUL;
+    pArgs->sCaPath[0] = XSTR_NUL;
+    pArgs->sAddr[0] = XSTR_NUL;
+    pArgs->nPort = XSTDNON;
+    pArgs->bSSL = XFALSE;
+    int nChar = XSTDNON;
+
+    while ((nChar = getopt(argc, argv, "a:p:c:k:r:s1:h1")) != -1)
+    {
+        switch (nChar)
+        {
+            case 'a':
+                xstrncpy(pArgs->sAddr, sizeof(pArgs->sAddr), optarg);
+                break;
+            case 'c':
+                xstrncpy(pArgs->sCertPath, sizeof(pArgs->sCertPath), optarg);
+                break;
+            case 'k':
+                xstrncpy(pArgs->sKeyPath, sizeof(pArgs->sKeyPath), optarg);
+                break;
+            case 'r':
+                xstrncpy(pArgs->sCaPath, sizeof(pArgs->sCaPath), optarg);
+                break;
+            case 'p':
+                pArgs->nPort = atoi(optarg);
+                break;
+            case 's':
+                pArgs->bSSL = XTRUE;
+                break;
+            case 'h':
+            default:
+                return XFALSE;
+        }
+    }
+
+    if (!xstrused(pArgs->sAddr))
+    {
+        xloge("Missing listener addr");
+        return XFALSE;
+    }
+
+    if (!pArgs->nPort)
+    {
+        xloge("Missing listener port");
+        return XFALSE;
+    }
+
+    if (pArgs->bSSL &&
+        (!xstrused(pArgs->sCertPath) ||
+         !xstrused(pArgs->sKeyPath)))
+    {
+        xloge("Missing SSL cert or key path");
+        return XFALSE;
+    }
+
+    return XTRUE;
+}
+
 int main(int argc, char* argv[])
 {
     xlog_defaults();
@@ -217,11 +355,11 @@ int main(int argc, char* argv[])
     nSignals[1] = SIGINT;
     XSig_Register(nSignals, 2, signal_callback);
 
-    if (argc < 3)
+    xws_args_t args;
+    if (!parse_args(&args, argc, argv))
     {
-        xlog("Usage: %s [address] [port]", argv[0]);
-        xlog("Example: %s 127.0.0.1 6969", argv[0]);
-        return 1;
+        display_usage(argv[0]);
+        return XSTDERR;
     }
 
     xapi_t api;
@@ -229,9 +367,19 @@ int main(int argc, char* argv[])
 
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
+
     endpt.eType = XAPI_WS;
-    endpt.pAddr = argv[1];
-    endpt.nPort = atoi(argv[2]);
+    endpt.pAddr = args.sAddr;
+    endpt.nPort = args.nPort;
+    endpt.bTLS = args.bSSL;
+
+    if (endpt.bTLS)
+    {
+        endpt.certs.pCaPath = args.sCaPath;
+        endpt.certs.pKeyPath = args.sKeyPath;
+        endpt.certs.pCertPath = args.sCertPath;
+        endpt.certs.nVerifyFlags = SSL_VERIFY_NONE;
+    }
 
     if (XAPI_Listen(&api, &endpt) < 0)
     {
