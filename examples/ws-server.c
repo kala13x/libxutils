@@ -4,7 +4,7 @@
  *  This source is part of "libxutils" project
  *  2015-2023  Sun Dro (f4tb0y@protonmail.com)
  *
- * @brief Implementation of high performance event based non-blocking Web Socket server.
+ * @brief Implementation of high performance event based non-blocking WS/WSS echo server.
  * The library will use poll(), WSAPoll(), or epoll() depending on the operating system.
  */
 
@@ -106,6 +106,7 @@ int handshake_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
 int send_pong(xapi_data_t *pData)
 {
+    session_data_t *pSession = (session_data_t*)pData->pSessionData;
     xws_status_t status;
     xws_frame_t frame;
 
@@ -124,16 +125,17 @@ int send_pong(xapi_data_t *pData)
     XAPI_PutTxBuff(pData, &frame.buffer);
     XWebFrame_Clear(&frame);
 
+    pSession->nTxCount++;
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
-int send_response(xapi_data_t *pData, const char *pPayload, size_t nLength)
+int send_response(xapi_data_t *pData, const uint8_t *pPayload, size_t nLength)
 {
     session_data_t *pSession = (session_data_t*)pData->pSessionData;
     xws_status_t status;
     xws_frame_t frame;
 
-    status = XWebFrame_Create(&frame, (uint8_t*)pPayload, nLength, XWS_TEXT, XTRUE);
+    status = XWebFrame_Create(&frame, pPayload, nLength, XWS_TEXT, XTRUE);
     if (status != XWS_ERR_NONE)
     {
         xloge("Failed to create WS frame: %s",
@@ -144,8 +146,6 @@ int send_response(xapi_data_t *pData, const char *pPayload, size_t nLength)
 
     xlogn("Sending response: fd(%d), buff(%zu)",
         (int)pData->sock.nFD, frame.buffer.nUsed);
-
-    xlogn("Response payload: %s", pPayload);
 
     XAPI_PutTxBuff(pData, &frame.buffer);
     XWebFrame_Clear(&frame);
@@ -158,50 +158,24 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xws_frame_t *pFrame = (xws_frame_t*)pData->pPacket;
     session_data_t *pSession = (session_data_t*)pData->pSessionData;
+    pSession->nRxCount++;
 
     xlogn("Received WS frame: fd(%d), type(%s), fin(%s), hdr(%zu), pl(%zu), buff(%zu)",
         (int)pData->sock.nFD, XWS_FrameTypeStr(pFrame->eType), pFrame->bFin?"true":"false",
         pFrame->nHeaderSize, pFrame->nPayloadLength, pFrame->buffer.nUsed);
 
-    if (pFrame->eType == XWS_CLOSE)
-    {
-        xlogd("Received CLOSE frame");
-        return XSTDERR;
-    }
-    else if (pFrame->eType == XWS_PING)
-    {
-        pSession->nRxCount++;
-        pSession->nTxCount++;
-        return send_pong(pData);
-    }
-    else if (pFrame->eType != XWS_TEXT)
-    {
-        char sPayload[XSTR_MIN];
+    if (pFrame->eType == XWS_PING) return send_pong(pData);
+    else if (pFrame->eType == XWS_CLOSE) return XSTDERR;
 
-        size_t nLength = xstrncpyf(
-            sPayload, sizeof(sPayload),
-            "{\"error\":\"unsupported type\"}");
+    const uint8_t *pPayload = XWebFrame_GetPayload(pFrame);
+    size_t nLength = XWebFrame_GetPayloadLength(pFrame);
+    XASSERT_RET((pPayload != NULL && nLength), XSTDOK);
 
-        return send_response(pData, sPayload, nLength);
-    }
+    if (pFrame->eType == XWS_TEXT && xstrused((const char*)pPayload))
+        xlogn("Payload (%zu bytes): %s", nLength, (const char*)pPayload);
 
-    /* Received close request, we should destroy this session */
-    const char* pPayload = (const char*)XWebFrame_GetPayload(pFrame);
-    if (xstrused(pPayload)) xlogn("WS frame payload: %s", pPayload);
-
-    pSession->nRxCount++;
-    return XAPI_EnableEvent(pData, XPOLLOUT);
-}
-
-int send_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
-{
-    char sPayload[XSTR_MIN];
-
-    size_t nLength = xstrncpyf(
-        sPayload, sizeof(sPayload),
-        "{\"message\":\"here is your response\"}");
-
-    return send_response(pData, sPayload, nLength);
+    /* Send payload back to the client (echo) */
+    return send_response(pData, pPayload, nLength);
 }
 
 int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -243,8 +217,6 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             return destroy_session(pCtx, pData);
         case XAPI_CB_READ:
             return handle_frame(pCtx, pData);
-        case XAPI_CB_WRITE:
-            return send_answer(pCtx, pData);
         case XAPI_CB_ERROR:
             return print_error(pCtx, pData);
         case XAPI_CB_STATUS:
@@ -272,11 +244,11 @@ void display_usage(const char *pName)
     printf("============================================================\n");
     printf("Usage: %s [options]\n\n", pName);
     printf("Options are:\n");
-    printf("  -a <path>            # Listener address (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
-    printf("  -p <path>            # Listener port (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
-    printf("  -c <format>          # SSL Cert file path\n");
-    printf("  -k <format>          # SSL Key file path\n");
-    printf("  -r <format>          # SSL CA file path\n");
+    printf("  -a <addr>            # Listener address (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
+    printf("  -p <port>            # Listener port (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
+    printf("  -c <path>            # SSL Cert file path\n");
+    printf("  -k <path>            # SSL Key file path\n");
+    printf("  -r <path>            # SSL CA file path\n");
     printf("  -s                   # SSL (WSS) mode\n");
     printf("  -h                   # Version and usage\n\n");
 }
@@ -377,7 +349,7 @@ int main(int argc, char* argv[])
         endpt.certs.pCaPath = args.sCaPath;
         endpt.certs.pKeyPath = args.sKeyPath;
         endpt.certs.pCertPath = args.sCertPath;
-        endpt.certs.nVerifyFlags = SSL_VERIFY_NONE;
+        endpt.certs.nVerifyFlags = SSL_VERIFY_PEER;
     }
 
     if (XAPI_Listen(&api, &endpt) < 0)

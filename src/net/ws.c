@@ -139,7 +139,7 @@ uint8_t XWS_OpCode(xws_frame_type_t eType)
     return 0;
 }
 
-uint8_t* XWS_CreateFrame(uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize)
+uint8_t* XWS_CreateFrame(const uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize)
 {
     if (pFrameSize != NULL) *pFrameSize = 0;
     uint8_t nFIN = bFin ? XSTDOK : XSTDNON;
@@ -235,7 +235,7 @@ void XWebFrame_Free(xws_frame_t **pFrame)
     }
 }
 
-xws_status_t XWebFrame_Create(xws_frame_t *pFrame, uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bFin)
+xws_status_t XWebFrame_Create(xws_frame_t *pFrame, const uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bFin)
 {
     XASSERT(pFrame, XWS_INVALID_ARGS);
     XASSERT((pPayload || !nLength), XWS_INVALID_ARGS);
@@ -278,7 +278,7 @@ xws_frame_t* XWebFrame_Alloc(xws_frame_type_t eType, size_t nBuffSize)
     return pFrame;
 }
 
-xws_frame_t* XWebFrame_New(uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bFin)
+xws_frame_t* XWebFrame_New(const uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bFin)
 {
     xws_frame_t *pFrame = XWebFrame_Alloc(eType, XSTDNON);
     XASSERT((pFrame != NULL), NULL);
@@ -313,10 +313,19 @@ const uint8_t* XWebFrame_GetPayload(xws_frame_t *pFrame)
     return pFrame->buffer.pData + pFrame->nHeaderSize;
 }
 
+size_t XWebFrame_GetExtraLength(xws_frame_t *pFrame)
+{
+    size_t nFrameSize = XWebFrame_GetFrameLength(pFrame);
+    XASSERT_RET((nFrameSize && pFrame->bComplete), XSTDNON);
+    XASSERT_RET((nFrameSize > pFrame->buffer.nUsed), XSTDNON);
+    return pFrame->buffer.nUsed - nFrameSize;
+}
+
 size_t XWebFrame_GetPayloadLength(xws_frame_t *pFrame)
 {
     XASSERT_RET(XWebFrame_CheckPayload(pFrame), XSTDNON);
-    return pFrame->buffer.nUsed - pFrame->nHeaderSize;
+    size_t nExtra = XWebFrame_GetExtraLength(pFrame);
+    return pFrame->buffer.nUsed - pFrame->nHeaderSize - nExtra;
 }
 
 size_t XWebFrame_GetFrameLength(xws_frame_t *pFrame)
@@ -331,14 +340,6 @@ size_t XWebFrame_GetFrameLength(xws_frame_t *pFrame)
 
     pFrame->bComplete = XTRUE;
     return nFrameSize;
-}
-
-size_t XWebFrame_GetExtraLength(xws_frame_t *pFrame)
-{
-    size_t nFrameSize = XWebFrame_GetFrameLength(pFrame);
-    XASSERT_RET((nFrameSize && pFrame->bComplete), XSTDNON);
-    XASSERT_RET((nFrameSize > pFrame->buffer.nUsed), XSTDNON);
-    return pFrame->buffer.nUsed - nFrameSize;
 }
 
 XSTATUS XWebFrame_CutExtraData(xws_frame_t *pFrame)

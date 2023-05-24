@@ -4,7 +4,7 @@
  *  This source is part of "libxutils" project
  *  2015-2023  Sun Dro (f4tb0y@protonmail.com)
  *
- * @brief Implementation of high performance event based non-blocking Web Socket client.
+ * @brief Implementation of high performance event based non-blocking WebSocket/TLS client.
  * The library will use poll(), WSAPoll(), or epoll() depending on the operating system.
  */
 

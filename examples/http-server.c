@@ -1,11 +1,11 @@
 /*!
- *  @file libxutils/examples/events.c
+ *  @file libxutils/examples/http-server.c
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
  *
- * @brief Implementation of high performance event based non-blocking HTTP server.
- * The xUtils library will use poll() or epoll() depending on the operating system.
+ * @brief Implementation of high performance event based non-blocking HTTP/S server.
+ * The library will use poll(), epoll() or WSAPoll() depending on the operating system.
  */
 
 #include <xutils/xstd.h>
@@ -15,6 +15,16 @@
 #include <xutils/api.h>
 
 static int g_nInterrupted = 0;
+extern char *optarg;
+
+typedef struct {
+    char sCaPath[XPATH_MAX];
+    char sCertPath[XPATH_MAX];
+    char sKeyPath[XPATH_MAX];
+    char sAddr[XSOCK_ADDR_MAX];
+    uint16_t nPort;
+    xbool_t bSSL;
+} xhttps_args_t;
 
 void signal_callback(int sig)
 {
@@ -49,7 +59,7 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
         free(pHeader);
     }
 
-    return XAPI_SetEvents(pData, XPOLLOUT);
+    return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
 int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -123,6 +133,83 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XSTDOK;
 }
 
+void display_usage(const char *pName)
+{
+    printf("============================================================\n");
+    printf(" HTTP/S server example - xUtils: %s\n", XUtils_Version());
+    printf("============================================================\n");
+    printf("Usage: %s [options]\n\n", pName);
+    printf("Options are:\n");
+    printf("  -a <addr>            # Listener address (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
+    printf("  -p <port>            # Listener port (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
+    printf("  -c <path>            # SSL Cert file path\n");
+    printf("  -k <path>            # SSL Key file path\n");
+    printf("  -r <path>            # SSL CA file path\n");
+    printf("  -s                   # SSL (WSS) mode\n");
+    printf("  -h                   # Version and usage\n\n");
+}
+
+xbool_t parse_args(xhttps_args_t *pArgs, int argc, char *argv[])
+{
+    pArgs->sCertPath[0] = XSTR_NUL;
+    pArgs->sKeyPath[0] = XSTR_NUL;
+    pArgs->sCaPath[0] = XSTR_NUL;
+    pArgs->sAddr[0] = XSTR_NUL;
+    pArgs->nPort = XSTDNON;
+    pArgs->bSSL = XFALSE;
+    int nChar = XSTDNON;
+
+    while ((nChar = getopt(argc, argv, "a:p:c:k:r:s1:h1")) != -1)
+    {
+        switch (nChar)
+        {
+            case 'a':
+                xstrncpy(pArgs->sAddr, sizeof(pArgs->sAddr), optarg);
+                break;
+            case 'c':
+                xstrncpy(pArgs->sCertPath, sizeof(pArgs->sCertPath), optarg);
+                break;
+            case 'k':
+                xstrncpy(pArgs->sKeyPath, sizeof(pArgs->sKeyPath), optarg);
+                break;
+            case 'r':
+                xstrncpy(pArgs->sCaPath, sizeof(pArgs->sCaPath), optarg);
+                break;
+            case 'p':
+                pArgs->nPort = atoi(optarg);
+                break;
+            case 's':
+                pArgs->bSSL = XTRUE;
+                break;
+            case 'h':
+            default:
+                return XFALSE;
+        }
+    }
+
+    if (!xstrused(pArgs->sAddr))
+    {
+        xloge("Missing listener addr");
+        return XFALSE;
+    }
+
+    if (!pArgs->nPort)
+    {
+        xloge("Missing listener port");
+        return XFALSE;
+    }
+
+    if (pArgs->bSSL &&
+        (!xstrused(pArgs->sCertPath) ||
+         !xstrused(pArgs->sKeyPath)))
+    {
+        xloge("Missing SSL cert or key path");
+        return XFALSE;
+    }
+
+    return XTRUE;
+}
+
 int main(int argc, char* argv[])
 {
     xlog_defaults();
@@ -135,11 +222,11 @@ int main(int argc, char* argv[])
     nSignals[1] = SIGINT;
     XSig_Register(nSignals, 2, signal_callback);
 
-    if (argc < 2)
+    xhttps_args_t args;
+    if (!parse_args(&args, argc, argv))
     {
-        xlog("Usage: %s [address] [port]", argv[0]);
-        xlog("Example: %s 127.0.0.1 6969", argv[0]);
-        return 1;
+        display_usage(argv[0]);
+        return XSTDERR;
     }
 
     xapi_t api;
@@ -147,9 +234,19 @@ int main(int argc, char* argv[])
 
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
+
     endpt.eType = XAPI_HTTP;
-    endpt.pAddr = argv[1];
-    endpt.nPort = atoi(argv[2]);
+    endpt.pAddr = args.sAddr;
+    endpt.nPort = args.nPort;
+    endpt.bTLS = args.bSSL;
+
+    if (endpt.bTLS)
+    {
+        endpt.certs.pCaPath = args.sCaPath;
+        endpt.certs.pKeyPath = args.sKeyPath;
+        endpt.certs.pCertPath = args.sCertPath;
+        endpt.certs.nVerifyFlags = SSL_VERIFY_PEER;
+    }
 
     if (XAPI_Listen(&api, &endpt) < 0)
     {
