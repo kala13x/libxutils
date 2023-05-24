@@ -209,7 +209,9 @@ XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
     XASSERT((pApi != NULL), XSTDERR);
     XASSERT(pApi->bHaveEvents, XSTDERR);
 
-    xevent_status_t eStatus = XEvents_Modify(&pApi->events, pEvData, nEvents);
+    xevent_status_t eStatus;
+    eStatus = XEvents_Modify(&pApi->events, pEvData, nEvents);
+
     if (eStatus != XEVENT_STATUS_SUCCESS)
     {
         XAPI_ErrorCb(pApi, pData, XAPI_EVENT, eStatus);
@@ -222,12 +224,11 @@ XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
 
 XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent)
 {
-    XASSERT((pData && pData->pEvData), XSTDERR);
-    xevent_data_t *pEvData = pData->pEvData;
+    XASSERT((pData != NULL), XSTDERR);
 
-    if (!(pEvData->nEvents & nEvent))
+    if (!(pData->nEvents & nEvent))
     {
-        int nEvents = pEvData->nEvents | nEvent;
+        int nEvents = pData->nEvents | nEvent;
         return XAPI_SetEvents(pData, nEvents);
     }
 
@@ -236,12 +237,11 @@ XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent)
 
 XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent)
 {
-    XASSERT((pData && pData->pEvData), XSTDERR);
-    xevent_data_t *pEvData = pData->pEvData;
+    XASSERT((pData != NULL), XSTDERR);
 
-    if (pEvData->nEvents & nEvent)
+    if (pData->nEvents & nEvent)
     {
-        int nEvents = pEvData->nEvents & ~nEvent;
+        int nEvents = pData->nEvents & ~nEvent;
         return XAPI_SetEvents(pData, nEvents);
     }
 
@@ -814,6 +814,7 @@ static int XAPI_Accept(xapi_t *pApi, xapi_data_t *pApiData)
 
     pPeerData->pSessionData = NULL;
     pPeerData->pEvData = pEventData;
+    pPeerData->nEvents = XSTDNON;
 
     if (XAPI_ServiceCb(pApi, pPeerData, XAPI_CB_ACCEPTED) < 0)
     {
@@ -915,15 +916,15 @@ static int XAPI_Write(xapi_t *pApi, xapi_data_t *pApiData)
         nStatus = XAPI_DisableEvent(pApiData, XPOLLOUT);
         XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);
 
-        if (pApiData->eType == XAPI_WS && !pApiData->bHandshakeDone)
-        {
-            nStatus = XAPI_EnableEvent(pApiData, XPOLLIN);
-            XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);            
-        }
-        else
+        if (pApiData->eType != XAPI_WS || pApiData->bHandshakeDone)
         {
             nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_COMPLETE);
             XASSERT_RET((nStatus >= XSTDNON), XEVENTS_DISCONNECT);
+        }
+        else if (pApiData->eRole == XAPI_CLIENT)
+        {
+            nStatus = XAPI_EnableEvent(pApiData, XPOLLIN);
+            XASSERT((nStatus > XSTDNON), XEVENTS_DISCONNECT);
         }
 
         if (pApiData->eRole != XAPI_CLIENT &&
@@ -1163,6 +1164,7 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 
     xstrncpy(pApiData->sAddr, sizeof(pApiData->sAddr), pEndpt->pAddr);
     xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
+
     pApiData->pSessionData = pEndpt->pSessionData;
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_SERVER;
@@ -1193,13 +1195,16 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     }
 
     /* Add listener socket to the event instance */
-    pApiData->pEvData = XEvents_RegisterEvent(pEvents, pApiData, pSock->nFD, nEvents, XAPI_SERVER);
-    if (pApiData->pEvData == NULL)
+    xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pApiData, pSock->nFD, nEvents, XAPI_SERVER);
+    if (pEvData == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_REGISTER);
         XAPI_FreeData(&pApiData);
         return XSTDERR;
     }
+
+    pApiData->pEvData = pEvData;
+    pApiData->nEvents = nEvents;
 
     if (XAPI_ServiceCb(pApi, pApiData, XAPI_CB_LISTENING) < 0)
     {
@@ -1265,13 +1270,16 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     }
 
     /* Add listener socket to the event instance */
-    pApiData->pEvData = XEvents_RegisterEvent(pEvents, pApiData, pSock->nFD, nEvents, XAPI_CLIENT);
-    if (pApiData->pEvData == NULL)
+    xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pApiData, pSock->nFD, nEvents, XAPI_CLIENT);
+    if (pEvData == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_REGISTER);
         XAPI_FreeData(&pApiData);
         return XSTDERR;
     }
+
+    pApiData->pEvData = pEvData;
+    pApiData->nEvents = nEvents;
 
     if (XAPI_ServiceCb(pApi, pApiData, XAPI_CB_CONNECTED) < 0)
     {

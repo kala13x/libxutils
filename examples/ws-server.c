@@ -254,7 +254,6 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             break;
         case XAPI_CB_COMPLETE:
             xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
-            XAPI_SetEvents(pData, XPOLLIN);
             break;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;

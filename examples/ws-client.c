@@ -30,7 +30,8 @@ typedef struct {
 
 void signal_callback(int sig)
 {
-    if (sig == SIGINT) printf("\n");
+    if (sig == SIGPIPE) return;
+    else if (sig == SIGINT) printf("\n");
     g_bFinish = XTRUE;
 }
 
@@ -214,7 +215,6 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             return print_status(pCtx, pData);
         case XAPI_CB_COMPLETE:
             xlogn("TX complete: fd(%d)", (int)pData->sock.nFD);
-            XAPI_SetEvents(pData, XPOLLIN);
             break;
         case XAPI_CB_INTERRUPT:
             if (g_bFinish) return XSTDERR;
@@ -233,10 +233,11 @@ int main(int argc, char* argv[])
     xlog_setfl(XLOG_ALL);
     xlog_indent(XTRUE);
 
-    int nSignals[2];
+    int nSignals[3];
     nSignals[0] = SIGTERM;
     nSignals[1] = SIGINT;
-    XSig_Register(nSignals, 2, signal_callback);
+    nSignals[2] = SIGPIPE;
+    XSig_Register(nSignals, 3, signal_callback);
 
     if (argc < 2)
     {
