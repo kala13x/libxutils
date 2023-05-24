@@ -129,13 +129,13 @@ int send_pong(xapi_data_t *pData)
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
-int send_response(xapi_data_t *pData, const uint8_t *pPayload, size_t nLength)
+int send_response(xapi_data_t *pData, const uint8_t *pPayload, size_t nLength, xws_frame_type_t eType)
 {
     session_data_t *pSession = (session_data_t*)pData->pSessionData;
     xws_status_t status;
     xws_frame_t frame;
 
-    status = XWebFrame_Create(&frame, pPayload, nLength, XWS_TEXT, XTRUE);
+    status = XWebFrame_Create(&frame, pPayload, nLength, eType, XTRUE);
     if (status != XWS_ERR_NONE)
     {
         xloge("Failed to create WS frame: %s",
@@ -175,7 +175,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
         xlogn("Payload (%zu bytes): %s", nLength, (const char*)pPayload);
 
     /* Send payload back to the client (echo) */
-    return send_response(pData, pPayload, nLength);
+    return send_response(pData, pPayload, nLength, pFrame->eType);
 }
 
 int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
