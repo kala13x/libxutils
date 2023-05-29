@@ -6,9 +6,9 @@
 
 ## libxutils - Cross-platform C library release 2.x
 
-`libxutils` is a cross-platform `C` library that provides safer implementations of various functions to make routine tasks easier for programs written in `C` and C-compatible languages like `C++`, `Rust`, and `Objective C`. The library offers a range of features including containers, data structures, network tools, `HTTP/S` & `WS/WSS` client/server library, cryptography algorithms, C string manipulations, `JSON` parser/serializer and system utilities. A list of key features can be found below.
+`libxutils` is a cross-platform `C` library that provides safer implementations of various functionality to make routine tasks easier for programs written in `C` and it's compatible languages like `C++`, `Rust`, and `Objective C`. The library offers a range of features including containers, data structures, network tools, cryptography algorithms, string manipulations, system utilities, `HTTP/S` & `WS/WSS` client/server, `JSON` parser/serializer, `JWT` tokens, and etc. A list of key features can be found below.
 
-`libxutils` is available for `Linux`, `Unix` and `Windows` operating systems and is released under the `MIT` License. To check the version of libxutils you have, you can refer to the file `src/xver.h`. Please note that the list of features provided in the README is incomplete. For more information about the full range of features offered by libxutils, you can refer to the individual header files linked below or browse the library's source code.
+`libxutils` is available for `Linux`, `Unix` and `Windows` operating systems and is released under the `MIT` License. To check the version of the library you have, you can refer to the file `src/xver.h`. Please note that the list of features provided in the README is incomplete. For more information about the full range of features, you can refer to the individual header files linked below or browse the source code.
 
 #### Containrers:
 - [Dynamically allocated array with sort and search features](https://github.com/kala13x/libxutils/blob/main/src/data/array.h)
@@ -19,7 +19,7 @@
 - [Implementation of linked list](https://github.com/kala13x/libxutils/blob/main/src/data/list.h)
 
 #### Network:
-- [Event based high performance client/server API for HTTP/S, WS/WSS and raw TCP](https://github.com/kala13x/libxutils/blob/main/src/net/api.h)
+- [Event based client/server API for HTTP/S, WS/WSS and TCP/SSL connections](https://github.com/kala13x/libxutils/blob/main/src/net/api.h)
 - [Cross-platform event library based on poll(), epoll() and WSAPoll()](https://github.com/kala13x/libxutils/blob/main/src/net/event.h)
 - [Cross-platform socket library with TCP, UDP and SSL support](https://github.com/kala13x/libxutils/blob/main/src/net/sock.h)
 - [Web Socket client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/ws.h)
@@ -32,16 +32,16 @@
 - [Base64 and Base64Url encrypt/decrypt functions](https://github.com/kala13x/libxutils/blob/main/src/crypt/base64.h)
 - [AES based on FIPS-197 implementation by Christophe Devine](https://github.com/kala13x/libxutils/blob/main/src/crypt/aes.h)
 - [Implementation of HMAC algorithm with SHA256 and MD5](https://github.com/kala13x/libxutils/blob/main/src/crypt/hmac.h)
-- [RSA implementation based on openssl library](https://github.com/kala13x/libxutils/blob/main/src/crypt/rsa.h)
+- [RSA implementation based on OpenSSL library](https://github.com/kala13x/libxutils/blob/main/src/crypt/rsa.h)
 - [Implementation of SHA256 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/sha256.h)
 - [Implementation of SHA1 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/sha1.h)
 - [Implementation of CRC32 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/crc32.h)
 - [Implementation of MD5 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/md5.h)
 
 #### System:
-- [Cross-platform file and directory manipulations](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
-- [Cross-platform CPU affinity manipulation API](https://github.com/kala13x/libxutils/blob/main/src/sys/xcpu.h)
-- [Implementation of advanced file search API](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
+- [Cross-platform file and directory operations](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
+- [Cross-platform CPU affinity manipulation](https://github.com/kala13x/libxutils/blob/main/src/sys/xcpu.h)
+- [Implementation of advanced file search](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
 - [System time manipulation library](https://github.com/kala13x/libxutils/blob/main/src/sys/xtime.h)
 - [Performance monitoring library](https://github.com/kala13x/libxutils/blob/main/src/sys/xtop.h)
 - [Advanced logging library](https://github.com/kala13x/libxutils/blob/main/src/sys/xlog.h)
@@ -49,10 +49,10 @@
 #### Miscellaneous:
 - [JSON parser and writer library with lint and minify support](https://github.com/kala13x/libxutils/blob/main/src/data/xjson.h)
 - [Implementation of JSON Web Tokens with HS256 and RS256](https://github.com/kala13x/libxutils/blob/main/src/data/jwt.h)
-- [Command-Line interface manipulations](https://github.com/kala13x/libxutils/blob/main/src/sys/xcli.h)
 - [Cross-platform synchronization library](https://github.com/kala13x/libxutils/blob/main/src/sys/sync.h)
 - [Cross-platform multithreading library](https://github.com/kala13x/libxutils/blob/main/src/sys/thread.h)
-- [String manipulation library](https://github.com/kala13x/libxutils/blob/main/src/data/xstr.h)
+- [Command-Line interface operations](https://github.com/kala13x/libxutils/blob/main/src/sys/xcli.h)
+- [C String manipulation library](https://github.com/kala13x/libxutils/blob/main/src/data/xstr.h)
 
 ### Installation
 There are several ways to build and install the project.
