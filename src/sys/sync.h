@@ -44,12 +44,12 @@ typedef struct XSyncBar {
 
 #ifdef _WIN32
 #define XSYNC_ATOMIC_ADD(dst,val) InterlockedExchangeAdd(dst, val)
-#define XSYNC_ATOMIC_SUB(dst,val) InterlockedExchangeSubtract(dst, dst)
+#define XSYNC_ATOMIC_SUB(dst,val) InterlockedExchangeSubtract(dst, val)
 #define XSYNC_ATOMIC_SET(dst,val) InterlockedExchange(dst, val)
 #define XSYNC_ATOMIC_GET(dst) InterlockedExchangeAdd(dst, 0)
 #else
 #define XSYNC_ATOMIC_ADD(dst,val) __sync_add_and_fetch(dst, val)
-#define XSYNC_ATOMIC_SUB(dst,val) __sync_sub_and_fetch(dst, dst)
+#define XSYNC_ATOMIC_SUB(dst,val) __sync_sub_and_fetch(dst, val)
 #define XSYNC_ATOMIC_SET(dst,val) __sync_lock_test_and_set(dst, val)
 #define XSYNC_ATOMIC_GET(dst) __sync_add_and_fetch(dst, 0)
 #endif
