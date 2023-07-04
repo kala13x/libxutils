@@ -60,6 +60,7 @@ typedef enum {
 typedef struct xjson_obj_ {
     xjson_type_t nType;
     uint8_t nAllowUpdate;
+    uint8_t nAllowLinter;
     uint8_t nAllocated;
     void *pData;
     char *pName;
@@ -144,7 +145,7 @@ typedef struct xjson_writer_ {
     xjson_format_t format;
     uint8_t nPretty;
     size_t nTabSize;
-    size_t nIdents;
+    size_t nIndents;
     size_t nLength;
     size_t nAvail;
     size_t nSize;

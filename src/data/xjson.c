@@ -353,6 +353,7 @@ xjson_obj_t* XJSON_CreateObject(const char *pName, void *pValue, xjson_type_t nT
     if (pObj == NULL) return NULL;
 
     pObj->nAllowUpdate = 0;
+    pObj->nAllowLinter = 1;
     pObj->nAllocated = 1;
     pObj->pName = NULL;
     pObj->pData = pValue;
@@ -1033,11 +1034,11 @@ static int XJSON_Realloc(xjson_writer_t *pWriter, size_t nSize)
 static int XJSON_AppedSpaces(xjson_writer_t *pWriter)
 {
     if (!pWriter->nTabSize) return XJSON_SUCCESS;
-    char *pSpaces = (char*)calloc(pWriter->nIdents + 1, sizeof(char));
+    char *pSpaces = (char*)calloc(pWriter->nIndents + 1, sizeof(char));
     if (pSpaces == NULL) return XJSON_FAILURE;
 
     size_t nLenght = 0;
-    while (nLenght < pWriter->nIdents)
+    while (nLenght < pWriter->nIndents)
         pSpaces[nLenght++] = ' ';
 
     pSpaces[nLenght] = '\0';
@@ -1056,9 +1057,9 @@ static int XJSON_AppedSpaces(xjson_writer_t *pWriter)
     return XJSON_SUCCESS;
 }
 
-static int XJSON_WriteString(xjson_writer_t *pWriter, int nIdent, const char *pFmt, ...)
+static int XJSON_WriteString(xjson_writer_t *pWriter, int nIndent, const char *pFmt, ...)
 {
-    if (nIdent) XASSERT(XJSON_AppedSpaces(pWriter), XJSON_FAILURE);
+    if (nIndent) XASSERT(XJSON_AppedSpaces(pWriter), XJSON_FAILURE);
 
     char *pBuffer = NULL;
     size_t nBytes = 0;
@@ -1115,7 +1116,7 @@ static int XJSON_WriteItem(xjson_obj_t *pObj, xjson_writer_t *pWriter)
 
     XASSERT(pObj->pData, XJSON_FAILURE);
     XASSERT(XJSON_WriteName(pObj, pWriter), XJSON_FAILURE);
-    int nIdent = pObj->pName == NULL ? 1 : 0;
+    int nIndent = (pObj->pName == NULL && pObj->nAllowLinter) ? 1 : 0;
 
     if (pWriter->nPretty)
     {
@@ -1123,39 +1124,39 @@ static int XJSON_WriteItem(xjson_obj_t *pObj, xjson_writer_t *pWriter)
 
         if (pObj->nType == XJSON_TYPE_STRING)
         {
-            return XJSON_WriteString(pWriter, nIdent, "\"%s%s%s%s\"",
+            return XJSON_WriteString(pWriter, nIndent, "\"%s%s%s%s\"",
                 pFormat->pStrFmt, pFormat->pStrClr,
                 (const char*)pObj->pData, XSTR_FMT_RESET);
         }
         else if (pObj->nType == XJSON_TYPE_BOOLEAN)
         {
-            return XJSON_WriteString(pWriter, nIdent, "%s%s%s%s",
+            return XJSON_WriteString(pWriter, nIndent, "%s%s%s%s",
                 pFormat->pBoolFmt, pFormat->pBoolClr,
                 (const char*)pObj->pData, XSTR_FMT_RESET);
         }
         else if (pObj->nType == XJSON_TYPE_NUMBER)
         {
-            return XJSON_WriteString(pWriter, nIdent, "%s%s%s%s",
+            return XJSON_WriteString(pWriter, nIndent, "%s%s%s%s",
                 pFormat->pNumFmt, pFormat->pNumClr,
                 (const char*)pObj->pData, XSTR_FMT_RESET);
         }
         else if (pObj->nType == XJSON_TYPE_FLOAT)
         {
-            return XJSON_WriteString(pWriter, nIdent, "%s%s%s%s",
+            return XJSON_WriteString(pWriter, nIndent, "%s%s%s%s",
                 pFormat->pFloatFmt, pFormat->pFloatClr,
                 (const char*)pObj->pData, XSTR_FMT_RESET);
         }
         else if (pObj->nType == XJSON_TYPE_NULL)
         {
-            return XJSON_WriteString(pWriter, nIdent, "%s%s%s%s",
+            return XJSON_WriteString(pWriter, nIndent, "%s%s%s%s",
                 pFormat->pNullFmt, pFormat->pNullClr,
                 (const char*)pObj->pData, XSTR_FMT_RESET);
         }
     }
 
     return (pObj->nType == XJSON_TYPE_STRING) ? 
-        XJSON_WriteString(pWriter, nIdent, "\"%s\"", (const char*)pObj->pData):
-        XJSON_WriteString(pWriter, nIdent, "%s", (const char*)pObj->pData);
+        XJSON_WriteString(pWriter, nIndent, "\"%s\"", (const char*)pObj->pData):
+        XJSON_WriteString(pWriter, nIndent, "%s", (const char*)pObj->pData);
 }
 
 static int XJSON_MapIt(xmap_pair_t *pPair, void *pContext)
@@ -1175,9 +1176,9 @@ static int XJSON_Ident(xjson_writer_t *pWriter, int nIncrease)
 {
     if (pWriter->nTabSize)
     {
-        if (nIncrease) pWriter->nIdents += pWriter->nTabSize;
-        else if (pWriter->nTabSize <= pWriter->nIdents) 
-            pWriter->nIdents -= pWriter->nTabSize;
+        if (nIncrease) pWriter->nIndents += pWriter->nTabSize;
+        else if (pWriter->nTabSize <= pWriter->nIndents)
+            pWriter->nIndents -= pWriter->nTabSize;
         else return XJSON_FAILURE;
     }
 
@@ -1188,13 +1189,13 @@ static int XJSON_WriteHashmap(xjson_obj_t *pObj, xjson_writer_t *pWriter)
 {
     XASSERT(XJSON_CheckObject(pObj, XJSON_TYPE_OBJECT), XJSON_FAILURE);
     XASSERT(XJSON_WriteName(pObj, pWriter), XJSON_FAILURE);
-    int nIdent = pObj->pName == NULL ? 1 : 0;
+    int nIndent = (pObj->pName == NULL && pObj->nAllowLinter) ? 1 : 0;
     xmap_t *pMap = (xmap_t*)pObj->pData;
 
-    XASSERT(XJSON_WriteString(pWriter, nIdent, "{"), XJSON_FAILURE);
-    nIdent = (pWriter->nTabSize && pMap->nUsed) ? 1 : 0;
+    XASSERT(XJSON_WriteString(pWriter, nIndent, "{"), XJSON_FAILURE);
+    nIndent = (pWriter->nTabSize && pMap->nUsed && pObj->nAllowLinter) ? 1 : 0;
 
-    if (nIdent)
+    if (nIndent)
     {
         XASSERT(XJSON_WriteString(pWriter, 0, "\n"), XJSON_FAILURE);
         XASSERT(XJSON_Ident(pWriter, XJSON_IDENT_INC), XJSON_FAILURE);
@@ -1218,23 +1219,23 @@ static int XJSON_WriteHashmap(xjson_obj_t *pObj, xjson_writer_t *pWriter)
         free(pIterator);
     }
 
-    if (nIdent) XASSERT(XJSON_Ident(pWriter, XJSON_IDENT_DEC), XJSON_FAILURE);
-    return XJSON_WriteString(pWriter, nIdent, "}");
+    if (nIndent) XASSERT(XJSON_Ident(pWriter, XJSON_IDENT_DEC), XJSON_FAILURE);
+    return XJSON_WriteString(pWriter, nIndent, "}");
 }
 
 static int XJSON_WriteArray(xjson_obj_t *pObj, xjson_writer_t *pWriter)
 {
     XASSERT(XJSON_CheckObject(pObj, XJSON_TYPE_ARRAY), XJSON_FAILURE);
     XASSERT(XJSON_WriteName(pObj, pWriter), XJSON_FAILURE);
-    int nIdent = pObj->pName == NULL ? 1 : 0;
+    int nIndent = (pObj->pName == NULL && pObj->nAllowLinter) ? 1 : 0;
 
     xarray_t* pArray = (xarray_t*)pObj->pData;
-    XASSERT(XJSON_WriteString(pWriter, nIdent, "["), XJSON_FAILURE);
+    XASSERT(XJSON_WriteString(pWriter, nIndent, "["), XJSON_FAILURE);
 
     size_t i, nUsed = XArray_Used(pArray);
-    nIdent = (pWriter->nTabSize && nUsed) ? 1 : 0;
+    nIndent = (pWriter->nTabSize && nUsed && pObj->nAllowLinter) ? 1 : 0;
 
-    if (nIdent)
+    if (nIndent)
     {
         XASSERT(XJSON_WriteString(pWriter, 0, "\n"), XJSON_FAILURE);
         XASSERT(XJSON_Ident(pWriter, XJSON_IDENT_INC), XJSON_FAILURE);
@@ -1243,13 +1244,18 @@ static int XJSON_WriteArray(xjson_obj_t *pObj, xjson_writer_t *pWriter)
     for (i = 0; i < nUsed; i++)
     {
         xjson_obj_t *pItem = XArray_GetData(pArray, i);
+        if (pItem == NULL) continue;
+
+        pItem->nAllowLinter = pObj->nAllowLinter;
         XASSERT(XJSON_WriteObject(pItem, pWriter), XJSON_FAILURE);
         if ((i + 1) < nUsed) XASSERT(XJSON_WriteString(pWriter, 0, ","), XJSON_FAILURE);
-        if (pWriter->nTabSize) XASSERT(XJSON_WriteString(pWriter, 0, "\n"), XJSON_FAILURE);
+
+        if (pWriter->nTabSize && pObj->nAllowLinter)
+            XASSERT(XJSON_WriteString(pWriter, 0, "\n"), XJSON_FAILURE);
     }
 
-    if (nIdent) XASSERT(XJSON_Ident(pWriter, XJSON_IDENT_DEC), XJSON_FAILURE);
-    return XJSON_WriteString(pWriter, nIdent, "]");
+    if (nIndent) XASSERT(XJSON_Ident(pWriter, XJSON_IDENT_DEC), XJSON_FAILURE);
+    return XJSON_WriteString(pWriter, nIndent, "]");
 }
 
 int XJSON_WriteObject(xjson_obj_t *pObj, xjson_writer_t *pWriter)
@@ -1338,7 +1344,7 @@ int XJSON_InitWriter(xjson_writer_t *pWriter, char *pOutput, size_t nSize)
 
     pWriter->nTabSize = 0;
     pWriter->nPretty = 0;
-    pWriter->nIdents = 0;
+    pWriter->nIndents = 0;
     pWriter->nLength = 0;
 
     return 1;
