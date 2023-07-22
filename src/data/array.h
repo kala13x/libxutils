@@ -2,7 +2,7 @@
  *  @file libxutils/src/data/array.h
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  * 
  * @brief Dynamically allocated data holder 
  * with some sorting and search algorithms.

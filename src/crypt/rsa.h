@@ -2,7 +2,7 @@
  *  @file libxutils/src/crypt/rsa.h
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  * 
  * @brief RSA implementation with openssl library
  */

@@ -2,7 +2,7 @@
  *  @file libxutils/src/media/rtp.h
  *
  *  This source is part of "libxutils" project
- *  2019-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2019-2020  Sun Dro (s.kalatoz@gmail.com)
  * 
  * @brief Implementation of RTP packet parser functionality
  */

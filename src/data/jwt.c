@@ -2,7 +2,7 @@
  *  @file libxutils/src/data/jwt.c
  *
  *  This source is part of "libxutils" project
- *  2019-2023  Sun Dro (f4tb0y@protonmail.com)
+ *  2019-2023  Sun Dro (s.kalatoz@gmail.com)
  * 
  * @brief Implementation of JSON Web Tokens
  */

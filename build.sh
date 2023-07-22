@@ -1,6 +1,12 @@
 #!/bin/bash
-./clean.sh
+# This source is part of "libxutils" project
+# 2015-2023  Sun Dro (s.kalatoz@gmail.com)
 
+PROJ_PATH=$(dirname $(readlink -f "$0"))
+TOOL_PATH=$PROJ_PATH/examples
+LIB_PATH=$PROJ_PATH
+
+TOOLS_DONE=0
 MAKE_TOOL=0
 CPU_COUNT=1
 
@@ -8,62 +14,102 @@ if [ ! -z "$1" ]; then
     MAKE_TOOL=$1
 fi
 
-# Check argument
 if [ $MAKE_TOOL == 0 ]; then
     echo "Specify build tool (cmake / smake)"
     echo "example: $0 smake"
     exit 1
 fi
 
-# Detect CPU count
-if [ $OSTYPE == linux-gnu ]; then
-    CPU_COUNT=$(nproc)
-fi
-
 # List of possible OpenSSL library locations
-LIB_CRYPTO_PATHS=(
-    "/lib/libcrypto.so"
-    "/lib64/libcrypto.so"
-    "/usr/lib/libcrypto.so"
-    "/usr/lib64/libcrypto.so"
-    "/usr/local/lib/libcrypto.so"
-    "/usr/local/lib64/libcrypto.so"
-    "/usr/local/ssl/lib/libcrypto.so"
-    "/usr/local/ssl/lib64/libcrypto.so"
+SSL_LD_PATH=(
+    "/lib"
+    "/lib64"
+    "/usr/lib"
+    "/usr/lib64"
+    "/usr/local/lib"
+    "/usr/local/lib64"
+    "/usr/local/ssl/lib"
+    "/usr/local/ssl/lib64"
 )
 
-LIB_SSL_PATHS=(
-    "/lib/libssl.so"
-    "/lib64/libssl.so"
-    "/usr/lib/libssl.so"
-    "/usr/lib64/libssl.so"
-    "/usr/local/lib/libssl.so"
-    "/usr/local/lib64/libssl.so"
-    "/usr/local/ssl/lib/libssl.so"
-    "/usr/local/ssl/lib64/libssl.so"
-)
-
-# Default values
-LIB_CRYPTO=""
-LIB_SSL=""
-
-# Function to find the library file from a list of possible locations
 find_lib() {
-    local paths=("$@")
-    for path in "${paths[@]}"; do
-        if [ -f "$path" ]; then
+    for directory in "${SSL_LD_PATH[@]}"; do
+        path=$(find "$directory" -name "$@")
+
+        if [ -n "$path" ]; then
             echo "$path"
             return
         fi
+
     done
     echo ""
 }
 
-# Detect the operating system
-echo "Checking OpenSSL libraries."
+clean_dir() {
+    cd "$@" 
+    [ -f ./Makefile ] && make clean
+    [ -d ./obj ] && rm -rf ./obj
+    [ -d ./build ] && rm -rf ./build
+    [ -d ./CMakeFiles ] && rm -rf ./CMakeFiles
+    [ -f ./CMakeCache.txt ] && rm -rf ./CMakeCache.txt
+    [ -f ./cmake_install.cmake ] && rm -rf ./cmake_install.cmake
+    [ -f ./install_manifest.txt ] && rm -rf ./install_manifest.txt
+    cd $PROJ_PATH
+}
 
-LIB_CRYPTO=$(find_lib "${LIB_CRYPTO_PATHS[@]}")
-LIB_SSL=$(find_lib "${LIB_SSL_PATHS[@]}")
+clean_project() {
+    clean_dir $PROJ_PATH/examples
+    clean_dir $PROJ_PATH
+}
+
+update_cpu_count() {
+    if [ $OSTYPE == linux-gnu ]; then
+        CPU_COUNT=$(nproc)
+    fi
+}
+
+build_tools() {
+    [ "$TOOLS_DONE" -eq 1 ] && return
+    cd $PROJ_PATH/examples
+
+    if [[ $MAKE_TOOL == "cmake" ]]; then
+        mkdir -p build && cd build && cmake ..
+        TOOL_PATH=$PROJ_PATH/examples/build
+    fi
+
+    make -j $CPU_COUNT
+    cd $PROJ_PATH
+    TOOLS_DONE=1
+}
+
+build_library() {
+    cd $PROJ_PATH
+
+    if [[ $MAKE_TOOL == "cmake" ]]; then
+        mkdir -p build && cd build && cmake ..
+        LIB_PATH=$PROJ_PATH/build
+    fi
+
+    make -j $CPU_COUNT
+    cd $PROJ_PATH
+}
+
+install_tools() {
+    build_tools
+    cd $TOOL_PATH
+    sudo make install
+    cd $PROJ_PATH
+}
+
+install_library() {
+    cd $LIB_PATH
+    sudo make install
+    cd $PROJ_PATH
+}
+
+echo "Checking OpenSSL libraries."
+LIB_CRYPTO=$(find_lib "libcrypto.so")
+LIB_SSL=$(find_lib "libssl.so")
 
 # If the OpenSSL libraries are found, set the environment variable
 if [ -n "$LIB_CRYPTO" ] && [ -n "$LIB_SSL" ]; then
@@ -75,20 +121,24 @@ else
     echo 'OpenSSL libraries not found!'
 fi
 
-# Generate Makefile and build library
-$MAKE_TOOL . && make -j $CPU_COUNT
+# Build the library
+update_cpu_count
+clean_project
+build_library
 
-if [ ! -z "$2" ]; then
-    if [ $2 == "--examples" ]; then
-        cd examples
-        make -j $CPU_COUNT
-        cd ..
-    elif [ $2 == "--install" ]; then
-        sudo make install
-        cd examples
-        make -j $CPU_COUNT
-        sudo make install
+for arg in "$@"; do
+    if [[ $arg == "--examples" ]]; then
+        build_tools
     fi
-fi
+
+    if [[ $arg == "--install" ]]; then
+        install_library
+        install_tools
+    fi
+
+    if [[ $arg == "--cleanup" ]]; then
+        clean_project
+    fi
+done
 
 exit 0

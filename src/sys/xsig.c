@@ -2,7 +2,7 @@
  *  @file libxutils/src/sys/xsig.c
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  * 
  * @brief Exit signal handling and backtrace.
  */

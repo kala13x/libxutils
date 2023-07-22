@@ -2,7 +2,7 @@
  *  @file libxutils/examples/xtop.c
  * 
  *  This source is part of "libxutils" project
- *  2015-2022  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2022  Sun Dro (s.kalatoz@gmail.com)
  *
  * @brief Implementation of advanced system monitor based on the xUtils.
  * Collect and monitor network, memory and CPU statistics in one window.
@@ -105,7 +105,7 @@ void XTOPApp_DisplayUsage(const char *pName)
     int nLength = strlen(pName) + 6;
 
     printf("==================================================================\n");
-    printf("XTOP v%d.%d - (c) 2022 Sandro Kalatozishvili (f4tb0y@protonmail.com)\n",
+    printf("XTOP v%d.%d - (c) 2022 Sandro Kalatozishvili (s.kalatoz@gmail.com)\n",
         XTOP_VERSION_MAJ, XTOP_VERSION_MIN);
     printf("==================================================================\n\n");
 

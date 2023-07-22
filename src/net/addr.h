@@ -2,7 +2,7 @@
  *  @file libxutils/src/net/addr.h
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  * 
  * @brief This source includes functions for detect 
  * IP and Mac address of the host operating system

@@ -2,7 +2,7 @@
  *  @file libxutils/src/crypt/aes.c
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  *
  * @brief Implementation of Advanced Encryption Standard
  * based on FIPS-197 implementation by Christophe Devine.

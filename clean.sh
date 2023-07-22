@@ -1,33 +1,17 @@
 #!/bin/bash
+PROJ_PATH=$(dirname $(readlink -f "$0"))
 
-cd examples
-make clean
-cd ..
+clean_path() {
+    cd "$@" 
+    [ -f ./Makefile ] && make clean
+    [ -d ./obj ] && rm -rf ./obj
+    [ -d ./build ] && rm -rf ./build
+    [ -d ./CMakeFiles ] && rm -rf ./CMakeFiles
+    [ -f ./CMakeCache.txt ] && rm -rf ./CMakeCache.txt
+    [ -f ./cmake_install.cmake ] && rm -rf ./cmake_install.cmake
+    [ -f ./install_manifest.txt ] && rm -rf ./install_manifest.txt
+    cd $PROJ_PATH
+}
 
-if [ -f ./Makefile ]; then
-    make clean
-fi
-
-if [ -d ./obj ]; then
-    rm -rf ./obj
-fi
-
-if [ -d ./build ]; then
-    rm -rf ./build
-fi
-
-if [ -d ./CMakeFiles ]; then
-    rm -rf ./CMakeFiles
-fi
-
-if [ -f ./CMakeCache.txt ]; then
-    rm -f ./CMakeCache.txt
-fi
-
-if [ -f ./cmake_install.cmake ]; then
-    rm -f ./cmake_install.cmake
-fi
-
-if [ -f ./install_manifest.txt ]; then
-    rm -f ./install_manifest.txt
-fi
+clean_path $PROJ_PATH
+clean_path $PROJ_PATH/examples

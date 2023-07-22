@@ -1,7 +1,7 @@
 /*!
  *  @file libxutils/examples/statcov.c
  * 
- *  2020-2021  Sun Dro (f4tb0y@protonmail.com)
+ *  2020-2021  Sun Dro (s.kalatoz@gmail.com)
  *
  * @brief Parse and print COVID-19 case 
  * statistics from https://stopcov.ge/

@@ -2,7 +2,7 @@
  *  @file libxutils/src/xver.c
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  *
  * @brief Get additional information about library
  */

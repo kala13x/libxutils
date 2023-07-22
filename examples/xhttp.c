@@ -2,7 +2,7 @@
  *  @file libxutils/examples/xhttp.c
  * 
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  *
  * @brief Example file for working with the HTTP request/responses.
  * Send custom HTTP request, analyze headers, download content, etc.
@@ -66,7 +66,7 @@ void XHTTPApp_DisplayUsage(const char *pName)
     int nLength = strlen(pName) + 6;
 
     printf("==========================================================================\n");
-    printf(" XHTTP tool v%d.%d - (c) 2022 Sandro Kalatozishvili (f4tb0y@protonmail.com)\n",
+    printf(" XHTTP tool v%d.%d - (c) 2022 Sandro Kalatozishvili (s.kalatoz@gmail.com)\n",
         XHTTP_VERSION_MAJ, XHTTP_VERSION_MIN);
     printf("==========================================================================\n");
 

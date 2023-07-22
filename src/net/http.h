@@ -2,7 +2,7 @@
  *  @file libxutils/src/net/http.h
  *
  *  This source is part of "libxutils" project
- *  2018-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2018-2020  Sun Dro (s.kalatoz@gmail.com)
  * 
  * @brief This source includes implementation of 
  * the HTTP request/response parser and assembler.

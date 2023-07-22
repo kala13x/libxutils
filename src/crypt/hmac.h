@@ -2,7 +2,7 @@
  *  @file libxutils/src/crypt/hmac.h
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  * 
  * @brief HMAC SHA-256 algorithm implementation for C/C++ based
  * on MD5 sample code from https://www.rfc-editor.org/rfc/rfc2104

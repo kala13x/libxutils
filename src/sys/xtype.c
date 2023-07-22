@@ -2,7 +2,7 @@
  *  @file libxutils/src/sys/xtype.c
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  *
  * @brief Implementation of various 
  * types and converting operations.

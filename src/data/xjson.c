@@ -2,7 +2,7 @@
  *  @file libxutils/src/data/json.c
  *
  *  This source is part of "libxutils" project
- *  2019-2021  Sun Dro (f4tb0y@protonmail.com)
+ *  2019-2021  Sun Dro (s.kalatoz@gmail.com)
  * 
  * @brief Implementation of the lexical analyzer 
  * and recursive descent parser with JSON grammar

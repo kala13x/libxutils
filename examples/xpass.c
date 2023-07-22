@@ -2,7 +2,7 @@
  *  @file libxutils/examples/xpass.c
  * 
  *  This source is part of "libxutils" project
- *  2015-2022  Sun Dro (f4tb0y@protonmail.com)
+ *  2015-2022  Sun Dro (s.kalatoz@gmail.com)
  *
  * @brief Simple and safe password manager for CLI
  */

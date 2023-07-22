@@ -78,9 +78,19 @@ smake && make
 sudo make install
 ```
 
+#### Using build script
+A relatively simple way to build and install a project is to use a build script.
+
+```bash
+git clone https://github.com/kala13x/libxutils.git
+cd libxutils
+./build.sh cmake --install --cleanup
+```
+
+You can either choose `cmake` or `smake` as the first argument, but `cmake` is recommended on platforms other than the Linux.
+
 #### Using Makefile
-If you do not have any of the above tools installed on your operating system,\
-then you can try the build by using already generated `Makefile` for linux.
+If you do not have any of the above tools installed on your operating system, then you can try the build by using already generated `Makefile` for linux.
 
 ```bash
 git clone https://github.com/kala13x/libxutils.git
@@ -147,10 +157,13 @@ use `-lxutils` linker flag while compiling your project. See the example directo
 ### Tools & Examples
 
 The project includes several examples and tools in the `examples` directory.\
-Currently, the examples can be built only by using `Makefile` from that directory.
+The examples can be built by using the `CMake` tool or `Makefile` from that directory.
 
 ```bash
 cd examples
+mkdir build
+cd build
+cmake ..
 make
 ```
 
