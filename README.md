@@ -87,10 +87,10 @@ cd libxutils
 ./build.sh cmake --install --cleanup
 ```
 
-You can either choose `cmake` or `smake` as the first argument, but `cmake` is recommended on platforms other than the Linux.
+You can either choose `cmake`, `smake` or `make` as the first argument, but `cmake` is recommended on the platforms other than the Linux.
 
 #### Using Makefile
-If you do not have any of the above tools installed on your operating system, then you can try the build by using already generated `Makefile` for linux.
+The project can also be built with a pre-generated `Makefile` for linux.
 
 ```bash
 git clone https://github.com/kala13x/libxutils.git

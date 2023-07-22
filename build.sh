@@ -85,12 +85,22 @@ build_tools() {
 build_library() {
     cd $PROJ_PATH
 
-    if [[ $MAKE_TOOL == "cmake" ]]; then
-        mkdir -p build && cd build && cmake ..
+    if [[ $MAKE_TOOL == "make" ]]; then
+        make -j $CPU_COUNT
+        LIB_PATH=$PROJ_PATH
+    elif [[ $MAKE_TOOL == "smake" ]]; then
+        smake . && make -j $CPU_COUNT
+        LIB_PATH=$PROJ_PATH
+    elif [[ $MAKE_TOOL == "cmake" ]]; then
+        mkdir -p build && cd build
+        cmake .. && make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH/build
+    else
+        echo "Unknown build tool: $MAKE_TOOL"
+        echo "Specify cmake, smake or make)"
+        exit 1
     fi
 
-    make -j $CPU_COUNT
     cd $PROJ_PATH
 }
 
