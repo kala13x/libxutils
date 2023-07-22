@@ -125,9 +125,7 @@ After updating the configuration, use the `generate.sh` script to generate the `
 
 ```bash
 ./generate.sh
-mkdir build
-cd build
-cmake .. && make
+./build.sh cmake
 ```
 
 You may notice that when you select only one module, several other modules may be also included in the build. Because some files depend on other files in the project, the `generate.sh` script will automatically resolve these dependencies and include required files in the build as well.
