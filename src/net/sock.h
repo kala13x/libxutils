@@ -18,8 +18,6 @@ extern "C" {
 #include "xstd.h"
 #include "xbuf.h"
 
-#define _XUTILS_USE_SSL 1 // temp
-
 #ifdef _XUTILS_USE_SSL
 #define OPENSSL_API_COMPAT XSSL_MINIMAL_API
 #include <openssl/pkcs12.h>
