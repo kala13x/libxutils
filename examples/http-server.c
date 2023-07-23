@@ -67,14 +67,14 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xhttp_t handle;
     if (XHTTP_InitResponse(&handle, 200, NULL) <= 0)
     {
-        xloge("Failed to initialize HTTP response: %s", strerror(errno));
+        xloge("Failed to initialize HTTP response: %s", XSTRERR);
         return XSTDERR;
     }
 
     if (XHTTP_AddHeader(&handle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
         XHTTP_AddHeader(&handle, "Content-Type", "text/plain") < 0)
     {
-        xloge("Failed to setup HTTP headers: %s", strerror(errno));
+        xloge("Failed to setup HTTP headers: %s", XSTRERR);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -84,7 +84,7 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     if (XHTTP_Assemble(&handle, (const uint8_t*)sBody, nLen) == NULL)
     {
-        xloge("Failed to assemble HTTP response: %s", strerror(errno));
+        xloge("Failed to assemble HTTP response: %s", XSTRERR);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }

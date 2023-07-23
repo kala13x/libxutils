@@ -99,6 +99,10 @@ typedef uint8_t             xbool_t;
 #define XSTDUSR         2
 #endif
 
+#ifndef XSTRERR
+#define XSTRERR         strerror(errno)
+#endif
+
 #define XCLR_RED        "\x1B[31m"
 #define XCLR_RES        "\x1B[0m"
 

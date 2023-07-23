@@ -38,7 +38,7 @@ int main()
     char *pJWTStr = XJWT_Create(&jwt, (uint8_t*)pSecret, nSecretLen, &nJWTLen);
     if (pJWTStr == NULL)
     {
-        xloge("Failed to create JWT: %s", strerror(errno));
+        xloge("Failed to create JWT: %s", XSTRERR);
         XJWT_Destroy(&jwt);
         return -1;
     }
@@ -90,7 +90,7 @@ int main()
     pJWTStr = XJWT_Create(&jwt, (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen, &nJWTLen);
     if (pJWTStr == NULL)
     {
-        xloge("Failed to create JWT: %s", strerror(errno));
+        xloge("Failed to create JWT: %s", XSTRERR);
         XJWT_Destroy(&jwt);
         return -1;
     }

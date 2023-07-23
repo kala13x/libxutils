@@ -91,14 +91,14 @@ int COVID_PrintCases(covid_cases_t *pCovCases)
         linter.nTabSize = XTAB_SIZE;
 
         if (XJSON_WriteObject(pRootObject, &linter)) xlog("%s", linter.pData);
-        else xloge("Failed to write JSON object (%s)", strerror(errno));
+        else xloge("Failed to write JSON object (%s)", XSTRERR);
 
         XJSON_DestroyWriter(&linter);
         XJSON_FreeObject(pRootObject);
         return XSTDOK;
     }
 
-    xloge("Failed to allocate memory for JSON obj: %s", strerror(errno));
+    xloge("Failed to allocate memory for JSON obj: %s", XSTRERR);
     return XSTDERR;
 }
 

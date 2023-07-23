@@ -329,7 +329,7 @@ static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
 int XSearch_Callback(xfile_search_t *pSearch, xfile_entry_t *pEntry, const char *pMsg)
 {
     if (pEntry != NULL) XSearch_DisplayEntry(pSearch, pEntry);
-    if (pMsg != NULL) xloge("%s (%s)", pMsg, strerror(errno));
+    if (pMsg != NULL) xloge("%s (%s)", pMsg, XSTRERR);
     return XSTDNON;
 }
 

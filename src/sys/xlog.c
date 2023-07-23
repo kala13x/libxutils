@@ -280,7 +280,7 @@ XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
 
     if (pFmt == NULL)
     {
-        xlogfl(nFlag, "%s", strerror(errno));
+        xlogfl(nFlag, "%s", XSTRERR);
         return nRetVal;
     }
 
@@ -304,7 +304,7 @@ void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...)
 
     if (pFmt == NULL)
     {
-        xloge("%s", strerror(errno));
+        xloge("%s", XSTRERR);
         return pRetVal;
     }
 

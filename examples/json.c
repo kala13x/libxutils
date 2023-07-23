@@ -152,7 +152,7 @@ int main(int argc, char *argv[])
     if (pBuffer == NULL)
     {
         xloge("Can't read file: %s (%s)", 
-            argv[1], strerror(errno));
+            argv[1], XSTRERR);
         return 0;
     }
 

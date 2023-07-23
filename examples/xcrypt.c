@@ -447,7 +447,7 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
 
     if (XPath_Write(pPubKeyPath, "cwt", (uint8_t*)pair.pPublicKey, pair.nPubKeyLen) <= 0)
     {
-        xloge("Failed to write public key file: %s (%s)", pPubKeyPath, strerror(errno));
+        xloge("Failed to write public key file: %s (%s)", pPubKeyPath, XSTRERR);
         XRSA_Destroy(&pair);
         XArray_Clear(pArr);
         return XSTDERR;
@@ -455,7 +455,7 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
 
     if (XPath_Write(pPrivKeyPath, "cwt", (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen) <= 0)
     {
-        xloge("Failed to write private key file: %s (%s)", pPrivKeyPath, strerror(errno));
+        xloge("Failed to write private key file: %s (%s)", pPrivKeyPath, XSTRERR);
         XRSA_Destroy(&pair);
         XArray_Clear(pArr);
         return XSTDERR;

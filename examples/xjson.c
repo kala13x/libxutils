@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
 
     if (XPath_LoadBuffer(args.sFile, &buffer) <= 0)
     {
-        xloge("Failed to load file: %s (%s)", args.sFile, strerror(errno));
+        xloge("Failed to load file: %s (%s)", args.sFile, XSTRERR);
         return 1;
     }
 

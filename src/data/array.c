@@ -202,7 +202,7 @@ int XArray_Add(xarray_t *pArr, xarray_data_t *pNewData)
     }
 
     pArr->pData[pArr->nUsed++] = pNewData;
-    return (int)pArr->nUsed;
+    return (int)pArr->nUsed - 1;
 }
 
 int XArray_AddData(xarray_t *pArr, void *pData, size_t nSize)

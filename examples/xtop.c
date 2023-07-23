@@ -1376,7 +1376,7 @@ int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
         XHTTP_AddHeader(&handle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
         XHTTP_Assemble(&handle, (const uint8_t*)content.pData, content.nLength) == NULL)
     {
-        xloge("Failed to assemble HTTP response: %s", strerror(errno));
+        xloge("Failed to assemble HTTP response: %s", XSTRERR);
         XString_Clear(&content);
         XHTTP_Clear(&handle);
         return XSTDERR;

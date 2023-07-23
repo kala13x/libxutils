@@ -60,7 +60,7 @@ int handle_request(xevent_data_t *pEvData)
     if (XHTTP_AddHeader(pHandle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
         XHTTP_AddHeader(pHandle, "Content-Type", "text/plain") < 0)
     {
-        xloge("Failed to initialize HTTP response: %s", strerror(errno));
+        xloge("Failed to initialize HTTP response: %s", XSTRERR);
         pEvData->pContext = NULL;
         return XEVENTS_DISCONNECT;
     }
@@ -70,7 +70,7 @@ int handle_request(xevent_data_t *pEvData)
 
     if (XHTTP_Assemble(pHandle, (const uint8_t*)sBody, nLen) == NULL)
     {
-        xloge("Failed to assemble HTTP response: %s", strerror(errno));
+        xloge("Failed to assemble HTTP response: %s", XSTRERR);
         pEvData->pContext = NULL;
         return XEVENTS_DISCONNECT;
     }
@@ -113,7 +113,7 @@ int read_event(xevents_t *pEvents, xevent_data_t *pEvData)
 
         if (XEvents_RegisterEvent(pEvents, pRequest, newSock.nFD, XPOLLIN, 0)  == NULL)
         {
-            xloge("Failed to register event for FD: %d (%s)", newSock.nFD, strerror(errno));
+            xloge("Failed to register event for FD: %d (%s)", newSock.nFD, XSTRERR);
             XSock_Close(&newSock);
             XHTTP_Clear(pRequest);
             return XEVENTS_CONTINUE;
@@ -138,7 +138,7 @@ int read_event(xevents_t *pEvents, xevent_data_t *pEvData)
             xevent_status_t eStatus = XEvents_Modify(pEvents, pEvData, XPOLLOUT);
             if (eStatus != XEVENT_STATUS_SUCCESS)
             {
-                xloge("%s: %s", XEvents_GetStatusStr(eStatus), strerror(errno));
+                xloge("%s: %s", XEvents_GetStatusStr(eStatus), XSTRERR);
                 return XEVENTS_DISCONNECT;
             }
 
@@ -151,7 +151,7 @@ int read_event(xevents_t *pEvents, xevent_data_t *pEvData)
             if (clientSock.eStatus == XSOCK_EOF)
                 xlogn("%s (%d)", pError, pEvData->nFD);
             else if (clientSock.eStatus != XSOCK_ERR_NONE)
-                xloge("%s (%s)", pError, strerror(errno));
+                xloge("%s (%s)", pError, XSTRERR);
 
             pEvData->bIsOpen = XFALSE;
             return XEVENTS_DISCONNECT;
@@ -184,7 +184,7 @@ int write_event(xevents_t *pEvents, xevent_data_t *pEvData)
     int nSent = XSock_Write(&socket, pBuffer->pData, pBuffer->nUsed);
     if (nSent <= 0)
     {
-        xloge("%s (%s)", XSock_ErrStr(&socket), strerror(errno));
+        xloge("%s (%s)", XSock_ErrStr(&socket), XSTRERR);
         pEvData->bIsOpen = XFALSE;
         return XEVENTS_DISCONNECT;
     }
