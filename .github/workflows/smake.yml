@@ -1,0 +1,28 @@
+name: SMake
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Checkout SMake
+      uses: actions/checkout@v3
+      with:
+        repository: 'kala13x/smake'
+        submodules: recursive
+        path: 'smake'
+
+    - name: Build Smake
+      run: cd smake && ./build.sh --install
+
+    - name: Build with SMake
+      run: smake && make
