@@ -25,4 +25,4 @@ jobs:
       run: cd smake && ./build.sh --install
 
     - name: Build with SMake
-      run: smake -v 4 && more Makefile && make
+      run: smake && make
