@@ -1,6 +1,7 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-brightgreen.svg?)](https://github.com/kala13x/libxutils/blob/main/LICENSE)
 [![C/C++ CI](https://github.com/kala13x/libxutils/actions/workflows/make.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/make.yml)
-[![CMake workflow](https://github.com/kala13x/libxutils/actions/workflows/cmake.yml/badge.svg)](https://github.com/kala13x/libxutils/actions)
+[![CMake](https://github.com/kala13x/libxutils/actions/workflows/cmake.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/cmake.yml)
+[![SMake](https://github.com/kala13x/libxutils/actions/workflows/smake.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/smake.yml)
 [![CodeQL](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/25173/badge.svg?)](https://scan.coverity.com/projects/libxutils)
 
