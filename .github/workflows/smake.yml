@@ -22,7 +22,13 @@ jobs:
         path: 'smake'
 
     - name: Build Smake
-      run: cd smake && ./build.sh --install
+      run: |
+        pwd && ls
+        cd smake && ./build.sh --install
+        pwd && ls
 
     - name: Build with SMake
-      run: smake && make
+      run: |
+        pwd && ls
+        smake && make
+        pwd && ls
