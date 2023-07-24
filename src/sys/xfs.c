@@ -1171,7 +1171,7 @@ xfile_entry_t* XFile_GetEntry(xfile_search_t *pSearch, int nIndex)
 
 int XFile_Search(xfile_search_t *pSearch, const char *pDirectory)
 {
-    if (pDirectory == NULL) return XSTDERR;
+    if (pDirectory == NULL || XSYNC_ATOMIC_GET(pSearch->pInterrupted)) return XSTDERR;
     size_t nDirLen = strlen(pDirectory);
 
     xdir_t dirHandle;

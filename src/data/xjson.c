@@ -12,10 +12,9 @@
 #define _GNU_SOURCE
 #endif
 
-#include "map.h"
-#include "array.h"
 #include "xjson.h"
 #include "xstr.h"
+#include "map.h"
 
 #define XOBJ_INITIAL_SIZE   2
 #define XJSON_IDENT_INC     1
@@ -896,6 +895,30 @@ void XJSON_Destroy(xjson_t *pJson)
     pJson->nDataSize = 0;
     pJson->nOffset = 0;
     pJson->pData = NULL;
+}
+
+static int XJSON_CollectIt(xmap_pair_t *pPair, void *pContext)
+{
+    xarray_t *pArray = (xarray_t*)pContext;
+    int nStatus = XArray_AddData(pArray, pPair, XSTDNON);
+    return nStatus < 0 ? XMAP_STOP : XMAP_OK;
+}
+
+xarray_t* XJSON_GetObjects(xjson_obj_t *pObj)
+{
+    if (!XJSON_CheckObject(pObj, XJSON_TYPE_OBJECT)) return NULL;
+    xmap_t *pMap = (xmap_t*)pObj->pData;
+
+    xarray_t *pArray = XArray_New(XSTDNON, XFALSE);
+    XASSERT(pArray, NULL);
+
+    if (XMap_Iterate(pMap, XJSON_CollectIt, pArray) != XMAP_OK)
+    {
+        XArray_Destroy(pArray);
+        return NULL;
+    }
+
+    return pArray;
 }
 
 xjson_obj_t* XJSON_GetObject(xjson_obj_t *pObj, const char *pName)

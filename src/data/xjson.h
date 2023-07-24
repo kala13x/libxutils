@@ -8,9 +8,8 @@
  * and recursive descent parser with JSON grammar
  */
 
-#include <inttypes.h>
-#include <stdlib.h>
-#include <ctype.h>
+#include "xstd.h"
+#include "array.h"
 
 #ifndef __XUTILS_JSON_H__
 #define __XUTILS_JSON_H__
@@ -114,6 +113,7 @@ void XJSON_Init(xjson_t *pJson);
 
 size_t XJSON_GetArrayLength(xjson_obj_t *pObj);
 int XJSON_RemoveArrayItem(xjson_obj_t *pObj, size_t nIndex);
+xarray_t* XJSON_GetObjects(xjson_obj_t *pObj);
 xjson_obj_t* XJSON_GetObject(xjson_obj_t *pObj, const char *pName);
 xjson_obj_t* XJSON_GetArrayItem(xjson_obj_t *pObj, size_t nIndex);
 xjson_obj_t *XJSON_GetOrCreateObject(xjson_obj_t *pObj, const char *pName, uint8_t nAllowUpdate);
