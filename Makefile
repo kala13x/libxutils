@@ -3,8 +3,7 @@
 # https://github.com/kala13x/smake #
 ####################################
 
-CFLAGS = -D_XUTILS_USE_SSL -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU
-CFLAGS += -I./src -I./src/sys -I./src/net -I./src/data -I./src/crypt
+CFLAGS = -D_XUTILS_USE_SSL -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU -I./src/crypt -I./src/data -I./src/net -I./src/sys -I./src
 LIBS = -lssl -lcrypto -lpthread
 NAME = libxutils.a
 ODIR = ./build
@@ -49,8 +48,8 @@ OBJS = addr.$(OBJ) \
 	xver.$(OBJ)
 
 OBJECTS = $(patsubst %,$(ODIR)/%,$(OBJS))
-INSTALL_INC = /usr/local/include/xutils
 INSTALL_BIN = /usr/local/lib
+INSTALL_INC = /usr/local/include/xutils
 VPATH = ./src:./src/sys:./src/net:./src/data:./src/crypt
 
 .c.$(OBJ):
@@ -63,13 +62,13 @@ $(NAME):$(OBJS)
 .PHONY: install
 install:
 	@test -d $(INSTALL_BIN) || mkdir -p $(INSTALL_BIN)
-	@install -m 0755 $(ODIR)/$(NAME) $(INSTALL_BIN)/
+	install -m 0755 $(ODIR)/$(NAME) $(INSTALL_BIN)/
 	@test -d $(INSTALL_INC) || mkdir -p $(INSTALL_INC)
-	@cp -r ./src/crypt/*.h $(INSTALL_INC)/
-	@cp -r ./src/data/*.h $(INSTALL_INC)/
-	@cp -r ./src/net/*.h $(INSTALL_INC)/
-	@cp -r ./src/sys/*.h $(INSTALL_INC)/
-	@cp -r ./src/*.h $(INSTALL_INC)/
+	cp -r ./src/crypt/*.h $(INSTALL_INC)/
+	cp -r ./src/data/*.h $(INSTALL_INC)/
+	cp -r ./src/net/*.h $(INSTALL_INC)/
+	cp -r ./src/sys/*.h $(INSTALL_INC)/
+	cp -r ./src/*.h $(INSTALL_INC)/
 
 .PHONY: clean
 clean:

@@ -349,7 +349,9 @@ int main(int argc, char* argv[])
         endpt.certs.pCaPath = args.sCaPath;
         endpt.certs.pKeyPath = args.sKeyPath;
         endpt.certs.pCertPath = args.sCertPath;
+#ifdef SSL_VERIFY_PEER
         endpt.certs.nVerifyFlags = SSL_VERIFY_PEER;
+#endif
     }
 
     if (XAPI_Listen(&api, &endpt) < 0)

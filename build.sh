@@ -34,11 +34,14 @@ SSL_LD_PATH=(
 
 find_lib() {
     for directory in "${SSL_LD_PATH[@]}"; do
-        path=$(find "$directory" -name "$@")
 
-        if [ -n "$path" ]; then
-            echo "$path"
-            return
+        if [ -d "$directory" ]; then
+            path=$(find "$directory" -name "$@")
+
+            if [ -n "$path" ]; then
+                echo "$path"
+                return
+            fi
         fi
 
     done
