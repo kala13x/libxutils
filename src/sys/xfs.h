@@ -74,8 +74,9 @@ int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char
 xfile_t* XFile_Alloc(const char *pPath, const char *pFlags, const char *pPerms);
 
 xbool_t XFile_IsOpen(xfile_t *pFile);
+void XFile_Destroy(xfile_t *pFile);
 void XFile_Close(xfile_t *pFile);
-void XFile_Free(xfile_t *pFile);
+void XFile_Free(xfile_t **ppFile);
 
 size_t XFile_Seek(xfile_t *pFile, uint64_t nPosit, int nOffset);
 int XFile_Write(xfile_t *pFile, const void *pBuff, size_t nSize);

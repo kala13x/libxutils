@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
             if (pFile != NULL)
             {
                 XFile_Write(pFile, linter.pData, linter.nLength);
-                XFile_Free(pFile);
+                XFile_Free(&pFile);
             }
 
             XJSON_DestroyWriter(&linter);

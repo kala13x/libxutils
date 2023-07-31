@@ -187,7 +187,7 @@ void XFile_Close(xfile_t *pFile)
     }
 }
 
-void XFile_Free(xfile_t *pFile)
+void XFile_Destroy(xfile_t *pFile)
 {
     if (pFile != NULL)
     {
@@ -196,6 +196,15 @@ void XFile_Free(xfile_t *pFile)
         if (pFile->nAlloc)
             free(pFile);
     }
+}
+
+void XFile_Free(xfile_t **ppFile)
+{
+    XASSERT_VOID_RET((ppFile && *ppFile));
+    xfile_t *pFile = *ppFile;
+
+    XFile_Destroy(pFile);
+    *ppFile = NULL;
 }
 
 size_t XFile_Seek(xfile_t *pFile, uint64_t nPosit, int nOffset)

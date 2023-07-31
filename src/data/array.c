@@ -136,6 +136,16 @@ void XArray_Destroy(xarray_t *pArr)
         free(pArr);
 }
 
+void XArray_Free(xarray_t **ppArr)
+{
+    if (ppArr == NULL ||
+        *ppArr == NULL) return;
+
+    xarray_t *pArr = *ppArr;
+    XArray_Destroy(pArr);
+    *ppArr = NULL;
+}
+
 uint8_t XArray_Contains(xarray_t *pArr, size_t nIndex)
 {
     if (pArr == NULL || nIndex >= pArr->nSize) return 0;

@@ -60,6 +60,7 @@ void* XArray_Init(xarray_t *pArr, size_t nSize, uint8_t nFixed);
 size_t XArray_Realloc(xarray_t *pArr);
 void XArray_Destroy(xarray_t *pArr);
 void XArray_Clear(xarray_t *pArr);
+void XArray_Free(xarray_t **ppArr);
 
 int XArray_Add(xarray_t *pArr, xarray_data_t *pNewData);
 int XArray_AddData(xarray_t *pArr, void* pData, size_t nSize);
