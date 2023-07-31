@@ -128,11 +128,11 @@ int main(int argc, char *argv[])
         /* Dump objects directly */
         if (XJSON_WriteObject(pRootArray, &linter))
         {
-            xfile_t *pFile = XFile_New(argv[1], "w", NULL);
+            xfile_t *pFile = XFile_Alloc(argv[1], "w", NULL);
             if (pFile != NULL)
             {
                 XFile_Write(pFile, linter.pData, linter.nLength);
-                XFile_Clean(pFile);
+                XFile_Free(pFile);
             }
 
             XJSON_DestroyWriter(&linter);

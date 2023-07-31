@@ -267,7 +267,7 @@ int XHTTPApp_DumpResponse(xhttp_t *pHandle, xhttp_ctx_t *pCbCtx)
         char sTmpPath[XPATH_MAX];
         xstrncpyf(sTmpPath, sizeof(sTmpPath), "%s.part", pArgs->sOutput);
 
-        pArgs->pOutputFile = XFile_New(sTmpPath, "cwt", NULL);
+        pArgs->pOutputFile = XFile_Alloc(sTmpPath, "cwt", NULL);
         if (pArgs->pOutputFile == NULL)
         {
             xloge("Failed to open output file: %s (%d)", sTmpPath, errno);
@@ -425,7 +425,7 @@ int XHTTPApp_Perform(xhttp_args_t *pArgs, xlink_t *pLink)
     if (eStatus != XHTTP_COMPLETE && !XHTTP_GetBodySize(&handle))
     {
         if (eStatus == XHTTP_BIGCNT) xlogi("Too big content. Try to use output file (-o <file>)");
-        XFile_Clean(pArgs->pOutputFile);
+        XFile_Free(pArgs->pOutputFile);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -455,7 +455,7 @@ int XHTTPApp_Perform(xhttp_args_t *pArgs, xlink_t *pLink)
             xstrncpy(pArgs->sAddress, sizeof(pArgs->sAddress), pLocation);
             xlogd("Following location: %s", pArgs->sAddress);
 
-            XFile_Clean(pArgs->pOutputFile);
+            XFile_Free(pArgs->pOutputFile);
             XHTTP_Clear(&handle);
             return XSTDOK;
         }
@@ -470,7 +470,7 @@ int XHTTPApp_Perform(xhttp_args_t *pArgs, xlink_t *pLink)
     const char *pBody = (const char *)XHTTP_GetBody(&handle);
     if (pBody != NULL && !bHaveOutput) printf("%s\n", pBody);
 
-    XFile_Clean(pArgs->pOutputFile);
+    XFile_Free(pArgs->pOutputFile);
     XHTTP_Clear(&handle);
     return XSTDNON;
 }

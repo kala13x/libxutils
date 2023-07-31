@@ -150,7 +150,7 @@ int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char
     return pFile->nFD;
 }
 
-xfile_t* XFile_New(const char *pPath, const char *pFlags, const char *pPerms)
+xfile_t* XFile_Alloc(const char *pPath, const char *pFlags, const char *pPerms)
 {
     xfile_t *pFile = (xfile_t*)malloc(sizeof(xfile_t));
     if (pFile == NULL) return NULL;
@@ -187,7 +187,7 @@ void XFile_Close(xfile_t *pFile)
     }
 }
 
-void XFile_Clean(xfile_t *pFile)
+void XFile_Free(xfile_t *pFile)
 {
     if (pFile != NULL)
     {
@@ -226,6 +226,22 @@ int XFile_Read(xfile_t *pFile, void *pBuff, size_t nSize)
 #else
     return read(pFile->nFD, pBuff, nSize);
 #endif
+}
+
+int XFile_Print(xfile_t *pFile, const char *pFmt, ...)
+{
+    va_list args;
+    size_t nLength = 0;
+
+    va_start(args, pFmt);
+    char *pDest = xstracpyargs(pFmt, args, &nLength);
+    va_end(args);
+
+    XASSERT(pDest, XSTDERR);
+    int nStatus = XFile_Write(pFile, pDest, nLength);
+
+    free(pDest);
+    return nStatus;
 }
 
 int XFile_GetStats(xfile_t *pFile)

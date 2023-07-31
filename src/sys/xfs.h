@@ -61,6 +61,9 @@ typedef struct XPath {
 
 #define XFILE_CHECK_FL(c, f) (((c) & (f)) == (f))
 
+#define xfprintf(xf, ...) \
+    XFile_Print(xf, __VA_ARGS__)
+
 int xstat(const char *pPath, struct stat *pStat);
 int xmkdir(const char* pPath, xmode_t nMode);
 int xunlink(const char* pPath);
@@ -68,15 +71,16 @@ int xrmdir(const char* pPath);
 int xclose(int nFD);
 
 int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms);
-xfile_t* XFile_New(const char *pPath, const char *pFlags, const char *pPerms);
+xfile_t* XFile_Alloc(const char *pPath, const char *pFlags, const char *pPerms);
 
 xbool_t XFile_IsOpen(xfile_t *pFile);
 void XFile_Close(xfile_t *pFile);
-void XFile_Clean(xfile_t *pFile);
+void XFile_Free(xfile_t *pFile);
 
 size_t XFile_Seek(xfile_t *pFile, uint64_t nPosit, int nOffset);
 int XFile_Write(xfile_t *pFile, const void *pBuff, size_t nSize);
 int XFile_Read(xfile_t *pFile, void *pBuff, size_t nSize);
+int XFile_Print(xfile_t *pFile, const char *pFmt, ...);
 
 int XFile_GetStats(xfile_t *pFile);
 int XFile_Copy(xfile_t *pIn, xfile_t *pOut);
