@@ -9,6 +9,7 @@ LIB_PATH=$PROJ_PATH
 TOOLS_DONE=0
 MAKE_TOOL=0
 CPU_COUNT=1
+SSL_ARG=""
 
 if [ ! -z "$1" ]; then
     MAKE_TOOL=$1
@@ -89,15 +90,17 @@ build_library() {
     cd $PROJ_PATH
 
     if [[ $MAKE_TOOL == "make" ]]; then
+        ./generate.sh $MAKE_TOOL $SSL_ARG
         make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH
-    elif [[ $MAKE_TOOL == "smake" ]]; then
-        smake . && make -j $CPU_COUNT
-        LIB_PATH=$PROJ_PATH
     elif [[ $MAKE_TOOL == "cmake" ]]; then
+        ./generate.sh $MAKE_TOOL $SSL_ARG
         mkdir -p build && cd build
         cmake .. && make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH/build
+    elif [[ $MAKE_TOOL == "smake" ]]; then
+        smake . && make -j $CPU_COUNT
+        LIB_PATH=$PROJ_PATH
     else
         echo "Unknown build tool: $MAKE_TOOL"
         echo "Specify cmake, smake or make)"
@@ -130,6 +133,7 @@ if [ -n "$LIB_CRYPTO" ] && [ -n "$LIB_SSL" ]; then
     echo "Crypto: $LIB_CRYPTO"
     echo "SSL: $LIB_SSL"
     export XUTILS_USE_SSL=y
+    SSL_ARG="--ssl"
 else
     echo 'OpenSSL libraries not found!'
 fi

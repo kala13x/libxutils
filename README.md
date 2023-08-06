@@ -122,10 +122,9 @@ USE_XLOG=y
 USE_XSTR=n
 ...
 ```
-After updating the configuration, use the `generate.sh` script to generate the `CMakeLists.txt` file and then build the project using the `CMake` tool as in this example:
+After updating the configuration, use the `build.sh` script to generate the `Makefile` and build the project. Use `cmake` or `make` as the first argument for the script.
 
 ```bash
-./generate.sh
 ./build.sh cmake
 ```
 
