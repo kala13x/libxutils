@@ -1,7 +1,35 @@
 #!/bin/bash
 
-[ ! -f "CMakeLists.tmp" ] && \
-    echo "CMakeLists template file is not found" && exit 1
+# Enable particular functionality
+sourceList="${SOURCE_DIR}/xver.c"
+extension=""
+sslFlags=""
+sslLibs=""
+
+if [[ $1 == "make" ]]; then
+    [ ! -f "./misc/Makefile.tmp" ] && \
+        echo "Makefile template file is not found" && exit 1
+
+    extension='$(OBJ) \\'
+
+elif [[ $1 == "cmake" ]]; then
+
+    [ ! -f "./misc/CMakeLists.tmp" ] && \
+        echo "CMakeLists template file is not found" && exit 1
+
+    extension="c"
+
+else
+    echo "Invalid make tool";
+    exit 1;
+fi
+
+for arg in "$@"; do
+    if [[ $arg == "--ssl" ]]; then
+        sslFlags="-D_XUTILS_USE_SSL"
+        sslLibs="-lssl -lcrypto"
+    fi
+done
 
 . $(dirname "$0")/xutils.conf
 SOURCE_DIR=./src
@@ -289,21 +317,48 @@ for mod in "${modules[@]}"; do
     fi
 done
 
-# Enable particular functionality
-sourceList="${SOURCE_DIR}/xver.c"
+if [[ $1 == "cmake" ]]; then
 
-for mod in "${modules[@]}"; do
-    IFS=': ' read -ra parts <<< "$mod"
-    dir=${parts[0]}
-    name=${parts[1]}
-    var="USE_$name"
+    extension='c'
+    sourceList="${SOURCE_DIR}/xver.${extension}"
 
-    if [ -v $var ] && [ ${!var} == "y" ]; then
-        echo "-- Using ${mod,,}.c"
-        sourceList="${sourceList}\n    ${SOURCE_DIR}/${dir}/${name,,}.c"
-    fi
-done
+    for mod in "${modules[@]}"; do
+        IFS=': ' read -ra parts <<< "$mod"
+        dir=${parts[0]}
+        name=${parts[1]}
+        var="USE_$name"
 
+        if [ -v $var ] && [ ${!var} == "y" ]; then
+            echo "-- Using ${mod,,}.c"
+            sourceList="${sourceList}\n    ${SOURCE_DIR}/${dir}/${name,,}.${extension}"
+        fi
+    done
 
-echo "-- Generating new CMakeLists.txt file..."
-cat CMakeLists.tmp | sed -e "s#_SOURCE_LIST_#${sourceList}#" > CMakeLists.txt
+    echo "-- Generating new CMakeLists.txt file..."
+    cat ./misc/CMakeLists.tmp | sed -e "s#_SOURCE_LIST_#${sourceList}#" > ./CMakeLists.txt
+
+elif [[ $1 == "make" ]]; then
+
+    extension='$(OBJ) \\'
+    sourceList="xver.${extension}"
+
+    for mod in "${modules[@]}"; do
+        IFS=': ' read -ra parts <<< "$mod"
+        dir=${parts[0]}
+        name=${parts[1]}
+        var="USE_$name"
+
+        if [ -v $var ] && [ ${!var} == "y" ]; then
+            echo "-- Using ${mod,,}.c"
+            sourceList="${sourceList}\n   ${name,,}.${extension}"
+        fi
+    done
+
+    echo "-- Generating new Makefile..."
+    cat ./misc/Makefile.tmp | sed -e "s#_SOURCE_LIST_#${sourceList}#" > ./misc/Makefile.1
+    cat ./misc/Makefile.1 | sed -e "s#_SSL_FLAGS_#${sslFlags}#" > ./misc/Makefile.2
+    cat ./misc/Makefile.2 | sed -e "s#_SSL_LIBS_#${sslLibs}#" > ./Makefile
+
+    [ -f ./misc/Makefile.1 ] && rm -rf ./misc/Makefile.1
+    [ -f ./misc/Makefile.2 ] && rm -rf ./misc/Makefile.2
+fi
