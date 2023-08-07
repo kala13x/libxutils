@@ -1,0 +1,42 @@
+{
+    "build": {
+        "name": "libxutils.a",
+        "outputDir": "./build",
+        "flags": "-g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU",
+        "libs": "-lpthread",
+        "overwrite": true,
+        "verbose": 2,
+
+        "sources": [
+            _SOURCE_LIST_
+        ],
+
+        "headers": [
+            "./src",
+            "./src/crypt",
+            "./src/data",
+            "./src/net",
+            "./src/sys"
+        ],
+
+        "excludes": [
+            "./examples",
+            "./build",
+            "./cmake",
+            "./smake"
+        ],
+
+        "find": {
+            "libssl.so:libcrypto.so": {
+                "path": "/usr/local/ssl/lib:/usr/local/ssl/lib64",
+                "flags": "-D_XUTILS_USE_SSL",
+                "libs": "-lssl -lcrypto"
+            }
+        }
+    },
+
+    "install": {
+        "headerDir": "/usr/local/include/xutils",
+        "binaryDir": "/usr/local/lib"
+    }
+}

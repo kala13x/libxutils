@@ -103,7 +103,7 @@ sudo make install
 ### Build particular files only
 If you want to use particular files and functions, you can configure the library and select only that functionality for the build. In this way, it is possible not to increase the size of the program and to avoid the linkage of unused code.
 
-The `libxutils` project has a config file that contains a list of modules that will be included in the build. This file is used by the `generate.sh` script, which resolves dependencies for each enabled module and generates a `CMakeList.txt` file.
+The `libxutils` project has a config file that contains a list of modules that will be included in the build. This file is used by the `build.sh` script, which resolves dependencies for each enabled module and generates a `CMakeList.txt` file.
 
 Open `xutils.conf` file with a text editor and mark only the functionality you want to include in the build. Use a low-case `y` symbol to enable and any other symbol to disable modules. Removing a related line from the list will also disable the module.
 
@@ -128,7 +128,7 @@ After updating the configuration, use the `build.sh` script to generate the `Mak
 ./build.sh cmake
 ```
 
-You may notice that when you select only one module, several other modules may be also included in the build. Because some files depend on other files in the project, the `generate.sh` script will automatically resolve these dependencies and include required files in the build as well.
+You may notice that when you select only one module, several other modules may be also included in the build. Because some files depend on other files in the project, the `build.sh` script will automatically resolve these dependencies and include required files in the build as well.
 
 For example, if you only mark HTTP library for a build, the socket library will be automatically enabled because HTTP uses some functionality from sockets.
 

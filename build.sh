@@ -87,14 +87,14 @@ build_tools() {
 }
 
 build_library() {
+    cd $PROJ_PATH/misc
+    ./generate.sh $MAKE_TOOL $SSL_ARG
     cd $PROJ_PATH
 
     if [[ $MAKE_TOOL == "make" ]]; then
-        ./generate.sh $MAKE_TOOL $SSL_ARG
         make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH
     elif [[ $MAKE_TOOL == "cmake" ]]; then
-        ./generate.sh $MAKE_TOOL $SSL_ARG
         mkdir -p build && cd build
         cmake .. && make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH/build
