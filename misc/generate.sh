@@ -8,41 +8,44 @@ extension=""
 sslFlags=""
 sslLibs=""
 
-if [[ $1 == "make" ]]; then
-
-    [ ! -f "./Makefile.tmp" ] && \
-        echo "Makefile template file is not found" && exit 1
-
-    extension='$(OBJ) \\'
-    sourceList="xver.${extension}"
-
-elif [[ $1 == "cmake" ]]; then
-
-    [ ! -f "./CMakeLists.tmp" ] && \
-        echo "CMakeLists template file is not found" && exit 1
-
-    extension="c"
-    sourceList="${SOURCE_DIR}/xver.${extension}"
-
-elif [[ $1 == "smake" ]]; then
-
-    [ ! -f "./smake.tmp" ] && \
-        echo "SMake template file is not found" && exit 1
-
-    extension="c"
-    sourceList="\"${SOURCE_DIR}/xver.${extension}\","
-
-else
-    echo "Invalid make tool.";
-    exit 1;
-fi
-
-for arg in "$@"; do
-    if [[ $arg == "--ssl" ]]; then
-        sslFlags="-D_XUTILS_USE_SSL"
-        sslLibs="-lssl -lcrypto"
-    fi
-done
+modules=(
+    "crypt: AES"
+    "crypt: BASE64"
+    "crypt: CRC32"
+    "crypt: CRYPT"
+    "crypt: HMAC"
+    "crypt: MD5"
+    "crypt: RSA"
+    "crypt: SHA256"
+    "crypt: SHA1"
+    "data: ARRAY"
+    "data: HASH"
+    "data: JWT"
+    "data: LIST"
+    "data: MAP"
+    "data: XBUF"
+    "data: XJSON"
+    "data: XSTR"
+    "net: ADDR"
+    "net: EVENT"
+    "net: HTTP"
+    "net: MDTP"
+    "net: NTP"
+    "net: RTP"
+    "net: SOCK"
+    "net: API"
+    "net: WS"
+    "sys: SYNC"
+    "sys: THREAD"
+    "sys: XCLI"
+    "sys: XCPU"
+    "sys: XFS"
+    "sys: XLOG"
+    "sys: XSIG"
+    "sys: XTIME"
+    "sys: XTOP"
+    "sys: XTYPE"
+)
 
 enable_aes() {
     USE_AES=y
@@ -275,92 +278,102 @@ enable_xtop() {
     enable_xfs
 }
 
-modules=(
-    "crypt: AES"
-    "crypt: BASE64"
-    "crypt: CRC32"
-    "crypt: CRYPT"
-    "crypt: HMAC"
-    "crypt: MD5"
-    "crypt: RSA"
-    "crypt: SHA256"
-    "crypt: SHA1"
-    "data: ARRAY"
-    "data: HASH"
-    "data: JWT"
-    "data: LIST"
-    "data: MAP"
-    "data: XBUF"
-    "data: XJSON"
-    "data: XSTR"
-    "net: ADDR"
-    "net: EVENT"
-    "net: HTTP"
-    "net: MDTP"
-    "net: NTP"
-    "net: RTP"
-    "net: SOCK"
-    "net: API"
-    "net: WS"
-    "sys: SYNC"
-    "sys: THREAD"
-    "sys: XCLI"
-    "sys: XCPU"
-    "sys: XFS"
-    "sys: XLOG"
-    "sys: XSIG"
-    "sys: XTIME"
-    "sys: XTOP"
-    "sys: XTYPE"
-)
+validate_args() {
+    case $1 in
+        "make")
+            [ ! -f "./Makefile.tmp" ] && echo "Makefile template file is not found" && exit 1
+            extension='$(OBJ) \\'
+            sourceList="xver.${extension}"
+            ;;
+        "cmake")
+            [ ! -f "./CMakeLists.tmp" ] && echo "CMakeLists template file is not found" && exit 1
+            extension="c"
+            sourceList="${SOURCE_DIR}/xver.${extension}"
+            ;;
+        "smake")
+            [ ! -f "./smake.tmp" ] && echo "SMake template file is not found" && exit 1
+            extension="c"
+            sourceList="\"${SOURCE_DIR}/xver.${extension}\","
+            ;;
+        *)
+            echo "Invalid make tool."
+            exit 1
+            ;;
+    esac
+}
 
-# Fix dependencies
-for mod in "${modules[@]}"; do
-    IFS=': ' read -ra parts <<< "$mod"
-    type=${parts[0]}
-    name=${parts[1]}
-    var="USE_$name"
+fix_dependencies() {
+    for mod in "${modules[@]}"; do
+        IFS=': ' read -ra parts <<< "$mod"
+        type=${parts[0]}
+        name=${parts[1]}
+        var="USE_$name"
 
-    if [ -v $var ] && [ ${!var} == "y" ]; then
-        func="enable_${name,,}"
-        eval "$func"
-    fi
-done
-
-for mod in "${modules[@]}"; do
-    IFS=': ' read -ra parts <<< "$mod"
-    dir=${parts[0]}
-    name=${parts[1]}
-    var="USE_$name"
-
-    if [ -v $var ] && [ ${!var} == "y" ]; then
-        echo "-- Using ${mod,,}.c"
-        if [[ $1 == "make" ]]; then
-            sourceList="${sourceList}\n   ${name,,}.${extension}"
-        elif [[ $1 == "cmake" ]]; then
-            sourceList="${sourceList}\n    ${SOURCE_DIR}/${dir}/${name,,}.${extension}"
-        elif [[ $1 == "smake" ]]; then
-            sourceList="${sourceList}\n            \"${SOURCE_DIR}/${dir}/${name,,}.${extension}\","
+        if [ -v $var ] && [ ${!var} == "y" ]; then
+            func="enable_${name,,}"
+            eval "$func"
         fi
+    done
+}
+
+handle_ssl() {
+    for arg in "$@"; do
+        if [[ $arg == "--ssl" ]]; then
+            sslFlags="-D_XUTILS_USE_SSL"
+            sslLibs="-lssl -lcrypto"
+        fi
+    done
+}
+
+process_modules() {
+    for mod in "${modules[@]}"; do
+        IFS=': ' read -ra parts <<< "$mod"
+        dir=${parts[0]}
+        name=${parts[1]}
+        var="USE_$name"
+
+        if [ -v $var ] && [ ${!var} == "y" ]; then
+            echo "-- Using ${mod,,}.c"
+            case $1 in
+                "make") sourceList="${sourceList}\n   ${name,,}.${extension}" ;;
+                "cmake") sourceList="${sourceList}\n    ${SOURCE_DIR}/${dir}/${name,,}.${extension}" ;;
+                "smake") sourceList="${sourceList}\n            \"${SOURCE_DIR}/${dir}/${name,,}.${extension}\"," ;;
+            esac
+        fi
+    done
+
+    if [[ "${sourceList: -1}" == "," ]]; then
+        sourceList="${sourceList%,}"
     fi
-done
+}
 
-if [[ "${sourceList: -1}" == "," ]]; then
-    sourceList="${sourceList%,}"
-fi
+generate_files() {
+    case $1 in
+        "cmake")
+            echo "-- Generating new CMakeLists.txt file..."
+            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./CMakeLists.tmp > ../CMakeLists.txt
+            ;;
+        "smake")
+            echo "-- Generating new smake.json file..."
+            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./smake.tmp > ../smake.json
+            ;;
+        "make")
+            echo "-- Generating new Makefile..."
+            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./Makefile.tmp > ./Makefile.1
+            sed -e "s#_SSL_FLAGS_#${sslFlags}#" < ./Makefile.1 > ./Makefile.2
+            sed -e "s#_SSL_LIBS_#${sslLibs}#" < ./Makefile.2 > ../Makefile
 
-if [[ $1 == "cmake" ]]; then
-    echo "-- Generating new CMakeLists.txt file..."
-    cat ./CMakeLists.tmp | sed -e "s#_SOURCE_LIST_#${sourceList}#" > ../CMakeLists.txt
-elif [[ $1 == "smake" ]]; then
-    echo "-- Generating new smake.json file..."
-    cat ./smake.tmp | sed -e "s#_SOURCE_LIST_#${sourceList}#" > ../smake.json
-elif [[ $1 == "make" ]]; then
-    echo "-- Generating new Makefile..."
-    cat ./Makefile.tmp | sed -e "s#_SOURCE_LIST_#${sourceList}#" > ./Makefile.1
-    cat ./Makefile.1 | sed -e "s#_SSL_FLAGS_#${sslFlags}#" > ./Makefile.2
-    cat ./Makefile.2 | sed -e "s#_SSL_LIBS_#${sslLibs}#" > ../Makefile
+            [ -f ./Makefile.1 ] && rm -rf ./Makefile.1
+            [ -f ./Makefile.2 ] && rm -rf ./Makefile.2
+            ;;
+    esac
+}
 
-    [ -f ./Makefile.1 ] && rm -rf ./Makefile.1
-    [ -f ./Makefile.2 ] && rm -rf ./Makefile.2
-fi
+# Validate CLI args
+validate_args "$1"
+handle_ssl "$@"
+
+# Fix deps & enable modules
+fix_dependencies "$@"
+process_modules "$1"
+generate_files "$1"

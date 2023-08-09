@@ -464,15 +464,25 @@ char XFile_GetTypeChar(xfile_type_t eType)
     return '?'; // Unknown file format
 }
 
-int XPath_Parse(xpath_t *pPath, const char *pPathStr)
+int XPath_Parse(xpath_t *pPath, const char *pPathStr, xbool_t bStat)
 {
+    XASSERT(pPath, XSTDINV);
     pPath->sPath[0] = XSTR_NUL;
     pPath->sFile[0] = XSTR_NUL;
 
-    if (!xstrused(pPathStr)) return XSTDERR;
+    XASSERT((xstrused(pPathStr)), XSTDERR);
     size_t nLength = strlen(pPathStr);
+    xbool_t bIsDir = XFALSE;
 
-    if (pPathStr[nLength - 1] == '/')
+    if (bStat)
+    {
+        struct stat st;
+        XSTATUS nStat = xstat(pPathStr, &st);
+        XASSERT((nStat >= 0), XSTDERR);
+        bIsDir = S_ISDIR(st.st_mode);
+    }
+
+    if (bIsDir || pPathStr[nLength - 1] == '/')
         return (int)xstrncpy(pPath->sPath, sizeof(pPath->sPath), pPathStr);
 
     xarray_t *pArr = xstrsplit(pPathStr, "/");

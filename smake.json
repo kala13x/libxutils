@@ -47,7 +47,7 @@
             "./src/sys/xtype.c"
         ],
 
-        "headers": [
+        "includes": [
             "./src",
             "./src/crypt",
             "./src/data",

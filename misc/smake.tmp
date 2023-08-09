@@ -11,7 +11,7 @@
             _SOURCE_LIST_
         ],
 
-        "headers": [
+        "includes": [
             "./src",
             "./src/crypt",
             "./src/data",

@@ -92,7 +92,7 @@ uint8_t* XFile_Load(xfile_t *pFile, size_t *pSize);
 
 xbool_t XPath_Exists(const char *pPath);
 char XPath_GetType(xmode_t nMode);
-int XPath_Parse(xpath_t *pPath, const char *pPathStr);
+int XPath_Parse(xpath_t *pPath, const char *pPathStr, xbool_t bStat);
 int XPath_SetPerm(const char *pPath, const char *pPerm);
 int XPath_GetPerm(char *pOutput, size_t nSize, const char *pPath);
 int XPath_PermToMode(const char *pPerm, xmode_t *pMode);

@@ -707,7 +707,7 @@ static xbool_t XPass_InitDatabase(xpass_ctx_t *pCtx)
     XASSERT((sAnswer[0] == 'Y' && sAnswer[0] == 'y'), XFALSE);
 
     xpath_t path;
-    XPath_Parse(&path, pCtx->sFile);
+    XPath_Parse(&path, pCtx->sFile, XTRUE);
 
     xmode_t nMode = 0;
     XPath_PermToMode(XPASS_DIR_CHMOD, &nMode);
@@ -772,7 +772,7 @@ static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
     XASSERT((sAnswer[0] == 'Y' || sAnswer[0] == 'y'), XFALSE);
 
     xpath_t path;
-    XPath_Parse(&path, pCtx->sConf);
+    XPath_Parse(&path, pCtx->sConf, XTRUE);
 
     xmode_t nMode = 0;
     XPath_PermToMode(XPASS_DIR_CHMOD, &nMode);
