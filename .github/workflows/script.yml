@@ -1,0 +1,40 @@
+name: Build Script
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: sudo apt install -y libssl-dev
+
+    - name: Install CMAKE
+      run: sudo apt install -y cmake
+
+    - name: Checkout SMAKE
+      uses: actions/checkout@v3
+      with:
+        repository: 'kala13x/smake'
+        submodules: recursive
+        path: 'smake'
+
+    - name: Install SMAKE
+      run: cd smake && ./build.sh --install
+
+    - name: Build with SMAKE
+      run: ./build.sh smake
+
+    - name: Build with CMAKE
+      run: ./build.sh cmake
+      
+    - name: Build with Makefile
+      run: ./build.sh make
