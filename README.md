@@ -141,10 +141,10 @@ Red-Hat family: `sudo dnf install openssl-devel`\
 Debian family: `sudo apt-get install libssl-dev`
 
 #### Disable SSL support in the library
-If you use the `cmake` or `smake` tools for building the project, you do not need to disable anything manually,\
+If you use the `build.sh` script, `cmake` or `smake` tools for building the project, you do not need to disable anything manually,\
 these tools will automatically disable SSL support if the OpenSSL library is not installed in the system.
 
-If you use `Makefile` to build the project, all you need to adjust `CFLAGS` and `LIBS` in `Makefile`.
+If you use raw `Makefile` to build the project, all you need to adjust `CFLAGS` and `LIBS` in `Makefile`.
 - Remove `-D_XUTILS_USE_SSL` entry from the `CFLAGS`.
 - Remove `-lssl` and `-lcrypto` entries from the `LIBS`.
 
