@@ -122,7 +122,7 @@ USE_XLOG=y
 USE_XSTR=n
 ...
 ```
-After updating the configuration, use the `build.sh` script to generate the `Makefile` and build the project. Use `cmake` or `make` as the first argument for the script.
+After updating the configuration, use the `build.sh` script to generate the `Makefile` and build the project. Use `cmake`, `smake`, or `make` as the first argument for the script.
 
 ```bash
 ./build.sh cmake
