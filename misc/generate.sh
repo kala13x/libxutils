@@ -9,6 +9,7 @@ extension=""
 sslObject=""
 sslFlags=""
 sslLibs=""
+useSSL="yes"
 
 SMAKE_SSL_OBJ="\"find\": {\n\
             \"libssl.so:libcrypto.so\": {\n\
@@ -333,20 +334,23 @@ fix_dependencies() {
 
 parse_cli_args() {
     for arg in "$@"; do
-        if [[ $arg == "--ssl" ]]; then
-            echo "-- Using SSL"
-            useSSL="yes"
+
+        if [[ $arg == --ssl=* ]]; then
+            useSSL="${arg#*=}"
         fi
 
         if [[ $arg == --prefix=* ]]; then
             installPrefix="${arg#*=}"
-            echo "-- Prefix: $installPrefix"
         fi
+
     done
 
     if [[ "${installPrefix: -1}" == "/" ]]; then
         installPrefix="${installPrefix%/}"
     fi
+
+    echo "-- Prefix: $installPrefix"
+    echo "-- Using SSL: $useSSL"
 }
 
 process_modules() {

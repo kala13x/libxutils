@@ -30,20 +30,20 @@ jobs:
     - name: Install SMAKE
       run: cd smake && ./build.sh --install
 
-    - name: Build with SMAKE with SSL
+    - name: Build with SMAKE (SSL)
       run: ./build.sh smake
 
-    - name: Build with SMAKE no SSL
+    - name: Build with SMAKE (no SSL)
       run: ./build.sh smake --ssl=no
 
-    - name: Build with CMAKE with SSL
+    - name: Build with CMAKE (SSL)
       run: ./build.sh cmake
       
-    - name: Build with CMAKE no SSL
+    - name: Build with CMAKE (no SSL)
       run: ./build.sh cmake --ssl=no
       
-    - name: Build with Makefile with SSL
+    - name: Build with Makefile (SSL)
       run: ./build.sh make
 
-    - name: Build with Makefile no SSL
+    - name: Build with Makefile (no SSL)
       run: ./build.sh make --ssl=no

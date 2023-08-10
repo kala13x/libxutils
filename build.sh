@@ -12,7 +12,6 @@ USE_SSL="yes"
 TOOLS_DONE=0
 MAKE_TOOL=0
 CPU_COUNT=1
-SSL_ARG=""
 
 if [ ! -z "$1" ]; then
     MAKE_TOOL=$1
@@ -103,7 +102,7 @@ build_tools() {
 
 build_library() {
     cd $PROJ_PATH/misc
-    ./generate.sh $MAKE_TOOL --prefix=$INSTALL_PREFIX $SSL_ARG
+    ./generate.sh $MAKE_TOOL --prefix=$INSTALL_PREFIX --ssl=$USE_SSL
     cd $PROJ_PATH
 
     if [[ $MAKE_TOOL == "make" ]]; then
@@ -138,18 +137,17 @@ install_library() {
     cd $PROJ_PATH
 }
 
-echo "Checking OpenSSL libraries."
-LIB_CRYPTO=$(find_lib "libcrypto.so")
-LIB_SSL=$(find_lib "libssl.so")
-
 if [[ $USE_SSL == "yes" ]]; then
+    echo "Checking OpenSSL libraries."
+    LIB_CRYPTO=$(find_lib "libcrypto.so")
+    LIB_SSL=$(find_lib "libssl.so")
+
     # If the OpenSSL libraries are found, set the environment variable
     if [ -n "$LIB_CRYPTO" ] && [ -n "$LIB_SSL" ]; then
         echo "OpenSSL libraries found!"
         echo "Crypto: $LIB_CRYPTO"
         echo "SSL: $LIB_SSL"
         export XUTILS_USE_SSL=y
-        SSL_ARG="--ssl"
     else
         echo 'OpenSSL libraries not found!'
     fi
