@@ -6,8 +6,22 @@ SOURCE_DIR=./src
 installPrefix="/usr/local"
 sourceList=""
 extension=""
+sslObject=""
 sslFlags=""
 sslLibs=""
+
+SMAKE_SSL_OBJ="\"find\": {\n\
+            \"libssl.so:libcrypto.so\": {\n\
+                \"path\": \"/usr/local/ssl/lib:/usr/local/ssl/lib64\",\n\
+                \"flags\": \"-D_XUTILS_USE_SSL\",\n\
+                \"libs\": \"-lssl -lcrypto\"\n\
+            }\n\
+        }"
+
+CMAKE_SSL_OBJ="find_package(OpenSSL)\n\
+IF(OpenSSL_FOUND)\n\
+set(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -D_XUTILS_USE_SSL\")\n\
+ENDIF()"
 
 modules=(
     "crypt: AES"
@@ -320,8 +334,8 @@ fix_dependencies() {
 parse_cli_args() {
     for arg in "$@"; do
         if [[ $arg == "--ssl" ]]; then
-            sslFlags="-D_XUTILS_USE_SSL"
-            sslLibs="-lssl -lcrypto"
+            echo "-- Using SSL"
+            useSSL="yes"
         fi
 
         if [[ $arg == --prefix=* ]]; then
@@ -359,9 +373,28 @@ process_modules() {
 
 cleanup_temp_files() {
     [ -f ./CMakeLists.1 ] && rm -f ./CMakeLists.1
+    [ -f ./CMakeLists.2 ] && rm -f ./CMakeLists.2
     [ -f ./Makefile.1 ] && rm -f ./Makefile.1
     [ -f ./Makefile.2 ] && rm -f ./Makefile.2
+    [ -f ./smake.2 ] && rm -f ./smake.2
     [ -f ./smake.1 ] && rm -f ./smake.1
+}
+
+prepare_ssl_objects() {
+    if [[ $useSSL == "yes" ]]; then
+        case $1 in
+            "cmake")
+                sslObject=$CMAKE_SSL_OBJ
+                ;;
+            "smake")
+                sslObject=$SMAKE_SSL_OBJ
+                ;;
+            "make")
+                sslFlags="-D_XUTILS_USE_SSL"
+                sslLibs="-lssl -lcrypto"
+                ;;
+        esac
+    fi
 }
 
 generate_files() {
@@ -369,12 +402,14 @@ generate_files() {
         "cmake")
             echo "-- Generating new CMakeLists.txt file..."
             sed -e "s#_INSTALL_PREFIX_#${installPrefix}#" < ./CMakeLists.tmp > ./CMakeLists.1
-            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./CMakeLists.1 > ../CMakeLists.txt
+            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./CMakeLists.1 > ./CMakeLists.2
+            sed -e "s#_SSL_OBJECT_#${sslObject}#" < ./CMakeLists.2 > ../CMakeLists.txt
             ;;
         "smake")
             echo "-- Generating new smake.json file..."
             sed -e "s#_INSTALL_PREFIX_#${installPrefix}#" < ./smake.tmp > ./smake.1
-            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./smake.1 > ../smake.json
+            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./smake.1 > ./smake.2
+            sed -e "s#_SSL_OBJECT_#${sslObject}#" < ./smake.2 > ../smake.json
             ;;
         "make")
             echo "-- Generating new Makefile..."
@@ -391,7 +426,10 @@ validate_args "$1"
 parse_cli_args "$@"
 
 # Fix deps & enable modules
+prepare_ssl_objects "$1"
 fix_dependencies "$@"
 process_modules "$1"
+
+# Generate build files
 generate_files "$1"
 cleanup_temp_files

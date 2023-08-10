@@ -7,6 +7,8 @@ TOOL_PATH=$PROJ_PATH/examples
 LIB_PATH=$PROJ_PATH
 
 INSTALL_PREFIX="/usr/local"
+USE_SSL="yes"
+
 TOOLS_DONE=0
 MAKE_TOOL=0
 CPU_COUNT=1
@@ -26,6 +28,11 @@ for arg in "$@"; do
     if [[ $arg == --prefix=* ]]; then
         INSTALL_PREFIX="${arg#*=}"
         echo "Using prefix: $INSTALL_PREFIX"
+    fi
+
+    if [[ $arg == --ssl=* ]]; then
+        USE_SSL="${arg#*=}"
+        echo "Using SSL: $USE_SSL"
     fi
 done
 
@@ -135,15 +142,17 @@ echo "Checking OpenSSL libraries."
 LIB_CRYPTO=$(find_lib "libcrypto.so")
 LIB_SSL=$(find_lib "libssl.so")
 
-# If the OpenSSL libraries are found, set the environment variable
-if [ -n "$LIB_CRYPTO" ] && [ -n "$LIB_SSL" ]; then
-    echo "OpenSSL libraries found!"
-    echo "Crypto: $LIB_CRYPTO"
-    echo "SSL: $LIB_SSL"
-    export XUTILS_USE_SSL=y
-    SSL_ARG="--ssl"
-else
-    echo 'OpenSSL libraries not found!'
+if [[ $USE_SSL == "yes" ]]; then
+    # If the OpenSSL libraries are found, set the environment variable
+    if [ -n "$LIB_CRYPTO" ] && [ -n "$LIB_SSL" ]; then
+        echo "OpenSSL libraries found!"
+        echo "Crypto: $LIB_CRYPTO"
+        echo "SSL: $LIB_SSL"
+        export XUTILS_USE_SSL=y
+        SSL_ARG="--ssl"
+    else
+        echo 'OpenSSL libraries not found!'
+    fi
 fi
 
 # Build the library

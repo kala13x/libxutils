@@ -26,13 +26,7 @@
             "./smake"
         ],
 
-        "find": {
-            "libssl.so:libcrypto.so": {
-                "path": "/usr/local/ssl/lib:/usr/local/ssl/lib64",
-                "flags": "-D_XUTILS_USE_SSL",
-                "libs": "-lssl -lcrypto"
-            }
-        }
+        _SSL_OBJECT_
     },
 
     "install": {
