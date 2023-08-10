@@ -6,6 +6,7 @@ PROJ_PATH=$(dirname $(readlink -f "$0"))
 TOOL_PATH=$PROJ_PATH/examples
 LIB_PATH=$PROJ_PATH
 
+INSTALL_PREFIX="/usr/local"
 TOOLS_DONE=0
 MAKE_TOOL=0
 CPU_COUNT=1
@@ -20,6 +21,13 @@ if [ $MAKE_TOOL == 0 ]; then
     echo "example: $0 smake"
     exit 1
 fi
+
+for arg in "$@"; do
+    if [[ $arg == --prefix=* ]]; then
+        INSTALL_PREFIX="${arg#*=}"
+        echo "Using prefix: $INSTALL_PREFIX"
+    fi
+done
 
 # List of possible OpenSSL library locations
 SSL_LD_PATH=(
@@ -88,7 +96,7 @@ build_tools() {
 
 build_library() {
     cd $PROJ_PATH/misc
-    ./generate.sh $MAKE_TOOL $SSL_ARG
+    ./generate.sh $MAKE_TOOL --prefix=$INSTALL_PREFIX $SSL_ARG
     cd $PROJ_PATH
 
     if [[ $MAKE_TOOL == "make" ]]; then

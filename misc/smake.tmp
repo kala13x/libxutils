@@ -36,7 +36,7 @@
     },
 
     "install": {
-        "headerDir": "/usr/local/include/xutils",
-        "binaryDir": "/usr/local/lib"
+        "headerDir": "_INSTALL_PREFIX_/include/xutils",
+        "binaryDir": "_INSTALL_PREFIX_/lib"
     }
 }

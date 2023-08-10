@@ -3,6 +3,7 @@
 . $(dirname "$0")/../xutils.conf
 SOURCE_DIR=./src
 
+installPrefix="/usr/local"
 sourceList=""
 extension=""
 sslFlags=""
@@ -316,13 +317,22 @@ fix_dependencies() {
     done
 }
 
-handle_ssl() {
+parse_cli_args() {
     for arg in "$@"; do
         if [[ $arg == "--ssl" ]]; then
             sslFlags="-D_XUTILS_USE_SSL"
             sslLibs="-lssl -lcrypto"
         fi
+
+        if [[ $arg == --prefix=* ]]; then
+            installPrefix="${arg#*=}"
+            echo "-- Prefix: $installPrefix"
+        fi
     done
+
+    if [[ "${installPrefix: -1}" == "/" ]]; then
+        installPrefix="${installPrefix%/}"
+    fi
 }
 
 process_modules() {
@@ -347,33 +357,41 @@ process_modules() {
     fi
 }
 
+cleanup_temp_files() {
+    [ -f ./CMakeLists.1 ] && rm -f ./CMakeLists.1
+    [ -f ./Makefile.1 ] && rm -f ./Makefile.1
+    [ -f ./Makefile.2 ] && rm -f ./Makefile.2
+    [ -f ./smake.1 ] && rm -f ./smake.1
+}
+
 generate_files() {
     case $1 in
         "cmake")
             echo "-- Generating new CMakeLists.txt file..."
-            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./CMakeLists.tmp > ../CMakeLists.txt
+            sed -e "s#_INSTALL_PREFIX_#${installPrefix}#" < ./CMakeLists.tmp > ./CMakeLists.1
+            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./CMakeLists.1 > ../CMakeLists.txt
             ;;
         "smake")
             echo "-- Generating new smake.json file..."
-            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./smake.tmp > ../smake.json
+            sed -e "s#_INSTALL_PREFIX_#${installPrefix}#" < ./smake.tmp > ./smake.1
+            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./smake.1 > ../smake.json
             ;;
         "make")
             echo "-- Generating new Makefile..."
-            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./Makefile.tmp > ./Makefile.1
-            sed -e "s#_SSL_FLAGS_#${sslFlags}#" < ./Makefile.1 > ./Makefile.2
-            sed -e "s#_SSL_LIBS_#${sslLibs}#" < ./Makefile.2 > ../Makefile
-
-            [ -f ./Makefile.1 ] && rm -rf ./Makefile.1
-            [ -f ./Makefile.2 ] && rm -rf ./Makefile.2
+            sed -e "s#_INSTALL_PREFIX_#${installPrefix}#" < ./Makefile.tmp > ./Makefile.1
+            sed -e "s#_SOURCE_LIST_#${sourceList}#" < ./Makefile.1 > ./Makefile.2
+            sed -e "s#_SSL_FLAGS_#${sslFlags}#" < ./Makefile.2 > ./Makefile.1
+            sed -e "s#_SSL_LIBS_#${sslLibs}#" < ./Makefile.1 > ../Makefile
             ;;
     esac
 }
 
 # Validate CLI args
 validate_args "$1"
-handle_ssl "$@"
+parse_cli_args "$@"
 
 # Fix deps & enable modules
 fix_dependencies "$@"
 process_modules "$1"
 generate_files "$1"
+cleanup_temp_files
