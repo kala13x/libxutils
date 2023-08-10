@@ -148,6 +148,11 @@ If you use raw `Makefile` to build the project, all you need to adjust `CFLAGS` 
 - Remove `-D_XUTILS_USE_SSL` entry from the `CFLAGS`.
 - Remove `-lssl` and `-lcrypto` entries from the `LIBS`.
 
+Use build script to force disable SSL even if it is installed in the system:
+```bash
+./build.sh make --ssl=no
+```
+
 ### Usage
 If you want to use the library, include the required `<xutils/*.h>` header files in your source code and\
 use `-lxutils` linker flag while compiling your project. See the example directory for more information.
