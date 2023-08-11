@@ -3,60 +3,59 @@
 # https://github.com/kala13x/smake #
 ####################################
 
-CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU -D_XUTILS_USE_SSL
+CFLAGS = -D_XUTILS_USE_SSL -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU
 CFLAGS += -I./src/crypt -I./src/data -I./src/net -I./src/sys -I./src
-
 LIBS = -lssl -lcrypto -lpthread
 NAME = libxutils.a
 ODIR = ./build
 OBJ = o
 
-OBJS = xver.$(OBJ) \
-   aes.$(OBJ) \
-   base64.$(OBJ) \
-   crc32.$(OBJ) \
-   crypt.$(OBJ) \
-   hmac.$(OBJ) \
-   md5.$(OBJ) \
-   rsa.$(OBJ) \
-   sha256.$(OBJ) \
-   sha1.$(OBJ) \
-   array.$(OBJ) \
-   hash.$(OBJ) \
-   jwt.$(OBJ) \
-   list.$(OBJ) \
-   map.$(OBJ) \
-   xbuf.$(OBJ) \
-   xjson.$(OBJ) \
-   xstr.$(OBJ) \
-   addr.$(OBJ) \
-   event.$(OBJ) \
-   http.$(OBJ) \
-   mdtp.$(OBJ) \
-   ntp.$(OBJ) \
-   rtp.$(OBJ) \
-   sock.$(OBJ) \
-   api.$(OBJ) \
-   ws.$(OBJ) \
-   sync.$(OBJ) \
-   thread.$(OBJ) \
-   xcli.$(OBJ) \
-   xcpu.$(OBJ) \
-   xfs.$(OBJ) \
-   xlog.$(OBJ) \
-   xsig.$(OBJ) \
-   xtime.$(OBJ) \
-   xtop.$(OBJ) \
-   xtype.$(OBJ) \
+OBJS = addr.$(OBJ) \
+	aes.$(OBJ) \
+	api.$(OBJ) \
+	array.$(OBJ) \
+	base64.$(OBJ) \
+	crc32.$(OBJ) \
+	crypt.$(OBJ) \
+	event.$(OBJ) \
+	hash.$(OBJ) \
+	hmac.$(OBJ) \
+	http.$(OBJ) \
+	jwt.$(OBJ) \
+	list.$(OBJ) \
+	map.$(OBJ) \
+	md5.$(OBJ) \
+	mdtp.$(OBJ) \
+	ntp.$(OBJ) \
+	rsa.$(OBJ) \
+	rtp.$(OBJ) \
+	sha1.$(OBJ) \
+	sha256.$(OBJ) \
+	sock.$(OBJ) \
+	sync.$(OBJ) \
+	thread.$(OBJ) \
+	ws.$(OBJ) \
+	xbuf.$(OBJ) \
+	xcli.$(OBJ) \
+	xcpu.$(OBJ) \
+	xfs.$(OBJ) \
+	xjson.$(OBJ) \
+	xlog.$(OBJ) \
+	xsig.$(OBJ) \
+	xstr.$(OBJ) \
+	xtime.$(OBJ) \
+	xtop.$(OBJ) \
+	xtype.$(OBJ) \
+	xver.$(OBJ)
 
 OBJECTS = $(patsubst %,$(ODIR)/%,$(OBJS))
-INSTALL_BIN = /usr/local/lib
 INSTALL_INC = /usr/local/include/xutils
+INSTALL_BIN = /usr/local/lib
 VPATH = ./src:./src/sys:./src/net:./src/data:./src/crypt
 
 .c.$(OBJ):
 	@test -d $(ODIR) || mkdir -p $(ODIR)
-	$(CC) $(CFLAGS) -c -o $(ODIR)/$@ $< $(LIBS)
+	$(CC) $(CFLAGS)  -c -o $(ODIR)/$@ $< $(LIBS)
 
 $(NAME):$(OBJS)
 	$(AR) rcs -o $(ODIR)/$(NAME) $(OBJECTS)

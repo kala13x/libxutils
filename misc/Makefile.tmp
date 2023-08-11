@@ -5,7 +5,6 @@
 
 CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU _SSL_FLAGS_
 CFLAGS += -I./src/crypt -I./src/data -I./src/net -I./src/sys -I./src
-
 LIBS = _SSL_LIBS_ -lpthread
 NAME = libxutils.a
 ODIR = ./build

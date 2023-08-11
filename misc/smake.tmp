@@ -12,18 +12,11 @@
         ],
 
         "includes": [
-            "./src",
             "./src/crypt",
             "./src/data",
             "./src/net",
-            "./src/sys"
-        ],
-
-        "excludes": [
-            "./examples",
-            "./build",
-            "./cmake",
-            "./smake"
+            "./src/sys",
+            "./src"
         ],
 
         _SSL_OBJECT_
