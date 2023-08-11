@@ -7,23 +7,18 @@ TOOL_PATH=$PROJ_PATH/examples
 LIB_PATH=$PROJ_PATH
 
 INSTALL_PREFIX="/usr/local"
+MAKE_TOOL="make"
 USE_SSL="yes"
 
 TOOLS_DONE=0
-MAKE_TOOL=0
 CPU_COUNT=1
 
-if [ ! -z "$1" ]; then
-    MAKE_TOOL=$1
-fi
-
-if [ $MAKE_TOOL == 0 ]; then
-    echo "Specify build tool (cmake / smake)"
-    echo "example: $0 smake"
-    exit 1
-fi
-
 for arg in "$@"; do
+    if [[ $arg == --tool=* ]]; then
+        MAKE_TOOL="${arg#*=}"
+        echo "Using tool: $MAKE_TOOL"
+    fi
+
     if [[ $arg == --prefix=* ]]; then
         INSTALL_PREFIX="${arg#*=}"
         echo "Using prefix: $INSTALL_PREFIX"
