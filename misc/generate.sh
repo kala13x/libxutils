@@ -363,7 +363,7 @@ process_modules() {
         if [ -v $var ] && [ ${!var} == "y" ]; then
             echo "-- Using ${mod,,}.c"
             case $1 in
-                "make") sourceList="${sourceList}\n   ${name,,}.${extension}" ;;
+                "make") sourceList="${sourceList}\n    ${name,,}.${extension}" ;;
                 "cmake") sourceList="${sourceList}\n    ${SOURCE_DIR}/${dir}/${name,,}.${extension}" ;;
                 "smake") sourceList="${sourceList}\n            \"${SOURCE_DIR}/${dir}/${name,,}.${extension}\"," ;;
             esac

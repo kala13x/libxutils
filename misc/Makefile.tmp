@@ -3,7 +3,7 @@
 # https://github.com/kala13x/smake #
 ####################################
 
-CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU _SSL_FLAGS_
+CFLAGS = _SSL_FLAGS_ -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU
 CFLAGS += -I./src/crypt -I./src/data -I./src/net -I./src/sys -I./src
 LIBS = _SSL_LIBS_ -lpthread
 NAME = libxutils.a
@@ -13,8 +13,8 @@ OBJ = o
 OBJS = _SOURCE_LIST_
 
 OBJECTS = $(patsubst %,$(ODIR)/%,$(OBJS))
-INSTALL_BIN = _INSTALL_PREFIX_/lib
 INSTALL_INC = _INSTALL_PREFIX_/include/xutils
+INSTALL_BIN = _INSTALL_PREFIX_/lib
 VPATH = ./src:./src/sys:./src/net:./src/data:./src/crypt
 
 .c.$(OBJ):

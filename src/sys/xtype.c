@@ -70,7 +70,7 @@ size_t XBytesToUnit(char *pDst, size_t nSize, size_t nBytes, xbool_t bShort)
     else
     {
         fVal = (double)nBytes;
-        pUnit = bShort ? "B" : " B";
+        pUnit = bShort ? "B" : "  B";
     }
 
     return bShort ?

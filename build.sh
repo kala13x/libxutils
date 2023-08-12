@@ -145,6 +145,8 @@ if [[ $USE_SSL == "yes" ]]; then
         export XUTILS_USE_SSL=y
     else
         echo 'OpenSSL libraries not found!'
+        export XUTILS_USE_SSL=n
+        USE_SSL="no"
     fi
 fi
 

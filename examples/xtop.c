@@ -30,6 +30,7 @@
 #define XTOP_SORT_LEN       4
 
 #define XTOP_API_URI        "/api/all"
+#define XTOP_TOTAL_LEN      5
 
 #define XTOP_CPU_HEADER " "\
     "CPU     IDL      "\
@@ -724,6 +725,9 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_wind_t *pWin, xtop_args_t *pArgs, xarray_t *
         size_t nNextLength = strlen(pIface->sName);
         if (nNextLength > nLength) nLength = nNextLength;
     }
+
+    /* If iface length is less than "total", take "total" length as maximum */
+    if (nLength < XTOP_TOTAL_LEN) nLength = XTOP_TOTAL_LEN;
 
     char sLine[XLINE_MAX], sRound[XSTR_TINY], sData[XSTR_TINY];
     size_t nPreHdr = nLength > 4 ? nLength - 4 : nLength;
