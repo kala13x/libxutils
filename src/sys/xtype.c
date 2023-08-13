@@ -55,22 +55,22 @@ size_t XBytesToUnit(char *pDst, size_t nSize, size_t nBytes, xbool_t bShort)
     if (nBytes > 1073741824)
     {
         fVal = (double)nBytes / (double)1073741824;
-        pUnit = bShort ? "G" : " GB";
+        pUnit = bShort ? "G" : "GB";
     }
     else if (nBytes > 1048576)
     {
         fVal = (double)nBytes / (double)1048576;
-        pUnit = bShort ? "M" : " MB";
+        pUnit = bShort ? "M" : "MB";
     }
     else if (nBytes > 1024)
     {
         fVal = (double)nBytes / (double)1024;
-        pUnit = bShort ? "K" : " KB";
+        pUnit = bShort ? "K" : "KB";
     }
     else
     {
         fVal = (double)nBytes;
-        pUnit = bShort ? "B" : "  B";
+        pUnit = bShort ? "B" : " B";
     }
 
     return bShort ?
