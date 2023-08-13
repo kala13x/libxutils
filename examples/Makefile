@@ -18,13 +18,14 @@ EXECS = array \
 	statcov \
 	strings \
 	json \
-	xtop \
-	xlog \
+	xutils \
 	xcrypt \
-	xpass \
 	xhttp \
 	xjson \
+	xpass \
 	xsrc \
+	xtop \
+	xlog \
 	list \
 	ntp \
 	jwt \
@@ -38,6 +39,7 @@ $(EXECS): %: %.c
 .PHONY: install
 install:
 	install -m 0755 xcrypt /usr/local/bin/
+	install -m 0755 xutils /usr/local/bin/
 	install -m 0755 xpass /usr/local/bin/
 	install -m 0755 xjson /usr/local/bin/
 	install -m 0755 xhttp /usr/local/bin/
