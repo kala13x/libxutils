@@ -33,7 +33,7 @@ jobs:
     - name: Build with SMAKE (SSL)
       run: |
         ./build.sh --tool=smake --tools --examples
-        ./build/xutils
+        ./tools/xutils
 
     - name: Build with SMAKE (no SSL)
       run: ./build.sh --tool=smake --tools --examples --ssl=no
@@ -41,19 +41,19 @@ jobs:
     - name: Build with CMAKE (SSL)
       run: |
         ./build.sh --tool=cmake --tools --examples
-        ./build/xutils
+        ./tools/xutils
       
     - name: Build with CMAKE (no SSL)
       run: |
         ./build.sh --tool=cmake --tools --examples --ssl=no
-        ./build/xutils
+        ./tools/xutils
       
     - name: Build with Makefile (SSL)
       run: |
         ./build.sh --tool=make --tools --examples
-        ./build/xutils
+        ./tools/xutils
 
     - name: Build with Makefile (no SSL)
       run: |
         ./build.sh --tool=make --tools --examples --ssl=no
-        ./build/xutils
+        ./tools/xutils
