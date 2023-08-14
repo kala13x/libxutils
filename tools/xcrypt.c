@@ -163,7 +163,7 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("the program will prompt you to enter the it securely.\n");
 
     xlog("%s2%s) You can specify multiple ciphers with -c argument.", XSTR_FMT_BOLD, XSTR_FMT_RESET);
-    xlog("The ciphers in the list must be separated separated by \":\".");
+    xlog("The ciphers in the list must be separated by \":\".");
     xlog("%s%s -dc hex:aes:xor -i crypted.txt -o decrypted.bin%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
 
 #ifdef _XUTILS_USE_SSL

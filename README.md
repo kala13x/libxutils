@@ -58,14 +58,32 @@
 ### Installation
 There are several ways to build and install the project.
 
+#### Using included script (recommended on Linux).
+A relatively simple way to build and install a project is to use the included build script:
+
+```bash
+git clone https://github.com/kala13x/libxutils.git && ./libxutils/build.sh --install
+```
+
+List options that build script supports:
+
+- `--tool=<tool>` Specify `Makefile` generation tool or use included `Makefile`.
+- `--ssl=yes/no` Manually enable or disable SSL support (default: yes).
+- `--install` Install library and the tools after the build.
+- `--cleanup` Cleanup object files after build/installation.
+- `--examples` Include examples in the build.
+- `--tools` Include tools in the build.
+
+You can either choose `cmake`, `smake` or `make` as the tool argument, but `cmake` is recommended on platforms other than the Linux.
+If the tool will not be specified the script will use `make` (included Makefile) as default.
+
 #### Using CMake
-If you have a `CMake` tool installed in your operating system, this is probably the easiest and best way to build a project:
+If you have a `CMake` tool installed in your operating system, here is how project can be built and installed using `cmake`:
 
 ```bash
 git clone https://github.com/kala13x/libxutils.git
 cd libxutils
-mkdir build && cd build
-cmake .. && make
+cmake . && make
 sudo make install
 ```
 
@@ -79,19 +97,8 @@ smake && make
 sudo make install
 ```
 
-#### Using build script
-A relatively simple way to build and install a project is to use a build script.
-
-```bash
-git clone https://github.com/kala13x/libxutils.git
-./libxutils/build.sh --tool=cmake --install --cleanup
-```
-
-You can either choose `cmake`, `smake` or `make` as the tool argument, but `cmake` is recommended on the platforms other than the Linux.
-If the tool will not be specified the script will use `make` as default.
-
 #### Using Makefile
-The project can also be built with a pre-generated `Makefile` for linux.
+The project can also be built with a pre-generated `Makefile` for the Linux.
 
 ```bash
 git clone https://github.com/kala13x/libxutils.git
@@ -154,20 +161,24 @@ Use build script to force disable SSL even if it is installed in the system:
 ```
 
 ### Usage
-If you want to use the library, include the required `<xutils/*.h>` header files in your source code and\
-use `-lxutils` linker flag while compiling your project. See the example directory for more information.
+Just include the required `<xutils/*.h>` header files in your source code and use `-lxutils`\
+linker flag while compiling your project. See the example directory for more information.
 
 ### Tools & Examples
+Use the included script to build or install CLI apps from the `tools` directory.\
+The script can be used to build the sources from the `examples` directory as well.
 
-The project includes samples and apps in the `examples` and `tools` directory.\
-These sources can be built by using the `CMake` tool or `Makefile` from that directory.
+```bash
+./libxutils/build.sh --tools --examples
+```
+
+These sources can also be built by using the `CMake` tool or `Makefile` from that directory.\
+You may need to export the SSL flag accordingly if you are doing a build without the script:
 
 ```bash
 cd examples
-mkdir build
-cd build
-cmake ..
-make
+export XUTILS_USE_SSL=y
+cmake . && make
 ```
 
 #### XTOP and more

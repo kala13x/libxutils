@@ -19,7 +19,10 @@ endif()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-
+find_package(OpenSSL)
+IF(OpenSSL_FOUND)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_XUTILS_USE_SSL")
+ENDIF()
 
 SET(HEADER_DST "include/xutils")
 SET(SOURCE_DIR "./src")
