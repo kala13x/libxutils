@@ -183,8 +183,12 @@ for arg in "$@"; do
         install_library
         install_tools
     fi
+done
 
-    if [[ $arg == "--cleanup" ]]; then
+# Do cleanup last
+for arg in "$@"; do
+    if [[ $arg == "--cleanup" ||
+          $arg == "--clean" ]]; then
         clean_project
     fi
 done
