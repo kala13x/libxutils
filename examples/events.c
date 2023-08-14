@@ -8,14 +8,14 @@
  * The xUtils library will use poll() or epoll() depending on the operating system.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/event.h>
-#include <xutils/xsig.h>
-#include <xutils/http.h>
-#include <xutils/sock.h>
-#include <xutils/xbuf.h>
-#include <xutils/xlog.h>
-#include <xutils/xver.h>
+#include "xstd.h"
+#include "event.h"
+#include "xsig.h"
+#include "http.h"
+#include "sock.h"
+#include "xbuf.h"
+#include "xlog.h"
+#include "xver.h"
 
 static int g_nInterrupted = 0;
 

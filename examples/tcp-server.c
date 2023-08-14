@@ -6,11 +6,10 @@
  * Simplest echo server based on XSocket.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/sock.h>
-#include <xutils/xlog.h>
-#include <xutils/xtime.h>
-
+#include "xstd.h"
+#include "sock.h"
+#include "xlog.h"
+#include "xtime.h"
 
 int main(int argc, char *argv[])
 {

@@ -8,15 +8,15 @@
  * Send custom HTTP request, analyze headers, download content, etc.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/sock.h>
-#include <xutils/http.h>
-#include <xutils/xlog.h>
-#include <xutils/xstr.h>
-#include <xutils/xver.h>
-#include <xutils/xcli.h>
-#include <xutils/xtime.h>
-#include <xutils/xfs.h>
+#include "xstd.h"
+#include "sock.h"
+#include "http.h"
+#include "xlog.h"
+#include "xstr.h"
+#include "xver.h"
+#include "xcli.h"
+#include "xtime.h"
+#include "xfs.h"
 
 extern char *optarg;
 

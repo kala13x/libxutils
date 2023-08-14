@@ -7,10 +7,10 @@
  * @brief Example file of working with RSA
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xlog.h>
-#include <xutils/xfs.h>
-#include <xutils/crypt.h>
+#include "xstd.h"
+#include "xlog.h"
+#include "xfs.h"
+#include "crypt.h"
 
 #define XKEY_PRIV   "rsa_priv.pem"
 #define XKEY_PUB    "rsa_pub.pem"

@@ -31,19 +31,29 @@ jobs:
       run: cd smake && ./build.sh --install
 
     - name: Build with SMAKE (SSL)
-      run: ./build.sh smake
+      run: |
+        ./build.sh --tool=smake --tools --examples
+        ./build/xutils
 
     - name: Build with SMAKE (no SSL)
-      run: ./build.sh smake --ssl=no
+      run: ./build.sh --tool=smake --tools --examples --ssl=no
 
     - name: Build with CMAKE (SSL)
-      run: ./build.sh cmake
+      run: |
+        ./build.sh --tool=cmake --tools --examples
+        ./build/xutils
       
     - name: Build with CMAKE (no SSL)
-      run: ./build.sh cmake --ssl=no
+      run: |
+        ./build.sh --tool=cmake --tools --examples --ssl=no
+        ./build/xutils
       
     - name: Build with Makefile (SSL)
-      run: ./build.sh make
+      run: |
+        ./build.sh --tool=make --tools --examples
+        ./build/xutils
 
     - name: Build with Makefile (no SSL)
-      run: ./build.sh make --ssl=no
+      run: |
+        ./build.sh --tool=make --tools --examples --ssl=no
+        ./build/xutils

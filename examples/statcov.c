@@ -7,14 +7,14 @@
  * statistics from https://stopcov.ge/
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xver.h>
-#include <xutils/sock.h>
-#include <xutils/http.h>
-#include <xutils/xstr.h>
-#include <xutils/xlog.h>
-#include <xutils/xtype.h>
-#include <xutils/xjson.h>
+#include "xstd.h"
+#include "xver.h"
+#include "sock.h"
+#include "http.h"
+#include "xstr.h"
+#include "xlog.h"
+#include "xtype.h"
+#include "xjson.h"
 
 #define STOPCOV_LINK        "https://stopcov.ge/"
 #define XSPACE_CHAR         "&#160;"

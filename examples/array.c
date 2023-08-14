@@ -6,8 +6,8 @@
  * Test example source of working with arrays
  */
 
-#include <xutils/xstd.h>
-#include <xutils/array.h>
+#include "xstd.h"
+#include "array.h" 
 
 typedef struct {
     int key;

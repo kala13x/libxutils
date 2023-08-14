@@ -7,11 +7,11 @@
  * @brief Implementation of advanced file search based on the xUtils.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xtype.h>
-#include <xutils/xstr.h>
-#include <xutils/xlog.h>
-#include <xutils/xfs.h>
+#include "xstd.h"
+#include "xtype.h"
+#include "xstr.h"
+#include "xlog.h"
+#include "xfs.h"
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0

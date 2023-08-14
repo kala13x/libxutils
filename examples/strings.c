@@ -6,10 +6,10 @@
  * Example file for working with strings.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xstr.h>
-#include <xutils/xlog.h>
-#include <xutils/array.h>
+#include "xstd.h"
+#include "xstr.h"
+#include "xlog.h"
+#include "array.h"
 
 #define UPPER_STRING "TEST STRING WITH UPPER CASE"
 #define LOVER_STRING "test string with lower case"

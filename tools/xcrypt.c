@@ -7,19 +7,19 @@
  * @brief Crypt or Decrypt input file
  */
 
-#include <xutils/xstd.h>
-#include <xutils/array.h>
-#include <xutils/xtype.h>
-#include <xutils/xlog.h>
-#include <xutils/xstr.h>
-#include <xutils/xcli.h>
-#include <xutils/xfs.h>
-#include <xutils/crypt.h>
-#include <xutils/crc32.h>
-#include <xutils/sha256.h>
-#include <xutils/sha1.h>
-#include <xutils/aes.h>
-#include <xutils/rsa.h>
+#include "xstd.h"
+#include "array.h"
+#include "xtype.h"
+#include "xlog.h"
+#include "xstr.h"
+#include "xcli.h"
+#include "xfs.h"
+#include "crypt.h"
+#include "crc32.h"
+#include "sha256.h"
+#include "sha1.h"
+#include "aes.h"
+#include "rsa.h"
 
 #define XCRYPT_VER_MAX      0
 #define XCRYPT_VER_MIN      1

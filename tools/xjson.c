@@ -7,12 +7,12 @@
  * @brief Parse, lint and minify json using xjson library.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xjson.h>
-#include <xutils/xbuf.h>
-#include <xutils/xstr.h>
-#include <xutils/xlog.h>
-#include <xutils/xfs.h>
+#include "xstd.h"
+#include "xjson.h"
+#include "xbuf.h"
+#include "xstr.h"
+#include "xlog.h"
+#include "xfs.h"
 
 extern char *optarg;
 

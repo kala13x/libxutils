@@ -8,17 +8,17 @@
  * Collect and monitor network, memory and CPU statistics in one window.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xsig.h>
-#include <xutils/xjson.h>
-#include <xutils/xstr.h>
-#include <xutils/xcli.h>
-#include <xutils/xlog.h>
-#include <xutils/xtop.h>
-#include <xutils/addr.h>
-#include <xutils/xver.h>
-#include <xutils/xfs.h>
-#include <xutils/api.h>
+#include "xstd.h"
+#include "xsig.h"
+#include "xjson.h"
+#include "xstr.h"
+#include "xcli.h"
+#include "xlog.h"
+#include "xtop.h"
+#include "addr.h"
+#include "xver.h"
+#include "xfs.h"
+#include "api.h"
 
 #define XTOP_VERSION_MAJ    1
 #define XTOP_VERSION_MIN    1

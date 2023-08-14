@@ -48,6 +48,7 @@
         "tuple": "c",
         "type_traits": "c",
         "utility": "c",
-        "xcli.h": "c"
+        "xcli.h": "c",
+        "xlog.h": "c"
     }
 }

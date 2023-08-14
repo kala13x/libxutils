@@ -18,27 +18,28 @@ CFLAGS += -I../src \
 	-I../src/net \
 	-I../src/sys
 
-EXECS = array \
-	http-server \
-	tcp-server \
-	ws-server \
-	ws-client \
-	statcov \
-	strings \
-	events \
-	thread \
-	files \
-	json \
-	xlog \
-	list \
-	ntp \
-	jwt \
-	rsa
+EXECS = xutils \
+	xcrypt \
+	xhttp \
+	xjson \
+	xpass \
+	xtop \
+	xsrc
 
 all: $(EXECS)
 
 $(EXECS): %: %.c
 	$(CC) $(CFLAGS) -o $@ $< $(LD_LIBS) $(LIBS)
+
+.PHONY: install
+install:
+	install -m 0755 xutils /usr/local/bin/
+	install -m 0755 xcrypt /usr/local/bin/
+	install -m 0755 xpass /usr/local/bin/
+	install -m 0755 xjson /usr/local/bin/
+	install -m 0755 xhttp /usr/local/bin/
+	install -m 0755 xtop /usr/local/bin/
+	install -m 0755 xsrc /usr/local/bin/
 
 .PHONY: clean
 clean:

@@ -3,13 +3,14 @@
 # 2015-2023  Sun Dro (s.kalatoz@gmail.com)
 
 PROJ_PATH=$(dirname $(readlink -f "$0"))
-TOOL_PATH=$PROJ_PATH/examples
+TOOL_PATH=$PROJ_PATH/tools
 LIB_PATH=$PROJ_PATH
 
 INSTALL_PREFIX="/usr/local"
 MAKE_TOOL="make"
 USE_SSL="yes"
 
+EXAMPLES_DONE=0
 TOOLS_DONE=0
 CPU_COUNT=1
 
@@ -72,6 +73,7 @@ clean_dir() {
 
 clean_project() {
     clean_dir $PROJ_PATH/examples
+    clean_dir $PROJ_PATH/tools
     clean_dir $PROJ_PATH
 }
 
@@ -83,16 +85,29 @@ update_cpu_count() {
 
 build_tools() {
     [ "$TOOLS_DONE" -eq 1 ] && return
-    cd $PROJ_PATH/examples
+    cd $PROJ_PATH/tools
 
     if [[ $MAKE_TOOL == "cmake" ]]; then
         mkdir -p build && cd build && cmake ..
-        TOOL_PATH=$PROJ_PATH/examples/build
+        TOOL_PATH=$PROJ_PATH/tools/build
     fi
 
     make -j $CPU_COUNT
     cd $PROJ_PATH
     TOOLS_DONE=1
+}
+
+build_examples() {
+    [ "$EXAMPLES_DONE" -eq 1 ] && return
+    cd $PROJ_PATH/examples
+
+    if [[ $MAKE_TOOL == "cmake" ]]; then
+        mkdir -p build && cd build && cmake ..
+    fi
+
+    make -j $CPU_COUNT
+    cd $PROJ_PATH
+    EXAMPLES_DONE=1
 }
 
 build_library() {
@@ -157,6 +172,10 @@ build_library
 
 for arg in "$@"; do
     if [[ $arg == "--examples" ]]; then
+        build_examples
+    fi
+
+    if [[ $arg == "--tools" ]]; then
         build_tools
     fi
 

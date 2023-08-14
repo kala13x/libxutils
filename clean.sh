@@ -14,4 +14,5 @@ clean_path() {
 }
 
 clean_path $PROJ_PATH
+clean_path $PROJ_PATH/tools
 clean_path $PROJ_PATH/examples

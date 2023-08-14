@@ -7,8 +7,8 @@
  */
 
 
-#include <xutils/xstd.h>
-#include <xutils/thread.h>
+#include "xstd.h"
+#include "thread.h"
 
 void* my_thread(void *arg)
 {

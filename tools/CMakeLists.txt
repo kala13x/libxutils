@@ -27,26 +27,21 @@ endif()
 
 # replace with your actual source files
 set(SOURCE_FILES 
-    array.c
-    http-server.c
-    tcp-server.c
-    ws-server.c
-    ws-client.c
-    statcov.c
-    strings.c
-    thread.c
-    events.c
-    files.c
-    json.c
-    xlog.c
-    list.c
-    ntp.c
-    jwt.c
-    rsa.c)
+    xutils.c
+    xcrypt.c
+    xpass.c
+    xhttp.c
+    xjson.c
+    xtop.c
+    xsrc.c)
 
 foreach(sourcefile ${SOURCE_FILES})
     string(REPLACE ".c" "" execname ${sourcefile})
     add_executable(${execname} ${sourcefile})
     target_link_libraries(${execname} Threads::Threads ${EXTRA_LIBS})
 endforeach()
+
+# install targets
+install(TARGETS xutils xcrypt xpass xjson xhttp xtop xsrc 
+        RUNTIME DESTINATION /usr/local/bin)
 

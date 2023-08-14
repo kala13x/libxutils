@@ -7,19 +7,19 @@
  * @brief Simple and safe password manager for CLI
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xjson.h>
-#include <xutils/xtype.h>
-#include <xutils/xlog.h>
-#include <xutils/xstr.h>
-#include <xutils/xcli.h>
-#include <xutils/xver.h>
-#include <xutils/xfs.h>
-#include <xutils/crypt.h>
-#include <xutils/crc32.h>
-#include <xutils/md5.h>
-#include <xutils/rsa.h>
-#include <xutils/aes.h>
+#include "xstd.h"
+#include "xjson.h"
+#include "xtype.h"
+#include "xlog.h"
+#include "xstr.h"
+#include "xcli.h"
+#include "xver.h"
+#include "xfs.h"
+#include "crypt.h"
+#include "crc32.h"
+#include "md5.h"
+#include "rsa.h"
+#include "aes.h"
 
 #define XPASS_VER_MAX       0
 #define XPASS_VER_MIN       2

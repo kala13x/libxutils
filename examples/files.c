@@ -6,9 +6,9 @@
  * File and folder operations.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xfs.h>
-#include <xutils/xlog.h>
+#include "xstd.h"
+#include "xlog.h"
+#include "xfs.h"
 
 int main(int argc, char *argv[]) 
 {

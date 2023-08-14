@@ -7,9 +7,9 @@
  * @brief Version and build number of the project.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xver.h>
-#include <xutils/xlog.h>
+#include "xstd.h"
+#include "xver.h"
+#include "xlog.h"
 
 int main() 
 {

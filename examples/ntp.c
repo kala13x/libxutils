@@ -6,10 +6,10 @@
  * @brief Implementation of NTP functionality.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xtime.h>
-#include <xutils/xlog.h>
-#include <xutils/ntp.h>
+#include "xstd.h"
+#include "xtime.h"
+#include "xlog.h"
+#include "ntp.h"
 
 #define NTP_SERVER "europe.pool.ntp.org"
 

@@ -8,11 +8,11 @@
  * The library will use poll(), WSAPoll(), or epoll() depending on the operating system.
  */
 
-#include <xutils/xstd.h>
-#include <xutils/xver.h>
-#include <xutils/xlog.h>
-#include <xutils/xsig.h>
-#include <xutils/api.h>
+#include "xstd.h"
+#include "xver.h"
+#include "xlog.h"
+#include "xsig.h"
+#include "api.h"
 
 static int g_nInterrupted = 0;
 extern char *optarg;

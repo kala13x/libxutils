@@ -7,9 +7,9 @@
  */
 
 
-#include <xutils/xstd.h>
-#include <xutils/xstr.h>
-#include <xutils/xlog.h>
+#include "xstd.h"
+#include "xstr.h"
+#include "xlog.h"
 
 int logCallback(const char *pLog, size_t nLength, xlog_flag_t eFlag, void *pCtx)
 {

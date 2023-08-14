@@ -7,12 +7,12 @@
  * @brief Example file of working with JSON Web Tokens
  */
 
-#include <xutils/xstd.h>
-#include <xutils/crypt.h>
-#include <xutils/xjson.h>
-#include <xutils/xlog.h>
-#include <xutils/jwt.h>
-#include <xutils/xfs.h>
+#include "xstd.h"
+#include "crypt.h"
+#include "xjson.h"
+#include "xlog.h"
+#include "jwt.h"
+#include "xfs.h"
 
 int main()
 {
