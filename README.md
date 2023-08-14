@@ -67,6 +67,7 @@ git clone https://github.com/kala13x/libxutils.git && ./libxutils/build.sh --ins
 
 List options that build script supports:
 
+- `--prefix=<path>` Install destination prefix for the library and header files.
 - `--tool=<tool>` Specify `Makefile` generation tool or use included `Makefile`.
 - `--ssl=yes/no` Manually enable or disable SSL support (default: yes).
 - `--install` Install library and the tools after the build.
