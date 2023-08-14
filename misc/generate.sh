@@ -17,7 +17,7 @@ SMAKE_SSL_OBJ="\"find\": {\n\
                 \"flags\": \"-D_XUTILS_USE_SSL\",\n\
                 \"libs\": \"-lssl -lcrypto\"\n\
             }\n\
-        }"
+        },"
 
 CMAKE_SSL_OBJ="find_package(OpenSSL)\n\
 IF(OpenSSL_FOUND)\n\

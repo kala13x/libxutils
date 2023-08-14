@@ -7,6 +7,14 @@
         "overwrite": true,
         "verbose": 2,
 
+        "find": {
+            "libssl.so:libcrypto.so": {
+                "path": "/usr/local/ssl/lib:/usr/local/ssl/lib64",
+                "flags": "-D_XUTILS_USE_SSL",
+                "libs": "-lssl -lcrypto"
+            }
+        },
+
         "sources": [
             "./src/xver.c",
             "./src/crypt/aes.c",
@@ -53,15 +61,7 @@
             "./src/net",
             "./src/sys",
             "./src"
-        ],
-
-        "find": {
-            "libssl.so:libcrypto.so": {
-                "path": "/usr/local/ssl/lib:/usr/local/ssl/lib64",
-                "flags": "-D_XUTILS_USE_SSL",
-                "libs": "-lssl -lcrypto"
-            }
-        }
+        ]
     },
 
     "install": {

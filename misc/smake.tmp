@@ -7,6 +7,8 @@
         "overwrite": true,
         "verbose": 2,
 
+        _SSL_OBJECT_
+
         "sources": [
             _SOURCE_LIST_
         ],
@@ -17,9 +19,7 @@
             "./src/net",
             "./src/sys",
             "./src"
-        ],
-
-        _SSL_OBJECT_
+        ]
     },
 
     "install": {

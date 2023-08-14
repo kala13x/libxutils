@@ -38,6 +38,7 @@ jobs:
     - name: Build with SMAKE (no SSL)
       run: |
         ./build.sh --tool=smake --tools --examples --ssl=no
+        ./tools/xutils
 
     - name: Build with CMAKE (SSL)
       run: |

@@ -31,10 +31,13 @@ else()
 endif()
 
 # if OpenSSL is found, add the definitions and libraries
-find_package(OpenSSL)
-if(OpenSSL_FOUND)
-  add_definitions(-D_XUTILS_USE_SSL)
-  list(APPEND EXTRA_LIBS ${OPENSSL_LIBRARIES})
+set(XUTILS_USE_SSL $ENV{XUTILS_USE_SSL})
+if(XUTILS_USE_SSL STREQUAL "y")
+    find_package(OpenSSL)
+    if(OpenSSL_FOUND)
+        add_definitions(-D_XUTILS_USE_SSL)
+        list(APPEND EXTRA_LIBS ${OPENSSL_LIBRARIES})
+    endif()
 endif()
 
 # replace with your actual source files
