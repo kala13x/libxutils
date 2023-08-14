@@ -16,7 +16,19 @@ set(XUTILS_INCLUDE_DIRS
 
 include_directories(${XUTILS_INCLUDE_DIRS})
 find_package(Threads REQUIRED)
-list(APPEND EXTRA_LIBS xutils)
+
+set(XUTILS_LIBRARY_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../build)
+set(XUTILS_STATIC_LIB ${XUTILS_LIBRARY_ROOT}/libxutils.a)
+set(XUTILS_SHARED_LIB ${XUTILS_LIBRARY_ROOT}/libxutils.so)
+
+# Check if static library exists
+if(EXISTS ${XUTILS_STATIC_LIB})
+    list(APPEND EXTRA_LIBS ${XUTILS_STATIC_LIB})
+elseif(EXISTS ${XUTILS_SHARED_LIB})
+    list(APPEND EXTRA_LIBS ${XUTILS_SHARED_LIB})
+else()
+    message(FATAL_ERROR "Neither static nor shared library found for xutils.")
+endif()
 
 # if OpenSSL is found, add the definitions and libraries
 find_package(OpenSSL)
