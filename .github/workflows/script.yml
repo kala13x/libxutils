@@ -33,7 +33,7 @@ jobs:
       run: |
         cd smake
         ./build.sh --install
-        smake -h 
+        smake -V
 
     - name: Build with SMAKE (SSL)
       run: |
