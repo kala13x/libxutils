@@ -18,7 +18,9 @@ jobs:
       run: sudo apt install -y libssl-dev
 
     - name: Install CMAKE
-      run: sudo apt install -y cmake
+      run: |
+        sudo apt install -y cmake
+        cmake --version
 
     - name: Checkout SMAKE
       uses: actions/checkout@v3
@@ -28,7 +30,10 @@ jobs:
         path: 'smake'
 
     - name: Install SMAKE
-      run: cd smake && ./build.sh --install
+      run: |
+        cd smake
+        ./build.sh --install
+        smake -h 
 
     - name: Build with SMAKE (SSL)
       run: |
