@@ -13,9 +13,13 @@ useSSL="yes"
 
 SMAKE_SSL_OBJ="\"find\": {\n\
             \"libssl.so:libcrypto.so\": {\n\
-                \"path\": \"/usr/local/ssl/lib:/usr/local/ssl/lib64\",\n\
-                \"flags\": \"-D_XUTILS_USE_SSL\",\n\
-                \"libs\": \"-lssl -lcrypto\"\n\
+                \"path\": \"/usr/local/ssl/lib:/usr/local/ssl/lib64\",\n\n\
+                \"found\": {\n\
+                    \"append\": {\n\
+                        \"flags\": \"-D_XUTILS_USE_SSL\",\n\
+                        \"libs\": \"-lssl -lcrypto\"\n\
+                    }\n\
+                }\n\
             }\n\
         },"
 
