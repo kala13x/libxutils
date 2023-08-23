@@ -88,5 +88,6 @@ int main()
 
     XLOG_ASSERT(XFALSE, 0, "Message from failed assert");
 
+    xlog_destroy();
     return 0;
 }

@@ -20,7 +20,7 @@ extern "C" {
 /* Definations for version info */
 #define XLOG_VERSION_MAJOR   1
 #define XLOG_VERSION_MINOR   8
-#define XLOG_BUILD_NUM       26
+#define XLOG_BUILD_NUM       27
 
 #define XLOG_NAME_DEFAULT   "xlog"
 
@@ -86,29 +86,25 @@ typedef enum
     XLOG_DATE
 } xlog_timing_t;
 
-#define XLog(...) \
-    XLog_Display(XLOG_NONE, __VA_ARGS__)
+/* XLog function definitions */
+#define XLog(...) XLog_Display(XLOG_NONE, 1, __VA_ARGS__)
+#define XLog_Note(...) XLog_Display(XLOG_NOTE, 1, __VA_ARGS__)
+#define XLog_Info(...) XLog_Display(XLOG_INFO, 1, __VA_ARGS__)
+#define XLog_Warn(...) XLog_Display(XLOG_WARN, 1, __VA_ARGS__)
+#define XLog_Debug(...) XLog_Display(XLOG_DEBUG, 1, __VA_ARGS__)
+#define XLog_Error(...) XLog_Display(XLOG_ERROR, 1, __VA_ARGS__)
+#define XLog_Trace(...) XLog_Display(XLOG_TRACE, 1, XLOG_THROW_LOCATION __VA_ARGS__)
+#define XLog_Fatal(...) XLog_Display(XLOG_FATAL, 1, XLOG_THROW_LOCATION __VA_ARGS__)
 
-#define XLog_Note(...) \
-    XLog_Display(XLOG_NOTE, __VA_ARGS__)
-
-#define XLog_Info(...) \
-    XLog_Display(XLOG_INFO, __VA_ARGS__)
-
-#define XLog_Warn(...) \
-    XLog_Display(XLOG_WARN, __VA_ARGS__)
-
-#define XLog_Debug(...) \
-    XLog_Display(XLOG_DEBUG, __VA_ARGS__)
-
-#define XLog_Error(...) \
-    XLog_Display(XLOG_ERROR, __VA_ARGS__)
-
-#define XLog_Trace(...) \
-    XLog_Display(XLOG_TRACE, XLOG_THROW_LOCATION __VA_ARGS__)
-
-#define XLog_Fatal(...) \
-    XLog_Display(XLOG_FATAL, XLOG_THROW_LOCATION __VA_ARGS__)
+/* No new line definitions */
+#define XLog_(...) XLog_Display(XLOG_NONE, 0, __VA_ARGS__)
+#define XLog_Note_(...) XLog_Display(XLOG_NOTE, 0, __VA_ARGS__)
+#define XLog_Info_(...) XLog_Display(XLOG_INFO, 0, __VA_ARGS__)
+#define XLog_Warn_(...) XLog_Display(XLOG_WARN, 0, __VA_ARGS__)
+#define XLog_Debug_(...) XLog_Display(XLOG_DEBUG, 0, __VA_ARGS__)
+#define XLog_Error_(...) XLog_Display(XLOG_ERROR, 0, __VA_ARGS__)
+#define XLog_Trace_(...) XLog_Display(XLOG_TRACE, 0, XLOG_THROW_LOCATION __VA_ARGS__)
+#define XLog_Fatal_(...) XLog_Display(XLOG_FATAL, 0, XLOG_THROW_LOCATION __VA_ARGS__)
 
 /* Lower case short name functions */
 #define xlog(...) XLog(__VA_ARGS__)
@@ -119,7 +115,18 @@ typedef enum
 #define xloge(...) XLog_Error( __VA_ARGS__)
 #define xlogt(...) XLog_Trace(__VA_ARGS__)
 #define xlogf(...) XLog_Fatal(__VA_ARGS__)
-#define xlogfl(f, ...) XLog_Display(f, __VA_ARGS__)
+#define xlogfl(f, ...) XLog_Display(f, 1, __VA_ARGS__)
+
+/* Lower case short name functions without new line */
+#define xlog_wn(...) XLog_(__VA_ARGS__)
+#define xlogn_wn(...) XLog_Note_(__VA_ARGS__)
+#define xlogi_wn(...) XLog_Info_(__VA_ARGS__)
+#define xlogw_wn(...) XLog_Warn_(__VA_ARGS__)
+#define xlogd_wn(...) XLog_Debug_( __VA_ARGS__)
+#define xloge_wn(...) XLog_Error_( __VA_ARGS__)
+#define xlogt_wn(...) XLog_Trace_(__VA_ARGS__)
+#define xlogf_wn(...) XLog_Fatal_(__VA_ARGS__)
+#define xlogfl_wn(f, ...) XLog_Display(f, 0, __VA_ARGS__)
 
 #define xthrowp(r, ...) XLog_ThrowPtr(r, __VA_ARGS__)
 #define xthrowr(r, ...) XLog_Throw(r, __VA_ARGS__)
@@ -180,8 +187,9 @@ typedef struct XLogConfig {
 
     xbool_t bTraceTid;
     xbool_t bToScreen;
-    xbool_t bNewLine;
+    xbool_t bKeepOpen;
     xbool_t bUseHeap;
+    xbool_t bRotate;
     xbool_t bToFile;
     xbool_t bIndent;
     xbool_t bFlush;
@@ -211,7 +219,6 @@ void XLog_ScreenLogSet(xbool_t bEnable);
 void XLog_FileLogSet(xbool_t bEnable);
 void XLog_FlushSet(xbool_t bEnable);
 void XLog_TraceTid(xbool_t bEnable);
-void XLog_NewLine(xbool_t bEnable);
 void XLog_UseHeap(xbool_t bEnable);
 void XLog_FlagsSet(uint16_t nFlags);
 uint16_t XLog_FlagsGet(void);
@@ -219,7 +226,7 @@ uint16_t XLog_FlagsGet(void);
 void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe);
 void XLog_Destroy(void);
 
-void XLog_Display(xlog_flag_t nFlag, const char *pFormat, ...);
+void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFormat, ...);
 XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...);
 void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...);
 
