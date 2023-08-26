@@ -30,7 +30,13 @@ typedef struct XLogCtx {
 } xlog_ctx_t;
 
 static xlog_t g_xlog;
-static xbool_t g_bInit = XFALSE;
+
+static XATOMIC g_nHaveXLogVerShort = XFALSE;
+static XATOMIC g_nHaveXLogVerLong = XFALSE;
+static XATOMIC g_bInit = XFALSE;
+
+static char g_xlogVerShort[128];
+static char g_xlogVerLong[256];
 
 static const char *XLog_GetIndent(xlog_flag_t eFlag)
 {
@@ -353,19 +359,30 @@ void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...)
     return pRetVal;
 }
 
-size_t XLog_Version(char *pDest, size_t nSize, int nMin)
+const char* XLog_Version(xbool_t bShort)
 {
-    size_t nLength = 0;
+    if (bShort)
+    {
+        if (!g_nHaveXLogVerShort)
+        {
+            xstrncpyf(g_xlogVerShort, sizeof(g_xlogVerShort), "%d.%d.%d",
+                XLOG_VERSION_MAJOR, XLOG_VERSION_MINOR, SLOG_BUILD_NUMBER);
 
-    /* Version short */
-    if (nMin) nLength = xstrncpyf(pDest, nSize, "%d.%d.%d",
-        XLOG_VERSION_MAJOR, XLOG_VERSION_MINOR, XLOG_BUILD_NUM);
+            g_nHaveXLogVerShort = XTRUE;
+        }
 
-    /* Version long */
-    else nLength = xstrncpyf(pDest, nSize, "%d.%d build %d (%s)",
-        XLOG_VERSION_MAJOR, XLOG_VERSION_MINOR, XLOG_BUILD_NUM, __DATE__);
+        return g_xlogVerShort;
+    }
 
-    return nLength;
+    if (!g_nHaveXLogVerLong)
+    {
+        xstrncpyf(g_xlogVerLong, sizeof(g_xlogVerLong), "%d.%d build %d (%s)",
+        XLOG_VERSION_MAJOR, XLOG_VERSION_MINOR, SLOG_BUILD_NUMBER, __DATE__);
+
+        g_nHaveXLogVerLong = XTRUE;
+    }
+
+    return g_xlogVerLong;
 }
 
 void XLog_ConfigGet(struct XLogConfig *pCfg)

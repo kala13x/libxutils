@@ -19,12 +19,8 @@ int logCallback(const char *pLog, size_t nLength, xlog_flag_t eFlag, void *pCtx)
 
 void greet() 
 {
-    /* Get and print XLog version */
-    char sVersion[128];
-    XLog_Version(sVersion, sizeof(sVersion), 0);
-
     printf("=========================================\n");
-    printf("XLog Version: %s\n", sVersion);
+    printf("XLog Version: %s\n", XLog_Version(XFALSE));
     printf("=========================================\n");
 }
 

@@ -20,7 +20,7 @@ extern "C" {
 /* Definations for version info */
 #define XLOG_VERSION_MAJOR   1
 #define XLOG_VERSION_MINOR   8
-#define XLOG_BUILD_NUM       27
+#define SLOG_BUILD_NUMBER    28
 
 #define XLOG_NAME_DEFAULT   "xlog"
 
@@ -46,7 +46,6 @@ extern "C" {
 
 /* SLog limits (To be safe while avoiding dynamic allocations) */
 #define XLOG_MESSAGE_MAX     8196
-#define XLOG_VERSION_MAX     128
 #define XLOG_PATH_MAX        2048
 #define XLOG_INFO_MAX        512
 #define XLOG_NAME_MAX        256
@@ -200,7 +199,7 @@ typedef struct XLogConfig {
     char sSeparator[XLOG_NAME_MAX];
 } xlog_cfg_t;
 
-size_t XLog_Version(char *pDest, size_t nSize, int nMin);
+const char* XLog_Version(xbool_t bShort);
 void XLog_ConfigGet(struct XLogConfig *pCfg);
 void XLog_ConfigSet(struct XLogConfig *pCfg);
 
