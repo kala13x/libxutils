@@ -41,7 +41,7 @@ int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
     const char *pStr = XAPI_GetStatus(pCtx);
 
     xlogn("%s: fd(%d)", pStr, nFD);
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int print_error(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -50,7 +50,7 @@ int print_error(xapi_ctx_t *pCtx, xapi_data_t *pData)
     const char *pStr = XAPI_GetStatus(pCtx);
 
     xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -67,7 +67,7 @@ int handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
         free(pHeader);
     }
 
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int handshake_response(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -84,7 +84,7 @@ int handshake_response(xapi_ctx_t *pCtx, xapi_data_t *pData)
         free(pHeader);
     }
 
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int send_pong(xapi_data_t *pData)
@@ -98,7 +98,7 @@ int send_pong(xapi_data_t *pData)
         xloge("Failed to create WS PONG frame: %s",
             XWebSock_GetStatusStr(status));
 
-        return XSTDERR;
+        return XAPI_DISCONNECT;
     }
 
     xlogn("Sending PONG: fd(%d), buff(%zu)",
@@ -127,7 +127,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     /* Received close request, we should destroy this session */
-    if (pFrame->eType == XWS_CLOSE) return XSTDERR;
+    if (pFrame->eType == XWS_CLOSE) return XAPI_DISCONNECT;
     const char* pPayload = (const char*)XWebFrame_GetPayload(pFrame);
 
     if (pPayload && pFrame->eType == XWS_TEXT)
@@ -147,7 +147,7 @@ int send_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XCLI_GetInput("Enter message: ", sPayload, sizeof(sPayload), XTRUE);
 
     size_t nLength = strlen(sPayload);
-    if (!nLength) return XSTDNON;
+    if (!nLength) return XAPI_NO_ACTION;
 
     status = XWebFrame_Create(&frame, (uint8_t*)sPayload, nLength, XWS_TEXT, XTRUE);
     if (status != XWS_ERR_NONE)
@@ -155,7 +155,7 @@ int send_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
         xloge("Failed to create WS frame: %s",
             XWebSock_GetStatusStr(status));
 
-        return XSTDERR;
+        return XAPI_DISCONNECT;
     }
 
     xlogn("Sending message: fd(%d), buff(%zu)",
@@ -190,7 +190,7 @@ int destroy_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
         pSession->nRxCount, pSession->nTxCount);
 
     g_bFinish = XTRUE;
-    return XSTDERR;
+    return XAPI_DISCONNECT;
 }
 
 int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -217,13 +217,13 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             xlogn("TX complete: fd(%d)", (int)pData->sock.nFD);
             break;
         case XAPI_CB_INTERRUPT:
-            if (g_bFinish) return XSTDERR;
+            if (g_bFinish) return XAPI_DISCONNECT;
             break;
         default:
             break;
     }
 
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int main(int argc, char* argv[])

@@ -42,7 +42,7 @@ int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
     else if (pCtx->eCbType == XAPI_CB_ERROR)
         xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
 
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -68,7 +68,7 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (XHTTP_InitResponse(&handle, 200, NULL) <= 0)
     {
         xloge("Failed to initialize HTTP response: %s", XSTRERR);
-        return XSTDERR;
+        return XAPI_DISCONNECT;
     }
 
     if (XHTTP_AddHeader(&handle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
@@ -76,7 +76,7 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
     {
         xloge("Failed to setup HTTP headers: %s", XSTRERR);
         XHTTP_Clear(&handle);
-        return XSTDERR;
+        return XAPI_DISCONNECT;
     }
 
     char sBody[XSTR_TINY];
@@ -86,7 +86,7 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
     {
         xloge("Failed to assemble HTTP response: %s", XSTRERR);
         XHTTP_Clear(&handle);
-        return XSTDERR;
+        return XAPI_DISCONNECT;
     }
 
     xlogn("Sending response: fd(%d), buff(%zu)",
@@ -122,15 +122,15 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             break;
         case XAPI_CB_COMPLETE:
             xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
-            return XSTDERR;
+            return XAPI_DISCONNECT;
         case XAPI_CB_INTERRUPT:
-            if (g_nInterrupted) return XSTDERR;
+            if (g_nInterrupted) return XAPI_DISCONNECT;
             break;
         default:
             break;
     }
 
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 void display_usage(const char *pName)

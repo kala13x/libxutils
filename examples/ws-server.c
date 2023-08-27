@@ -58,7 +58,7 @@ int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
     const char *pStr = XAPI_GetStatus(pCtx);
 
     xlogn("%s: fd(%d)", pStr, nFD);
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int print_error(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -67,7 +67,7 @@ int print_error(xapi_ctx_t *pCtx, xapi_data_t *pData)
     const char *pStr = XAPI_GetStatus(pCtx);
 
     xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -84,7 +84,7 @@ int handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
         free(pHeader);
     }
 
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int handshake_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -101,7 +101,7 @@ int handshake_answer(xapi_ctx_t *pCtx, xapi_data_t *pData)
         free(pHeader);
     }
 
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 int send_pong(xapi_data_t *pData)
@@ -116,7 +116,7 @@ int send_pong(xapi_data_t *pData)
         xloge("Failed to create WS PONG frame: %s",
             XWebSock_GetStatusStr(status));
 
-        return XSTDERR;
+        return XAPI_DISCONNECT;
     }
 
     xlogn("Sending PONG: fd(%d), buff(%zu)",
@@ -141,7 +141,7 @@ int send_response(xapi_data_t *pData, const uint8_t *pPayload, size_t nLength, x
         xloge("Failed to create WS frame: %s",
             XWebSock_GetStatusStr(status));
 
-        return XSTDERR;
+        return XAPI_DISCONNECT;
     }
 
     xlogn("Sending response: fd(%d), buff(%zu)",
@@ -165,7 +165,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
         pFrame->nHeaderSize, pFrame->nPayloadLength, pFrame->buffer.nUsed);
 
     if (pFrame->eType == XWS_PING) return send_pong(pData);
-    else if (pFrame->eType == XWS_CLOSE) return XSTDERR;
+    else if (pFrame->eType == XWS_CLOSE) return XAPI_DISCONNECT;
 
     const uint8_t *pPayload = XWebFrame_GetPayload(pFrame);
     size_t nLength = XWebFrame_GetPayloadLength(pFrame);
@@ -184,7 +184,7 @@ int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     /* Create session data that will be unique for each session */
     session_data_t *pSession = new_session_data();
-    XASSERT_RET((pSession != NULL), XSTDERR);
+    XASSERT_RET((pSession != NULL), XAPI_DISCONNECT);
 
     pData->pSessionData = pSession;
     return XAPI_SetEvents(pData, XPOLLIN);
@@ -200,7 +200,7 @@ int destroy_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
         pData->pSessionData = NULL;
     }
 
-    return XSTDOK;
+    return XAPI_DISCONNECT;
 }
 
 int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -228,13 +228,13 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
             break;
         case XAPI_CB_INTERRUPT:
-            if (g_nInterrupted) return XSTDERR;
+            if (g_nInterrupted) return XAPI_DISCONNECT;
             break;
         default:
             break;
     }
 
-    return XSTDOK;
+    return XAPI_CONTINUE;
 }
 
 void display_usage(const char *pName)

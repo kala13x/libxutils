@@ -26,6 +26,11 @@ extern "C" {
 
 typedef struct xapi_ xapi_t;
 
+#define XAPI_DISCONNECT XSTDERR
+#define XAPI_CONTINUE   XSTDOK
+#define XAPI_USER_CB    XSTDUSR
+#define XAPI_NO_ACTION  XSTDNON
+
 typedef enum {
     XAPI_CB_ERROR = 0,
     XAPI_CB_STATUS,
@@ -92,9 +97,9 @@ typedef struct xapi_endpoint_ {
     uint32_t nEvents;
     uint16_t nPort;
     xbool_t bTLS;
-}xapi_endpoint_t;
+} xapi_endpoint_t;
 
-typedef struct XAPIData {
+typedef struct xapi_data_ {
     char sAddr[XSOCK_ADDR_MAX];
     char sKey[XSOCK_ADDR_MAX];
     char sUri[XHTTP_URL_MAX];
