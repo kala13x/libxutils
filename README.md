@@ -59,7 +59,7 @@
 There are several ways to build and install the project.
 
 #### Using included script (recommended on Linux).
-A relatively simple way to build and install a project is to use the included build script:
+A relatively simple way to build and install the libary and tools is to use the included build script:
 
 ```bash
 git clone https://github.com/kala13x/libxutils.git && ./libxutils/build.sh --install
