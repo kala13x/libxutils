@@ -109,7 +109,7 @@ void XTime_FromEpoch(xtime_t *pTime, const time_t nTime)
     pTime->nFraq = 0;
 }
 
-void XTime_FromU64(xtime_t *pTime, const uint64_t nTime)
+void XTime_Deserialize(xtime_t *pTime, const uint64_t nTime)
 {
     pTime->nYear = XTIME_U64_YEAR(nTime);
     pTime->nMonth = XTIME_U64_MONTH(nTime);
@@ -118,6 +118,13 @@ void XTime_FromU64(xtime_t *pTime, const uint64_t nTime)
     pTime->nMin = XTIME_U64_MIN(nTime);
     pTime->nSec = XTIME_U64_SEC(nTime);
     pTime->nFraq = XTIME_U64_FRAQ(nTime);
+}
+
+void XTime_FromU64(xtime_t *pTime, const uint64_t nTime)
+{
+    xtimeu_t xtime;
+    xtime.uTime = nTime;
+    *pTime = xtime.time;
 }
 
 void XTime_ToTm(const xtime_t *pTime, struct tm *pTm)
@@ -179,6 +186,14 @@ size_t XTime_ToHTTP(const xtime_t *pTime, char *pStr, size_t nSize)
 }
 
 uint64_t XTime_ToU64(const xtime_t *pTime)
+{
+    XASSERT_RET(pTime, 0);
+    xtimeu_t xtime;
+    xtime.time = *pTime;
+    return xtime.uTime;
+}
+
+uint64_t XTime_Serialize(const xtime_t *pTime)
 {
     uint64_t nTime;
     nTime = (uint64_t)pTime->nYear;
@@ -266,8 +281,8 @@ double XTime_Diff(const xtime_t *pSrc1, const xtime_t *pSrc2, xtime_diff_t eDiff
 
 void XTime_Copy(xtime_t *pDst, const xtime_t *pSrc) 
 {
-    if (pDst == NULL || pSrc == NULL) return;
-    XTime_FromU64(pDst, XTime_ToU64(pSrc));
+    XASSERT_VOID_RET((pDst && pSrc));
+    *pDst = *pSrc;
 }
 
 void XTime_Make(xtime_t *pSrc)
@@ -354,9 +369,16 @@ size_t XTime_GetStr(char *pDst, size_t nSize, xtime_fmt_t eFmt)
 
 uint64_t XTime_GetU64(void)
 {
+    xtimeu_t xtime;
+    XTime_Get(&xtime.time);
+    return xtime.uTime;
+}
+
+uint64_t XTime_Serialized(void)
+{
     xtime_t xtime;
     XTime_Get(&xtime);
-    return XTime_ToU64(&xtime);
+    return XTime_Serialize(&xtime);
 }
 
 void XTime_GetTm(struct tm *pTm)

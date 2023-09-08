@@ -49,6 +49,7 @@
         "type_traits": "c",
         "utility": "c",
         "xcli.h": "c",
-        "xlog.h": "c"
+        "xlog.h": "c",
+        "xtime.h": "c"
     }
 }

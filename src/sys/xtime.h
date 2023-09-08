@@ -62,6 +62,11 @@ typedef struct XTime {
     uint8_t nFraq;
 } xtime_t;
 
+typedef union {
+    xtime_t time;
+    uint64_t uTime;
+} xtimeu_t;
+
 /* Empty initializer of xtime_t structure */
 #define XTIME_EMPTY     (xtime_t){ 0, 0, 0, 0, 0, 0, 0}
 
@@ -72,6 +77,7 @@ extern "C" {
 void XTime_Init(xtime_t *pTime);
 void XTime_Get(xtime_t *pTime);
 void XTime_GetTm(struct tm *pTm);
+uint64_t XTime_Serialized(void);
 uint64_t XTime_GetU64(void);
 uint32_t XTime_GetUsec(void);
 uint64_t XTime_GetStamp(void);
@@ -89,6 +95,7 @@ void XTime_Copy(xtime_t *pDst, const xtime_t *pSrc);
 double XTime_DiffSec(const xtime_t *pSrc1, const xtime_t *pSrc2);
 double XTime_Diff(const xtime_t *pSrc1, const xtime_t *pSrc2, xtime_diff_t eDiff);
 
+uint64_t XTime_Serialize(const xtime_t *pTime);
 uint64_t XTime_ToU64(const xtime_t *pTime);
 time_t XTime_ToEpoch(const xtime_t *pTime);
 size_t XTime_ToStr(const xtime_t *pTime, char *pStr, size_t nSize);
@@ -98,6 +105,7 @@ size_t XTime_ToRstr(const xtime_t *pTime, char *pStr, size_t nSize);
 size_t XTime_ToHTTP(const xtime_t *pTime, char *pStr, size_t nSize);
 void XTime_ToTm(const xtime_t* pTime, struct tm *pTm);
 
+void XTime_Deserialize(xtime_t *pTime, const uint64_t nTime);
 void XTime_FromEpoch(xtime_t *pTime, const time_t nTime);
 void XTime_FromU64(xtime_t *pTime, const uint64_t nTime);
 void XTime_FromTm(xtime_t *pTime, const struct tm *pTm);
