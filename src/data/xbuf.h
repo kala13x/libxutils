@@ -10,7 +10,6 @@
 #ifndef __XUTILS_BUFFER_H__
 #define __XUTILS_BUFFER_H__
 
-#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include "xstr.h"

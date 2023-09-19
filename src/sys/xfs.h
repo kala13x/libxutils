@@ -16,6 +16,7 @@ extern "C" {
 #endif
 
 #include "xstd.h"
+#include "xstr.h"
 #include "xbuf.h"
 #include "array.h"
 

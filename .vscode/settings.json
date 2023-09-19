@@ -50,6 +50,8 @@
         "utility": "c",
         "xcli.h": "c",
         "xlog.h": "c",
-        "xtime.h": "c"
+        "xtime.h": "c",
+        "stdlib.h": "c",
+        "xdef.h": "c"
     }
 }

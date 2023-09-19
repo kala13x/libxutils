@@ -14,7 +14,8 @@
 extern "C" {
 #endif
 
-#include "xstd.h"
+#include <stdint.h>
+#include <stdlib.h>
 
 #define XMAP_INITIAL_SIZE   16
 #define XMAP_CHAIN_LENGTH   32
@@ -61,10 +62,13 @@ int XMap_PutPair(xmap_t *pMap, xmap_pair_t *pPair);
 int XMap_Remove(xmap_t *pMap, const char* pKey);
 int XMap_Update(xmap_t *pMap, int nHash, char *pKey, void *pValue);
 
+#ifdef _XMAP_USE_CRYPT
+int XMap_HashMIX(xmap_t* pMap, const char* pStr);
+int XMap_HashFNV(xmap_t* pMap, const char* pStr);
+int XMap_HashSHA(xmap_t* pMap, const char* pStr);
+#endif
+
 int XMap_GetHash(xmap_t *pMap, const char* pKey);
-int XMap_HashMIX(xmap_t *pMap, const char *pStr);
-int XMap_HashFNV(xmap_t *pMap, const char *pStr);
-int XMap_HashSHA(xmap_t *pMap, const char *pStr);
 int XMap_Hash(xmap_t *pMap, const char *pStr);
 
 int XMap_Iterate(xmap_t *pMap, xmap_iterator_t itfunc, void *pCtx);

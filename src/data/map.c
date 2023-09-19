@@ -7,9 +7,13 @@
  * @brief Implementation of dynamically allocated hash map
  */
 
+#include <string.h>
 #include "map.h"
+
+#ifdef _XMAP_USE_CRYPT
 #include "crc32.h"
 #include "sha256.h"
+#endif
 
 #define XFNV_OFFSET_32 2166136261
 #define XFNV_PRIME_32  16777619
@@ -23,8 +27,18 @@ int XMap_Init(xmap_t *pMap, size_t nSize)
     pMap->nUsed = 0;
     if (!nSize) return XMAP_OK;
 
-    pMap->pPairs = (xmap_pair_t*)calloc(nSize, sizeof(xmap_pair_t));
-    return (pMap->pPairs == NULL) ? XMAP_OMEM : XMAP_OK;
+    pMap->pPairs = (xmap_pair_t*)malloc(nSize * sizeof(xmap_pair_t));
+    if (pMap->pPairs == NULL) return XMAP_OMEM;
+
+    size_t i;
+    for (i = 0; i < pMap->nTableSize; i++)
+    {
+        pMap->pPairs[i].nUsed = 0;
+        pMap->pPairs[i].pData = NULL;
+        pMap->pPairs[i].pKey = NULL;
+    }
+
+    return XMAP_OK;
 }
 
 xmap_t *XMap_New(size_t nSize)
@@ -102,6 +116,7 @@ void XMap_Destroy(xmap_t *pMap)
     XMap_Free(pMap);
 }
 
+#ifdef _XMAP_USE_CRYPT
 int XMap_HashMIX(xmap_t *pMap, const char *pStr)
 {
     if (!pMap->nTableSize) return XMAP_EINIT;
@@ -154,6 +169,7 @@ int XMap_HashSHA(xmap_t *pMap, const char *pStr)
 
     return nHash % pMap->nTableSize;
 }
+#endif /* _XMAP_USE_CRYPT */
 
 int XMap_Hash(xmap_t *pMap, const char *pStr)
 {

@@ -18,7 +18,7 @@ uint8_t *XByteData_Dup(const uint8_t *pBuff, size_t nLength)
     if (pData == NULL) return NULL;
 
     memcpy(pData, pBuff, nLength);
-    pData[nLength] = XSTR_NUL;
+    pData[nLength] = '\0';
 
     return pData;
 }
@@ -65,7 +65,7 @@ int XByteBuffer_Resize(xbyte_buffer_t *pBuffer, size_t nSize)
     }
 
     pBuffer->nUsed = (pBuffer->nUsed >= nSize) ? (nSize - 1) : pBuffer->nUsed;
-    if (pBuffer->nUsed < nSize) pBuffer->pData[pBuffer->nUsed] = XSTR_NUL;
+    if (pBuffer->nUsed < nSize) pBuffer->pData[pBuffer->nUsed] = '\0';
 
     pBuffer->nSize = nSize;
     return (int)pBuffer->nSize;
@@ -75,7 +75,7 @@ int XByteBuffer_Terminate(xbyte_buffer_t *pBuffer, size_t nPosit)
 {
     if (pBuffer->pData == NULL || !pBuffer->nUsed) return XSTDERR;
     size_t nTerminatePosit = XSTD_MIN(pBuffer->nUsed, nPosit);
-    pBuffer->pData[nTerminatePosit] = XSTR_NUL;
+    pBuffer->pData[nTerminatePosit] = '\0';
     pBuffer->nUsed = nTerminatePosit;
     return XSTDOK;
 }
@@ -212,14 +212,6 @@ int XByteBuffer_AddStr(xbyte_buffer_t *pBuffer, xstring_t *pStr)
     return XByteBuffer_Add(pBuffer, pData, pStr->nLength);
 }
 
-int XByteBuffer_AddByte(xbyte_buffer_t *pBuffer, uint8_t nByte)
-{
-    if (XByteBuffer_Reserve(pBuffer, 2) <= 0) return XSTDERR;
-    pBuffer->pData[pBuffer->nUsed++] = nByte;
-    pBuffer->pData[pBuffer->nUsed] = '\0';
-    return (int)pBuffer->nUsed;
-}
-
 int XByteBuffer_AddFmt(xbyte_buffer_t *pBuffer, const char *pFmt, ...)
 {
     size_t nBytes = 0;
@@ -239,6 +231,14 @@ int XByteBuffer_AddFmt(xbyte_buffer_t *pBuffer, const char *pFmt, ...)
     free(pDest);
 
     return nStatus;
+}
+
+int XByteBuffer_AddByte(xbyte_buffer_t *pBuffer, uint8_t nByte)
+{
+    if (XByteBuffer_Reserve(pBuffer, 2) <= 0) return XSTDERR;
+    pBuffer->pData[pBuffer->nUsed++] = nByte;
+    pBuffer->pData[pBuffer->nUsed] = '\0';
+    return (int)pBuffer->nUsed;
 }
 
 int XByteBuffer_NullTerm(xbyte_buffer_t *pBuffer)
@@ -317,7 +317,7 @@ xbool_t XByteBuffer_HasData(xbyte_buffer_t *pBuffer)
 
 int XDataBuffer_Init(xdata_buffer_t *pBuffer, size_t nSize, int nFixed)
 {
-    pBuffer->pData = (void**)calloc(nSize, sizeof(void*));
+    pBuffer->pData = (void**)malloc(nSize * sizeof(void*));
     if (pBuffer->pData == NULL)
     {
         pBuffer->nSize = 0;
@@ -445,7 +445,7 @@ int XRingBuffer_Init(xring_buffer_t *pBuffer, size_t nSize)
     pBuffer->nUsed = 0;
     unsigned int i;
 
-    pBuffer->pData = (xbyte_buffer_t**)calloc(nSize, sizeof(xbyte_buffer_t*));
+    pBuffer->pData = (xbyte_buffer_t**)malloc(nSize * sizeof(xbyte_buffer_t*));
     if (pBuffer->pData == NULL) return 0;
 
     for (i = 0; i < pBuffer->nSize; i++)

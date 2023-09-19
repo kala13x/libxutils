@@ -12,6 +12,7 @@
 
 #include "api.h"
 #include "xver.h"
+#include "xstr.h"
 #include "xbuf.h"
 #include "sha1.h"
 #include "base64.h"

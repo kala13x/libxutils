@@ -8,12 +8,10 @@
  * with some sorting and search algorithms.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "array.h"
 
-xarray_data_t *XArray_NewData(void *pData, size_t nSize, uint64_t nKey)
+xarray_data_t *XArray_NewData(void *pData, size_t nSize, uint32_t nKey)
 {
     xarray_data_t *pNewData = (xarray_data_t*)malloc(sizeof(xarray_data_t));
     if (pNewData == NULL) return NULL;
@@ -78,7 +76,7 @@ void* XArray_Init(xarray_t *pArr, size_t nSize, uint8_t nFixed)
 
     if (nSize)
     {
-        pArr->pData = (xarray_data_t**)calloc(nSize, sizeof(xarray_data_t*));
+        pArr->pData = (xarray_data_t**)malloc(nSize * sizeof(xarray_data_t*));
         if (pArr->pData == NULL) return NULL;
     }
 
@@ -242,7 +240,7 @@ int XArray_PushData(xarray_t *pArr, void *pData, size_t nSize)
     return XArray_Add(pArr, pNewData);
 }
 
-int XArray_AddDataKey(xarray_t *pArr, void *pData, size_t nSize, uint64_t nKey)
+int XArray_AddDataKey(xarray_t *pArr, void *pData, size_t nSize, uint32_t nKey)
 {
     xarray_data_t *pNewData = XArray_NewData(pData, nSize, nKey);
 
@@ -282,7 +280,7 @@ size_t XArray_GetSize(xarray_t *pArr, size_t nIndex)
     return pArrData ? pArrData->nSize : 0;
 }
 
-uint64_t XArray_GetKey(xarray_t *pArr, size_t nIndex)
+uint32_t XArray_GetKey(xarray_t *pArr, size_t nIndex)
 {
     if (nIndex >= pArr->nSize) return 0;
     xarray_data_t *pArrData = pArr->pData[nIndex];
@@ -379,6 +377,7 @@ void XArray_Swap(xarray_t *pArr, size_t nIndex1, size_t nIndex2)
 
 static int XArray_CompareSize(const void *pData1, const void *pData2, void *pCtx)
 {
+    (void)pCtx;
     xarray_data_t *pFirst = (xarray_data_t*)pData1;
     xarray_data_t *pSecond = (xarray_data_t*)pData2;
     return (int)pFirst->nSize - (int)pSecond->nSize;
@@ -386,6 +385,7 @@ static int XArray_CompareSize(const void *pData1, const void *pData2, void *pCtx
 
 static int XArray_CompareKey(const void *pData1, const void *pData2, void *pCtx)
 {
+    (void)pCtx;
     xarray_data_t *pFirst = (xarray_data_t*)pData1;
     xarray_data_t *pSecond = (xarray_data_t*)pData2;
     return (int)pFirst->nKey - (int)pSecond->nKey;
@@ -449,7 +449,7 @@ void XArray_BubbleSort(xarray_t *pArr, xarray_comparator_t compare, void *pCtx)
     }
 }
 
-int XArray_LinearSearch(xarray_t *pArr, uint64_t nKey)
+int XArray_LinearSearch(xarray_t *pArr, uint32_t nKey)
 {
     if (pArr == NULL || !pArr->nUsed) return XARRAY_FAILURE;
     size_t i = 0;
@@ -463,7 +463,7 @@ int XArray_LinearSearch(xarray_t *pArr, uint64_t nKey)
     return XARRAY_FAILURE;
 }
 
-int XArray_SentinelSearch(xarray_t *pArr, uint64_t nKey)
+int XArray_SentinelSearch(xarray_t *pArr, uint32_t nKey)
 {
     if (pArr == NULL || !pArr->nUsed) return XARRAY_FAILURE;
     int i, nRet = 0, nLast = (int)pArr->nUsed - 1;
@@ -488,7 +488,7 @@ int XArray_SentinelSearch(xarray_t *pArr, uint64_t nKey)
     return nRet;
 }
 
-int XArray_DoubleSearch(xarray_t *pArr, uint64_t nKey)
+int XArray_DoubleSearch(xarray_t *pArr, uint32_t nKey)
 {
     if (pArr == NULL || !pArr->nUsed) return XARRAY_FAILURE;
     int nFront = 0, nBack = (int)pArr->nUsed - 1;
@@ -508,7 +508,7 @@ int XArray_DoubleSearch(xarray_t *pArr, uint64_t nKey)
     return XARRAY_FAILURE;
 }
 
-int XArray_BinarySearch(xarray_t *pArr, uint64_t nKey)
+int XArray_BinarySearch(xarray_t *pArr, uint32_t nKey)
 {
     if (pArr == NULL || !pArr->nUsed) return XARRAY_FAILURE;
     int nLeft = 0, nRight = (int)pArr->nUsed - 1;
