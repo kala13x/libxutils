@@ -62,9 +62,9 @@ int xclose(int nFD)
 #endif
 }
 
-int xstat(const char *pPath, struct stat *pStat)
+int xstat(const char *pPath, xstat_t *pStat)
 {
-    memset(pStat, 0, sizeof(struct stat));
+    memset(pStat, 0, sizeof(xstat_t));
 #ifdef _WIN32
     if (stat(pPath, pStat) < 0) return XSTDERR;
 #else
@@ -257,7 +257,7 @@ int XFile_GetStats(xfile_t *pFile)
 {
     XASSERT(XFile_IsOpen(pFile), XSTDERR);
 
-    struct stat fileStat;
+    xstat_t fileStat;
     if (fstat(pFile->nFD, &fileStat) < 0) return XSTDERR;
 
 #ifdef _WIN32
@@ -376,8 +376,8 @@ int XFile_ReadLine(xfile_t *pFile, char* pLine, size_t nSize, size_t nLineNum)
 
 xbool_t XPath_Exists(const char *pPath)
 {
-    struct stat st;
-    memset(&st, 0, sizeof(struct stat));
+    xstat_t st;
+    memset(&st, 0, sizeof(xstat_t));
     if (stat(pPath, &st) < 0) return XFALSE;
     return XTRUE;
 }
@@ -476,10 +476,9 @@ int XPath_Parse(xpath_t *pPath, const char *pPathStr, xbool_t bStat)
 
     if (bStat)
     {
-        struct stat st;
-        XSTATUS nStat = xstat(pPathStr, &st);
-        XASSERT((nStat >= 0), XSTDERR);
-        bIsDir = S_ISDIR(st.st_mode);
+        xstat_t st;
+        if (xstat(pPathStr, &st) >= 0)
+            bIsDir = S_ISDIR(st.st_mode);
     }
 
     if (bIsDir || pPathStr[nLength - 1] == '/')
@@ -600,7 +599,7 @@ int XPath_SetPerm(const char *pPath, const char *pPerm)
 
 int XPath_GetPerm(char *pOutput, size_t nSize, const char *pPath)
 {
-    struct stat statbuf;
+    xstat_t statbuf;
     xstat(pPath, &statbuf);
     return XPath_ModeToPerm(pOutput, nSize, statbuf.st_mode);
 }
@@ -796,7 +795,7 @@ int XDir_Read(xdir_t *pDir, char *pFile, size_t nSize)
 
 int XDir_Valid(const char *pPath)
 {
-    struct stat statbuf = {0};
+    xstat_t statbuf = {0};
     int nStatus = stat(pPath, &statbuf);
     if (nStatus < 0) return nStatus;
 
@@ -842,7 +841,7 @@ int XDir_Create(const char *pDir, xmode_t nMode)
 
 int XDir_Unlink(const char *pPath)
 {
-    struct stat statbuf;
+    xstat_t statbuf;
     if (!stat(pPath, &statbuf))
     {
         return (S_ISDIR(statbuf.st_mode)) ? 
@@ -901,7 +900,7 @@ void XFile_InitEntry(xfile_entry_t *pEntry)
     pEntry->nUID = 0;
 }
 
-void XFile_CreateEntry(xfile_entry_t *pEntry, const char *pName, const char *pPath, struct stat *pStat)
+void XFile_CreateEntry(xfile_entry_t *pEntry, const char *pName, const char *pPath, xstat_t *pStat)
 {
     XFile_InitEntry(pEntry);
 
@@ -940,7 +939,7 @@ xfile_entry_t* XFile_AllocEntry()
     return pEntry;
 }
 
-xfile_entry_t* XFile_NewEntry(const char *pName, const char *pPath, struct stat *pStat)
+xfile_entry_t* XFile_NewEntry(const char *pName, const char *pPath, xstat_t *pStat)
 {
     xfile_entry_t *pEntry = (xfile_entry_t*)malloc(sizeof(xfile_entry_t));
     if (pEntry == NULL) return NULL;
@@ -1065,7 +1064,7 @@ static xbool_t XFile_SearchName(xfile_search_t *pSearch, const char *pFileName)
     return bFound;
 }
 
-static xbool_t XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, const char *pName, struct stat *pStat)
+static xbool_t XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, const char *pName, xstat_t *pStat)
 {
     if (pSearch->nLinkCount >= 0 && pSearch->nLinkCount != pStat->st_nlink) return XFALSE;
     if (pSearch->nFileSize >= 0 && pSearch->nFileSize != pStat->st_size) return XFALSE;
@@ -1220,7 +1219,7 @@ int XFile_Search(xfile_search_t *pSearch, const char *pDirectory)
     {
         char sFullPath[XPATH_MAX];
         char sDirPath[XPATH_MAX];
-        struct stat statbuf;
+        xstat_t statbuf;
 
         /* Don't add slash twice if directory already contains slash character at the end */
         const char *pSlash = (pDirectory[nDirLen - 1] != '/') ? "/" : XSTR_EMPTY;

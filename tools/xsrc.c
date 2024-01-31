@@ -272,7 +272,7 @@ static void XSearch_ColorizeSymlink(char *pSimlink, size_t nSize, xfile_entry_t 
     {
         if (pEntry->pRealPath != NULL)
         {
-            struct stat statbuf;
+            xstat_t statbuf;
             xfile_entry_t linkEntry;
             xstat(pEntry->pRealPath, &statbuf);
 

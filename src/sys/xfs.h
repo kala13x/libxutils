@@ -60,12 +60,14 @@ typedef struct XPath {
     char sFile[XNAME_MAX];
 } xpath_t;
 
-#define XFILE_CHECK_FL(c, f) (((c) & (f)) == (f))
+typedef struct stat xstat_t;
 
 #define xfprintf(xf, ...) \
     XFile_Print(xf, __VA_ARGS__)
 
-int xstat(const char *pPath, struct stat *pStat);
+#define XFILE_CHECK_FL(c, f) (((c) & (f)) == (f))
+
+int xstat(const char *pPath, xstat_t *pStat);
 int xmkdir(const char* pPath, xmode_t nMode);
 int xunlink(const char* pPath);
 int xrmdir(const char* pPath);
@@ -144,8 +146,8 @@ typedef struct XFileEntry {
     char *pRealPath;
 } xfile_entry_t;
 
-void XFile_CreateEntry(xfile_entry_t *pEntry, const char *pName, const char *pPath, struct stat *pStat);
-xfile_entry_t* XFile_NewEntry(const char *pName, const char *pPath, struct stat *pStat);
+void XFile_CreateEntry(xfile_entry_t *pEntry, const char *pName, const char *pPath, xstat_t *pStat);
+xfile_entry_t* XFile_NewEntry(const char *pName, const char *pPath, xstat_t *pStat);
 xfile_entry_t* XFile_AllocEntry();
 
 void XFile_InitEntry(xfile_entry_t *pEntry);
