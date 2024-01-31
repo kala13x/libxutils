@@ -23,7 +23,7 @@
 
 #define XPASS_VER_MAX       0
 #define XPASS_VER_MIN       2
-#define XPASS_BUILD_NUM     5
+#define XPASS_BUILD_NUM     6
 
 #define XPASS_AES_LEN       128
 #define XPASS_NAME_LEN      6
@@ -66,6 +66,7 @@ typedef struct
     char sAddr[XSTR_MIN];
     char sDesc[XSTR_MIN];
 
+    char sMasterPass[XSTR_TINY];
     char sCiphers[XPATH_MAX];
     char sFile[XPATH_MAX];
     char sConf[XPATH_MAX];
@@ -80,6 +81,7 @@ typedef struct
     xbool_t bInitConf;
     xbool_t bRead;
     xbool_t bWrite;
+    xbool_t bForce;
     xbool_t bDelete;
     xbool_t bUpdate;
 
@@ -126,19 +128,24 @@ static void XPass_DisplayUsage(const char *pName)
 
     xlog("Usage: %s [-c <path>] [-i <path>] [-k <size>] [-a <addr>]", pName);
     xlog(" %s [-d <desc>] [-n <name>] [-u <user>] [-p <pass>]", XPass_WhiteSpace(nLength));
-    xlog(" %s [-C <ciphers>] [-I] [-J] [-D] [-R] [-W] [-U] [-h]\n", XPass_WhiteSpace(nLength));
+    xlog(" %s [-C <ciphers>] [-P <pass>] [-I] [-J] [-F] [-D]", XPass_WhiteSpace(nLength));
+    xlog(" %s [-R] [-W] [-U] [-h]\n", XPass_WhiteSpace(nLength));
 
     xlog("These arguments are optional:");
     xlog("   %s-a%s <addr>               %s# Address value of the entry%s", XPASS_ARG_FMT);
     xlog("   %s-d%s <desc>               %s# Description value of the entry%s", XPASS_ARG_FMT);
     xlog("   %s-n%s <name>               %s# Unique name value of the entry%s", XPASS_ARG_FMT);
     xlog("   %s-u%s <user>               %s# Username value of the the entry%s", XPASS_ARG_FMT);
-    xlog("   %s-p%s <pass>               %s# Password value of the the entry%s\n", XPASS_ARG_FMT);
+    xlog("   %s-p%s <pass>               %s# Password value of the the entry (not safe)%s%s*%s\n",
+                                                XPASS_ARG_FMT, XSTR_CLR_RED, XSTR_FMT_RESET);
+    xlog("   %s-P%s <pass>               %s# Master password from CLI (not safe)%s%s*%s",
+                                                XPASS_ARG_FMT, XSTR_CLR_RED, XSTR_FMT_RESET);
 
     xlog("   %s-C%s <ciphers>            %s# Cipher or ciphers by encryption order%s", XPASS_ARG_FMT);
     xlog("   %s-c%s <path>               %s# Configuration file path%s", XPASS_ARG_FMT);
     xlog("   %s-i%s <path>               %s# Input/Database file path%s", XPASS_ARG_FMT);
     xlog("   %s-k%s <size>               %s# AES encryt/decrypt key size%s", XPASS_ARG_FMT);
+    xlog("   %s-f%s                      %s# Force overwrite db/cfg files%s\n", XPASS_ARG_FMT);
     xlog("   %s-h%s                      %s# Version and usage%s\n", XPASS_ARG_FMT);
 
     xlog("Required one operation from this list%s*%s:", XSTR_CLR_RED, XSTR_FMT_RESET);
@@ -149,7 +156,6 @@ static void XPass_DisplayUsage(const char *pName)
     xlog("   %s-W%s                      %s# Write new entry to the database%s", XPASS_ARG_FMT);
     xlog("   %s-U%s                      %s# Update existing entry in the database%s\n", XPASS_ARG_FMT);
 
-
     xlog("Supported ciphers:");
     xlog("   aes");
     xlog("   hex");
@@ -158,8 +164,8 @@ static void XPass_DisplayUsage(const char *pName)
     xlog("   reverse\n");
 
     xlog("%sNotes:%s", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
-    xlog("%s1%s) If you do not specify an argument password (-p <pass>),", XSTR_FMT_BOLD, XSTR_FMT_RESET);
-    xlog("the program will prompt you to enter the password securely.\n");
+    xlog("%s1%s) If you do not specify an argument password (-p or -P),", XSTR_FMT_BOLD, XSTR_FMT_RESET);
+    xlog("the program will prompt you to enter the password securely.%s*%s\n", XSTR_CLR_RED, XSTR_FMT_RESET);
 
     xlog("%s2%s) The delimiter \":\" can be used to specify more than one ciphers.", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     xlog("The program will use the ciphers to encrypt/decrypt database by order.\n");
@@ -209,31 +215,45 @@ static xbool_t XPass_GetPass(xpass_ctx_t *pCtx)
 static xbool_t XPass_GetKey(xpass_ctx_t *pCtx)
 {
     char sPwd[XSTR_MIN];
+    uint8_t *pMasterPwd = NULL;
+    size_t nLength = 0;
 
-    if (XCLI_GetPass("Enter master password: ", sPwd, sizeof(sPwd)) <= 0)
+    if (xstrused(pCtx->sMasterPass))
     {
-        xloge("Failed to read master password: %d", errno);
-        return XFALSE;
+        pMasterPwd = (uint8_t*)pCtx->sMasterPass;
+        nLength = strnlen(pCtx->sMasterPass, sizeof(pCtx->sMasterPass) - 1);
     }
-
-    if (!pCtx->bRead)
+    else
     {
-        char sPwd2[XSTR_MIN];
-
-        if (XCLI_GetPass("Re-enter master password: ", sPwd2, sizeof(sPwd2)) <= 0)
+        if (XCLI_GetPass("Enter master password: ", sPwd, sizeof(sPwd)) <= 0)
         {
-            xloge("Failed to read password: %d", errno);
+            xloge("Failed to read master password: %d", errno);
             return XFALSE;
         }
 
-        if (strcmp(sPwd, sPwd2))
+        if (!pCtx->bRead)
         {
-            xloge("Password do not match.");
-            return XFALSE;
+            char sPwd2[XSTR_MIN];
+
+            if (XCLI_GetPass("Re-enter master password: ", sPwd2, sizeof(sPwd2)) <= 0)
+            {
+                xloge("Failed to read password: %d", errno);
+                return XFALSE;
+            }
+
+            if (strcmp(sPwd, sPwd2))
+            {
+                xloge("Password do not match.");
+                return XFALSE;
+            }
         }
+
+        pMasterPwd = (uint8_t*)sPwd;
+        nLength = strnlen(sPwd, sizeof(sPwd) - 1);
+
     }
 
-    char *pCrypted = XMD5_Sum((uint8_t*)sPwd, strlen(sPwd));
+    char *pCrypted = XMD5_Sum(pMasterPwd, nLength);
     if (pCrypted == NULL)
     {
         xloge("Failed to crypt master password: %d", errno);
@@ -249,7 +269,7 @@ static xbool_t XPass_GetKey(xpass_ctx_t *pCtx)
 static xbool_t XPass_ParseArgs(xpass_ctx_t *pCtx, int argc, char *argv[])
 {
     int nChar = 0;
-    while ((nChar = getopt(argc, argv, "a:c:C:d:n:i:u:p:k:D1:I1:J1:R1:W1:U1:h1")) != -1)
+    while ((nChar = getopt(argc, argv, "a:c:C:d:n:i:u:p:k:P:f1:D1:I1:J1:R1:W1:U1:h1")) != -1)
     {
         switch (nChar)
         {
@@ -277,8 +297,14 @@ static xbool_t XPass_ParseArgs(xpass_ctx_t *pCtx, int argc, char *argv[])
             case 'p':
                 xstrncpy(pCtx->sPass, sizeof(pCtx->sPass), optarg);
                 break;
+            case 'P':
+                xstrncpy(pCtx->sMasterPass, sizeof(pCtx->sMasterPass), optarg);
+                break;
             case 'k':
                 pCtx->nAESKeyLength = (size_t)atoi(optarg);
+                break;
+            case 'f':
+                pCtx->bForce = XTRUE;
                 break;
             case 'D':
                 pCtx->bDelete = XTRUE;
@@ -696,15 +722,18 @@ static xbool_t XPass_InitDatabase(xpass_ctx_t *pCtx)
     if (!xstrused(pCtx->sFile)) return XTRUE;
     xjson_t *pJson = &pCtx->dataBase;
 
-    xlogw("This operation will erase and reinitialize following file:");
-    xlog("%sDatabase:%s %s", XSTR_FMT_BOLD, XSTR_FMT_RESET, pCtx->sFile);
-    printf("Do you want to continue? (y/n): ");
+    if (!pCtx->bForce)
+    {
+        xlogw("This operation will erase and reinitialize following file:");
+        xlog("%sDatabase:%s %s", XSTR_FMT_BOLD, XSTR_FMT_RESET, pCtx->sFile);
+        printf("Do you want to continue? (y/n): ");
 
-    char sAnswer[XSTR_TINY];
-    sAnswer[0] = XSTR_NUL;
+        char sAnswer[XSTR_TINY];
+        sAnswer[0] = XSTR_NUL;
 
-    XASSERT((fgets(sAnswer, sizeof(sAnswer), stdin)), XFALSE);
-    XASSERT((sAnswer[0] == 'Y' && sAnswer[0] == 'y'), XFALSE);
+        XASSERT((fgets(sAnswer, sizeof(sAnswer), stdin)), XFALSE);
+        XASSERT((sAnswer[0] == 'Y' && sAnswer[0] == 'y'), XFALSE);
+    }
 
     xpath_t path;
     XPath_Parse(&path, pCtx->sFile, XTRUE);
@@ -761,15 +790,18 @@ static xbool_t XPass_InitDatabase(xpass_ctx_t *pCtx)
 
 static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
 {
-    xlogw("This operation will erase and reinitialize following file:");
-    xlog("%sConfig:%s %s", XSTR_FMT_BOLD, XSTR_FMT_RESET, pCtx->sConf);
-    printf("Do you want to continue? (y/n): ");
+    if (!pCtx->bForce)
+    {
+        xlogw("This operation will erase and reinitialize following file:");
+        xlog("%sConfig:%s %s", XSTR_FMT_BOLD, XSTR_FMT_RESET, pCtx->sConf);
+        printf("Do you want to continue? (y/n): ");
 
-    char sAnswer[XSTR_TINY];
-    sAnswer[0] = XSTR_NUL;
+        char sAnswer[XSTR_TINY];
+        sAnswer[0] = XSTR_NUL;
 
-    XASSERT((fgets(sAnswer, sizeof(sAnswer), stdin)), XFALSE);
-    XASSERT((sAnswer[0] == 'Y' || sAnswer[0] == 'y'), XFALSE);
+        XASSERT((fgets(sAnswer, sizeof(sAnswer), stdin)), XFALSE);
+        XASSERT((sAnswer[0] == 'Y' || sAnswer[0] == 'y'), XFALSE);
+    }
 
     xpath_t path;
     XPath_Parse(&path, pCtx->sConf, XTRUE);
