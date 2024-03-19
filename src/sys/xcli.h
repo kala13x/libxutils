@@ -45,22 +45,22 @@ typedef struct xcli_wind_ {
     xcli_disp_type_t eType;
     xcli_size_t frameSize;
     xarray_t lineArray;
-} xcli_wind_t;
+} xcli_win_t;
 
-void XWindow_Init(xcli_wind_t *pWin);
-void XWindow_Destroy(xcli_wind_t *pWin);
+void XWindow_Init(xcli_win_t *pWin);
+void XWindow_Destroy(xcli_win_t *pWin);
 
-XSTATUS XWindow_UpdateSize(xcli_wind_t *pWin);
+XSTATUS XWindow_UpdateSize(xcli_win_t *pWin);
 int XWindow_ClearScreen();
 
-XSTATUS XWindow_AddAligned(xcli_wind_t *pWin, const char *pInput, const char *pFmt, uint8_t nAlign);
-XSTATUS XWindow_AddLineFmt(xcli_wind_t *pWin, const char *pFmt, ...);
-XSTATUS XWindow_AddLine(xcli_wind_t *pWin, char *pLine, size_t nLine);
-XSTATUS XWindow_AddEmptyLine(xcli_wind_t *pWin);
+XSTATUS XWindow_AddAligned(xcli_win_t *pWin, const char *pInput, const char *pFmt, uint8_t nAlign);
+XSTATUS XWindow_AddLineFmt(xcli_win_t *pWin, const char *pFmt, ...);
+XSTATUS XWindow_AddLine(xcli_win_t *pWin, char *pLine, size_t nLine);
+XSTATUS XWindow_AddEmptyLine(xcli_win_t *pWin);
 
-XSTATUS XWindow_GetFrame(xcli_wind_t *pWin, xbyte_buffer_t *pFrame);
-XSTATUS XWindow_Display(xcli_wind_t *pWin);
-XSTATUS XWindow_Flush(xcli_wind_t *pWin);
+XSTATUS XWindow_GetFrame(xcli_win_t *pWin, xbyte_buffer_t *pFrame);
+XSTATUS XWindow_Display(xcli_win_t *pWin);
+XSTATUS XWindow_Flush(xcli_win_t *pWin);
 
 typedef struct xcli_bar_ {
     xcli_size_t frameSize;

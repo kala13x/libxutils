@@ -20,17 +20,18 @@
 #include "xfs.h"
 #include "api.h"
 
-#define XTOP_VERSION_MAJ    1
-#define XTOP_VERSION_MIN    1
+#define XTOP_VERSION_MAJ        1
+#define XTOP_VERSION_MIN        2
 
-#define XTOP_SORT_DISABLE   0
-#define XTOP_SORT_BUSY      1
-#define XTOP_SORT_FREE      2
-#define XTOP_SORT_NAME      3
-#define XTOP_SORT_LEN       4
+#define XTOP_SORT_DISABLE       0
+#define XTOP_SORT_BUSY          1
+#define XTOP_SORT_FREE          2
+#define XTOP_SORT_NAME          3
+#define XTOP_SORT_LEN           4
 
-#define XTOP_API_URI        "/api/all"
-#define XTOP_TOTAL_LEN      5
+#define XTOP_API_URI            "/api/all"
+#define XTOP_TOTAL_LEN          5
+#define XTOP_CPU_EXTRA_DEFAULT  ((uint16_t)-1)
 
 #define XTOP_CPU_HEADER " "\
     "CPU     IDL      "\
@@ -63,7 +64,6 @@ typedef enum {
 
 typedef struct xtop_args_ {
     xtop_stats_t *pStats;
-    xbool_t bExcludeCPU;
     xbool_t bDaemon;
     xbool_t bServer;
     xbool_t bClient;
@@ -77,6 +77,7 @@ typedef struct xtop_args_ {
     char sKey[XSTR_MIN];
 
     size_t nIntervalU;
+    uint16_t nCPUExtraLimit;
     uint16_t nPort;
     uint8_t nSort;
     xpid_t nPID;
@@ -122,16 +123,16 @@ void XTOPApp_DisplayUsage(const char *pName)
     XSTR_FMT_BOLD, XSTR_FMT_RESET, XSTR_CLR_RED, XSTR_FMT_RESET, XSTR_CLR_YELLOW,
     XSTR_FMT_RESET, XSTR_FMT_DIM, XSTR_FMT_RESET, XSTR_FMT_BOLD, XSTR_FMT_RESET);
 
-    printf("Usage: %s [-i <iface>] [-m <seconds>] [-t <type>] [-u <pid>]\n", pName);
-    printf(" %s [-a <addr>] [-p <port>] [-l <path>] [-d] [-s] [-e]\n", XTOPApp_WhiteSpace(nLength));
+    printf("Usage: %s [-e <count>] [-i <iface>] [-m <seconds>] [-t <type>]\n", pName);
+    printf(" %s [-a <addr>] [-p <port>] [-l <path>] [-u <pid>] [-d] [-s]\n", XTOPApp_WhiteSpace(nLength));
     printf(" %s [-U <user>] [-P <pass>] [-K <key>] [-c] [-v] [-h]\n\n", XTOPApp_WhiteSpace(nLength));
 
     printf("Options are:\n");
+    printf("  %s-e%s <count>            # Limit extra CPU info to given number\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-i%s <iface>            # Interface name to display on top\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-m%s <seconds>          # Monitoring interval seconds\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-t%s <type>             # Sort result by selected type%s*%s\n", XSTR_CLR_CYAN, XSTR_FMT_RESET, XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("  %s-u%s <pid>              # Track process CPU and memory usage\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-e%s                    # Exclude additional CPU info\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-h%s                    # Print version and usage\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("%sXTOP has a REST API server and client mode to send%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
@@ -172,7 +173,6 @@ uint8_t XTOPApp_GetSortType(const char *pArg)
 
 int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
 {
-    pArgs->bExcludeCPU = XFALSE;
     pArgs->bDaemon = XFALSE;
     pArgs->bServer = XFALSE;
     pArgs->bClient = XFALSE;
@@ -186,6 +186,7 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
     xstrnul(pArgs->sToken);
     xstrnul(pArgs->sKey);
 
+    pArgs->nCPUExtraLimit = XTOP_CPU_EXTRA_DEFAULT;
     pArgs->nIntervalU = 0;
     pArgs->nPort = 0;
     pArgs->nPID = 0;
@@ -196,7 +197,7 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
     xbool_t bVerbose = XFALSE;
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "a:i:K:U:P:l:m:p:t:u:c1:d1:s1:e1:d1:v1:h1")) != -1)
+    while ((nChar = getopt(argc, argv, "a:e:i:K:U:P:l:m:p:t:u:c1:d1:s1:d1:v1:h1")) != -1)
     {
         switch (nChar)
         {
@@ -221,6 +222,9 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
             case 't':
                 pArgs->nSort = XTOPApp_GetSortType(optarg);
                 break;
+            case 'e':
+                pArgs->nCPUExtraLimit = atoi(optarg);
+                break;
             case 'm':
                 pArgs->nIntervalU = atoi(optarg);
                 break;
@@ -229,9 +233,6 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
                 break;
             case 'u':
                 pArgs->nPID = atoi(optarg);
-                break;
-            case 'e':
-                pArgs->bExcludeCPU = XTRUE;
                 break;
             case 'c':
                 pArgs->bClient = XTRUE;
@@ -311,9 +312,9 @@ int XTOPApp_CompareCPUs(const void *pData1, const void *pData2, void *pContext)
     xcpu_info_t *pInfo1 = (xcpu_info_t*)((xarray_data_t*)pData1)->pData;
     xcpu_info_t *pInfo2 = (xcpu_info_t*)((xarray_data_t*)pData2)->pData;
 
-    return (pArgs->nSort == XTOP_SORT_BUSY) ?
-        (int)pInfo1->nIdleTime - (int)pInfo2->nIdleTime:
-        (int)pInfo2->nIdleTime - (int)pInfo1->nIdleTime;
+    return (pArgs->nSort == XTOP_SORT_FREE) ?
+        (int)pInfo2->nIdleTime - (int)pInfo1->nIdleTime:
+        (int)pInfo1->nIdleTime - (int)pInfo2->nIdleTime;
 }
 
 int XTOPApp_CompareIFaces(const void *pData1, const void *pData2, void *pContext)
@@ -374,7 +375,7 @@ int XTOPApp_FillCPUBar(xcli_bar_t *pBar, xcpu_info_t *pCore, char *pDst, size_t 
         XSTR_CLR_CYAN, sVirt, XSTR_FMT_RESET);
 }
 
-XSTATUS XTOPApp_AddCPULoadBar(xcli_wind_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCPU)
+XSTATUS XTOPApp_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCPU)
 {
     char sFirst[XLINE_MAX], sSecond[XLINE_MAX], sUsed[XLINE_MAX];
     uint16_t i, nNext = pCPU->nCoreCount;
@@ -517,7 +518,7 @@ int XTOPApp_FillSwapBar(xcli_bar_t *pBar, xmem_info_t *pMemInfo, char *pDst, siz
         XSTR_CLR_YELLOW, sCached, XSTR_FMT_RESET);
 }
 
-XSTATUS XTOPApp_AddOverallBar(xcli_wind_t *pWin, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
+XSTATUS XTOPApp_AddOverallBar(xcli_win_t *pWin, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
 {
     if (pMemInfo->nMemoryTotal < pMemInfo->nMemoryAvail) return XSTDNON;
     char sLine[XLINE_MAX], sBuff[XSTR_TINY];
@@ -621,7 +622,7 @@ void XTOPApp_AddCPUInfoUnit(char *pLine, size_t nSize, double fPct, xbool_t bIdl
     }
 }
 
-XSTATUS XTOPApp_AddCPUInfo(xcli_wind_t *pWin, xcpu_info_t *pCore)
+XSTATUS XTOPApp_AddCPUInfo(xcli_win_t *pWin, xcpu_info_t *pCore)
 {
     char sLine[XLINE_MAX];
     char sCore[XSTR_TINY];
@@ -650,19 +651,23 @@ XSTATUS XTOPApp_AddCPUInfo(xcli_wind_t *pWin, xcpu_info_t *pCore)
     return XWindow_AddLineFmt(pWin, "%s", sLine);
 }
 
-XSTATUS XTOPApp_AddCPUExtra(xcli_wind_t *pWin, xtop_args_t *pArgs, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
+XSTATUS XTOPApp_AddCPUExtra(xcli_win_t *pWin, xtop_args_t *pArgs, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
 {
     XWindow_AddAligned(pWin, XTOP_CPU_HEADER, XSTR_BACK_BLUE, XCLI_LEFT);
     XSTATUS nStatus = XTOPApp_AddCPUInfo(pWin, &pCPU->sum);
     if (nStatus <= 0) return nStatus;
 
-    if (pArgs->nSort && pCPU->nCoreCount &&
+    uint16_t i, nCount = pCPU->nCoreCount;
+    if (pArgs->nCPUExtraLimit != XTOP_CPU_EXTRA_DEFAULT)
+        nCount = XSTD_MIN(pCPU->nCoreCount, pArgs->nCPUExtraLimit);
+
+    if ((pArgs->nSort && pCPU->nCoreCount &&
         pArgs->nSort != XTOP_SORT_NAME &&
-        pArgs->nSort != XTOP_SORT_LEN)
+        pArgs->nSort != XTOP_SORT_LEN) ||
+        pCPU->nCoreCount != nCount)
         XArray_Sort(&pCPU->cores, XTOPApp_CompareCPUs, pArgs);
 
-    uint16_t i;
-    for (i = 0; i < pCPU->nCoreCount; i++)
+    for (i = 0; i < nCount; i++)
     {
         xcpu_info_t *pCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, i);
         if (pCore != NULL) nStatus = XTOPApp_AddCPUInfo(pWin, pCore);
@@ -671,7 +676,7 @@ XSTATUS XTOPApp_AddCPUExtra(xcli_wind_t *pWin, xtop_args_t *pArgs, xcli_bar_t *p
     return nStatus;
 }
 
-XSTATUS XTOPApp_AddInterface(xcli_wind_t *pWin, xtop_args_t *pArgs, xnet_iface_t *pIface, size_t nLength)
+XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_args_t *pArgs, xnet_iface_t *pIface, size_t nLength)
 {
     char sLine[XLINE_MAX], sName[XSTR_TINY], sRound[XSTR_TINY], sData[XSTR_TINY];
     xstrnlcpyf(sName, sizeof(sName), nLength + 1, XSTR_SPACE_CHAR, "%s", pIface->sName);
@@ -701,7 +706,7 @@ XSTATUS XTOPApp_AddInterface(xcli_wind_t *pWin, xtop_args_t *pArgs, xnet_iface_t
     return XWindow_AddLineFmt(pWin, "%s", sLine);
 }
 
-XSTATUS XTOPApp_AddNetworkInfo(xcli_wind_t *pWin, xtop_args_t *pArgs, xarray_t *pIfaces)
+XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *pIfaces)
 {
     if (pArgs->nSort) XArray_Sort(pIfaces, XTOPApp_CompareIFaces, pArgs);
     size_t nTrackLen = strlen(pArgs->sName);
@@ -1539,7 +1544,7 @@ int main(int argc, char *argv[])
         return nStatus;
     }
 
-    xcli_wind_t win;
+    xcli_win_t win;
     XWindow_Init(&win);
 
     xcli_bar_t bar;
@@ -1564,7 +1569,7 @@ int main(int argc, char *argv[])
             XTOPApp_AddCPULoadBar(&win, &bar, &cpuStats);
             XTOPApp_AddOverallBar(&win, &bar, &memInfo, &cpuStats);
 
-            if (!args.bExcludeCPU)
+            if (args.nCPUExtraLimit > 0)
             {
                 XWindow_AddEmptyLine(&win);
                 XTOPApp_AddCPUExtra(&win, &args, &bar, &memInfo, &cpuStats);
