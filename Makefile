@@ -66,10 +66,10 @@ install:
 	@test -d $(INSTALL_BIN) || mkdir -p $(INSTALL_BIN)
 	install -m 0755 $(ODIR)/$(NAME) $(INSTALL_BIN)/
 	@test -d $(INSTALL_INC) || mkdir -p $(INSTALL_INC)
-	cp -r ./src/crypt/*.h $(INSTALL_INC)/
-	cp -r ./src/data/*.h $(INSTALL_INC)/
-	cp -r ./src/net/*.h $(INSTALL_INC)/
-	cp -r ./src/sys/*.h $(INSTALL_INC)/
+	cp -r ./src/crypt/*.h $(INSTALL_INC)/crypt
+	cp -r ./src/data/*.h $(INSTALL_INC)/data
+	cp -r ./src/net/*.h $(INSTALL_INC)/net
+	cp -r ./src/sys/*.h $(INSTALL_INC)/sys
 	cp -r ./src/*.h $(INSTALL_INC)/
 
 .PHONY: clean
