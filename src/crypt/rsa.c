@@ -8,7 +8,7 @@
  */
 
 #include "rsa.h"
-#include "xfs.h"
+#include <sys/xfs.h>
 
 #ifdef XCRYPT_USE_SSL
 static const uint8_t g_shaPadding[XSHA256_PADDING_SIZE] =

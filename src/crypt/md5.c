@@ -8,7 +8,7 @@
  */
 
 #include "md5.h"
-#include "xstr.h"
+#include <data/xstr.h>
 
 static const uint32_t g_intRadians[64] = 
     {

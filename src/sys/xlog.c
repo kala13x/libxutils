@@ -7,9 +7,9 @@
  * Advanced logging library for C/C++
  */
 
-#include "xlog.h"
-#include "xstr.h"
-#include "xtime.h"
+#include <sys/xlog.h>
+#include <data/xstr.h>
+#include <sys/xtime.h>
 
 typedef struct XLogFile {
     uint8_t nCurrDay;

@@ -4,7 +4,8 @@
 ####################################
 
 CFLAGS = -D_XUTILS_USE_SSL -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU
-CFLAGS += -I./src/crypt -I./src/data -I./src/net -I./src/sys -I./src
+#CFLAGS += -I./src/crypt -I./src/data -I./src/net -I./src/sys -I./src
+CFLAGS += -I./src
 LIBS = -lssl -lcrypto -lpthread
 NAME = libxutils.a
 ODIR = ./build

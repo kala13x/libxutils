@@ -9,11 +9,11 @@
  */
 
 #include "xstd.h"
-#include "addr.h"
-#include "xtype.h"
-#include "xstr.h"
-#include "xtop.h"
-#include "xfs.h"
+#include <net/addr.h>
+#include <sys/xtype.h>
+#include <data/xstr.h>
+#include <sys/xtop.h>
+#include <sys/xfs.h>
 
 #define XPROC_BUFFER_SIZE           2048
 

@@ -12,10 +12,10 @@
 
 #include "api.h"
 #include "xver.h"
-#include "xstr.h"
-#include "xbuf.h"
-#include "sha1.h"
-#include "base64.h"
+#include <data/xstr.h>
+#include <data/xbuf.h>
+#include <crypt/sha1.h>
+#include <crypt/base64.h>
 
 #define XAPI_RX_MAX     (5000 * 1024)
 #define XAPI_RX_SIZE    4096

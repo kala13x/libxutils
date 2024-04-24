@@ -13,11 +13,11 @@
 #define __XUTILS_HTTP_H__
 
 #include "xstd.h"
-#include "addr.h"
-#include "sock.h"
-#include "map.h"
-#include "xbuf.h"
-#include "xtype.h"
+#include <net/addr.h>
+#include <net/sock.h>
+#include <data/map.h>
+#include <data/xbuf.h>
+#include <sys/xtype.h>
 
 #ifdef __cplusplus
 extern "C" {

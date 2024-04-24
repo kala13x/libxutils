@@ -8,10 +8,10 @@
  */
 
 #include "jwt.h"
-#include "xstr.h"
-#include "array.h"
-#include "hmac.h"
-#include "base64.h"
+#include <data/xstr.h>
+#include <data/array.h>
+#include <crypt/hmac.h>
+#include <crypt/base64.h>
 
 #ifdef XSHA256_DIGEST_SIZE
 #define XJWT_HASH_LENGTH XSHA256_DIGEST_SIZE

@@ -9,7 +9,7 @@
  * critical section, atomic builtins, rwlocks, and etc.
  */
 
-#include "sync.h"
+#include <sys/sync.h>
 
 #if !defined(_WIN32) && !defined(PTHREAD_MUTEX_RECURSIVE)
 #define PTHREAD_MUTEX_RECURSIVE PTHREAD_MUTEX_RECURSIVE_NP

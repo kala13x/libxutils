@@ -11,10 +11,10 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "xstr.h"
+#include <data/xstr.h>
 #include "http.h"
-#include "crypt.h"
-#include "base64.h"
+#include <crypt/crypt.h>
+#include <crypt/base64.h>
 
 typedef struct XHTTPCode {
     const int nCode;

@@ -11,7 +11,7 @@
 #define __XUTILS_XSTR_H__
 
 #include "xstd.h"
-#include "array.h"
+#include <data/array.h>
 
 /* Supported colors */
 #define XSTR_CLR_NONE               "\x1B[0m"

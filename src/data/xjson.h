@@ -9,7 +9,7 @@
  */
 
 #include "xstd.h"
-#include "array.h"
+#include <data/array.h>
 
 #ifndef __XUTILS_JSON_H__
 #define __XUTILS_JSON_H__

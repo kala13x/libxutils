@@ -8,8 +8,8 @@
  */
 
 #include "xstd.h"
-#include "sync.h"
-#include "thread.h"
+#include <sys/sync.h>
+#include <sys/thread.h>
 
 #ifdef _WIN32
 static DWORD WINAPI XThread_WinThread(void* pArg)

@@ -15,7 +15,7 @@
 
 #include "xstd.h"
 #include "event.h"
-#include "sock.h"
+#include <net/sock.h>
 #include "http.h"
 #include "mdtp.h"
 #include "ws.h"

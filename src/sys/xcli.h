@@ -14,8 +14,8 @@
 extern "C" {
 #endif
 
-#include "xbuf.h"
-#include "list.h"
+#include <data/xbuf.h>
+#include <data/list.h>
 
 #define XCLI_BAR_INTERVAL   100000
 #define XCLI_BUF_SIZE       256
