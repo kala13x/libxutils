@@ -7,9 +7,9 @@
  */
 
 #include "xstd.h"
-#include "xstr.h"
-#include "xlog.h"
-#include "array.h"
+#include <data/xstr.h>
+#include <sys/xlog.h>
+#include <data/array.h>
 
 #define UPPER_STRING "TEST STRING WITH UPPER CASE"
 #define LOVER_STRING "test string with lower case"

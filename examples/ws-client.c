@@ -10,11 +10,11 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "xlog.h"
-#include "xsig.h"
-#include "xcli.h"
-#include "addr.h"
-#include "api.h"
+#include <sys/xlog.h>
+#include <sys/xsig.h>
+#include <sys/xcli.h>
+#include <net/addr.h>
+#include <net/api.h>
 
 static xbool_t g_bFinish = XFALSE;
 

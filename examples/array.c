@@ -7,7 +7,7 @@
  */
 
 #include "xstd.h"
-#include "array.h" 
+#include <data/array.h>
 
 typedef struct {
     int key;

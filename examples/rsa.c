@@ -8,9 +8,9 @@
  */
 
 #include "xstd.h"
-#include "xlog.h"
-#include "xfs.h"
-#include "crypt.h"
+#include <sys/xlog.h>
+#include <sys/xfs.h>
+#include <crypt/crypt.h>
 
 #define XKEY_PRIV   "rsa_priv.pem"
 #define XKEY_PUB    "rsa_pub.pem"

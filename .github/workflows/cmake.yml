@@ -26,10 +26,14 @@ jobs:
 
     - name: Build with CMAKE
       run: |
-        cmake -Bbuild -DCMAKE_INSTALL_PREFIX=./libxutil && cmake --build build --target install
+        cmake -Bbuild -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/libxutils && cmake --build build --target install
+        ls ${{github.workspace}}/libxutils
+        ls ${{github.workspace}}/libxutils/include
+        ls ${{github.workspace}}/libxutils/lib
+        ls ${{github.workspace}}/libxutils/bin
 
     - name: Uploading libxutils
       uses: actions/upload-artifact@v4
       with:
         name: ubuntu_latest_libxutils
-        path: ./libxutil
+        path: ${{github.workspace}}/libxutils

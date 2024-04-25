@@ -6,8 +6,8 @@
  * Example file for working with linked list.
  */
 
-#include "list.h"
-#include "xlog.h"
+#include <data/list.h>
+#include <sys/xlog.h>
 
 typedef struct {
     char *pName;

@@ -9,13 +9,13 @@
  */
 
 #include "xstd.h"
-#include "event.h"
-#include "xsig.h"
-#include "http.h"
-#include "sock.h"
-#include "xbuf.h"
-#include "xlog.h"
-#include "xver.h"
+#include <net/event.h>
+#include <sys/xsig.h>
+#include <net/http.h>
+#include <net/sock.h>
+#include <data/xbuf.h>
+#include <sys/xlog.h>
+#include <xver.h>
 
 static int g_nInterrupted = 0;
 

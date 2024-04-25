@@ -8,7 +8,7 @@
 
 
 #include "xstd.h"
-#include "thread.h"
+#include <sys/thread.h>
 
 void* my_thread(void *arg)
 {

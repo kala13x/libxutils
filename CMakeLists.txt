@@ -7,19 +7,8 @@ ELSE()
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall")
 ENDIF()
 
-# TODO: CMAKE very smart and can count on usage CMAKE_INSTALL_PREFIX variable
-#set(XUTILS_INSTALL_PREFIX "/usr/local")
-#string(SUBSTRING "${XUTILS_INSTALL_PREFIX}" 0 2 PREFIX_START)
-#
-#if("${PREFIX_START}" STREQUAL "./")
-#  get_filename_component(CURRENT_WORKING_DIR "${CMAKE_SOURCE_DIR}" REALPATH)
-#  string(SUBSTRING "${XUTILS_INSTALL_PREFIX}" 1 -1 RELATIVE_PATH)
-#  set(CMAKE_INSTALL_PREFIX "${CURRENT_WORKING_DIR}${RELATIVE_PATH}")
-#endif()
-
-# TODO: looks like it is not used
-#set(THREADS_PREFER_PTHREAD_FLAG ON)
-#find_package(Threads REQUIRED)
+option(EXAMPLES "Build examples" ON)
+option(TOOLS "Build tools" ON)
 
 find_package(OpenSSL)
 if(OpenSSL_FOUND)
@@ -36,6 +25,14 @@ add_library(xutils STATIC
 target_link_libraries(xutils
     PUBLIC
     OpenSSL::SSL)
+
+if(EXAMPLES)
+  add_subdirectory(examples)
+endif()
+
+if(TOOLS)
+  add_subdirectory(tools)
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS xutils EXPORT xutils

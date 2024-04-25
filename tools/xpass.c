@@ -8,18 +8,18 @@
  */
 
 #include "xstd.h"
-#include "xjson.h"
-#include "xtype.h"
-#include "xlog.h"
-#include "xstr.h"
-#include "xcli.h"
+#include <data/xjson.h>
+#include <sys/xtype.h>
+#include <sys/xlog.h>
+#include <data/xstr.h>
+#include <sys/xcli.h>
 #include "xver.h"
-#include "xfs.h"
-#include "crypt.h"
-#include "crc32.h"
-#include "md5.h"
-#include "rsa.h"
-#include "aes.h"
+#include <sys/xfs.h>
+#include <crypt/crypt.h>
+#include <crypt/crc32.h>
+#include <crypt/md5.h>
+#include <crypt/rsa.h>
+#include <crypt/aes.h>
 
 #define XPASS_VER_MAX       0
 #define XPASS_VER_MIN       2

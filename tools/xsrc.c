@@ -8,10 +8,10 @@
  */
 
 #include "xstd.h"
-#include "xtype.h"
-#include "xstr.h"
-#include "xlog.h"
-#include "xfs.h"
+#include <sys/xtype.h>
+#include <data/xstr.h>
+#include <sys/xlog.h>
+#include <sys/xfs.h>
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0

@@ -7,9 +7,9 @@
  */
 
 #include "xstd.h"
-#include "sock.h"
-#include "xlog.h"
-#include "xtime.h"
+#include <net/sock.h>
+#include <sys/xlog.h>
+#include <sys/xtime.h>
 
 int main(int argc, char *argv[])
 {

@@ -7,9 +7,9 @@
  */
 
 #include "xstd.h"
-#include "xfs.h"
-#include "xlog.h"
-#include "xjson.h"
+#include <sys/xfs.h>
+#include <sys/xlog.h>
+#include <data/xjson.h>
 
 int main(int argc, char *argv[])
 {

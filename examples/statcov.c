@@ -9,12 +9,12 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "sock.h"
-#include "http.h"
-#include "xstr.h"
-#include "xlog.h"
-#include "xtype.h"
-#include "xjson.h"
+#include <net/sock.h>
+#include <net/http.h>
+#include <data/xstr.h>
+#include <sys/xlog.h>
+#include <sys/xtype.h>
+#include <data/xjson.h>
 
 #define STOPCOV_LINK        "https://stopcov.ge/"
 #define XSPACE_CHAR         "&#160;"

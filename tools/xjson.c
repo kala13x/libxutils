@@ -8,11 +8,11 @@
  */
 
 #include "xstd.h"
-#include "xjson.h"
-#include "xbuf.h"
-#include "xstr.h"
-#include "xlog.h"
-#include "xfs.h"
+#include <data/xjson.h>
+#include <data/xbuf.h>
+#include <data/xstr.h>
+#include <sys/xlog.h>
+#include <sys/xfs.h>
 
 extern char *optarg;
 
