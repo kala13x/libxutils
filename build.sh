@@ -83,32 +83,33 @@ update_cpu_count() {
     fi
 }
 
-build_tools() {
-    [ "$TOOLS_DONE" -eq 1 ] && return
-    cd $PROJ_PATH/tools
+#build_tools() {
+#    [ "$TOOLS_DONE" -eq 1 ] && return
+#    cd $PROJ_PATH/tools
+#
+#    if [[ $MAKE_TOOL == "cmake" ]]; then
+#        cmake -Bbuild #mkdir -p build && cd build && cmake ..
+#        TOOL_PATH=$PROJ_PATH/tools/build
+#    fi
+#
+#    cmake --build build --target install
+#    #make -j $CPU_COUNT
+#    cd $PROJ_PATH
+#    TOOLS_DONE=1
+#}
 
-    if [[ $MAKE_TOOL == "cmake" ]]; then
-        mkdir -p build && cd build && cmake ..
-        TOOL_PATH=$PROJ_PATH/tools/build
-    fi
-
-    make -j $CPU_COUNT
-    cd $PROJ_PATH
-    TOOLS_DONE=1
-}
-
-build_examples() {
-    [ "$EXAMPLES_DONE" -eq 1 ] && return
-    cd $PROJ_PATH/examples
-
-    if [[ $MAKE_TOOL == "cmake" ]]; then
-        mkdir -p build && cd build && cmake ..
-    fi
-
-    make -j $CPU_COUNT
-    cd $PROJ_PATH
-    EXAMPLES_DONE=1
-}
+#build_examples() {
+#    [ "$EXAMPLES_DONE" -eq 1 ] && return
+#    cd $PROJ_PATH/examples
+#
+#    if [[ $MAKE_TOOL == "cmake" ]]; then
+#        mkdir -p build && cd build && cmake ..
+#    fi
+#
+#    make -j $CPU_COUNT
+#    cd $PROJ_PATH
+#    EXAMPLES_DONE=1
+#}
 
 build_library() {
     cd $PROJ_PATH/misc
@@ -119,8 +120,9 @@ build_library() {
         make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH
     elif [[ $MAKE_TOOL == "cmake" ]]; then
-        mkdir -p build && cd build
-        cmake .. && make -j $CPU_COUNT
+        cmake -Bbuild -DCMAKE_INSTALL_PREFIX=./install && cmake --build build --target install
+        #mkdir -p build && cd build
+        #cmake .. && make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH/build
     elif [[ $MAKE_TOOL == "smake" ]]; then
         smake . && make -j $CPU_COUNT
@@ -134,18 +136,18 @@ build_library() {
     cd $PROJ_PATH
 }
 
-install_tools() {
-    build_tools
-    cd $TOOL_PATH
-    sudo make install
-    cd $PROJ_PATH
-}
+#install_tools() {
+#    build_tools
+#    cd $TOOL_PATH
+#    sudo make install
+#    cd $PROJ_PATH
+#}
 
-install_library() {
-    cd $LIB_PATH
-    sudo make install
-    cd $PROJ_PATH
-}
+#install_library() {
+#    cd $LIB_PATH
+#    sudo make install
+#    cd $PROJ_PATH
+#}
 
 if [[ $USE_SSL == "yes" ]]; then
     echo "Checking OpenSSL libraries."
@@ -171,17 +173,18 @@ clean_project
 build_library
 
 for arg in "$@"; do
-    if [[ $arg == "--examples" ]]; then
-        build_examples
-    fi
-
-    if [[ $arg == "--tools" ]]; then
-        build_tools
-    fi
+#    if [[ $arg == "--examples" ]]; then
+#        build_examples
+#    fi
+#
+#    if [[ $arg == "--tools" ]]; then
+#        build_tools
+#    fi
 
     if [[ $arg == "--install" ]]; then
-        install_library
-        install_tools
+        cmake -Bbuild -DCMAKE_INSTALL_PREFIX=./libxutils && cmake --build build --target install
+        #install_library
+        #install_tools
     fi
 done
 
