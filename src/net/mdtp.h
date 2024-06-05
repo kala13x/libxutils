@@ -75,7 +75,7 @@ typedef struct XPacketHeader {
     char sTZ[XPACKET_TZ_MAX];
 } xpacket_header_t;
 
-typedef struct XPacket {
+struct XPacket {
     xpacket_header_t header;            // Packet header information
     xbyte_buffer_t rawData;             // Raw data of assembled packet
     xjson_obj_t *pHeaderObj;            // JSON object of parsed header
@@ -85,7 +85,7 @@ typedef struct XPacket {
     uint8_t nAllocated;                 // Flag to check if packet is allocated
     uint8_t *pPayload;                  // Payload pointed from original raw data
     void *pUserData;                    // User data pointer for packet extension
-} xpacket_t;
+};
 
 #ifdef __cplusplus
 extern "C" {

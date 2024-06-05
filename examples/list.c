@@ -22,7 +22,7 @@ void clearCallback(void *pUser, void *pData)
 
 int searchCallback(void *pUserPtr, xlist_t *pNode)
 {
-    char *pString = (char*)pNode->pData;
+    char *pString = (char*)pNode->data.pData;
     char *pSearch = (char*)pUserPtr;
     return !strncmp(pSearch, pString, strlen(pSearch));
 }
@@ -30,12 +30,12 @@ int searchCallback(void *pUserPtr, xlist_t *pNode)
 int costumOpreation(void *pUserPtr, xlist_t *pNode)
 {
     UserData *pUsrData = (UserData*)pUserPtr;
-    char *pString = (char*)pNode->pData;
+    char *pString = (char*)pNode->data.pData;
 
     if (!strncmp(pUsrData->pName, pString, strlen(pUsrData->pName)))
     {
         xlogd("renaming: %s -> %d", pString, pUsrData->nNumber);
-        snprintf(pString, pNode->nSize, "%d", pUsrData->nNumber);
+        snprintf(pString, pNode->data.nSize, "%d", pUsrData->nNumber);
         return -1; /* Stop search*/
     }
 
@@ -47,7 +47,7 @@ void displayAllNodes(xlist_t *pNode)
     xlist_t *pHead = XList_GetHead(pNode);
     while (pHead != NULL)
     {
-        xlogi("node: %s", pHead->pData);
+        xlogi("node: %s", (const char*)pHead->data.pData);
         pHead = pHead->pNext;
     }
 }
@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
 
     /* Search third node */
     xlist_t *pFound = XList_Search(pNode, (void*)"third", searchCallback);
-    if (pFound != NULL) xlogd("found node: %s", (char*)pFound->pData);
+    if (pFound != NULL) xlogd("found node: %s", (const char*)pFound->data.pData);
 
     /* Iterate while list and print data */
     displayAllNodes(pNode);

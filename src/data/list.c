@@ -9,25 +9,41 @@
 
 #include "list.h"
 
-void XList_Init(xlist_t *pList, void *pData, size_t nSize, xlist_cb_t clearCb, void *pCtx)
+void XListData_Init(xlist_data_t *pListData, void *pData, size_t nSize, xlist_cb_t onClear, void *pCbCtx)
 {
-    pList->clearCb = clearCb;
-    pList->pCbCtx = pCtx;
-    pList->pData = pData;
-    pList->nSize = nSize;
-    pList->pNext = NULL;
-    pList->pPrev = NULL;
-    pList->nAlloc = 0;
-    pList->nID = 0;
+    pListData->pData = pData;
+    pListData->nSize = nSize;
+    pListData->onClear = onClear;
+    pListData->pClearCtx = pCbCtx;
 }
 
-xlist_t *XList_New(void *pData, size_t nSize, xlist_cb_t clearCb, void *pCtx)
+void XListData_MergeCtx(xlist_data_t *pNext, xlist_data_t *pPrev)
+{
+    if (pNext != NULL && pPrev != NULL)
+    {
+        if (pNext->pClearCtx == NULL)
+            pNext->pClearCtx = pPrev->pClearCtx;
+
+        if (pNext->onClear == NULL)
+            pNext->onClear = pPrev->onClear;
+    }
+}
+
+void XList_Init(xlist_t *pList, void *pData, size_t nSize, xlist_cb_t onClear, void *pCtx)
+{
+    XListData_Init(&pList->data, pData, nSize, onClear, pCtx);
+    pList->pNext = NULL;
+    pList->pPrev = NULL;
+    pList->nIsAlloc = 0;
+}
+
+xlist_t *XList_New(void *pData, size_t nSize, xlist_cb_t onClear, void *pCtx)
 {
     xlist_t *pList = (xlist_t*)malloc(sizeof(xlist_t));
     if (pList == NULL) return NULL;
 
-    XList_Init(pList, pData, nSize, clearCb, pCtx);
-    pList->nAlloc = 1;
+    XList_Init(pList, pData, nSize, onClear, pCtx);
+    pList->nIsAlloc = 1;
     return pList;
 }
 
@@ -35,15 +51,22 @@ void XList_Free(xlist_t *pList)
 {
     if (pList != NULL)
     {
-        if (pList->pData != NULL)
+        xlist_data_t *pListData = &pList->data;
+        if (pListData->pData != NULL)
         {
-            if (pList->clearCb != NULL)
-                pList->clearCb(pList->pCbCtx, pList->pData);
-            else if (pList->nSize > 0) 
-                free(pList->pData);
+            if (pListData->onClear != NULL)
+            {
+                pListData->onClear(pListData->pClearCtx, pListData->pData);
+                pListData->pData = NULL;
+            }
+            else if (pListData->nSize > 0)
+            {
+                free(pListData->pData);
+                pListData->pData = NULL;
+            }
         }
 
-        if (pList->nAlloc) free(pList);
+        if (pList->nIsAlloc) free(pList);
         else XList_Init(pList, NULL, 0, NULL, NULL);
     }
 }
@@ -108,8 +131,9 @@ uint8_t XList_IsRing(xlist_t *pList)
     if (pList == NULL) return 0;
     xlist_t *pNode = pList->pNext;
 
-    while (pNode != NULL && pNode != pList)
-       pNode = pNode->pNext;
+    while (pNode != NULL &&
+           pNode != pList)
+            pNode = pNode->pNext;
 
     return (pNode == pList);
 }
@@ -123,12 +147,7 @@ void XList_Clear(xlist_t *pList)
 xlist_t* XList_InsertPrev(xlist_t *pList, xlist_t *pNode)
 {
     if (pList == NULL || pNode == NULL) return NULL;
-
-    if (pNode->pCbCtx == NULL)
-        pNode->pCbCtx = pList->pCbCtx;
-
-    if (pNode->clearCb == NULL)
-        pNode->clearCb = pList->clearCb;
+    XListData_MergeCtx(&pNode->data, &pList->data);
 
     xlist_t *pPrev = pList->pPrev;
     pList->pPrev = pNode;
@@ -147,12 +166,7 @@ xlist_t* XList_InsertPrev(xlist_t *pList, xlist_t *pNode)
 xlist_t* XList_InsertNext(xlist_t *pList, xlist_t *pNode)
 {
     if (pList == NULL || pNode == NULL) return NULL;
-
-    if (pNode->pCbCtx == NULL)
-        pNode->pCbCtx = pList->pCbCtx;
-
-    if (pNode->clearCb == NULL)
-        pNode->clearCb = pList->clearCb;
+    XListData_MergeCtx(&pNode->data, &pList->data);
 
     xlist_t *pNext = pList->pNext;
     pList->pNext = pNode;
@@ -171,13 +185,9 @@ xlist_t* XList_InsertNext(xlist_t *pList, xlist_t *pNode)
 xlist_t* XList_InsertHead(xlist_t *pList, xlist_t *pNode)
 {
     if (pList == NULL || pNode == NULL) return NULL;
+
     xlist_t *pHead = XList_GetHead(pList);
-
-    if (pNode->pCbCtx == NULL)
-        pNode->pCbCtx = pHead->pCbCtx;
-
-    if (pNode->clearCb == NULL)
-        pNode->clearCb = pHead->clearCb;
+    XListData_MergeCtx(&pNode->data, &pHead->data);
 
     pHead->pPrev = pNode;
     pNode->pNext = pHead;
@@ -188,13 +198,9 @@ xlist_t* XList_InsertHead(xlist_t *pList, xlist_t *pNode)
 xlist_t* XList_InsertTail(xlist_t *pList, xlist_t *pNode)
 {
     if (pList == NULL || pNode == NULL) return NULL;
+
     xlist_t *pTail = XList_GetTail(pList);
-
-    if (pNode->pCbCtx == NULL)
-        pNode->pCbCtx = pTail->pCbCtx;
-
-    if (pNode->clearCb == NULL)
-        pNode->clearCb = pTail->clearCb;
+    XListData_MergeCtx(&pNode->data, &pTail->data);
 
     pTail->pNext = pNode;
     pNode->pPrev = pTail;
@@ -202,78 +208,35 @@ xlist_t* XList_InsertTail(xlist_t *pList, xlist_t *pNode)
     return pNode;
 }
 
-xlist_t* XList_InsertSorted(xlist_t *pList, xlist_t *pNode)
-{
-    if (pList == NULL || pNode == NULL) return NULL;
-
-    while (pNode->nID < pList->nID)
-    {
-        if (pList->pPrev == NULL) break;
-        xlist_t *pPrev = pList->pPrev;
-
-        if (pNode->nID > pPrev->nID) break;
-        pList = pPrev;
-    }
-
-    while (pNode->nID > pList->nID)
-    {
-        if (pList->pNext == NULL) break;
-        xlist_t *pNext = pList->pNext;
-
-        if (pNode->nID < pNext->nID) break;
-        pList = pNext;
-    }
-
-    return !pList->nID || pNode->nID > pList->nID ?
-        XList_InsertNext(pList, pNode):
-        XList_InsertPrev(pList, pNode);
-}
-
 xlist_t* XList_PushPrev(xlist_t *pList, void *pData, size_t nSize)
 {
     if (pList == NULL) return NULL;
-    xlist_t *pNode = XList_New(pData, nSize, pList->clearCb, pList->pCbCtx);
+    xlist_t *pNode = XList_New(pData, nSize, pList->data.onClear, pList->data.pClearCtx);
     return pNode != NULL ? XList_InsertPrev(pList, pNode) : NULL;
 }
 
 xlist_t* XList_PushNext(xlist_t *pList, void *pData, size_t nSize)
 {
     if (pList == NULL) return NULL;
-    xlist_t *pNode = XList_New(pData, nSize, pList->clearCb, pList->pCbCtx);
+    xlist_t *pNode = XList_New(pData, nSize, pList->data.onClear, pList->data.pClearCtx);
     return pNode != NULL ? XList_InsertNext(pList, pNode) : NULL;
 }
 
 xlist_t* XList_PushFront(xlist_t *pList, void *pData, size_t nSize)
 {
     if (pList == NULL) return NULL;
-    xlist_t *pNode = XList_New(pData, nSize, pList->clearCb, pList->pCbCtx);
+    xlist_t *pNode = XList_New(pData, nSize, pList->data.onClear, pList->data.pClearCtx);
     return pNode != NULL ? XList_InsertHead(pList, pNode) : NULL;
 }
 
 xlist_t* XList_PushBack(xlist_t *pList, void *pData, size_t nSize)
 {
     if (pList == NULL) return NULL;
-    xlist_t *pNode = XList_New(pData, nSize, pList->clearCb, pList->pCbCtx);
+    xlist_t *pNode = XList_New(pData, nSize, pList->data.onClear, pList->data.pClearCtx);
     return pNode != NULL ? XList_InsertTail(pList, pNode) : NULL;
 }
 
-xlist_t* XList_PushSorted(xlist_t *pList, void *pData, size_t nSize, uint32_t nID)
-{
-    if (pList == NULL) return NULL;
-
-    xlist_t *pNode = XList_New(
-        pData, nSize,
-        pList->clearCb,
-        pList->pCbCtx
-    );
-
-    if (pNode == NULL) return NULL;
-    pNode->nID = nID;
-
-    return XList_InsertSorted(pList, pNode);
-}
-
-xlist_t* XList_Search(xlist_t *pList, void *pUserPtr, xlist_comparator_t compare)
+xlist_t* XList_Search(xlist_t *pList, void *pUserPtr, xlist_cmp_t compare)
 {
     if (pList == NULL || compare == NULL) return NULL;
     xlist_t *pHead = XList_GetHead(pList);
@@ -289,7 +252,7 @@ xlist_t* XList_Search(xlist_t *pList, void *pUserPtr, xlist_comparator_t compare
     return NULL;
 }
 
-xlist_t* XList_Remove(xlist_t *pList, void *pUserPtr, xlist_comparator_t compare)
+xlist_t* XList_Remove(xlist_t *pList, void *pUserPtr, xlist_cmp_t compare)
 {
     xlist_t *pNode = XList_Search(pList, pUserPtr, compare);
     return (pNode != NULL) ? XList_Unlink(pNode) : NULL;

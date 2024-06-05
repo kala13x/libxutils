@@ -17,23 +17,29 @@ extern "C" {
 #include <stdlib.h>
 #include <stdint.h>
 
+typedef struct xlist xlist_t;
 typedef void(*xlist_cb_t)(void *pCbCtx, void *pData);
+typedef int(*xlist_cmp_t)(void *pUserPtr, xlist_t *pNode);
 
-typedef struct xlist {
-    xlist_cb_t clearCb;
-    struct xlist* pNext;
-    struct xlist* pPrev;
-    void* pCbCtx;
-    void* pData;
+typedef struct xlist_data {
+    xlist_cb_t onClear;
+    void *pClearCtx;
+    void *pData;
     size_t nSize;
-    uint32_t nID;
-    uint8_t nAlloc;
-} xlist_t;
+} xlist_data_t;
 
-typedef int(*xlist_comparator_t)(void *pUserPtr, xlist_t *pNode);
+void XListData_Init(xlist_data_t *pListData, void *pData, size_t nSize, xlist_cb_t onClear, void *pCbCtx);
+void XListData_MergeCtx(xlist_data_t *pNext, xlist_data_t *pPrev);
 
-xlist_t *XList_New(void *pData, size_t nSize, xlist_cb_t clearCb, void *pCtx);
-void XList_Init(xlist_t *pList, void *pData, size_t nSize, xlist_cb_t clearCb, void *pCtx);
+struct xlist {
+    struct xlist *pNext;
+    struct xlist *pPrev;
+    xlist_data_t data;
+    uint8_t nIsAlloc;
+};
+
+xlist_t *XList_New(void *pData, size_t nSize, xlist_cb_t onClear, void *pCtx);
+void XList_Init(xlist_t *pList, void *pData, size_t nSize, xlist_cb_t onClear, void *pCtx);
 void XList_Clear(xlist_t *pList);
 void XList_Free(xlist_t *pList);
 
@@ -48,16 +54,14 @@ xlist_t* XList_InsertPrev(xlist_t *pList, xlist_t *pNode);
 xlist_t* XList_InsertNext(xlist_t *pList, xlist_t *pNode);
 xlist_t* XList_InsertHead(xlist_t *pList, xlist_t *pNode);
 xlist_t* XList_InsertTail(xlist_t *pList, xlist_t *pNode);
-xlist_t* XList_InsertSorted(xlist_t *pList, xlist_t *pNode);
 
 xlist_t* XList_PushPrev(xlist_t *pList, void *pData, size_t nSize);
 xlist_t* XList_PushNext(xlist_t *pList, void *pData, size_t nSize);
 xlist_t* XList_PushFront(xlist_t *pList, void *pData, size_t nSize);
 xlist_t* XList_PushBack(xlist_t *pList, void *pData, size_t nSize);
-xlist_t* XList_PushSorted(xlist_t *pList, void *pData, size_t nSize, uint32_t nID);
 
-xlist_t* XList_Search(xlist_t *pList, void *pUserPtr, xlist_comparator_t compare);
-xlist_t* XList_Remove(xlist_t *pList, void *pUserPtr, xlist_comparator_t compare);
+xlist_t* XList_Search(xlist_t *pList, void *pUserPtr, xlist_cmp_t compare);
+xlist_t* XList_Remove(xlist_t *pList, void *pUserPtr, xlist_cmp_t compare);
 
 xlist_t* XList_MakeRing(xlist_t *pList);
 uint8_t XList_IsRing(xlist_t *pList);

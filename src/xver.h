@@ -12,7 +12,7 @@
 
 #define XUTILS_VERSION_MAX     2
 #define XUTILS_VERSION_MIN     5
-#define XUTILS_BUILD_NUMBER    50
+#define XUTILS_BUILD_NUMBER    51
 
 #ifdef __cplusplus
 extern "C" {

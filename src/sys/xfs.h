@@ -157,7 +157,7 @@ char XFile_GetTypeChar(xfile_type_t eType);
 typedef struct XFileSearch xfile_search_t;
 typedef int(*xfile_search_cb_t)(xfile_search_t *pSearch, xfile_entry_t *pEntry, const char *pMsg);
 
-typedef struct XFileSearch {
+struct XFileSearch {
     /* Search context */
     xfile_search_cb_t callback;     // Search callback
     xarray_t fileArray;             // Found file array
@@ -177,7 +177,7 @@ typedef struct XFileSearch {
 
     xatomic_t *pInterrupted;        // Interrupt flag pointer
     xatomic_t nInterrupted;         // Interrupt flag
-} xfile_search_t;
+};
 
 void XFile_SearchInit(xfile_search_t *pSrcCtx, const char *pFileName);
 void XFile_SearchDestroy(xfile_search_t *pSrcCtx);

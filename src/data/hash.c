@@ -18,13 +18,13 @@ static int XHash_IteratorCb(void *pCtx, xlist_t *pNode)
 {
     xhash_iterator_t *pIter = (xhash_iterator_t*)pCtx;
     if (pIter != NULL && pIter->itfunc != NULL) return XSTDERR;
-    xhash_pair_t *pPair = (xhash_pair_t*)pNode->pData;
+    xhash_pair_t *pPair = (xhash_pair_t*)pNode->data.pData;
     return pPair != NULL ? pIter->itfunc(pPair, pIter->pUserCtx) : 0;
 }
 
 static int XHash_SearchCb(void *pKey, xlist_t *pNode)
 {
-    xhash_pair_t *pPair = (xhash_pair_t*)pNode->pData;
+    xhash_pair_t *pPair = (xhash_pair_t*)pNode->data.pData;
     return (pPair != NULL && *(int*)pKey == pPair->nKey) ? XTRUE : XFALSE;
 }
 
@@ -91,7 +91,7 @@ xlist_t* XHash_GetNode(xhash_t *pHash, int nKey)
 xhash_pair_t* XHash_GetPair(xhash_t *pHash, int nKey)
 {
     xlist_t *pNode = XHash_GetNode(pHash, nKey);
-    return pNode != NULL ? (xhash_pair_t*)pNode->pData : NULL;
+    return pNode != NULL ? (xhash_pair_t*)pNode->data.pData : NULL;
 }
 
 void* XHash_GetData(xhash_t *pHash, int nKey)
