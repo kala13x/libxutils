@@ -10,9 +10,9 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "xlog.h"
-#include "xsig.h"
-#include "api.h"
+#include <sys/xlog.h>
+#include <sys/xsig.h>
+#include <net/api.h>
 
 static int g_nInterrupted = 0;
 extern char *optarg;

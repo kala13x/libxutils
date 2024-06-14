@@ -9,7 +9,7 @@
  */
 
 #include "xstd.h"
-#include "xstr.h"
+#include <data/xstr.h>
 #include "mdtp.h"
 
 const char* XPacket_GetStatusStr(xpacket_status_t eStatus)

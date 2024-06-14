@@ -12,9 +12,9 @@
 #endif
 
 #include "xcpu.h"
-#include "sync.h"
-#include "xstr.h"
-#include "xfs.h"
+#include <sys/sync.h>
+#include <data/xstr.h>
+#include <sys/xfs.h>
 
 #define XCPU_INFO_FILE      "/proc/cpuinfo"
 #define XCPU_KEYWORD        "processor"

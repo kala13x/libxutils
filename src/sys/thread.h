@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 #include "xstd.h"
-#include "sync.h"
+#include <sys/sync.h>
 
 #define XTHREAD_STACK_SIZE  409600
 #define XTHREAD_SUCCESS     XSTDOK

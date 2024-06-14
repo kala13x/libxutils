@@ -8,9 +8,9 @@
  * standart file and directory operations.
  */
 
-#include "xfs.h"
-#include "xstr.h"
-#include "sync.h"
+#include <sys/xfs.h>
+#include <data/xstr.h>
+#include <sys/sync.h>
 
 #define XFILE_BUF_SIZE      4096
 #define XFILE_FLAGS_LEN     10

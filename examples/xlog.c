@@ -8,9 +8,9 @@
 
 
 #include "xstd.h"
-#include "xstr.h"
-#include "xlog.h"
-#include "xtime.h"
+#include <data/xstr.h>
+#include <sys/xlog.h>
+#include <sys/xtime.h>
 
 int logCallback(const char *pLog, size_t nLength, xlog_flag_t eFlag, void *pCtx)
 {

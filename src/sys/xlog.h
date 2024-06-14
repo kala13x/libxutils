@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 #include "xstd.h"
-#include "sync.h"
+#include <sys/sync.h>
 
 /* Definations for version info */
 #define XLOG_VERSION_MAJOR   1

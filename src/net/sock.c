@@ -12,9 +12,9 @@
 #define _GNU_SOURCE
 #endif
 
-#include "sock.h"
-#include "sync.h"
-#include "xstr.h"
+#include <net/sock.h>
+#include <sys/sync.h>
+#include <data/xstr.h>
 
 /*
   S.K. >> Note:

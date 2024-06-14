@@ -9,8 +9,8 @@
 
 #include "xstd.h"
 #include "xcli.h"
-#include "xstr.h"
-#include "xtime.h"
+#include <data/xstr.h>
+#include <sys/xtime.h>
 
 #ifdef __linux__
 #include <termios.h>

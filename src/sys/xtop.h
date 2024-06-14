@@ -12,9 +12,9 @@
 #define __XUTILS_XPROC_H__
 
 #include "xstd.h"
-#include "thread.h"
-#include "array.h"
-#include "sync.h"
+#include <sys/thread.h>
+#include <data/array.h>
+#include <sys/sync.h>
 
 #define XNET_HWADDR_DEFAULT         "00:00:00:00:00:00"
 #define XNET_IPADDR_DEFAULT         "0.0.0.0"

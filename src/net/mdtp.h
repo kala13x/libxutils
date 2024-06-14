@@ -13,8 +13,8 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include "xjson.h"
-#include "xbuf.h"
+#include <data/xjson.h>
+#include <data/xbuf.h>
 
 #define XPACKET_VERSION_STR     "1.0"
 #define XPACKET_INFO_BYTES      4

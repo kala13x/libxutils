@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-#include "xtime.h"
+#include <sys/xtime.h>
 
 int XNTP_GetDate(const char *pAddr, uint16_t nPort, xtime_t *pTime);
 
