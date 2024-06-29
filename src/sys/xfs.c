@@ -604,6 +604,22 @@ int XPath_GetPerm(char *pOutput, size_t nSize, const char *pPath)
     return XPath_ModeToPerm(pOutput, nSize, statbuf.st_mode);
 }
 
+long XPath_GetSize(const char *pPath)
+{
+    xfile_t srcFile;
+
+    if (XFile_Open(&srcFile, pPath, NULL, NULL) >= 0)
+    {
+        XFile_GetStats(&srcFile);
+        long nSize = srcFile.nSize;
+
+        XFile_Close(&srcFile);
+        return nSize;
+    }
+
+    return XSTDERR;
+}
+
 int XPath_CopyFile(const char *pSrc, const char *pDst)
 {
     xfile_t srcFile;
