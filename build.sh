@@ -87,10 +87,11 @@ build_tools() {
     [ "$TOOLS_DONE" -eq 1 ] && return
     cd $PROJ_PATH/tools
 
-    if [[ $MAKE_TOOL == "cmake" ]]; then
-        mkdir -p build && cd build && cmake ..
-        TOOL_PATH=$PROJ_PATH/tools/build
-    fi
+#    if [[ $MAKE_TOOL == "cmake" ]]; then
+#         cmake -Bbuild -DCMAKE_INSTALL_PREFIX=./libxutils && cmake --build build --target install
+#        cmake -Bbuild #mkdir -p build && cd build && cmake ..
+#        TOOL_PATH=$PROJ_PATH/tools/build
+#    fi
 
     make -j $CPU_COUNT
     cd $PROJ_PATH
@@ -101,9 +102,9 @@ build_examples() {
     [ "$EXAMPLES_DONE" -eq 1 ] && return
     cd $PROJ_PATH/examples
 
-    if [[ $MAKE_TOOL == "cmake" ]]; then
-        mkdir -p build && cd build && cmake ..
-    fi
+#    if [[ $MAKE_TOOL == "cmake" ]]; then
+#        mkdir -p build && cd build && cmake ..
+#    fi
 
     make -j $CPU_COUNT
     cd $PROJ_PATH
@@ -119,8 +120,7 @@ build_library() {
         make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH
     elif [[ $MAKE_TOOL == "cmake" ]]; then
-        mkdir -p build && cd build
-        cmake .. && make -j $CPU_COUNT
+        cmake -Bbuild -DCMAKE_INSTALL_PREFIX=./install && cmake --build build --target install
         LIB_PATH=$PROJ_PATH/build
     elif [[ $MAKE_TOOL == "smake" ]]; then
         smake . && make -j $CPU_COUNT
@@ -172,16 +172,22 @@ build_library
 
 for arg in "$@"; do
     if [[ $arg == "--examples" ]]; then
+      if [[ $MAKE_TOOL != "cmake" ]]; then
         build_examples
+      fi
     fi
 
     if [[ $arg == "--tools" ]]; then
+      if [[ $MAKE_TOOL != "cmake" ]]; then
         build_tools
+      fi
     fi
 
     if [[ $arg == "--install" ]]; then
+      if [[ $MAKE_TOOL != "cmake" ]]; then
         install_library
         install_tools
+      fi
     fi
 done
 

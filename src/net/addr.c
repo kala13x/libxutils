@@ -9,10 +9,10 @@
  */
 
 #include "xstd.h"
-#include "array.h"
-#include "addr.h"
-#include "sock.h"
-#include "xstr.h"
+#include <data/array.h>
+#include <net/addr.h>
+#include <net/sock.h>
+#include <data/xstr.h>
 
 typedef struct XProtocolPorts {
     const char* pProtocol;

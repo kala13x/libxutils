@@ -9,7 +9,7 @@
  */
 
 #include "sha256.h"
-#include "xstr.h"
+#include <data/xstr.h>
 
 #ifdef _WIN32
 #pragma warning(disable : 4146)

@@ -8,7 +8,7 @@
  */
 
 #include "xstd.h"
-#include "sock.h"
+#include <net/sock.h>
 #include "ntp.h"
 
 #define XNTP_BUF_SIZE   12

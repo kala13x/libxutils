@@ -9,7 +9,7 @@
  */
 
 #include <string.h>
-#include "array.h"
+#include <data/array.h>
 
 xarray_data_t *XArray_NewData(void *pData, size_t nSize, uint32_t nKey)
 {

@@ -9,7 +9,7 @@
  */
 
 #include "sha1.h"
-#include "xstr.h"
+#include <data/xstr.h>
 
 #define XSHA1_ROL(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
 

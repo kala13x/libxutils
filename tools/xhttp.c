@@ -9,14 +9,14 @@
  */
 
 #include "xstd.h"
-#include "sock.h"
-#include "http.h"
-#include "xlog.h"
-#include "xstr.h"
+#include <net/sock.h>
+#include <net/http.h>
+#include <sys/xlog.h>
+#include <data/xstr.h>
 #include "xver.h"
-#include "xcli.h"
-#include "xtime.h"
-#include "xfs.h"
+#include <sys/xcli.h>
+#include <sys/xtime.h>
+#include <sys/xfs.h>
 
 extern char *optarg;
 

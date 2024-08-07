@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 #include "xstd.h"
-#include "xbuf.h"
+#include <data/xbuf.h>
 
 #ifdef _XUTILS_USE_SSL
 #define OPENSSL_API_COMPAT XSSL_MINIMAL_API

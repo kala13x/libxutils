@@ -8,11 +8,11 @@
  */
 
 #include "xstd.h"
-#include "crypt.h"
-#include "xjson.h"
-#include "xlog.h"
-#include "jwt.h"
-#include "xfs.h"
+#include <crypt/crypt.h>
+#include <data/xjson.h>
+#include <sys/xlog.h>
+#include <data/jwt.h>
+#include <sys/xfs.h>
 
 int main()
 {

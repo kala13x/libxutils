@@ -8,8 +8,8 @@
  * get month days, calculate leap year, and e.t.c.
  */
 
-#include "xtime.h"
-#include "xstr.h"
+#include <sys/xtime.h>
+#include <data/xstr.h>
 
 #if defined(__linux__) && defined(CLOCK_REALTIME)
 #define XTIME_USE_CLOCK

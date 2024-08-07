@@ -8,8 +8,8 @@
  * types and converting operations.
  */
 
-#include "xtype.h"
-#include "xstr.h"
+#include <sys/xtype.h>
+#include <data/xstr.h>
 
 union {
     float fValue;

@@ -1,34 +1,14 @@
 cmake_minimum_required(VERSION 3.10)
-project(xutils)
+project(tools)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall")
+
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
-
-set(XUTILS_INCLUDE_DIRS
-  ../src/crypt 
-  ../src/data
-  ../src/net
-  ../src/sys
-  ../src
-)
-
-include_directories(${XUTILS_INCLUDE_DIRS})
 find_package(Threads REQUIRED)
 
-set(XUTILS_LIBRARY_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../build)
-set(XUTILS_STATIC_LIB ${XUTILS_LIBRARY_ROOT}/libxutils.a)
-set(XUTILS_SHARED_LIB ${XUTILS_LIBRARY_ROOT}/libxutils.so)
-
-# Check if static library exists
-if(EXISTS ${XUTILS_STATIC_LIB})
-    list(APPEND EXTRA_LIBS ${XUTILS_STATIC_LIB})
-elseif(EXISTS ${XUTILS_SHARED_LIB})
-    list(APPEND EXTRA_LIBS ${XUTILS_SHARED_LIB})
-else()
-    message(FATAL_ERROR "Neither static nor shared library found for xutils.")
-endif()
+include_directories(${CMAKE_INSTALL_PREFIX}/include)
 
 # if OpenSSL is found, add the definitions and libraries
 set(XUTILS_USE_SSL $ENV{XUTILS_USE_SSL})
@@ -50,13 +30,21 @@ set(SOURCE_FILES
     xtop.c
     xsrc.c)
 
+include(GNUInstallDirs)
 foreach(sourcefile ${SOURCE_FILES})
     string(REPLACE ".c" "" execname ${sourcefile})
-    add_executable(${execname} ${sourcefile})
-    target_link_libraries(${execname} Threads::Threads ${EXTRA_LIBS})
-endforeach()
+    add_executable(${execname}_tool ${sourcefile})
+    target_link_libraries(${execname}_tool
+            -L${CMAKE_INSTALL_PREFIX}/lib
+            xutils
+            Threads::Threads
+            ${EXTRA_LIBS})
 
-# install targets
-install(TARGETS xutils xcrypt xpass xjson xhttp xtop xsrc 
-        RUNTIME DESTINATION /usr/local/bin)
+    add_dependencies(${execname}_tool xutils)
+
+    install(TARGETS ${execname}_tool EXPORT tools
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR})
+endforeach()
 

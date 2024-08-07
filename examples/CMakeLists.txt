@@ -1,34 +1,13 @@
 cmake_minimum_required(VERSION 3.10)
-project(xutils)
+project(examples)
 
 set(CMAKE_C_STANDARD 11)
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall")
+
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
-
-set(XUTILS_INCLUDE_DIRS
-  ../src/crypt 
-  ../src/data
-  ../src/net
-  ../src/sys
-  ../src
-)
-
-include_directories(${XUTILS_INCLUDE_DIRS})
 find_package(Threads REQUIRED)
-
-set(XUTILS_LIBRARY_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../build)
-set(XUTILS_STATIC_LIB ${XUTILS_LIBRARY_ROOT}/libxutils.a)
-set(XUTILS_SHARED_LIB ${XUTILS_LIBRARY_ROOT}/libxutils.so)
-
-# Check if static library exists
-if(EXISTS ${XUTILS_STATIC_LIB})
-    list(APPEND EXTRA_LIBS ${XUTILS_STATIC_LIB})
-elseif(EXISTS ${XUTILS_SHARED_LIB})
-    list(APPEND EXTRA_LIBS ${XUTILS_SHARED_LIB})
-else()
-    message(FATAL_ERROR "Neither static nor shared library found for xutils.")
-endif()
 
 # if OpenSSL is found, add the definitions and libraries
 set(XUTILS_USE_SSL $ENV{XUTILS_USE_SSL})
@@ -36,32 +15,45 @@ if(XUTILS_USE_SSL STREQUAL "y")
     find_package(OpenSSL)
     if(OpenSSL_FOUND)
         add_definitions(-D_XUTILS_USE_SSL)
-        list(APPEND EXTRA_LIBS ${OPENSSL_LIBRARIES})
+        list(APPEND EXTRA_LIBS OpenSSL::SSL)#${OPENSSL_LIBRARIES})
     endif()
 endif()
 
-# replace with your actual source files
-set(SOURCE_FILES 
+# this is a guarantee that we will use library packages outside of this project well
+include_directories(${CMAKE_INSTALL_PREFIX}/include)
+set(EXAMPLES_NAMES
     array.c
-    http-server.c
-    tcp-server.c
-    ws-server.c
-    ws-client.c
-    statcov.c
-    strings.c
-    thread.c
     events.c
     files.c
+    http-server.c
     json.c
-    xlog.c
+    jwt.c
     list.c
     ntp.c
-    jwt.c
-    rsa.c)
+    rsa.c
+    statcov.c
+    strings.c
+    tcp-server.c
+    thread.c
+    ws-client.c
+    ws-server.c
+    xlog.c)
 
-foreach(sourcefile ${SOURCE_FILES})
+include(GNUInstallDirs)
+foreach(sourcefile ${EXAMPLES_NAMES})
     string(REPLACE ".c" "" execname ${sourcefile})
     add_executable(${execname} ${sourcefile})
-    target_link_libraries(${execname} Threads::Threads ${EXTRA_LIBS})
+    target_link_libraries(${execname}
+            -L${CMAKE_INSTALL_PREFIX}/lib
+            xutils
+            Threads::Threads
+            ${EXTRA_LIBS})
+
+    add_dependencies(${execname} xutils)
+
+    install(TARGETS ${execname} EXPORT examples
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR})
 endforeach()
 

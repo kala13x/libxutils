@@ -13,7 +13,7 @@
 #endif
 
 #include "xjson.h"
-#include "xstr.h"
+#include <data/xstr.h>
 #include "map.h"
 
 #define XOBJ_INITIAL_SIZE   2

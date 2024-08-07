@@ -9,16 +9,16 @@
  */
 
 #include "xstd.h"
-#include "xsig.h"
-#include "xjson.h"
-#include "xstr.h"
-#include "xcli.h"
-#include "xlog.h"
-#include "xtop.h"
-#include "addr.h"
+#include <sys/xsig.h>
+#include <data/xjson.h>
+#include <data/xstr.h>
+#include <sys/xcli.h>
+#include <sys/xlog.h>
+#include <sys/xtop.h>
+#include <net/addr.h>
 #include "xver.h"
-#include "xfs.h"
-#include "api.h"
+#include <sys/xfs.h>
+#include <net/api.h>
 
 #define XTOP_VERSION_MAJ        1
 #define XTOP_VERSION_MIN        2
