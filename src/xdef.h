@@ -110,6 +110,26 @@ typedef uint8_t             xbool_t;
 #define XLOCATION_LVL2(line)    XLOCATION_LVL1(line)
 #define __XLOCATION__           XLOCATION_LVL2(__LINE__)
 
+#ifdef _ASSERT_TIMED
+#include <time.h>
+#define XTROW_LOCATION                          \
+    do {                                        \
+        char timeStr[20];                       \
+        time_t now = time(NULL);                \
+        struct tm *tmInfo = localtime(&now);    \
+        strftime(timeStr, sizeof(timeStr),      \
+                "%H:%M:%S.%03d", tmInfo );      \
+        printf("%s %s<error>%s "                \
+            "Assert failed: "                   \
+            "%s:%s():%s\n",                     \
+            timeStr,                            \
+            XCLR_RED, XCLR_RES,                 \
+            __FILE__,                           \
+            __FUNCTION__,                       \
+            __XLOCATION__);                     \
+    }                                           \
+    while (XSTDNON)
+#else
 #define XTROW_LOCATION                          \
             printf("%s<error>%s "               \
                 "Assert failed: "               \
@@ -118,6 +138,7 @@ typedef uint8_t             xbool_t;
                 __FILE__,                       \
                 __FUNCTION__,                   \
                 __XLOCATION__)
+#endif
 
 #define XASSERT_RET(condition, value)           \
     if (!condition) return value

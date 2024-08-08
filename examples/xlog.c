@@ -35,6 +35,8 @@ int main()
     /* Greet users */
     greet();
 
+    XASSERT(0, 0);
+
     /* Initialize XLog with default parameters */
     XLog_Init("example", XLOG_ALL, 0);
     xlog_separator("[xutils]");
