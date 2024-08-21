@@ -560,7 +560,7 @@ size_t XLog_PathSet(const char *pPath)
     xlog_cfg_t *pCfg = &g_xlog.config;
     size_t nLength = 0;
 
-    if (strncmp(pCfg->sFilePath, pPath, strlen(pCfg->sFilePath))) XLog_CloseFile(pFile);
+    if (strncmp(pCfg->sFilePath, pPath, sizeof(pCfg->sFilePath))) XLog_CloseFile(pFile);
     nLength = xstrncpy(pCfg->sFilePath, sizeof(pCfg->sFilePath), pPath);
 
     XSync_Unlock(&g_xlog.lock);
