@@ -14,8 +14,11 @@
 extern "C" {
 #endif
 
-#ifdef _XUTILS_USE_SSL
 #include "xstd.h"
+
+int XRSA_HaveSSL(void);
+
+#ifdef _XUTILS_USE_SSL
 #include "sha256.h"
 
 #define OPENSSL_API_COMPAT XSSL_MINIMAL_API

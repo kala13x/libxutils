@@ -10,6 +10,15 @@
 #include "rsa.h"
 #include "xfs.h"
 
+int XRSA_HaveSSL(void)
+{
+#ifdef XCRYPT_USE_SSL
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 #ifdef XCRYPT_USE_SSL
 static const uint8_t g_shaPadding[XSHA256_PADDING_SIZE] =
     {
