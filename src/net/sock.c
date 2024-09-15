@@ -12,6 +12,11 @@
 #define _GNU_SOURCE
 #endif
 
+#if defined(_MSC_VER)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
+
 #include "sock.h"
 #include "sync.h"
 #include "xstr.h"
