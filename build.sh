@@ -2,7 +2,7 @@
 # This source is part of "libxutils" project
 # 2015-2023  Sun Dro (s.kalatoz@gmail.com)
 
-PROJ_PATH=$(dirname $(readlink -f "$0"))
+PROJ_PATH=$(pwd -P)/$(dirname "$0")
 TOOL_PATH=$PROJ_PATH/tools
 LIB_PATH=$PROJ_PATH
 

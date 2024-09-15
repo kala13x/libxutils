@@ -24,9 +24,11 @@ SMAKE_SSL_OBJ="\"find\": {\n\
         },"
 
 CMAKE_SSL_OBJ="find_package(OpenSSL)\n\
-IF(OpenSSL_FOUND)\n\
-set(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -D_XUTILS_USE_SSL\")\n\
-ENDIF()"
+if(OpenSSL_FOUND)\n\
+    include_directories(\${OPENSSL_INCLUDE_DIR})\n\
+    link_directories(\${OPENSSL_LIBRARIES})\n\
+    set(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -D_XUTILS_USE_SSL\")\n\
+endif()"
 
 modules=(
     "crypt: AES"
@@ -329,8 +331,9 @@ fix_dependencies() {
         name=${parts[1]}
         var="USE_$name"
 
-        if [ -v $var ] && [ ${!var} == "y" ]; then
-            func="enable_${name,,}"
+        if [ ! -z "${!var}" ] && [ "${!var}" == "y" ]; then
+            # Use tr to convert the name to lowercase
+            func="enable_$(echo "$name" | tr '[:upper:]' '[:lower:]')"
             eval "$func"
         fi
     done
@@ -364,16 +367,20 @@ process_modules() {
         name=${parts[1]}
         var="USE_$name"
 
-        if [ -v $var ] && [ ${!var} == "y" ]; then
-            echo "-- Using ${mod,,}.c"
+        # Check if the variable is set and its value is "y"
+        if [ ! -z "${!var}" ] && [ "${!var}" == "y" ]; then
+            # Use tr to convert the name to lowercase
+            lower_name=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+            echo "-- Using ${lower_name}.c"
             case $1 in
-                "make") sourceList="${sourceList}\n    ${name,,}.${extension}" ;;
-                "cmake") sourceList="${sourceList}\n    ${SOURCE_DIR}/${dir}/${name,,}.${extension}" ;;
-                "smake") sourceList="${sourceList}\n            \"${SOURCE_DIR}/${dir}/${name,,}.${extension}\"," ;;
+                "make") sourceList="${sourceList}\n    ${lower_name}.${extension}" ;;
+                "cmake") sourceList="${sourceList}\n    ${SOURCE_DIR}/${dir}/${lower_name}.${extension}" ;;
+                "smake") sourceList="${sourceList}\n            \"${SOURCE_DIR}/${dir}/${lower_name}.${extension}\"," ;;
             esac
         fi
     done
 
+    # Strip the last comma if it exists
     if [[ "${sourceList: -1}" == "," ]]; then
         sourceList="${sourceList%,}"
     fi
