@@ -235,7 +235,7 @@ void XSock_DeinitSSL(void)
 int XSock_LastSSLError(char *pDst, size_t nSize)
 {
     if (pDst == NULL) return XSOCK_NONE;
-    int nLength = 0;
+    size_t nLength = 0;
     pDst[0] = XSTR_NUL;
 
 #ifdef XSOCK_USE_SSL
@@ -262,7 +262,7 @@ int XSock_LastSSLError(char *pDst, size_t nSize)
     (void)nSize;
 #endif
 
-    return nLength;
+    return (int)nLength;
 }
 
 int xclosesock(XSOCKET nFd)
@@ -588,7 +588,7 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
 
     while (nLeft > 0)
     {
-        int nBytes = SSL_write(pSSL, &pBuff[nSent], nLeft);
+        int nBytes = SSL_write(pSSL, &pBuff[nSent], (int)nLeft);
         if (nBytes <= 0)
         {
             int nError = SSL_get_error(pSSL, nBytes);
@@ -623,7 +623,7 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
         if (XSock_IsNB(pSock)) break;
     }
 
-    return nSent;
+    return (int)nSent;
 #else
     pSock->eStatus = XSOCK_ERR_NOSSL;
     XSock_Close(pSock);
@@ -826,7 +826,7 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
         }
 
         SSL_set_accept_state(pSSL);
-        SSL_set_fd(pSSL, pNewSock->nFD);
+        SSL_set_fd(pSSL, (int)pNewSock->nFD);
 
         XSOCKET nFD = XSock_SetSSL(pNewSock, pSSL);
         XASSERT((nFD != XSOCK_INVALID), XSOCK_INVALID);
@@ -1463,10 +1463,10 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
     }
 
     SSL_set_connect_state(pSSL);
-    SSL_set_fd(pSSL, pSock->nFD);
+    SSL_set_fd(pSSL, (int)pSock->nFD);
 
 #ifdef SSL_OP_IGNORE_UNEXPECTED_EOF
-    long nOpts = SSL_get_options(pSSL);
+    long nOpts = (long)SSL_get_options(pSSL);
     nOpts |= SSL_OP_IGNORE_UNEXPECTED_EOF;
     SSL_set_options(pSSL, nOpts);
 #endif

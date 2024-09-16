@@ -10,6 +10,9 @@
 #ifndef __XUTILS_STDDEF_H__
 #define __XUTILS_STDDEF_H__
 
+#include <errno.h>
+#include <string.h>
+
 #ifdef _WIN32
 typedef int                 xsocklen_t;
 typedef long                xatomic_t;
@@ -97,10 +100,6 @@ typedef uint8_t             xbool_t;
 
 #ifndef XSTDUSR
 #define XSTDUSR         2
-#endif
-
-#ifndef XSTRERR
-#define XSTRERR         strerror(errno)
 #endif
 
 #define XCLR_RED        "\x1B[31m"
@@ -224,6 +223,24 @@ typedef uint8_t             xbool_t;
 
 #ifndef XSTD_FIRSTOF
 #define XSTD_FIRSTOF(a,b)(a?a:b)
+#endif
+
+#ifdef _WIN32
+static inline const char* XSTR_Error()
+{
+    static char buf[XMSG_MID];
+    strerror_s(buf, sizeof(buf), errno);
+    return buf;
+}
+#else
+static inline const char* XSTR_Error()
+{
+    return strerror(errno);
+}
+#endif
+
+#ifndef XSTRERR
+#define XSTRERR XSTR_Error()
 #endif
 
 #define XSSL_MINIMAL_API 0x10000000L

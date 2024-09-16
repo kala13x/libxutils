@@ -189,10 +189,10 @@ size_t xstrnfill(char *pDst, size_t nSize, size_t nLength, char cFill)
 char *xstrfill(size_t nLength, char cFill)
 {
     static char sRetVal[XSTR_MAX];
+    size_t nLen, i = 0;
     xstrnul(sRetVal);
-    int i = 0;
 
-    int nLen = XSTD_MIN(nLength, sizeof(sRetVal) - 1);
+    nLen = XSTD_MIN(nLength, sizeof(sRetVal) - 1);
     for (i = 0; i < nLen; i++) sRetVal[i] = ' ';
 
     sRetVal[i] = '\0';
@@ -827,8 +827,8 @@ int xstrnrep(char *pDst, size_t nSize, const char *pOrig, const char *pRep, cons
 
         xstrncpys(pOffset, nAvail, pWith, nWithLen);
         pOrig += (size_t)nFirstPartLen + nRepLen;
-        nAvail -= nWithLen;
-        pOffset += nWithLen;
+        nAvail -= (int)nWithLen;
+        pOffset += (int)nWithLen;
         if (nAvail <= 0) return XSTDNON;
     }
 

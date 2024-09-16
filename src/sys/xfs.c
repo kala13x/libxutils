@@ -368,7 +368,7 @@ int XFile_ReadLine(xfile_t *pFile, char* pLine, size_t nSize, size_t nLineNum)
     {
         nRet = XFile_GetLine(pFile, pLine, nSize);
         if (nRet <= 0) return XSTDERR;
-        if (++nLine == nLineNum) return nRet;
+        if (++nLine == nLineNum) return (int)nRet;
     }
 
     return XSTDERR;
@@ -611,10 +611,10 @@ long XPath_GetSize(const char *pPath)
     if (XFile_Open(&srcFile, pPath, NULL, NULL) >= 0)
     {
         XFile_GetStats(&srcFile);
-        long nSize = srcFile.nSize;
+        size_t nSize = srcFile.nSize;
 
         XFile_Close(&srcFile);
-        return nSize;
+        return (long)nSize;
     }
 
     return XSTDERR;

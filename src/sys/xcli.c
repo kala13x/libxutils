@@ -52,7 +52,7 @@ int XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNew
     pInput[0] = XSTR_NUL;
 
     if (pText != NULL) printf("%s", pText);
-    char *pRet = fgets(pInput, nSize, stdin);
+    char *pRet = fgets(pInput, (int)nSize, stdin);
 
     XASSERT_RET((pRet != NULL), XSTDERR);
     if (!xstrused(pInput)) return XSTDNON;

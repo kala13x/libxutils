@@ -108,7 +108,7 @@ XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp
         return XSTDERR;
     }
 
-    nRetVal = RSA_generate_key_ex(pKeyPair, nKeyLength, pBigNum, NULL);
+    nRetVal = RSA_generate_key_ex(pKeyPair, (int)nKeyLength, pBigNum, NULL);
     if (nRetVal != XSTDOK)
     {
         RSA_free(pKeyPair);
@@ -159,7 +159,7 @@ XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp
         return XSTDERR;
     }
 
-    int nRead = BIO_read(pBioPriv, pCtx->pPrivateKey, pCtx->nPrivKeyLen);
+    int nRead = BIO_read(pBioPriv, pCtx->pPrivateKey, (int)pCtx->nPrivKeyLen);
     if ((size_t)nRead != pCtx->nPrivKeyLen)
     {
         XRSA_Destroy(pCtx);
@@ -169,7 +169,7 @@ XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp
         return XSTDERR;
     }
 
-    nRead = BIO_read(pBioPub, pCtx->pPublicKey, pCtx->nPubKeyLen);
+    nRead = BIO_read(pBioPub, pCtx->pPublicKey, (int)pCtx->nPubKeyLen);
     if ((size_t)nRead != pCtx->nPubKeyLen)
     {
         XRSA_Destroy(pCtx);
@@ -201,7 +201,7 @@ uint8_t* XRSA_Crypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size
     uint8_t *pOutput = malloc(nRSASize + 1);
     XASSERT(pOutput, NULL);
 
-    int nOutLength = RSA_public_encrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
+    int nOutLength = RSA_public_encrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
     XASSERT_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
@@ -222,7 +222,7 @@ uint8_t* XRSA_PrivCrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, 
     uint8_t *pOutput = malloc(nRSASize + 1);
     XASSERT(pOutput, NULL);
 
-    int nOutLength = RSA_private_encrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
+    int nOutLength = RSA_private_encrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
     XASSERT_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
@@ -243,7 +243,7 @@ uint8_t* XRSA_PubDecrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength,
     uint8_t *pOutput = malloc(nRSASize + 1);
     XASSERT(pOutput, NULL);
 
-    int nOutLength = RSA_public_decrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
+    int nOutLength = RSA_public_decrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
     XASSERT_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
@@ -261,7 +261,7 @@ uint8_t* XRSA_Decrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, si
     uint8_t *pOutput = malloc(nLength + 1);
     XASSERT(pOutput, NULL);
 
-    int nOutLength = RSA_private_decrypt(nLength, pData, pOutput, pRSA, pCtx->nPadding);
+    int nOutLength = RSA_private_decrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
     XASSERT_FREE((nOutLength > 0), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
@@ -282,7 +282,7 @@ XSTATUS XRSA_LoadPrivKey(xrsa_ctx_t *pCtx)
         XASSERT(pCtx->pKeyPair, XSTDERR);
     }
 
-    BIO* pBIO = BIO_new_mem_buf((void*)pCtx->pPrivateKey, pCtx->nPrivKeyLen);
+    BIO* pBIO = BIO_new_mem_buf((void*)pCtx->pPrivateKey, (int)pCtx->nPrivKeyLen);
     XASSERT(pBIO, XSTDERR);
 
     RSA *pRSA = PEM_read_bio_RSAPrivateKey(pBIO, &pCtx->pKeyPair, NULL, NULL);
@@ -302,7 +302,7 @@ XSTATUS XRSA_LoadPubKey(xrsa_ctx_t *pCtx)
         XASSERT(pCtx->pKeyPair, XSTDERR);
     }
 
-    BIO* pBIO = BIO_new_mem_buf((void*)pCtx->pPublicKey, pCtx->nPubKeyLen);
+    BIO* pBIO = BIO_new_mem_buf((void*)pCtx->pPublicKey, (int)pCtx->nPubKeyLen);
     XASSERT(pBIO, XSTDERR);
 
     RSA *pRSA = PEM_read_bio_RSAPublicKey(pBIO, &pCtx->pKeyPair, NULL, NULL);

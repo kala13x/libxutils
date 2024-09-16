@@ -218,7 +218,7 @@ int XAddr_GetIFCIP(const char *pIFace, char *pAddr, int nSize)
     char *pIPAddr = inet_ntoa(((struct sockaddr_in *)&ifbuf.ifr_addr)->sin_addr);
     return (pAddr != NULL) ? xstrncpyf(pAddr, nSize, "%s", pIPAddr) : XSTDERR;
 #endif
-    return xstrncpyf(pAddr, nSize, "0.0.0.0");
+    return (int)xstrncpyf(pAddr, nSize, "0.0.0.0");
 }
 
 int XAddr_GetIFCMac(const char *pIFace, char *pAddr, int nSize)
@@ -242,7 +242,7 @@ int XAddr_GetIFCMac(const char *pIFace, char *pAddr, int nSize)
     return xstrncpyf(pAddr, nSize, "%02x:%02x:%02x:%02x:%02x:%02x", 
         hwaddr[0],hwaddr[1],hwaddr[2],hwaddr[3],hwaddr[4],hwaddr[5]);
 #endif
-    return xstrncpyf(pAddr, nSize, "0:0:0:0:0:0");
+    return (int)xstrncpyf(pAddr, nSize, "0:0:0:0:0:0");
 }
 
 int XAddr_GetMAC(char *pAddr, int nSize)
@@ -286,6 +286,6 @@ int XAddr_GetMAC(char *pAddr, int nSize)
     close(sock);
     return nLength;
 #endif
-    return xstrncpyf(pAddr, nSize, "0:0:0:0:0:0");
+    return (int)xstrncpyf(pAddr, nSize, "0:0:0:0:0:0");
 }
 

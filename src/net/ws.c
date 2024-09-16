@@ -160,7 +160,7 @@ uint8_t* XWS_CreateFrame(const uint8_t *pPayload, size_t nLength, uint8_t nOpCod
 
     if (nLength <= 125)
     {
-        nLengthByte = nLength;
+        nLengthByte = (uint8_t)nLength;
     }
     else if (nLength <= 65535)
     {

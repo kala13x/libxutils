@@ -410,7 +410,7 @@ xevent_status_t XEvents_Service(xevents_t *pEv, int nTimeoutMs)
         if (nRet != XEVENTS_CONTINUE) break;
     }
 #else
-    for (i = 0; i < pEv->nEventCount; i++)
+    for (i = 0; i < (int)pEv->nEventCount; i++)
     {
         if (pEv->pEventArray[i].revents <= 0) continue;
         else if (pEv->pEventArray[i].fd == XSOCK_INVALID) break;

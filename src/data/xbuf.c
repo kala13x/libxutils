@@ -179,7 +179,7 @@ int XByteBuffer_OwnData(xbyte_buffer_t *pBuffer, uint8_t *pData, size_t nSize)
     XByteBuffer_Clear(pBuffer);
     XByteBuffer_SetData(pBuffer, pData, nSize);
     pBuffer->nSize = nSize;
-    return pBuffer->nSize;
+    return (int)pBuffer->nSize;
 }
 
 int XByteBuffer_Own(xbyte_buffer_t *pBuffer, xbyte_buffer_t *pSrc)
@@ -193,7 +193,7 @@ int XByteBuffer_Own(xbyte_buffer_t *pBuffer, xbyte_buffer_t *pSrc)
     pSrc->pData = NULL;
     pSrc->nSize = XSTDNON;
     pSrc->nUsed = XSTDNON;
-    return pBuffer->nSize;
+    return (int)pBuffer->nSize;
 }
 
 int XByteBuffer_Add(xbyte_buffer_t *pBuffer, const uint8_t *pData, size_t nSize)

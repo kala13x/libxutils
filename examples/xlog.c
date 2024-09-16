@@ -35,8 +35,6 @@ int main()
     /* Greet users */
     greet();
 
-    XASSERT(0, 0);
-
     /* Initialize XLog with default parameters */
     XLog_Init("example", XLOG_ALL, 0);
     xlog_separator("[xutils]");
@@ -84,8 +82,6 @@ int main()
     xlog("just another simple message");
     xlogd("just another debug message");
     xlogt("just another trace message");
-
-    XLOG_ASSERT(XFALSE, 0, "Message from failed assert");
 
     xlog_destroy();
     return 0;

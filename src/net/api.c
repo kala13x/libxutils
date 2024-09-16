@@ -264,7 +264,7 @@ xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pApiData)
 XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer)
 {
     XASSERT_RET((pApiData && pBuffer), XSTDINV);
-    XASSERT_RET(pBuffer->nUsed, pApiData->txBuffer.nUsed);
+    XASSERT_RET(pBuffer->nUsed, (XSTATUS)pApiData->txBuffer.nUsed);
 
     XByteBuffer_AddBuff(&pApiData->txBuffer, pBuffer);
     if (!pApiData->txBuffer.nUsed)

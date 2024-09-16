@@ -136,7 +136,7 @@ static xbool_t XLog_OpenFile(xlog_file_t *pFile, const xlog_cfg_t *pCfg, const x
     if (pFile->pHandle == NULL)
     {
         printf("<%s:%d> %s: [ERROR] Failed to open file: %s (%s)\n",
-            __FILE__, __LINE__, __func__, sFilePath, strerror(errno));
+            __FILE__, __LINE__, __func__, sFilePath, XSTRERR);
 
         return XFALSE;
     }
@@ -544,7 +544,7 @@ void XLog_FlagsSet(uint16_t nFlags)
 
 uint16_t XLog_FlagsGet(void)
 {
-    XASSERT_RET(XSTDNON, g_bInit);
+    XASSERT_RET(g_bInit, XSTDNON);
     XSync_Lock(&g_xlog.lock);
     uint16_t nFlags = g_xlog.config.nFlags;
     XSync_Unlock(&g_xlog.lock);
@@ -553,7 +553,7 @@ uint16_t XLog_FlagsGet(void)
 
 size_t XLog_PathSet(const char *pPath)
 {
-    XASSERT_RET(XSTDNON, g_bInit);
+    XASSERT_RET(g_bInit, XSTDNON);
     XSync_Lock(&g_xlog.lock);
 
     xlog_file_t *pFile = &g_xlog.fileCtx;
@@ -569,7 +569,7 @@ size_t XLog_PathSet(const char *pPath)
 
 size_t XLog_NameSet(const char *pName)
 {
-    XASSERT_RET(XSTDNON, g_bInit);
+    XASSERT_RET(g_bInit, XSTDNON);
     XSync_Lock(&g_xlog.lock);
 
     xlog_file_t *pFile = &g_xlog.fileCtx;
