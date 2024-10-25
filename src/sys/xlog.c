@@ -288,7 +288,9 @@ void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFormat, ...)
     xlog_cfg_t *pCfg = &g_xlog.config;
 
     if ((XLOG_FLAGS_CHECK(g_xlog.config.nFlags, eFlag)) &&
-       (g_xlog.config.bToScreen || g_xlog.config.bToFile || g_xlog.config.logCallback))
+       (g_xlog.config.logCallback ||
+        g_xlog.config.bToScreen ||
+        g_xlog.config.bToFile))
     {
         xlog_ctx_t ctx;
         XTime_Get(&ctx.time);
