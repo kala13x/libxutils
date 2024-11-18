@@ -21,7 +21,7 @@ extern "C" {
 typedef struct XPool {
     struct XPool *pNext;
     uint8_t *pData;
-    size_t nOffset;
+    size_t nUsed;
     size_t nSize;
     xbool_t bAlloc;
 } xpool_t;

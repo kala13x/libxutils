@@ -4,7 +4,7 @@
  *  This source is part of "libxutils" project
  *  2015-2024  Sun Dro (s.kalatoz@gmail.com)
  * 
- * @brief Implementation of the memory pPool functionality
+ * @brief Implementation of the memory pool functionality
  */
 
 #include "pool.h"
@@ -17,7 +17,7 @@ XSTATUS XPool_Init(xpool_t *pPool, size_t nSize)
     pPool->pData = (uint8_t *)malloc(nSize);
     if (!pPool->pData) return XSTDERR;
 
-    pPool->nOffset = XSTDNON;
+    pPool->nUsed = XSTDNON;
     pPool->nSize = nSize;
     pPool->pNext = NULL;
     pPool->bAlloc = XFALSE;
@@ -50,7 +50,7 @@ void XPool_Destroy(xpool_t *pPool)
         pPool->pData = NULL;
     }
 
-    pPool->nOffset = 0;
+    pPool->nUsed = 0;
     pPool->nSize = 0;
 
     if (pPool->pNext)
@@ -65,7 +65,7 @@ void XPool_Destroy(xpool_t *pPool)
 void XPool_Reset(xpool_t *pPool)
 {
     XASSERT_VOID_RET(pPool);
-    pPool->nOffset = 0;
+    pPool->nUsed = 0;
     XPool_Reset(pPool->pNext);
 }
 
@@ -75,7 +75,7 @@ void *XPool_Alloc(xpool_t *pPool, size_t nSize)
     XASSERT_RET(nSize, NULL);
 
     // Find space in current pool
-    if (pPool->nOffset + nSize > pPool->nSize)
+    if (pPool->nUsed + nSize > pPool->nSize)
     {
         // Create new pool if next is not found
         if (pPool->pNext == NULL)
@@ -91,8 +91,8 @@ void *XPool_Alloc(xpool_t *pPool, size_t nSize)
         return XPool_Alloc(pPool->pNext, nSize);
     }
 
-    void *pRet = pPool->pData + pPool->nOffset;
-    pPool->nOffset += nSize;
+    void *pRet = pPool->pData + pPool->nUsed;
+    pPool->nUsed += nSize;
 
     return pRet;
 }
@@ -117,16 +117,16 @@ void XPool_Free(xpool_t *pPool, void *pData, size_t nSize)
         {
             // Check if only this data is allocated in pool
             if (pData == pCur->pData &&
-                nSize >= pCur->nOffset)
+                nSize >= pCur->nUsed)
             {
-                pCur->nOffset = 0;
+                pCur->nUsed = 0;
                 return;
             }
 
             // Check if data is last allocated memory in pool
-            uint8_t *pOffset = pCur->pData + pCur->nOffset;
-            uint8_t *pEnd = (uint8_t *)pData + nSize;
-            if (pOffset == pEnd) pCur->nOffset -= nSize;
+            uint8_t *pOffset = pCur->pData + pCur->nUsed;
+            uint8_t *pDataEnd = (uint8_t *)pData + nSize;
+            if (pOffset == pDataEnd) pCur->nUsed -= nSize;
 
             // If data is in the middle of pool, do nothing
             // to keep memory aligned and avoid fragmentation
@@ -145,19 +145,19 @@ void* xalloc(xpool_t *pPool, size_t nSize)
     return XPool_Alloc(pPool, nSize);
 }
 
-void* xrealloc(xpool_t *pPool, void *pData, size_t nOldSize, size_t nSize)
+void* xrealloc(xpool_t *pPool, void *pData, size_t nDataSize, size_t nNewSize)
 {
-    XASSERT_RET(nSize, NULL);
-    if (!pPool) return realloc(pData, nSize);
+    XASSERT_RET(nNewSize, NULL);
+    if (!pPool) return realloc(pData, nNewSize);
 
-    void *pNew = XPool_Alloc(pPool, nSize);
+    void *pNew = XPool_Alloc(pPool, nNewSize);
     if (pNew == NULL) return NULL;
 
     if (pData != NULL && nOldSize)
     {
-        size_t nCopySize = XSTD_MIN(nOldSize, nSize);
+        size_t nCopySize = XSTD_MIN(nDataSize, nNewSize);
         memcpy(pNew, pData, nCopySize);
-        xfreen(pPool, pData, nOldSize);
+        xfreen(pPool, pData, nDataSize);
     }
 
     return pNew;
@@ -185,5 +185,5 @@ size_t XPool_GetSize(xpool_t *pPool)
 size_t XPool_GetUsed(xpool_t *pPool)
 {
     XASSERT_RET(pPool, 0);
-    return pPool->nOffset;
+    return pPool->nUsed;
 }
