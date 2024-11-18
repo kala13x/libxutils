@@ -397,7 +397,7 @@ xjson_obj_t* XJSON_NewObject(const char *pName, uint8_t nAllowUpdate)
 
 xjson_obj_t* XJSON_NewArray(const char *pName, uint8_t nAllowUpdate)
 {
-    xarray_t *pArray = XArray_New(XOBJ_INITIAL_SIZE, 0);
+    xarray_t *pArray = XArray_New(NULL, XOBJ_INITIAL_SIZE, 0);
     if (pArray == NULL) return NULL;
 
     pArray->clearCb = XJSON_ArrayClearCb;
@@ -909,7 +909,7 @@ xarray_t* XJSON_GetObjects(xjson_obj_t *pObj)
     if (!XJSON_CheckObject(pObj, XJSON_TYPE_OBJECT)) return NULL;
     xmap_t *pMap = (xmap_t*)pObj->pData;
 
-    xarray_t *pArray = XArray_New(XSTDNON, XFALSE);
+    xarray_t *pArray = XArray_New(NULL, XSTDNON, XFALSE);
     XASSERT(pArray, NULL);
 
     if (XMap_Iterate(pMap, XJSON_CollectIt, pArray) != XMAP_OK)

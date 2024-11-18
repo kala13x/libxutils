@@ -446,7 +446,7 @@ uint8_t* XCrypt_Multy(xcrypt_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength
     xarray_t *pCiphersArr = xstrsplit(pCtx->pCiphers, ":");
     if (pCiphersArr == NULL)
     {
-        pCiphersArr = XArray_New(XSTDNON, XFALSE);
+        pCiphersArr = XArray_New(NULL, XSTDNON, XFALSE);
         if (pCiphersArr == NULL)
         {
             XCrypt_ErrorCallback(pCtx, "Can not allocate memory for cipher array");

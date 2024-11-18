@@ -38,6 +38,7 @@ OBJS = xver.$(OBJ) \
     api.$(OBJ) \
     ws.$(OBJ) \
     sync.$(OBJ) \
+    pool.$(OBJ) \
     thread.$(OBJ) \
     xcli.$(OBJ) \
     xcpu.$(OBJ) \

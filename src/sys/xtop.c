@@ -86,7 +86,7 @@ int XTop_GetCPUStats(xtop_stats_t *pStats, xcpu_stats_t *pCpuStats)
     int i, nCPUCores = XSYNC_ATOMIC_GET(&pStats->cpuStats.nCoreCount);
     if (nCPUCores <= 0) return 0;
 
-    if (XArray_Init(&pCpuStats->cores, 1, 0) == NULL) return -1;
+    if (XArray_Init(&pCpuStats->cores, NULL, 1, 0) == NULL) return -1;
     pCpuStats->cores.clearCb = XTop_ClearCb;
 
     XTop_CopyCPUUsage(&pCpuStats->usage, &pStats->cpuStats.usage);
@@ -120,7 +120,7 @@ int XTop_GetNetworkStats(xtop_stats_t *pStats, xarray_t *pIfaces)
     XSync_Lock(&pStats->netLock);
 
     if (!pStats->netIfaces.nUsed || 
-        !XArray_Init(pIfaces, 1, 0))
+        !XArray_Init(pIfaces, NULL, 1, 0))
     {
         XSync_Unlock(&pStats->netLock);
         return 0;
@@ -455,7 +455,7 @@ int XTop_UpdateStats(void* pData)
 
 int XTop_InitCPUStats(xcpu_stats_t *pStats)
 {
-    if (XArray_Init(&pStats->cores, 1, 0) == NULL) return 0;
+    if (XArray_Init(&pStats->cores, NULL, 1, 0) == NULL) return 0;
     pStats->cores.clearCb = XTop_ClearCb;
 
     memset(&pStats->usage, 0, sizeof(xproc_info_t));
@@ -469,7 +469,7 @@ int XTop_InitCPUStats(xcpu_stats_t *pStats)
 
 int XTop_InitStats(xtop_stats_t *pStats)
 {
-    if (XArray_Init(&pStats->netIfaces, 1, 0) == NULL) return XSTDERR;
+    if (XArray_Init(&pStats->netIfaces, NULL, 1, 0) == NULL) return XSTDERR;
     pStats->netIfaces.clearCb = XTop_ClearCb;
 
     if (!XTop_InitCPUStats(&pStats->cpuStats))

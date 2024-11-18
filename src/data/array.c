@@ -11,17 +11,17 @@
 #include <string.h>
 #include "array.h"
 
-xarray_data_t *XArray_NewData(void *pData, size_t nSize, uint32_t nKey)
+xarray_data_t *XArray_NewData(xarray_t *pArr, void *pData, size_t nSize, uint32_t nKey)
 {
-    xarray_data_t *pNewData = (xarray_data_t*)malloc(sizeof(xarray_data_t));
+    xarray_data_t *pNewData = (xarray_data_t *)xalloc(pArr->pPool, sizeof(xarray_data_t));
     if (pNewData == NULL) return NULL;
 
     if (pData != NULL && nSize > 0) 
     {
-        pNewData->pData = malloc(nSize + 1);
+        pNewData->pData = xalloc(pArr->pPool, nSize + 1);
         if (pNewData->pData == NULL)
         {
-            free(pNewData);
+            xfree(pArr->pPool, pNewData);
             return NULL;
         }
 
@@ -34,6 +34,7 @@ xarray_data_t *XArray_NewData(void *pData, size_t nSize, uint32_t nKey)
         pNewData->nSize = 0;
     }
 
+    pNewData->pPool = pArr->pPool;
     pNewData->nKey = nKey;
     return pNewData;
 }
@@ -42,11 +43,10 @@ void XArray_FreeData(xarray_data_t *pArrData)
 {
     if (pArrData != NULL)
     {
-        if (pArrData->pData && 
-            pArrData->nSize > 0) 
-            free(pArrData->pData);
+        if (pArrData->pData && pArrData->nSize > 0)
+            xfree(pArrData->pPool, pArrData->pData);
 
-        free(pArrData);
+        xfree(pArrData->pPool, pArrData);
     }
 }
 
@@ -64,7 +64,7 @@ void XArray_ClearData(xarray_t *pArr, xarray_data_t *pArrData)
     XArray_FreeData(pArrData);
 }
 
-void* XArray_Init(xarray_t *pArr, size_t nSize, uint8_t nFixed)
+void* XArray_Init(xarray_t *pArr, xpool_t *pPool, size_t nSize, uint8_t nFixed)
 {
     pArr->eStatus = XARRAY_STATUS_EMPTY;
     pArr->clearCb = NULL;
@@ -73,10 +73,11 @@ void* XArray_Init(xarray_t *pArr, size_t nSize, uint8_t nFixed)
     pArr->nFixed = nFixed;
     pArr->nAlloc = 0;
     pArr->nUsed = 0;
+    pArr->pPool = pPool;
 
     if (nSize)
     {
-        pArr->pData = (xarray_data_t**)malloc(nSize * sizeof(xarray_data_t*));
+        pArr->pData = (xarray_data_t**)xalloc(pArr->pPool, nSize * sizeof(xarray_data_t*));
         if (pArr->pData == NULL) return NULL;
     }
 
@@ -87,14 +88,14 @@ void* XArray_Init(xarray_t *pArr, size_t nSize, uint8_t nFixed)
     return pArr->pData;
 }
 
-xarray_t* XArray_New(size_t nSize, uint8_t nFixed)
+xarray_t* XArray_New(xpool_t *pPool, size_t nSize, uint8_t nFixed)
 {
-    xarray_t *pArr = (xarray_t*)malloc(sizeof(xarray_t));
+    xarray_t *pArr = (xarray_t*)xalloc(pPool, sizeof(xarray_t));
     if (pArr == NULL) return NULL;
 
-    if (XArray_Init(pArr, nSize, nFixed) == NULL && nSize)
+    if (XArray_Init(pArr, pPool, nSize, nFixed) == NULL && nSize)
     {
-        free(pArr);
+        xfree(pPool, pArr);
         return NULL;
     }
 
@@ -121,17 +122,14 @@ void XArray_Clear(xarray_t *pArr)
 void XArray_Destroy(xarray_t *pArr)
 {
     XArray_Clear(pArr);
-    if (pArr->pData != NULL)
-    {
-        free(pArr->pData);
-        pArr->pData = NULL;
-    }
 
+    xfree(pArr->pPool, pArr->pData);
+    pArr->pData = NULL;
     pArr->nSize = 0;
     pArr->nFixed = 0;
 
-    if (pArr->nAlloc) 
-        free(pArr);
+    if (pArr->nAlloc)
+        xfree(pArr->pPool, pArr);
 }
 
 void XArray_Free(xarray_t **ppArr)
@@ -152,7 +150,9 @@ uint8_t XArray_Contains(xarray_t *pArr, size_t nIndex)
 
 size_t XArray_Realloc(xarray_t *pArr)
 {
+    if (pArr == NULL) return 0;
     if (pArr->nFixed) return pArr->nSize;
+
     size_t nSize = 0, nUsed = pArr->nUsed;
     float fQuotient = (float)nUsed / (float)pArr->nSize;
 
@@ -161,17 +161,22 @@ size_t XArray_Realloc(xarray_t *pArr)
 
     if (nSize)
     {
-        xarray_data_t **pData = (xarray_data_t**)malloc(sizeof(xarray_data_t*) * nSize);
+        xarray_data_t **pData = (xarray_data_t**)xalloc(pArr->pPool, sizeof(xarray_data_t*) * nSize);
         if (pData == NULL)
         {
             pArr->eStatus = XARRAY_STATUS_NO_MEMORY;
             return 0;
         }
 
-        size_t nCopySize = sizeof(xarray_data_t*) * pArr->nSize;
-        memcpy(pData, pArr->pData, nCopySize);
+        printf("Reallocating array from %lu to %lu\n", pArr->nSize, nSize);
 
-        free(pArr->pData);
+        if (pArr->pData != NULL && pArr->nUsed)
+        {
+            size_t nCopySize = sizeof(xarray_data_t*) * pArr->nUsed;
+            memcpy(pData, pArr->pData, nCopySize);
+            xfree(pArr->pPool, pArr->pData);
+        }
+
         pArr->pData = pData;
         pArr->nSize = nSize;
 
@@ -191,7 +196,7 @@ size_t XArray_CheckSpace(xarray_t *pArr)
     {
         uint8_t nAlloc = pArr->nAlloc;
         xarray_clear_cb_t clearCb = pArr->clearCb;
-        XArray_Init(pArr, XARRAY_INITIAL_SIZE, 0);
+        XArray_Init(pArr, pArr->pPool, XARRAY_INITIAL_SIZE, 0);
         pArr->clearCb = clearCb;
         pArr->nAlloc = nAlloc;
     }
@@ -216,7 +221,7 @@ int XArray_Add(xarray_t *pArr, xarray_data_t *pNewData)
 int XArray_AddData(xarray_t *pArr, void *pData, size_t nSize)
 {
     if (pArr == NULL) return XARRAY_FAILURE;
-    xarray_data_t *pNewData = XArray_NewData(pData, nSize, 0);
+    xarray_data_t *pNewData = XArray_NewData(pArr, pData, nSize, 0);
 
     if (pNewData == NULL) 
     {
@@ -229,7 +234,7 @@ int XArray_AddData(xarray_t *pArr, void *pData, size_t nSize)
 
 int XArray_PushData(xarray_t *pArr, void *pData, size_t nSize)
 {
-    xarray_data_t *pNewData = XArray_NewData(pData, 0, 0);
+    xarray_data_t *pNewData = XArray_NewData(pArr, pData, 0, 0);
     if (pNewData == NULL) 
     {
         pArr->eStatus = XARRAY_STATUS_NO_MEMORY;
@@ -242,7 +247,7 @@ int XArray_PushData(xarray_t *pArr, void *pData, size_t nSize)
 
 int XArray_AddDataKey(xarray_t *pArr, void *pData, size_t nSize, uint32_t nKey)
 {
-    xarray_data_t *pNewData = XArray_NewData(pData, nSize, nKey);
+    xarray_data_t *pNewData = XArray_NewData(pArr, pData, nSize, nKey);
 
     if (pNewData == NULL)
     {
@@ -324,7 +329,7 @@ xarray_data_t* XArray_Set(xarray_t *pArr, size_t nIndex, xarray_data_t *pNewData
 
 xarray_data_t* XArray_SetData(xarray_t *pArr, size_t nIndex, void *pData, size_t nSize)
 {
-    xarray_data_t *pNewData = XArray_NewData(pData, nSize, 0);
+    xarray_data_t *pNewData = XArray_NewData(pArr, pData, nSize, 0);
     if (pNewData == NULL)
     {
         pArr->eStatus = XARRAY_STATUS_NO_MEMORY;
@@ -355,7 +360,7 @@ xarray_data_t* XArray_InsertData(xarray_t *pArr, size_t nIndex, void *pData, siz
 {
     if (!XArray_CheckSpace(pArr)) return NULL;
 
-    xarray_data_t *pNewData = XArray_NewData(pData, nSize, 0);
+    xarray_data_t *pNewData = XArray_NewData(pArr, pData, nSize, 0);
     if (pNewData == NULL)
     {
         pArr->eStatus = XARRAY_STATUS_NO_MEMORY;

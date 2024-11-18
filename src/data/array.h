@@ -17,6 +17,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdlib.h>
+#include "pool.h"
 
 #define XARRAY_SUCCESS          0
 #define XARRAY_FAILURE          -1
@@ -32,6 +33,7 @@ typedef enum {
 } xarray_status_t;
 
 typedef struct XArrayData {
+    xpool_t *pPool;
     void* pData;
     size_t nSize;
     uint32_t nKey;
@@ -44,18 +46,19 @@ typedef struct XArray_ {
     xarray_data_t** pData;
     xarray_clear_cb_t clearCb;
     xarray_status_t eStatus;
+    xpool_t *pPool;
     uint8_t nFixed;
     uint8_t nAlloc;
     size_t nSize;
     size_t nUsed;
 } xarray_t;
 
-xarray_data_t *XArray_NewData(void *pData, size_t nSize, uint32_t nKey);
+xarray_data_t *XArray_NewData(xarray_t *pArr, void *pData, size_t nSize, uint32_t nKey);
 void XArray_FreeData(xarray_data_t *pArrData);
 void XArray_ClearData(xarray_t *pArr, xarray_data_t *pArrData);
 
-xarray_t* XArray_New(size_t nSize, uint8_t nFixed);
-void* XArray_Init(xarray_t *pArr, size_t nSize, uint8_t nFixed);
+xarray_t* XArray_New(xpool_t *pPool, size_t nSize, uint8_t nFixed);
+void* XArray_Init(xarray_t *pArr, xpool_t *pPool, size_t nSize, uint8_t nFixed);
 size_t XArray_Realloc(xarray_t *pArr);
 void XArray_Destroy(xarray_t *pArr);
 void XArray_Clear(xarray_t *pArr);

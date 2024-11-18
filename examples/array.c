@@ -8,6 +8,7 @@
 
 #include "xstd.h"
 #include "array.h" 
+#include "pool.h"
 
 typedef struct {
     int key;
@@ -64,9 +65,12 @@ int ComparatorCostum(const void *pData1, const void *pData2, void *pCtx)
 
 int main() 
 {
+    xpool_t pool;
+    XPool_Init(&pool, 1024 * 2);
+
     /* Create the xarray_t */
     xarray_t array;
-    XArray_Init(&array, 5, 0);
+    XArray_Init(&array, &pool, 5, 0);
     printf("Initialized the array\n");
     PrintEverything(&array);
 
@@ -156,6 +160,7 @@ int main()
 
     /* We have not destructor at C, so clean up memory by ourselves */
     XArray_Destroy(&array);
+    XPool_Destroy(&pool);
 
     return 0;
 }

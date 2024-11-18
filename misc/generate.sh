@@ -58,6 +58,7 @@ modules=(
     "net: API"
     "net: WS"
     "sys: SYNC"
+    "sys: POOL"
     "sys: THREAD"
     "sys: XCLI"
     "sys: XCPU"
@@ -95,6 +96,10 @@ enable_rtp() {
 
 enable_sync() {
     USE_SYNC=y
+}
+
+enable_pool() {
+    USE_POOL=y
 }
 
 enable_xsig() {

@@ -87,7 +87,7 @@ XSTATUS XCLI_GetWindowSize(xcli_size_t *pCli)
 
 void XWindow_Init(xcli_win_t *pWin)
 {
-    XArray_Init(&pWin->lineArray, 0, 0);
+    XArray_Init(&pWin->lineArray,  NULL, 0, 0);
     pWin->eType = XCLI_RENDER_FRAME;
     pWin->frameSize.nWinColumns = 0;
     pWin->frameSize.nWinRows = 0;
