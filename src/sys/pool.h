@@ -27,7 +27,7 @@ typedef struct XPool {
 } xpool_t;
 
 void* xalloc(xpool_t *pPool, size_t nSize);
-void* xrealloc(xpool_t *pPool, void *pData, size_t nOldSize, size_t nSize);
+void* xrealloc(xpool_t *pPool, void *pData, size_t nDataSize, size_t nNewSize);
 
 void xfree(xpool_t *pPool, void *pData);
 void xfreen(xpool_t *pPool, void *pData, size_t nSize);
