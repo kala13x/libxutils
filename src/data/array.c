@@ -172,10 +172,8 @@ size_t XArray_Realloc(xarray_t *pArr)
 
         if (pArr->pData != NULL && pArr->nUsed < nSize)
         {
-            size_t nCopySize = sizeof(xarray_data_t*) * pArr->nUsed;
-            size_t nFullSize = sizeof(xarray_data_t*) * pArr->nSize;
-            memcpy(pData, pArr->pData, nCopySize);
-            xfreen(pPool, pArr->pData, nFullSize);
+            memcpy(pData, pArr->pData, sizeof(xarray_data_t*) * pArr->nUsed);
+            xfreen(pPool, pArr->pData, sizeof(xarray_data_t*) * pArr->nSize);
         }
 
         pArr->pData = pData;
@@ -202,7 +200,9 @@ size_t XArray_CheckSpace(xarray_t *pArr)
         pArr->nAlloc = nAlloc;
     }
     else if (pArr->nUsed >= pArr->nSize)
+    {
         return XArray_Realloc(pArr);
+    }
 
     return pArr->pData == NULL ? 0 : 1;
 }

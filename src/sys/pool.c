@@ -99,7 +99,6 @@ void *XPool_Alloc(xpool_t *pPool, size_t nSize)
 
 void XPool_Free(xpool_t *pPool, void *pData, size_t nSize)
 {
-    XASSERT_VOID_RET(pPool);
     XASSERT_VOID_RET(pData);
     XASSERT_VOID_RET(nSize);
 
@@ -158,6 +157,7 @@ void* xrealloc(xpool_t *pPool, void *pData, size_t nOldSize, size_t nSize)
     {
         size_t nCopySize = XSTD_MIN(nOldSize, nSize);
         memcpy(pNew, pData, nCopySize);
+        xfreen(pPool, pData, nOldSize);
     }
 
     return pNew;
@@ -172,7 +172,7 @@ void xfree(xpool_t *pPool, void *pData)
 void xfreen(xpool_t *pPool, void *pData, size_t nSize)
 {
     XASSERT_VOID_RET(pData);
-    if (nSize == 0) xfree(pPool, pData);
+    if (!nSize) xfree(pPool, pData);
     else XPool_Free(pPool, pData, nSize);
 }
 
