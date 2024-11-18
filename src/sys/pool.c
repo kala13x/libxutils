@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/sys/pPool.c
+ *  @file libxutils/src/sys/pool.c
  *
  *  This source is part of "libxutils" project
  *  2015-2024  Sun Dro (s.kalatoz@gmail.com)
