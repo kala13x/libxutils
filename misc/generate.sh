@@ -82,10 +82,6 @@ enable_crc32() {
     USE_CRC32=y
 }
 
-enable_array() {
-    USE_ARRAY=y
-}
-
 enable_list() {
     USE_LIST=y
 }
@@ -104,6 +100,11 @@ enable_pool() {
 
 enable_xsig() {
     USE_XSIG=y
+}
+
+enable_array() {
+    USE_ARRAY=y
+    enable_pool
 }
 
 enable_md5() {
@@ -134,6 +135,7 @@ enable_xbuf() {
 enable_xstr() {
     USE_XSTR=y
     enable_array
+    enable_pool
 }
 
 enable_thread() {
@@ -190,6 +192,7 @@ enable_addr() {
 enable_xjson() {
     USE_XJSON=y
     enable_map
+    enable_pool
     enable_xstr
     enable_array
 }

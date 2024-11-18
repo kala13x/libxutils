@@ -15,17 +15,17 @@ TOOLS_DONE=0
 CPU_COUNT=1
 
 for arg in "$@"; do
-    if [[ $arg == --tool=* ]]; then
+    if [[ $arg == --tool=* || $arg == -m=* ]]; then
         MAKE_TOOL="${arg#*=}"
         echo "Using tool: $MAKE_TOOL"
     fi
 
-    if [[ $arg == --prefix=* ]]; then
+    if [[ $arg == --prefix=* || $arg == -p=* ]]; then
         INSTALL_PREFIX="${arg#*=}"
         echo "Using prefix: $INSTALL_PREFIX"
     fi
 
-    if [[ $arg == --ssl=* ]]; then
+    if [[ $arg == --ssl=* || $arg == -s=* ]]; then
         USE_SSL="${arg#*=}"
         echo "Using SSL: $USE_SSL"
     fi
@@ -171,15 +171,15 @@ clean_project
 build_library
 
 for arg in "$@"; do
-    if [[ $arg == "--examples" ]]; then
+    if [[ $arg == "--examples" || $arg == "-e" ]]; then
         build_examples
     fi
 
-    if [[ $arg == "--tools" ]]; then
+    if [[ $arg == "--tools" || $arg == "-t" ]]; then
         build_tools
     fi
 
-    if [[ $arg == "--install" ]]; then
+    if [[ $arg == "--install" || $arg == "-i" ]]; then
         install_library
         install_tools
     fi
@@ -187,8 +187,7 @@ done
 
 # Do cleanup last
 for arg in "$@"; do
-    if [[ $arg == "--cleanup" ||
-          $arg == "--clean" ]]; then
+    if [[ $$arg == "--clean" || $arg == "-c" ]]; then
         clean_project
     fi
 done

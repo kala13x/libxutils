@@ -39,6 +39,7 @@ void XPool_Destroy(xpool_t *pPool);
 void XPool_Reset(xpool_t *pPool);
 
 void *XPool_Alloc(xpool_t *pPool, size_t nSize);
+void *XPool_Realloc(xpool_t *pPool, void *pData, size_t nDataSize, size_t nNewSize);
 void XPool_Free(xpool_t *pPool, void *pData, size_t nSize);
 
 size_t XPool_GetSize(xpool_t *pPool);

@@ -95,6 +95,24 @@ void *XPool_Alloc(xpool_t *pPool, size_t nSize)
     return pRet;
 }
 
+void *XPool_Realloc(xpool_t *pPool, void *pData, size_t nDataSize, size_t nNewSize)
+{
+    XASSERT_RET(nNewSize, NULL);
+    XASSERT_RET(pPool, NULL);
+
+    void *pNew = XPool_Alloc(pPool, nNewSize);
+    if (pNew == NULL) return NULL;
+
+    if (pData != NULL && nDataSize)
+    {
+        size_t nCopySize = XSTD_MIN(nDataSize, nNewSize);
+        memcpy(pNew, pData, nCopySize);
+        XPool_Free(pPool, pData, nDataSize);
+    }
+
+    return pNew;
+}
+
 void XPool_Free(xpool_t *pPool, void *pData, size_t nSize)
 {
     XASSERT_VOID_RET(pData);
@@ -147,18 +165,7 @@ void* xrealloc(xpool_t *pPool, void *pData, size_t nDataSize, size_t nNewSize)
 {
     XASSERT_RET(nNewSize, NULL);
     if (!pPool) return realloc(pData, nNewSize);
-
-    void *pNew = XPool_Alloc(pPool, nNewSize);
-    if (pNew == NULL) return NULL;
-
-    if (pData != NULL && nDataSize)
-    {
-        size_t nCopySize = XSTD_MIN(nDataSize, nNewSize);
-        memcpy(pNew, pData, nCopySize);
-        xfreen(pPool, pData, nDataSize);
-    }
-
-    return pNew;
+    return XPool_Realloc(pPool, pData, nDataSize, nNewSize);
 }
 
 void xfree(xpool_t *pPool, void *pData)
