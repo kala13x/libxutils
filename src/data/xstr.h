@@ -12,6 +12,7 @@
 
 #include "xstd.h"
 #include "array.h"
+#include "pool.h"
 
 /* Supported colors */
 #define XSTR_CLR_NONE               "\x1B[0m"
@@ -89,12 +90,14 @@ typedef enum {
 xarray_t* xstrsplit(const char *pString, const char *pDlmt);
 char* xstrrep(const char *pOrig, const char *pRep, const char *pWith);
 int xstrnrep(char *pDst, size_t nSize, const char *pOrig, const char *pRep, const char *pWith);
+char *xstrpdup(xpool_t *pPool, const char *pStr);
 char* xstrdup(const char *pStr);
 char* xstracpy(const char *pFmt, ...);
 char* xstracpyn(size_t *nSize, const char *pFmt, ...);
 char* xstralloc(size_t nSize);
 
 int xstrncpyarg(char *pDest, size_t nSize, const char *pFmt, va_list args);
+char* xstrpcpyargs(xpool_t *pPool, const char *pFmt, va_list args, size_t *nSize);
 char* xstracpyarg(const char *pFmt, va_list args);
 char* xstracpyargs(const char *pFmt, va_list args, size_t *nSize);
 size_t xstrarglen(const char *pFmt, va_list args);

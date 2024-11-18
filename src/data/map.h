@@ -16,6 +16,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdlib.h>
+#include "pool.h"
 
 #define XMAP_INITIAL_SIZE   16
 #define XMAP_CHAIN_LENGTH   32
@@ -41,17 +42,18 @@ typedef void(*xmap_clear_cb_t)(xmap_pair_t*);
 typedef struct XMap {
     xmap_clear_cb_t clearCb;
     xmap_pair_t *pPairs;
+    xpool_t *pPool;
     size_t nTableSize;
     size_t nUsed;
     int nAlloc;
 } xmap_t;
 
-int XMap_Init(xmap_t *pMap, size_t nSize);
+int XMap_Init(xmap_t *pMap, xpool_t *pPool, size_t nSize);
 int XMap_Realloc(xmap_t *pMap);
 void XMap_Destroy(xmap_t *pMap);
 void XMap_Reset(xmap_t *pMap);
 
-xmap_t *XMap_New(size_t nSize);
+xmap_t *XMap_New(xpool_t *pPool, size_t nSize);
 void XMap_Free(xmap_t *pMap);
 
 xmap_pair_t *XMap_GetPair(xmap_t *pMap, const char* pKey);

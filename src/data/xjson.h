@@ -10,6 +10,7 @@
 
 #include "xstd.h"
 #include "array.h"
+#include "pool.h"
 
 #ifndef __XUTILS_JSON_H__
 #define __XUTILS_JSON_H__
@@ -61,6 +62,7 @@ typedef struct xjson_obj_ {
     uint8_t nAllowUpdate;
     uint8_t nAllowLinter;
     uint8_t nAllocated;
+    xpool_t *pPool;
     void *pData;
     char *pName;
 } xjson_obj_t;
@@ -74,17 +76,17 @@ typedef enum {
     XJSON_ERR_ALLOC
 } xjson_error_t;
 
-xjson_obj_t *XJSON_FromStr(const char *pFmt, ...);
-xjson_obj_t* XJSON_CreateObject(const char *pName, void *pValue, xjson_type_t nType);
-xjson_obj_t* XJSON_NewObject(const char *pName, uint8_t nAllowUpdate);
-xjson_obj_t* XJSON_NewArray(const char *pName, uint8_t nAllowUpdate);
-xjson_obj_t* XJSON_NewU64(const char *pName, uint64_t nValue);
-xjson_obj_t* XJSON_NewU32(const char *pName, uint32_t nValue);
-xjson_obj_t* XJSON_NewInt(const char *pName, int nValue);
-xjson_obj_t* XJSON_NewFloat(const char *pName, double fValue);
-xjson_obj_t* XJSON_NewString(const char *pName, const char *pValue);
-xjson_obj_t* XJSON_NewBool(const char *pName, int nValue);
-xjson_obj_t* XJSON_NewNull(const char *pName);
+xjson_obj_t *XJSON_FromStr(xpool_t *pPool, const char *pFmt, ...);
+xjson_obj_t* XJSON_CreateObject(xpool_t *pPool, const char *pName, void *pValue, xjson_type_t nType);
+xjson_obj_t* XJSON_NewObject(xpool_t *pPool, const char *pName, uint8_t nAllowUpdate);
+xjson_obj_t* XJSON_NewArray(xpool_t *pPool, const char *pName, uint8_t nAllowUpdate);
+xjson_obj_t* XJSON_NewU64(xpool_t *pPool, const char *pName, uint64_t nValue);
+xjson_obj_t* XJSON_NewU32(xpool_t *pPool, const char *pName, uint32_t nValue);
+xjson_obj_t* XJSON_NewInt(xpool_t *pPool, const char *pName, int nValue);
+xjson_obj_t* XJSON_NewFloat(xpool_t *pPool, const char *pName, double fValue);
+xjson_obj_t* XJSON_NewString(xpool_t *pPool, const char *pName, const char *pValue);
+xjson_obj_t* XJSON_NewBool(xpool_t *pPool, const char *pName, int nValue);
+xjson_obj_t* XJSON_NewNull(xpool_t *pPool, const char *pName);
 void XJSON_FreeObject(xjson_obj_t *pObj);
 
 xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc);
@@ -101,13 +103,14 @@ typedef struct xjson_ {
     xjson_error_t nError;
     xjson_obj_t *pRootObj;
     const char *pData;
+    xpool_t *pPool;
     size_t nDataSize;
     size_t nOffset;
 } xjson_t;
 
 size_t XJSON_GetErrorStr(xjson_t *pJson, char *pOutput, size_t nSize);
 
-int XJSON_Parse(xjson_t *pJson, const char *pData, size_t nSize);
+int XJSON_Parse(xjson_t *pJson, xpool_t *pPool, const char *pData, size_t nSize);
 void XJSON_Destroy(xjson_t *pJson);
 void XJSON_Init(xjson_t *pJson);
 
@@ -150,11 +153,12 @@ typedef struct xjson_writer_ {
     size_t nAvail;
     size_t nSize;
     char *pData;
+    xpool_t *pPool;
     uint8_t nAlloc;
 } xjson_writer_t;
 
 void XJSON_DestroyWriter(xjson_writer_t *pWriter);
-int XJSON_InitWriter(xjson_writer_t *pWriter, char *pOutput, size_t nSize);
+int XJSON_InitWriter(xjson_writer_t *pWriter, xpool_t *pPool, char *pOutput, size_t nSize);
 int XJSON_WriteObject(xjson_obj_t *pObj, xjson_writer_t *pWriter);
 int XJSON_Write(xjson_t *pJson, char *pOutput, size_t nSize);
 

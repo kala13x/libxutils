@@ -229,6 +229,24 @@ char* xstracpyargs(const char *pFmt, va_list args, size_t *nSize)
     return pDest;
 }
 
+char* xstrpcpyargs(xpool_t *pPool, const char *pFmt, va_list args, size_t *nSize)
+{
+    size_t nLength = xstrarglen(pFmt, args);
+    if (!nLength) return NULL;
+
+    char *pDest = (char*)xalloc(pPool, ++nLength);
+    if (pDest == NULL) return NULL;
+
+    *nSize = xstrncpyarg(pDest, nLength, pFmt, args);
+    if (*nSize <= 0 && pDest)
+    {
+        xfree(pPool, pDest);
+        return NULL;
+    }
+
+    return pDest;
+}
+
 char* xstracpyarg(const char *pFmt, va_list args)
 {
     size_t nDummy = 0;
@@ -842,6 +860,18 @@ char *xstrdup(const char *pStr)
     size_t nLength = strlen(pStr);
 
     char *pDst = (char*)malloc(++nLength);
+    if (pDst == NULL) return NULL;
+
+    xstrncpy(pDst, nLength, pStr);
+    return pDst;
+}
+
+char *xstrpdup(xpool_t *pPool, const char *pStr)
+{
+    if (pStr == NULL) return NULL;
+    size_t nLength = strlen(pStr);
+
+    char *pDst = (char*)xalloc(pPool, ++nLength);
     if (pDst == NULL) return NULL;
 
     xstrncpy(pDst, nLength, pStr);

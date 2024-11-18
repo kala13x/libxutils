@@ -8,6 +8,7 @@
  */
 
 #include "xstd.h"
+#include "pool.h"
 #include "xjson.h"
 #include "xbuf.h"
 #include "xstr.h"
@@ -17,7 +18,9 @@
 extern char *optarg;
 
 #define XJSON_LINT_VER_MAX  0
-#define XJSON_LINT_VER_MIN  3
+#define XJSON_LINT_VER_MIN  4
+
+#define XJSON_POOL_SIZE     1024 * 64
 
 typedef struct xjson_args_ {
     char sFile[XPATH_MAX];
@@ -95,19 +98,23 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (!XJSON_Parse(&json, (const char*)buffer.pData, buffer.nUsed))
+    xpool_t pool;
+    XPool_Init(&pool, XJSON_POOL_SIZE);
+
+    if (!XJSON_Parse(&json, &pool, (const char*)buffer.pData, buffer.nUsed))
     {
         char sError[256];
         XJSON_GetErrorStr(&json, sError, sizeof(sError));
         xloge("Failed to parse JSON: %s", sError);
 
         XByteBuffer_Clear(&buffer);
+        XPool_Destroy(&pool);
         XJSON_Destroy(&json);
         return 1;
     }
 
     xjson_writer_t writer;
-    XJSON_InitWriter(&writer, NULL, buffer.nUsed);
+    XJSON_InitWriter(&writer, &pool, NULL, buffer.nUsed);
     writer.nTabSize = !args.nMinify ? args.nTabSize : 0;
     writer.nPretty = args.nPretty;
 
@@ -117,5 +124,7 @@ int main(int argc, char *argv[])
     XJSON_DestroyWriter(&writer);
     XByteBuffer_Clear(&buffer);
     XJSON_Destroy(&json);
+    XPool_Destroy(&pool);
+
     return 0;
 }

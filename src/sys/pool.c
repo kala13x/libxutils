@@ -43,7 +43,7 @@ xpool_t* XPool_Create(size_t nSize)
 
 void XPool_Destroy(xpool_t *pPool)
 {
-    XASSERT_VOID(pPool);
+    XASSERT_VOID_RET(pPool);
 
     if (pPool->pData)
     {
@@ -66,7 +66,7 @@ void XPool_Destroy(xpool_t *pPool)
 
 void XPool_Reset(xpool_t *pPool)
 {
-    XASSERT_VOID(pPool);
+    XASSERT_VOID_RET(pPool);
     pPool->nOffset = 0;
     pPool->nUsed = 0;
     XPool_Reset(pPool->pNext);
@@ -133,7 +133,24 @@ void* xalloc(xpool_t *pPool, size_t nSize)
     XASSERT(nSize, NULL);
     if (!pPool) return malloc(nSize);
     return XPool_Alloc(pPool, nSize);
-} 
+}
+
+void* xrealloc(xpool_t *pPool, void *pData, size_t nOldSize, size_t nSize)
+{
+    XASSERT(nSize, NULL);
+    if (!pPool) return realloc(pData, nSize);
+
+    void *pNew = XPool_Alloc(pPool, nSize);
+    if (pNew == NULL) return NULL;
+
+    if (pData != NULL && nOldSize)
+    {
+        size_t nCopySize = XSTD_MIN(nOldSize, nSize);
+        memcpy(pNew, pData, nCopySize);
+    }
+
+    return pNew;
+}
 
 void xfree(xpool_t *pPool, void *pData)
 {

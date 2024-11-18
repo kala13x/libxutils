@@ -49,9 +49,9 @@ xjson_obj_t* XJWT_CreateHeaderObj(xjwt_alg_t eAlg)
     const char *pAlgo = XJWT_GetAlgStr(eAlg);
     XASSERT(pAlgo, NULL);
 
-    xjson_obj_t *pJson = XJSON_NewObject(NULL, XFALSE);
-    XJSON_AddObject(pJson, XJSON_NewString("alg", pAlgo));
-    XJSON_AddObject(pJson, XJSON_NewString("typ", "JWT"));
+    xjson_obj_t *pJson = XJSON_NewObject(NULL, NULL, XFALSE);
+    XJSON_AddObject(pJson, XJSON_NewString(NULL, "alg", pAlgo));
+    XJSON_AddObject(pJson, XJSON_NewString(NULL, "typ", "JWT"));
     return pJson;
 }
 
@@ -156,7 +156,7 @@ xjson_obj_t* XJWT_GetPayloadObj(xjwt_t *pJWT)
     XASSERT(pPayloadRaw, NULL);
 
     xjson_t json;
-    int nStatus = XJSON_Parse(&json, pPayloadRaw, nPayloadLen);
+    int nStatus = XJSON_Parse(&json, NULL, pPayloadRaw, nPayloadLen);
     free(pPayloadRaw);
 
     XASSERT((nStatus == XJSON_SUCCESS), NULL);
@@ -247,7 +247,7 @@ xjson_obj_t* XJWT_GetHeaderObj(xjwt_t *pJWT)
     XASSERT(nHeaderRaw, NULL);
 
     xjson_t json;
-    int nStatus = XJSON_Parse(&json, nHeaderRaw, nHeaderLen);
+    int nStatus = XJSON_Parse(&json, NULL, nHeaderRaw, nHeaderLen);
     free(nHeaderRaw);
 
     XASSERT((nStatus == XJSON_SUCCESS), NULL);

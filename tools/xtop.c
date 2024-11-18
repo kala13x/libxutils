@@ -1012,7 +1012,7 @@ int XTOPApp_GetRemoteStats(xtop_args_t *pArgs, xtop_stats_t *pStats)
     }
 
     xjson_t json;
-    if (!XJSON_Parse(&json, pBody, handle.nContentLength))
+    if (!XJSON_Parse(&json, NULL, pBody, handle.nContentLength))
     {
         char sError[256];
         XJSON_GetErrorStr(&json, sError, sizeof(sError));

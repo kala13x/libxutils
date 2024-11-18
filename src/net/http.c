@@ -266,7 +266,7 @@ int XHTTP_Init(xhttp_t *pHttp, xhttp_method_t eMethod, size_t nSize)
     pHttp->eMethod = eMethod;
     pHttp->eType = XHTTP_INITIAL;
 
-    XMap_Init(&pHttp->headerMap, 0);
+    XMap_Init(&pHttp->headerMap, NULL, 0);
     pHttp->headerMap.clearCb = XHTTP_HeaderClearCb;
 
     xbyte_buffer_t *pBuffer = &pHttp->rawData;
@@ -309,7 +309,7 @@ void XHTTP_Reset(xhttp_t *pHttp, xbool_t bHard)
         XByteBuffer_Init(&pHttp->rawData, XSTDNON, XFALSE);
 
         XMap_Destroy(&pHttp->headerMap);
-        XMap_Init(&pHttp->headerMap, XSTDNON);
+        XMap_Init(&pHttp->headerMap, NULL, XSTDNON);
         pHttp->headerMap.clearCb = XHTTP_HeaderClearCb;
     }
     else

@@ -77,7 +77,7 @@ int COVID_ParseResponse(xhttp_t *pHttp, covid_cases_t *pCovCases)
 
 int COVID_PrintCases(covid_cases_t *pCovCases)
 {
-    xjson_obj_t *pRootObject = XJSON_NewObject(NULL, 0);
+    xjson_obj_t *pRootObject = XJSON_NewObject(NULL, NULL, 0);
     if (pRootObject != NULL)
     {
         XJSON_AddInt(pRootObject, "confirmed", pCovCases->nConfirmed);
@@ -87,7 +87,7 @@ int COVID_PrintCases(covid_cases_t *pCovCases)
         XJSON_AddInt(pRootObject, "deaths", pCovCases->nDeaths);
 
         xjson_writer_t linter;
-        XJSON_InitWriter(&linter, NULL, XSTR_MIN);
+        XJSON_InitWriter(&linter, NULL, NULL, XSTR_MIN);
         linter.nTabSize = XTAB_SIZE;
 
         if (XJSON_WriteObject(pRootObject, &linter)) xlog("%s", linter.pData);

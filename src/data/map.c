@@ -18,16 +18,17 @@
 #define XFNV_OFFSET_32 2166136261
 #define XFNV_PRIME_32  16777619
 
-int XMap_Init(xmap_t *pMap, size_t nSize)
+int XMap_Init(xmap_t *pMap, xpool_t *pPool, size_t nSize)
 {
     pMap->nTableSize = nSize;
     pMap->clearCb = NULL;
     pMap->pPairs = NULL;
     pMap->nAlloc = 0;
     pMap->nUsed = 0;
+    pMap->pPool = pPool;
     if (!nSize) return XMAP_OK;
 
-    pMap->pPairs = (xmap_pair_t*)malloc(nSize * sizeof(xmap_pair_t));
+    pMap->pPairs = (xmap_pair_t*)xalloc(pPool, nSize * sizeof(xmap_pair_t));
     if (pMap->pPairs == NULL) return XMAP_OMEM;
 
     size_t i;
@@ -41,14 +42,14 @@ int XMap_Init(xmap_t *pMap, size_t nSize)
     return XMAP_OK;
 }
 
-xmap_t *XMap_New(size_t nSize)
+xmap_t *XMap_New(xpool_t *pPool, size_t nSize)
 {
-    xmap_t *pMap = (xmap_t*)malloc(sizeof(xmap_t));
+    xmap_t *pMap = (xmap_t*)xalloc(pPool, sizeof(xmap_t));
     if(pMap == NULL) return NULL;
 
-    if (XMap_Init(pMap, nSize) < 0)
+    if (XMap_Init(pMap, pPool, nSize) < 0)
     {
-        free(pMap);
+        xfree(pPool, pMap);
         return NULL;
     }
 
@@ -60,13 +61,18 @@ void XMap_Free(xmap_t *pMap)
 {
     if (pMap != NULL)
     {
+        xpool_t *pPool = pMap->pPool;
+
         if (pMap->pPairs != NULL)
         {
-             free(pMap->pPairs);
+             xfree(pPool, pMap->pPairs);
              pMap->pPairs = NULL;
         }
 
-        if (pMap->nAlloc) free(pMap);
+        if (pMap->nAlloc)
+        {
+            xfree(pPool, pMap);
+        }
         else
         {
             pMap->clearCb = NULL;
@@ -202,14 +208,24 @@ int XMap_GetHash(xmap_t *pMap, const char* pKey)
 
 int XMap_Realloc(xmap_t *pMap)
 {
-    size_t nNewSize = pMap->nTableSize ? pMap->nTableSize * 2 : XMAP_INITIAL_SIZE;
-    xmap_pair_t *pPairs = (xmap_pair_t*)calloc(nNewSize, sizeof(xmap_pair_t));
-    if (pPairs == NULL) return XMAP_OMEM;
+    if (pMap == NULL) return XMAP_OINV;
+    xpool_t *pPool = pMap->pPool;
     int nStatus = XMAP_OK;
+
+    size_t i, nNewSize = pMap->nTableSize ? pMap->nTableSize * 2 : XMAP_INITIAL_SIZE;
+    xmap_pair_t *pPairs = (xmap_pair_t*)xalloc(pPool, nNewSize * sizeof(xmap_pair_t));
+    if (pPairs == NULL) return XMAP_OMEM;
+
+    for (i = 0; i < nNewSize; i++)
+    {
+        pPairs[i].nUsed = 0;
+        pPairs[i].pData = NULL;
+        pPairs[i].pKey = NULL;
+    }
 
     xmap_pair_t* pOldPairs = pMap->pPairs;
     size_t nOldSize = pMap->nTableSize;
-    size_t i, nUsed = pMap->nUsed;
+    size_t nUsed = pMap->nUsed;
 
     pMap->nUsed = 0;
     pMap->pPairs = pPairs;
@@ -227,12 +243,12 @@ int XMap_Realloc(xmap_t *pMap)
             pMap->pPairs = pOldPairs;
             pMap->nUsed = nUsed;
 
-            free(pPairs);
+            xfree(pPool, pPairs);
             return nStatus;
         }
     }
 
-    free(pOldPairs);
+    xfree(pPool, pOldPairs);
     return nStatus;
 }
 

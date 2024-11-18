@@ -148,7 +148,7 @@ xpacket_status_t XPacket_UpdateHeader(xpacket_t *pPacket)
 
     if (pPacket->pHeaderObj == NULL)
     {
-        pPacket->pHeaderObj = XJSON_NewObject(NULL, 1);
+        pPacket->pHeaderObj = XJSON_NewObject(NULL, NULL, 1);
         if (pPacket->pHeaderObj == NULL) return XPACKET_ERR_ALLOC;
     }
 
@@ -227,7 +227,7 @@ xpacket_status_t XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize
     pPacket->pUserData = NULL;
     pPacket->callback = NULL;
 
-    pPacket->pHeaderObj = XJSON_NewObject(NULL, 1);
+    pPacket->pHeaderObj = XJSON_NewObject(NULL, NULL, 1);
     return (pPacket->pHeaderObj == NULL) ?
         XPACKET_ERR_ALLOC : XPACKET_ERR_NONE;
 }
@@ -266,7 +266,7 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
     xpacket_header_t *pHeader = &pPacket->header;
     xjson_writer_t jsonWriter;
 
-    XJSON_InitWriter(&jsonWriter, NULL, XPACKET_HDR_INITIAL);
+    XJSON_InitWriter(&jsonWriter, NULL, NULL, XPACKET_HDR_INITIAL);
     XByteBuffer_Reset(&pPacket->rawData);
 
     if (XJSON_WriteObject(pPacket->pHeaderObj, &jsonWriter))
@@ -317,7 +317,7 @@ xpacket_status_t XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t 
     if (pPacket->nHeaderLength > 0)
     {
         xjson_t json;
-        if (!XJSON_Parse(&json, pHeader, pPacket->nHeaderLength))
+        if (!XJSON_Parse(&json, NULL, pHeader, pPacket->nHeaderLength))
         {
             XJSON_Destroy(&json);
             return XPACKET_INVALID;

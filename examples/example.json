@@ -4,7 +4,8 @@
             "testobj1": {
                 "testobj2": {
                     "testbool1": true,
-                    "teststr1": "example string 1"
+                    "teststr1": "example string 1",
+                    "emptyString": ""
                 },
                 "testfloat1": 60.900002,
                 "testint1": 66

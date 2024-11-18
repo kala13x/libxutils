@@ -407,7 +407,7 @@ static xbool_t XPass_ParseConfig(xpass_ctx_t *pCtx)
     }
 
     xjson_t json;
-    if (!XJSON_Parse(&json, (const char*)buffer.pData, buffer.nUsed))
+    if (!XJSON_Parse(&json, NULL, (const char*)buffer.pData, buffer.nUsed))
     {
         char sError[XMSG_MID];
         XJSON_GetErrorStr(&json, sError, sizeof(sError));
@@ -637,7 +637,7 @@ static xbool_t XPass_LoadDatabase(xpass_ctx_t *pCtx)
     XByteBuffer_Clear(&buffer);
     xjson_t *pJson = &pCtx->dataBase;
 
-    if (!XJSON_Parse(pJson, (const char*)pData, nLength))
+    if (!XJSON_Parse(pJson, NULL, (const char*)pData, nLength))
     {
         char sError[XMSG_MID];
         XJSON_GetErrorStr(pJson, sError, sizeof(sError));
@@ -680,7 +680,7 @@ static xbool_t XPass_WriteDatabase(xpass_ctx_t *pCtx)
     if (pJson->pRootObj == NULL) return XFALSE;
 
     xjson_writer_t writer;
-    XJSON_InitWriter(&writer, NULL, XSTR_MIN);
+    XJSON_InitWriter(&writer, NULL, NULL, XSTR_MIN);
 
     if (!XJSON_WriteObject(pJson->pRootObj, &writer))
     {
@@ -747,14 +747,14 @@ static xbool_t XPass_InitDatabase(xpass_ctx_t *pCtx)
         return XFALSE;
     }
 
-    pJson->pRootObj = XJSON_NewObject(NULL, XTRUE);
+    pJson->pRootObj = XJSON_NewObject(NULL, NULL, XTRUE);
     if (pJson->pRootObj == NULL)
     {
         xloge("Failed to allocate memory for JSON object: %d", errno);
         return XFALSE;
     }
 
-    xjson_obj_t *pArrObj = XJSON_NewArray("entries", XTRUE);
+    xjson_obj_t *pArrObj = XJSON_NewArray(NULL, "entries", XTRUE);
     if (pArrObj == NULL)
     {
         xloge("Failed to allocate memory for JSON array: %d", errno);
@@ -815,14 +815,14 @@ static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
         return XFALSE;
     }
 
-    xjson_obj_t *pRootObj = XJSON_NewObject(NULL, XFALSE);
+    xjson_obj_t *pRootObj = XJSON_NewObject(NULL, NULL, XFALSE);
     if (pRootObj == NULL)
     {
         xloge("Failed to allocate memory for JSON object: %d", errno);
         return XFALSE;
     }
 
-    xjson_obj_t *pCfgObj = XJSON_NewObject("config", XFALSE);
+    xjson_obj_t *pCfgObj = XJSON_NewObject(NULL, "config", XFALSE);
     if (pCfgObj == NULL)
     {
         xloge("Failed to allocate memory for config JSON object: %s", pCtx->sConf);
@@ -847,7 +847,7 @@ static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
         return XFALSE;
     }
 
-    xjson_obj_t *pLayoutObj = XJSON_NewObject("layout", XFALSE);
+    xjson_obj_t *pLayoutObj = XJSON_NewObject(NULL, "layout", XFALSE);
     if (pLayoutObj == NULL)
     {
         xloge("Failed to allocate memory for layout JSON object: %s", pCtx->sConf);
@@ -867,7 +867,7 @@ static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
     }
 
     xjson_writer_t writer;
-    XJSON_InitWriter(&writer, NULL, XSTR_MIN);
+    XJSON_InitWriter(&writer, NULL, NULL, XSTR_MIN);
     writer.nTabSize = 4; // Enable linter
 
     if (!XJSON_WriteObject(pRootObj, &writer))
@@ -1013,7 +1013,7 @@ static xbool_t XPass_AppendEntry(xpass_ctx_t *pCtx)
         return XFALSE;
     }
 
-    xjson_obj_t *pNewObj = XJSON_NewObject(NULL, XTRUE);
+    xjson_obj_t *pNewObj = XJSON_NewObject(NULL, NULL, XTRUE);
     if (pNewObj == NULL)
     {
         xloge("Failed to allocate memory for JSON object: %d", errno);

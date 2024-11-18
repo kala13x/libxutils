@@ -10,6 +10,7 @@
 #include "xfs.h"
 #include "xlog.h"
 #include "xjson.h"
+#include "pool.h"
 
 int main(int argc, char *argv[])
 {
@@ -27,91 +28,95 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    xpool_t pool;
+    XPool_Init(&pool, 1024 * 64);
+    xpool_t *pPool = &pool;
+
 ////////////////////////////////////////////////////////
 // CREATE JSON FILE
 ////////////////////////////////////////////////////////
 
-    xjson_obj_t *pRootArray = XJSON_NewArray(NULL, 0);
+    xjson_obj_t *pRootArray = XJSON_NewArray(pPool, NULL, 0);
     if (pRootArray != NULL)
     {
-        xjson_obj_t *pRootObject = XJSON_NewObject(NULL, 0);
+        xjson_obj_t *pRootObject = XJSON_NewObject(pPool, NULL, 0);
         if (pRootObject != NULL)
         {
-            xjson_obj_t *pBigObj = XJSON_NewObject("bigobj", 0);
+            xjson_obj_t *pBigObj = XJSON_NewObject(pPool, "bigobj", 0);
             if (pBigObj != NULL)
             {
-                xjson_obj_t *pTestObj1 = XJSON_NewObject("testobj1", 0);
+                xjson_obj_t *pTestObj1 = XJSON_NewObject(pPool, "testobj1", 0);
                 if (pTestObj1 != NULL)
                 {
-                    xjson_obj_t *pTestObj2 = XJSON_NewObject("testobj2", 0);
+                    xjson_obj_t *pTestObj2 = XJSON_NewObject(pPool, "testobj2", 0);
                     if (pTestObj2 != NULL)
                     {
-                        XJSON_AddObject(pTestObj2, XJSON_NewBool("testbool1", 1));
-                        XJSON_AddObject(pTestObj2, XJSON_NewString("emptyString", ""));
-                        XJSON_AddObject(pTestObj2, XJSON_NewString("teststr1", "example string 1"));
+                        XJSON_AddObject(pTestObj2, XJSON_NewBool(pPool, "testbool1", 1));
+                        XJSON_AddObject(pTestObj2, XJSON_NewString(pPool, "emptyString", ""));
+                        XJSON_AddObject(pTestObj2, XJSON_NewString(pPool, "teststr1", "example string 1"));
                         XJSON_AddObject(pTestObj1, pTestObj2);
                     }
 
-                    XJSON_AddObject(pTestObj1, XJSON_NewFloat("testfloat1", 60.900002));
-                    XJSON_AddObject(pTestObj1, XJSON_NewInt("testint1", 66));
+                    XJSON_AddObject(pTestObj1, XJSON_NewFloat(pPool, "testfloat1", 60.900002));
+                    XJSON_AddObject(pTestObj1, XJSON_NewInt(pPool, "testint1", 66));
                     XJSON_AddObject(pBigObj, pTestObj1);
                 }
 
-                xjson_obj_t *pTestObj3 = XJSON_NewObject("testobj3", 0);
+                xjson_obj_t *pTestObj3 = XJSON_NewObject(pPool, "testobj3", 0);
                 if (pTestObj3 != NULL)
                 {
-                    xjson_obj_t *pTestArr2 = XJSON_NewArray("testarray2", 0);
+                    xjson_obj_t *pTestArr2 = XJSON_NewArray(pPool, "testarray2", 0);
                     if (pTestArr2 != NULL)
                     {
-                        XJSON_AddObject(pTestArr2, XJSON_NewBool(NULL, 1));
-                        XJSON_AddObject(pTestArr2, XJSON_NewInt(NULL, 69));
-                        XJSON_AddObject(pTestArr2, XJSON_NewFloat(NULL, 69.900002));
+                        XJSON_AddObject(pTestArr2, XJSON_NewBool(pPool, NULL, 1));
+                        XJSON_AddObject(pTestArr2, XJSON_NewInt(pPool, NULL, 69));
+                        XJSON_AddObject(pTestArr2, XJSON_NewFloat(pPool, NULL, 69.900002));
                         XJSON_AddObject(pTestObj3, pTestArr2);
                     }
 
-                    XJSON_AddObject(pTestObj3, XJSON_NewString("teststr2", "example string 2"));
-                    XJSON_AddObject(pTestObj3, XJSON_NewBool("testbool2", 1));
+                    XJSON_AddObject(pTestObj3, XJSON_NewString(pPool, "teststr2", "example string 2"));
+                    XJSON_AddObject(pTestObj3, XJSON_NewBool(pPool, "testbool2", 1));
                     XJSON_AddObject(pBigObj, pTestObj3);
                 }
 
-                xjson_obj_t *pTestArr1 = XJSON_NewArray("testarray1", 0);
+                xjson_obj_t *pTestArr1 = XJSON_NewArray(pPool, "testarray1", 0);
                 if (pTestArr1 != NULL)
                 {
-                    xjson_obj_t *pArrObj = XJSON_NewObject(NULL, 0);
+                    xjson_obj_t *pArrObj = XJSON_NewObject(pPool, NULL, 0);
                     if (pArrObj != NULL)
                     {
-                        XJSON_AddObject(pArrObj, XJSON_NewFloat("testfloat2", 61.900002));
-                        XJSON_AddObject(pArrObj, XJSON_NewInt("testint2", -67));
+                        XJSON_AddObject(pArrObj, XJSON_NewFloat(pPool, "testfloat2", 61.900002));
+                        XJSON_AddObject(pArrObj, XJSON_NewInt(pPool, "testint2", -67));
                         XJSON_AddObject(pTestArr1, pArrObj);
                     }
 
-                    pArrObj = XJSON_NewObject(NULL, 0);
+                    pArrObj = XJSON_NewObject(pPool, NULL, 0);
                     if (pArrObj != NULL)
                     {
-                        XJSON_AddObject(pArrObj, XJSON_NewFloat("testfloat2", 62.900002));
-                        XJSON_AddObject(pArrObj, XJSON_NewInt("testint2", 68));
+                        XJSON_AddObject(pArrObj, XJSON_NewFloat(pPool, "testfloat2", 62.900002));
+                        XJSON_AddObject(pArrObj, XJSON_NewInt(pPool, "testint2", 68));
                         XJSON_AddObject(pTestArr1, pArrObj);
                     }
 
-                    pArrObj = XJSON_NewObject(NULL, 0);
+                    pArrObj = XJSON_NewObject(pPool, NULL, 0);
                     if (pArrObj != NULL)
                     {
-                        XJSON_AddObject(pArrObj, XJSON_NewFloat("testfloat2", 63.96969002));
-                        XJSON_AddObject(pArrObj, XJSON_NewInt("testint2", -69));
+                        XJSON_AddObject(pArrObj, XJSON_NewFloat(pPool, "testfloat2", 63.96969002));
+                        XJSON_AddObject(pArrObj, XJSON_NewInt(pPool, "testint2", -69));
                         XJSON_AddObject(pTestArr1, pArrObj);
                     }
 
                     XJSON_AddObject(pBigObj, pTestArr1);
                 }
 
-                XJSON_AddObject(pBigObj, XJSON_NewObject("emptyObject", 0));
-                XJSON_AddObject(pBigObj, XJSON_NewArray("emptyArray", 0));
-                XJSON_AddObject(pBigObj, XJSON_NewNull("nullItem"));
+                XJSON_AddObject(pBigObj, XJSON_NewObject(pPool, "emptyObject", 0));
+                XJSON_AddObject(pBigObj, XJSON_NewArray(pPool, "emptyArray", 0));
+                XJSON_AddObject(pBigObj, XJSON_NewNull(pPool, "nullItem"));
 
-                xjson_obj_t *pArrObj = XJSON_NewArray("emptyArrObj", 0);
+                xjson_obj_t *pArrObj = XJSON_NewArray(pPool, "emptyArrObj", 0);
                 if (pArrObj != NULL)
                 {
-                    XJSON_AddObject(pArrObj, XJSON_NewObject(NULL, 0));
+                    XJSON_AddObject(pArrObj, XJSON_NewObject(pPool, NULL, 0));
                     XJSON_AddObject(pBigObj, pArrObj);
                 }
 
@@ -122,7 +127,7 @@ int main(int argc, char *argv[])
         }
 
         xjson_writer_t linter;
-        XJSON_InitWriter(&linter, NULL, 1); // Dynamic allocation
+        XJSON_InitWriter(&linter, pPool, NULL, 1); // Dynamic allocation
         linter.nTabSize = 4; // Enable linter and set tab size (4 spaces)
 
         /* Dump objects directly */
@@ -145,6 +150,7 @@ int main(int argc, char *argv[])
 // PARSE JSON FILE
 ////////////////////////////////////////////////////////
 
+    XPool_Reset(pPool);
     xjson_t json;
     size_t nSize;
 
@@ -156,7 +162,7 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    if (!XJSON_Parse(&json, pBuffer, nSize))
+    if (!XJSON_Parse(&json, pPool, pBuffer, nSize))
     {
         char sError[XMSG_MID];
         XJSON_GetErrorStr(&json, sError, sizeof(sError));
@@ -243,7 +249,7 @@ int main(int argc, char *argv[])
 ////////////////////////////////////////////////////////
 
     xjson_writer_t writer;
-    XJSON_InitWriter(&writer, NULL, nSize); // Dynamic allocation
+    XJSON_InitWriter(&writer, pPool, NULL, nSize); // Dynamic allocation
     writer.nTabSize = 4; // Enable linter and set tab size (4 spaces)
 
     /* Dump objects directly */
@@ -254,6 +260,7 @@ int main(int argc, char *argv[])
     }
 
     XJSON_Destroy(&json);
+    XPool_Destroy(pPool);
     free(pBuffer);
     return 0;
 }

@@ -77,7 +77,7 @@ void* XArray_Init(xarray_t *pArr, xpool_t *pPool, size_t nSize, uint8_t nFixed)
 
     if (nSize)
     {
-        pArr->pData = (xarray_data_t**)xalloc(pArr->pPool, nSize * sizeof(xarray_data_t*));
+        pArr->pData = (xarray_data_t**)xalloc(pPool, nSize * sizeof(xarray_data_t*));
         if (pArr->pData == NULL) return NULL;
     }
 
@@ -122,14 +122,15 @@ void XArray_Clear(xarray_t *pArr)
 void XArray_Destroy(xarray_t *pArr)
 {
     XArray_Clear(pArr);
+    xpool_t *pPool = pArr->pPool;
 
-    xfree(pArr->pPool, pArr->pData);
+    xfree(pPool, pArr->pData);
     pArr->pData = NULL;
     pArr->nSize = 0;
     pArr->nFixed = 0;
 
     if (pArr->nAlloc)
-        xfree(pArr->pPool, pArr);
+        xfree(pPool, pArr);
 }
 
 void XArray_Free(xarray_t **ppArr)
@@ -168,7 +169,7 @@ size_t XArray_Realloc(xarray_t *pArr)
             return 0;
         }
 
-        if (pArr->pData != NULL && pArr->nUsed)
+        if (pArr->pData != NULL && pArr->nUsed < nSize)
         {
             size_t nCopySize = sizeof(xarray_data_t*) * pArr->nUsed;
             memcpy(pData, pArr->pData, nCopySize);
