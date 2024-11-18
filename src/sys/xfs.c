@@ -1194,7 +1194,7 @@ void XFile_SearchInit(xfile_search_t *pSrcCtx, const char *pFileName)
     pSrcCtx->nLinkCount = -1;
     pSrcCtx->nFileSize = -1;
 
-    XArray_Init(&pSrcCtx->fileArray, NULL, XSTDNON, XFALSE);
+    XArray_InitPool(&pSrcCtx->fileArray, XSTDNON, XSTDNON, XFALSE);
     pSrcCtx->fileArray.clearCb = XFile_ArrayClearCb;
 }
 

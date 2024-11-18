@@ -930,7 +930,7 @@ xarray_t* XJSON_GetObjects(xjson_obj_t *pObj)
     if (!XJSON_CheckObject(pObj, XJSON_TYPE_OBJECT)) return NULL;
     xmap_t *pMap = (xmap_t*)pObj->pData;
 
-    xarray_t *pArray = XArray_New(NULL, XSTDNON, XFALSE);
+    xarray_t *pArray = XArray_New(pObj->pPool, XSTDNON, XFALSE);
     XASSERT(pArray, NULL);
 
     if (XMap_Iterate(pMap, XJSON_CollectIt, pArray) != XMAP_OK)

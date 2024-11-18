@@ -47,6 +47,7 @@ typedef struct XArray_ {
     xarray_clear_cb_t clearCb;
     xarray_status_t eStatus;
     xpool_t *pPool;
+    uint8_t nOwnPool;
     uint8_t nFixed;
     uint8_t nAlloc;
     size_t nSize;
@@ -58,7 +59,11 @@ void XArray_FreeData(xarray_data_t *pArrData);
 void XArray_ClearData(xarray_t *pArr, xarray_data_t *pArrData);
 
 xarray_t* XArray_New(xpool_t *pPool, size_t nSize, uint8_t nFixed);
+xarray_t* XArray_NewPool(size_t nPoolSize, size_t nSize, uint8_t nFixed);
+
 void* XArray_Init(xarray_t *pArr, xpool_t *pPool, size_t nSize, uint8_t nFixed);
+void* XArray_InitPool(xarray_t *pArr, size_t nPoolSize, size_t nSize, uint8_t nFixed);
+
 size_t XArray_Realloc(xarray_t *pArr);
 void XArray_Destroy(xarray_t *pArr);
 void XArray_Clear(xarray_t *pArr);

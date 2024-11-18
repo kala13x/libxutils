@@ -74,6 +74,7 @@ void* XArray_Init(xarray_t *pArr, xpool_t *pPool, size_t nSize, uint8_t nFixed)
     pArr->nAlloc = 0;
     pArr->nUsed = 0;
     pArr->pPool = pPool;
+    pArr->nOwnPool = 0;
 
     if (nSize)
     {
@@ -86,6 +87,22 @@ void* XArray_Init(xarray_t *pArr, xpool_t *pPool, size_t nSize, uint8_t nFixed)
         pArr->pData[i] = NULL;
 
     return pArr->pData;
+}
+
+void* XArray_InitPool(xarray_t *pArr, size_t nPoolSize, size_t nSize, uint8_t nFixed)
+{
+    xpool_t *pPool = XPool_Create(nPoolSize);
+    if (pPool == NULL) return NULL;
+
+    void *pData = XArray_Init(pArr, pPool, nSize, nFixed);
+    if (nSize && pData == NULL)
+    {
+        XPool_Destroy(pPool);
+        return NULL;
+    }
+
+    pArr->nOwnPool = 1;
+    return pData;
 }
 
 xarray_t* XArray_New(xpool_t *pPool, size_t nSize, uint8_t nFixed)
@@ -103,6 +120,22 @@ xarray_t* XArray_New(xpool_t *pPool, size_t nSize, uint8_t nFixed)
     return pArr;
 }
 
+xarray_t* XArray_NewPool(size_t nPoolSize, size_t nSize, uint8_t nFixed)
+{
+    xpool_t *pPool = XPool_Create(nPoolSize);
+    if (pPool == NULL) return NULL;
+
+    xarray_t *pArr = XArray_New(pPool, nSize, nFixed);
+    if (nSize && pArr == NULL)
+    {
+        XPool_Destroy(pPool);
+        return NULL;
+    }
+
+    pArr->nOwnPool = 1;
+    return pArr;
+}
+
 void XArray_Clear(xarray_t *pArr)
 {
     if (pArr->pData != NULL)
@@ -115,6 +148,7 @@ void XArray_Clear(xarray_t *pArr)
         }
     }
 
+    if (pArr->nOwnPool) XPool_Reset(pArr->pPool);
     pArr->eStatus = XARRAY_STATUS_EMPTY;
     pArr->nUsed = 0;
 }
@@ -122,15 +156,19 @@ void XArray_Clear(xarray_t *pArr)
 void XArray_Destroy(xarray_t *pArr)
 {
     XArray_Clear(pArr);
+
     xpool_t *pPool = pArr->pPool;
+    uint8_t nOwnPool = pArr->nOwnPool;
 
     xfree(pPool, pArr->pData);
     pArr->pData = NULL;
     pArr->nSize = 0;
     pArr->nFixed = 0;
+    pArr->pPool = NULL;
+    pArr->nOwnPool = 0;
 
-    if (pArr->nAlloc)
-        xfreen(pPool, pArr, sizeof(xarray_t));
+    if (pArr->nAlloc) xfreen(pPool, pArr, sizeof(xarray_t));
+    if (nOwnPool) XPool_Destroy(pPool);
 }
 
 void XArray_Free(xarray_t **ppArr)

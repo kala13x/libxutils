@@ -11,16 +11,16 @@
 
 XSTATUS XPool_Init(xpool_t *pPool, size_t nSize)
 {
-    // Align to 8 bytes
-    nSize = (nSize + 7) & ~7;
+    nSize = nSize ? nSize : XPOOL_DEFAULT_SIZE;
+    nSize = (nSize + 7) & ~7; // Align to 8 bytes
 
     pPool->pData = (uint8_t *)malloc(nSize);
     if (!pPool->pData) return XSTDERR;
 
-    pPool->bAlloc = XFALSE;
-    pPool->nOffset = 0;
+    pPool->nOffset = XSTDNON;
     pPool->nSize = nSize;
     pPool->pNext = NULL;
+    pPool->bAlloc = XFALSE;
 
     return XSTDOK;
 }
@@ -71,8 +71,8 @@ void XPool_Reset(xpool_t *pPool)
 
 void *XPool_Alloc(xpool_t *pPool, size_t nSize)
 {
-    XASSERT(pPool, NULL);
-    XASSERT(nSize, NULL);
+    XASSERT_RET(pPool, NULL);
+    XASSERT_RET(nSize, NULL);
 
     // Find space in current pool
     if (pPool->nOffset + nSize > pPool->nSize)

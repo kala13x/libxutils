@@ -902,7 +902,7 @@ xarray_t* xstrsplit(const char *pString, const char *pDlmt)
     size_t nDlmtLen = strlen(pDlmt);
     if (!nDlmtLen) return NULL;
 
-    xarray_t *pArray = XArray_New(NULL, XSTDNON, XFALSE);
+    xarray_t *pArray = XArray_NewPool(XSTDNON, XSTDNON, XFALSE);
     if (pArray == NULL) return NULL;
 
     char sToken[XSTR_MAX];
@@ -1526,7 +1526,7 @@ xarray_t* XString_SplitStr(xstring_t *pString, const char *pDlmt)
     xstring_t *pToken = XString_New(XSTR_MIN, 0);
     if (pToken == NULL) return NULL;
 
-    xarray_t *pArray = XArray_New(NULL, 2, 0);
+    xarray_t *pArray = XArray_NewPool(XSTDNON, 2, 0);
     if (pArray == NULL)
     {
         XString_Clear(pToken);

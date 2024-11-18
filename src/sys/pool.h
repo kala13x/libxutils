@@ -16,6 +16,8 @@ extern "C" {
 
 #include "xstd.h"
 
+#define XPOOL_DEFAULT_SIZE  4096
+
 typedef struct XPool {
     struct XPool *pNext;
     uint8_t *pData;
