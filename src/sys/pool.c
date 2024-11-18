@@ -153,7 +153,7 @@ void* xrealloc(xpool_t *pPool, void *pData, size_t nDataSize, size_t nNewSize)
     void *pNew = XPool_Alloc(pPool, nNewSize);
     if (pNew == NULL) return NULL;
 
-    if (pData != NULL && nOldSize)
+    if (pData != NULL && nDataSize)
     {
         size_t nCopySize = XSTD_MIN(nDataSize, nNewSize);
         memcpy(pNew, pData, nCopySize);
