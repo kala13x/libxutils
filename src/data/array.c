@@ -168,8 +168,6 @@ size_t XArray_Realloc(xarray_t *pArr)
             return 0;
         }
 
-        printf("Reallocating array from %lu to %lu\n", pArr->nSize, nSize);
-
         if (pArr->pData != NULL && pArr->nUsed)
         {
             size_t nCopySize = sizeof(xarray_data_t*) * pArr->nUsed;
