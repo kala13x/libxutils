@@ -18,10 +18,10 @@ xarray_data_t *XArray_NewData(xarray_t *pArr, void *pData, size_t nSize, uint32_
 
     if (pData != NULL && nSize > 0) 
     {
-        pNewData->pData = xalloc(pArr->pPool, nSize + 1);
+        pNewData->pData = xalloc(pArr->pPool, nSize);
         if (pNewData->pData == NULL)
         {
-            xfree(pArr->pPool, pNewData);
+            xfreen(pArr->pPool, pNewData, sizeof(xarray_data_t));
             return NULL;
         }
 
@@ -43,10 +43,10 @@ void XArray_FreeData(xarray_data_t *pArrData)
 {
     if (pArrData != NULL)
     {
-        if (pArrData->pData && pArrData->nSize > 0)
-            xfree(pArrData->pPool, pArrData->pData);
+        if (pArrData->pData && pArrData->nSize)
+            xfreen(pArrData->pPool, pArrData->pData, pArrData->nSize);
 
-        xfree(pArrData->pPool, pArrData);
+        xfreen(pArrData->pPool, pArrData, sizeof(xarray_data_t));
     }
 }
 
@@ -95,7 +95,7 @@ xarray_t* XArray_New(xpool_t *pPool, size_t nSize, uint8_t nFixed)
 
     if (XArray_Init(pArr, pPool, nSize, nFixed) == NULL && nSize)
     {
-        xfree(pPool, pArr);
+        xfreen(pPool, pArr, sizeof(xarray_t));
         return NULL;
     }
 
@@ -130,7 +130,7 @@ void XArray_Destroy(xarray_t *pArr)
     pArr->nFixed = 0;
 
     if (pArr->nAlloc)
-        xfree(pPool, pArr);
+        xfreen(pPool, pArr, sizeof(xarray_t));
 }
 
 void XArray_Free(xarray_t **ppArr)
@@ -154,6 +154,7 @@ size_t XArray_Realloc(xarray_t *pArr)
     if (pArr == NULL) return 0;
     if (pArr->nFixed) return pArr->nSize;
 
+    xpool_t *pPool = pArr->pPool;
     size_t nSize = 0, nUsed = pArr->nUsed;
     float fQuotient = (float)nUsed / (float)pArr->nSize;
 
@@ -162,7 +163,7 @@ size_t XArray_Realloc(xarray_t *pArr)
 
     if (nSize)
     {
-        xarray_data_t **pData = (xarray_data_t**)xalloc(pArr->pPool, sizeof(xarray_data_t*) * nSize);
+        xarray_data_t **pData = (xarray_data_t**)xalloc(pPool, sizeof(xarray_data_t*) * nSize);
         if (pData == NULL)
         {
             pArr->eStatus = XARRAY_STATUS_NO_MEMORY;
@@ -172,8 +173,9 @@ size_t XArray_Realloc(xarray_t *pArr)
         if (pArr->pData != NULL && pArr->nUsed < nSize)
         {
             size_t nCopySize = sizeof(xarray_data_t*) * pArr->nUsed;
+            size_t nFullSize = sizeof(xarray_data_t*) * pArr->nSize;
             memcpy(pData, pArr->pData, nCopySize);
-            xfree(pArr->pPool, pArr->pData);
+            xfreen(pPool, pArr->pData, nFullSize);
         }
 
         pArr->pData = pData;

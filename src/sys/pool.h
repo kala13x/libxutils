@@ -20,7 +20,6 @@ typedef struct XPool {
     struct XPool *pNext;
     uint8_t *pData;
     size_t nOffset;
-    size_t nUsed;
     size_t nSize;
     xbool_t bAlloc;
 } xpool_t;
@@ -39,6 +38,9 @@ void XPool_Reset(xpool_t *pPool);
 
 void *XPool_Alloc(xpool_t *pPool, size_t nSize);
 void XPool_Free(xpool_t *pPool, void *pData, size_t nSize);
+
+size_t XPool_GetSize(xpool_t *pPool);
+size_t XPool_GetUsed(xpool_t *pPool);
 
 #ifdef __cplusplus
 }
