@@ -80,9 +80,7 @@ void *XPool_Alloc(xpool_t *pPool, size_t nSize)
         // Create new pool if next is not found
         if (pPool->pNext == NULL)
         {
-            size_t nNewSize = nSize > pPool->nSize ?
-                              nSize : pPool->nSize;
-
+            size_t nNewSize = XSTD_MAX(nSize, pPool->nSize);
             pPool->pNext = XPool_Create(nNewSize);
             if (pPool->pNext == NULL) return NULL;
         }
