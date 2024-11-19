@@ -492,7 +492,7 @@ static xbool_t XPass_ParseConfig(xpass_ctx_t *pCtx)
 
     xcli_size_t cliSize;
     XCLI_GetWindowSize(&cliSize);
-    pCtx->nFrameLength = cliSize.nWinColumns - 1;
+    pCtx->nFrameLength = cliSize.nColumns - 1;
 
     XJSON_Destroy(&json);
     return XTRUE;

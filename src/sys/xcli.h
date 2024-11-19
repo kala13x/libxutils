@@ -26,8 +26,8 @@ extern "C" {
 #define XCLI_LEFT           2
 
 typedef struct xcli_size_ {
-    size_t nWinColumns;
-    size_t nWinRows;
+    size_t nColumns;
+    size_t nRows;
 } xcli_size_t;
 
 int XCLI_GetPass(const char *pText, char *pPass, size_t nSize);
@@ -44,8 +44,8 @@ typedef enum {
 
 typedef struct xcli_wind_ {
     xcli_disp_type_t eType;
-    xcli_size_t frameSize;
-    xarray_t lineArray;
+    xcli_size_t frame;
+    xarray_t lines;
     xbool_t bAscii;
 } xcli_win_t;
 
@@ -60,12 +60,12 @@ XSTATUS XWindow_AddLineFmt(xcli_win_t *pWin, const char *pFmt, ...);
 XSTATUS XWindow_AddLine(xcli_win_t *pWin, char *pLine, size_t nLine);
 XSTATUS XWindow_AddEmptyLine(xcli_win_t *pWin);
 
-XSTATUS XWindow_GetFrame(xcli_win_t *pWin, xbyte_buffer_t *pFrame);
+XSTATUS XWindow_GetFrame(xcli_win_t *pWin, xbyte_buffer_t *pFrameBuff);
 XSTATUS XWindow_Display(xcli_win_t *pWin);
 XSTATUS XWindow_Flush(xcli_win_t *pWin);
 
 typedef struct xcli_bar_ {
-    xcli_size_t frameSize;
+    xcli_size_t frame;
     size_t nBarLength;
     size_t nBarUsed;
 

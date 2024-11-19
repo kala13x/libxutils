@@ -40,12 +40,19 @@
     "HI      IO      "\
     "ST      GT      GN"
 
+/*
 #define XTOP_IFACE_HEADER \
     "IFACE               "\
     "RX               "\
     "TX              "\
-    "SUM           "\
-    "MAC           IP"
+    "SUM             "\
+    "MAC             IP"
+*/
+
+#define XTOP_IFACE_HEADER \
+    "IFACE               "\
+    "RX               "\
+    "TX              SUM"
 
 static int g_nInterrupted = 0;
 extern char *optarg;
@@ -396,7 +403,7 @@ XSTATUS XTOPApp_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *
     xstrnul(sFirst);
 
     XProgBar_UpdateWindowSize(pBar);
-    pBar->frameSize.nWinColumns /= 2;
+    pBar->frame.nColumns /= 2;
 
     for (i = 0; i < pCPU->nCoreCount; i++)
     {
@@ -426,7 +433,7 @@ XSTATUS XTOPApp_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *
 
             if (i == nNext || nNext >= pCPU->nCoreCount)
             {
-                xstrnfill(sSecond, sizeof(sSecond), pBar->frameSize.nWinColumns, XSTR_SPACE_CHAR);
+                xstrnfill(sSecond, sizeof(sSecond), pBar->frame.nColumns, XSTR_SPACE_CHAR);
                 return XWindow_AddLineFmt(pWin, "%s%s", sFirst, sSecond);
             }
 
@@ -591,8 +598,8 @@ XSTATUS XTOPApp_AddOverallBar(xcli_win_t *pWin, xcli_bar_t *pBar, xmem_info_t *p
                 XSTR_CLR_LIGHT_BLUE, XU32ToFloat(pCPU->nLoadAvg[2]), XSTR_FMT_RESET);
 
     /* Create half-empry line for pretty print */
-    XProgBar_UpdateWindowSize(pBar); pBar->frameSize.nWinColumns /= 2;
-    xstrnfill(sLine, sizeof(sLine), pBar->frameSize.nWinColumns, XSTR_SPACE_CHAR);
+    XProgBar_UpdateWindowSize(pBar); pBar->frame.nColumns /= 2;
+    xstrnfill(sLine, sizeof(sLine), pBar->frame.nColumns, XSTR_SPACE_CHAR);
 
     /* Create and append process track info next to swap bar */
     XKBToUnit(sUsed, sizeof(sUsed), pMemInfo->nResidentMemory, XTRUE);
@@ -705,11 +712,17 @@ XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_args_t *pArgs, xnet_iface_t 
     xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
-    xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sHWAddr) + 4, XSTR_SPACE_CHAR, "%s", pIface->sHWAddr);
+    uint8_t nAddrPadding = (pWin->frame.nColumns < 106) ? 7 : 8;
+    nAddrPadding = (pWin->frame.nColumns < 104) ? 6 : nAddrPadding;
+    nAddrPadding = (pWin->frame.nColumns < 102) ? 5 : nAddrPadding;
+    nAddrPadding = (pWin->frame.nColumns < 100) ? 4 : nAddrPadding;
+    nAddrPadding = (pWin->frame.nColumns < 98) ? 3 : nAddrPadding;
+
+    xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sHWAddr) + nAddrPadding, XSTR_SPACE_CHAR, "%s", pIface->sHWAddr);
     if (strncmp(pIface->sHWAddr, XNET_HWADDR_DEFAULT, 17)) xstrncat(sLine, sizeof(sLine), "%s", sRound);
     else xstrncat(sLine, sizeof(sLine), "%s%s%s", XSTR_FMT_DIM, sRound, XSTR_FMT_RESET);
 
-    xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sIPAddr) + 4, XSTR_SPACE_CHAR, "%s", pIface->sIPAddr);
+    xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sIPAddr) + nAddrPadding, XSTR_SPACE_CHAR, "%s", pIface->sIPAddr);
     if (strncmp(pIface->sIPAddr, XNET_IPADDR_DEFAULT, 7)) xstrncat(sLine, sizeof(sLine), "%s", sRound);
     else xstrncat(sLine, sizeof(sLine), "%s%s%s", XSTR_FMT_DIM, sRound, XSTR_FMT_RESET);
 
@@ -748,6 +761,19 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
     size_t nPreHdr = nLength > 4 ? nLength - 4 : nLength;
     xstrnfill(sLine, sizeof(sLine), nPreHdr, XSTR_SPACE_CHAR);
     xstrncat(sLine, sizeof(sLine), "%s", XTOP_IFACE_HEADER);
+
+    uint8_t nSpacePadding = (pWin->frame.nColumns < 106) ? 17 : 18;
+    nSpacePadding = (pWin->frame.nColumns < 104) ? 16 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 102) ? 15 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 100) ? 14 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 98) ? 13 : nSpacePadding;
+
+    xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", "MAC");
+    xstrncat(sLine, sizeof(sLine), "%s", sRound);
+
+    xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding - 1, XSTR_SPACE_CHAR, "%s", "IP");
+    xstrncat(sLine, sizeof(sLine), "%s", sRound);
+
     XWindow_AddAligned(pWin, sLine, XSTR_BACK_BLUE, XCLI_LEFT);
 
     if (nTrackID >= 0)

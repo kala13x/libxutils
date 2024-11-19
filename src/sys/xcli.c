@@ -72,42 +72,42 @@ XSTATUS XCLI_GetWindowSize(xcli_size_t *pCli)
     csbi.srWindow.Right = csbi.srWindow.Left = 0;
     csbi.srWindow.Top = csbi.srWindow.Bottom = 0;
     GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-    pCli->nWinColumns = (size_t)csbi.srWindow.Right - (size_t)csbi.srWindow.Left + 1;
-    pCli->nWinRows = (size_t)csbi.srWindow.Bottom - (size_t)csbi.srWindow.Top + 1;
+    pCli->nColumns = (size_t)csbi.srWindow.Right - (size_t)csbi.srWindow.Left + 1;
+    pCli->nRows = (size_t)csbi.srWindow.Bottom - (size_t)csbi.srWindow.Top + 1;
 #else
     struct winsize size;
     size.ws_col = size.ws_row = 0;
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
-    pCli->nWinColumns = size.ws_col;
-    pCli->nWinRows = size.ws_row;
+    pCli->nColumns = size.ws_col;
+    pCli->nRows = size.ws_row;
 #endif
 
-    return (pCli->nWinColumns && pCli->nWinRows) ?  XSTDOK : XSTDERR;
+    return (pCli->nColumns && pCli->nRows) ?  XSTDOK : XSTDERR;
 }
 
 void XWindow_Init(xcli_win_t *pWin, xbool_t bAscii)
 {
-    XArray_Init(&pWin->lineArray, NULL, 0, 0);
+    XArray_Init(&pWin->lines, NULL, 0, 0);
     pWin->eType = XCLI_RENDER_FRAME;
-    pWin->frameSize.nWinColumns = 0;
-    pWin->frameSize.nWinRows = 0;
+    pWin->frame.nColumns = 0;
+    pWin->frame.nRows = 0;
     pWin->bAscii = bAscii;
 }
 
 XSTATUS XWindow_UpdateSize(xcli_win_t *pWin)
 {
-    XSTATUS nStatus = XCLI_GetWindowSize(&pWin->frameSize);
-    if (nStatus != XSTDERR) pWin->frameSize.nWinRows--;
+    XSTATUS nStatus = XCLI_GetWindowSize(&pWin->frame);
+    if (nStatus != XSTDERR) pWin->frame.nRows--;
     return nStatus;
 }
 
 XSTATUS XWindow_AddLine(xcli_win_t *pWin, char *pLine, size_t nLength)
 {
-    xcli_size_t *pSize = &pWin->frameSize;
-    xarray_t *pLines = &pWin->lineArray;
+    xcli_size_t *pFrame = &pWin->frame;
+    xarray_t *pLines = &pWin->lines;
 
     if (XWindow_UpdateSize(pWin) == XSTDERR) return XSTDERR;
-    if (pLines->nUsed >= pSize->nWinRows) return XSTDNON;
+    if (pLines->nUsed >= pFrame->nRows) return XSTDNON;
 
     if (XArray_AddData(pLines, pLine, nLength) < 0)
     {
@@ -120,11 +120,11 @@ XSTATUS XWindow_AddLine(xcli_win_t *pWin, char *pLine, size_t nLength)
 
 XSTATUS XWindow_AddLineFmt(xcli_win_t *pWin, const char *pFmt, ...)
 {
-    xcli_size_t *pSize = &pWin->frameSize;
-    xarray_t *pLines = &pWin->lineArray;
+    xcli_size_t *pFrame = &pWin->frame;
+    xarray_t *pLines = &pWin->lines;
 
     if (XWindow_UpdateSize(pWin) == XSTDERR) return XSTDERR;
-    if (pLines->nUsed >= pSize->nWinRows) return XSTDNON;
+    if (pLines->nUsed >= pFrame->nRows) return XSTDNON;
 
     size_t nLength = 0;
     va_list args;
@@ -149,7 +149,7 @@ XSTATUS XWindow_AddLineFmt(xcli_win_t *pWin, const char *pFmt, ...)
 XSTATUS XWindow_AddEmptyLine(xcli_win_t *pWin)     
 {
     if (XWindow_UpdateSize(pWin) == XSTDERR) return XSTDERR;
-    size_t nColumns = pWin->frameSize.nWinColumns;
+    size_t nColumns = pWin->frame.nColumns;
     char emptyLine[XLINE_MAX];
 
     size_t i, nSpaces = XSTD_MIN(nColumns, sizeof(emptyLine) - 1);
@@ -162,7 +162,7 @@ XSTATUS XWindow_AddEmptyLine(xcli_win_t *pWin)
 XSTATUS XWindow_AddAligned(xcli_win_t *pWin, const char *pInput, const char *pFmt, uint8_t nAlign)
 {
     if (XWindow_UpdateSize(pWin) == XSTDERR) return XSTDERR;
-    size_t nColumns = pWin->frameSize.nWinColumns;
+    size_t nColumns = pWin->frame.nColumns;
 
     size_t nInputLen = strlen(pInput);
     if (!nInputLen) return XSTDERR;
@@ -206,7 +206,7 @@ int XWindow_ClearScreen(xbool_t bAscii)
 XSTATUS XWindow_RenderLine(xcli_win_t *pWin, xbyte_buffer_t *pLine, xarray_data_t *pArrData)
 {
     if (XWindow_UpdateSize(pWin) == XSTDERR) return XSTDERR;
-    size_t nChars = 0, nMaxSize = pWin->frameSize.nWinColumns;
+    size_t nChars = 0, nMaxSize = pWin->frame.nColumns;
 
     XByteBuffer_SetData(pLine, (uint8_t*)pArrData->pData, pArrData->nSize);
     pLine->nSize = pArrData->nSize;
@@ -247,17 +247,17 @@ XSTATUS XWindow_RenderLine(xcli_win_t *pWin, xbyte_buffer_t *pLine, xarray_data_
     return XSTDOK;
 }
 
-XSTATUS XWindow_GetFrame(xcli_win_t *pWin, xbyte_buffer_t *pFrame)
+XSTATUS XWindow_GetFrame(xcli_win_t *pWin, xbyte_buffer_t *pFrameBuff)
 {
-    if (pWin == NULL || pFrame == NULL) return XSTDERR;
-    XByteBuffer_Init(pFrame, XSTDNON, XSTDNON);
+    if (pWin == NULL || pFrameBuff == NULL) return XSTDERR;
+    XByteBuffer_Init(pFrameBuff, XSTDNON, XSTDNON);
 
-    while (pWin->lineArray.nUsed < pWin->frameSize.nWinRows)
+    while (pWin->lines.nUsed < pWin->frame.nRows)
         if (XWindow_AddEmptyLine(pWin) < 0) return XSTDERR;
 
-    xcli_size_t *pSize = &pWin->frameSize;
-    xarray_t *pLines = &pWin->lineArray;
-    size_t i, nRows = XSTD_MIN(pSize->nWinRows, pLines->nUsed);
+    xcli_size_t *pFrame = &pWin->frame;
+    xarray_t *pLines = &pWin->lines;
+    size_t i, nRows = XSTD_MIN(pFrame->nRows, pLines->nUsed);
 
     for (i = 0; i < nRows; i++)
     {
@@ -269,14 +269,14 @@ XSTATUS XWindow_GetFrame(xcli_win_t *pWin, xbyte_buffer_t *pFrame)
 
         if (XWindow_RenderLine(pWin, &lineBuff, pData) < 0)
         {
-            XByteBuffer_Clear(pFrame);
+            XByteBuffer_Clear(pFrameBuff);
             XArray_Clear(pLines);
             return XSTDERR;
         }
 
-        if (XByteBuffer_AddBuff(pFrame, &lineBuff) < 0)
+        if (XByteBuffer_AddBuff(pFrameBuff, &lineBuff) < 0)
         {
-            XByteBuffer_Clear(pFrame);
+            XByteBuffer_Clear(pFrameBuff);
             XArray_Clear(pLines);
             return XSTDERR;
         }
@@ -292,8 +292,8 @@ XSTATUS XWindow_Display(xcli_win_t *pWin)
     if (pWin->eType == XCLI_LINE_BY_LINE)
     {
         XWindow_ClearScreen(pWin->bAscii);
-        xarray_t *pLines = &pWin->lineArray;
-        size_t i, nWinRows = pWin->frameSize.nWinRows;
+        xarray_t *pLines = &pWin->lines;
+        size_t i, nWinRows = pWin->frame.nRows;
         size_t nRows = XSTD_MIN(nWinRows, pLines->nUsed);
 
         for (i = 0; i < nRows; i++)
@@ -336,13 +336,13 @@ XSTATUS XWindow_Display(xcli_win_t *pWin)
 XSTATUS XWindow_Flush(xcli_win_t *pWin)
 {
     XSTATUS nStatus = XWindow_Display(pWin);
-    XArray_Clear(&pWin->lineArray);
+    XArray_Clear(&pWin->lines);
     return nStatus;
 }
 
 void XWindow_Destroy(xcli_win_t *pWin)
 {
-    xarray_t *pArr = &pWin->lineArray;
+    xarray_t *pArr = &pWin->lines;
     XArray_Destroy(pArr);
 }
 
@@ -352,8 +352,8 @@ void XWindow_Destroy(xcli_win_t *pWin)
 
 XSTATUS XProgBar_UpdateWindowSize(xcli_bar_t *pCtx)
 {
-    xcli_size_t *pSize = &pCtx->frameSize;
-    return XCLI_GetWindowSize(pSize);
+    xcli_size_t *pFrame = &pCtx->frame;
+    return XCLI_GetWindowSize(pFrame);
 }
 
 void XProgBar_GetDefaults(xcli_bar_t *pCtx)
@@ -405,7 +405,7 @@ void XProgBar_Finish(xcli_bar_t *pCtx)
 void XProgBar_MakeMove(xcli_bar_t *pCtx)
 {
     XProgBar_UpdateWindowSize(pCtx);
-    size_t nColumns = pCtx->frameSize.nWinColumns;
+    size_t nColumns = pCtx->frame.nColumns;
 
     char sProgress[XLINE_MAX];
     char sSpaces[XLINE_MAX];
@@ -482,7 +482,7 @@ xbool_t XProgBar_CalculateBounds(xcli_bar_t *pCtx)
         xstrncpyfl(pCtx->sPercent, sizeof(pCtx->sPercent), 
             XCLI_PERCENT_MAX, XSTR_SPACE_CHAR, "%.1f%%", pCtx->fPercent);
 
-    size_t nColumns = pCtx->frameSize.nWinColumns;
+    size_t nColumns = pCtx->frame.nColumns;
     size_t nPreLen = strlen(pCtx->sPrefix);
     size_t nSufLen = strlen(pCtx->sSuffix);
     size_t nPctLen = strlen(pCtx->sPercent);
