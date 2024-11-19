@@ -11,8 +11,8 @@
 #define __XUTILS_XLIBVER_H__
 
 #define XUTILS_VERSION_MAX     2
-#define XUTILS_VERSION_MIN     5
-#define XUTILS_BUILD_NUMBER    59
+#define XUTILS_VERSION_MIN     6
+#define XUTILS_BUILD_NUMBER    1
 
 #ifdef __cplusplus
 extern "C" {
