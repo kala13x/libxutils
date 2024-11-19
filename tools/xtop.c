@@ -21,7 +21,7 @@
 #include "api.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        3
+#define XTOP_VERSION_MIN        4
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -40,19 +40,7 @@
     "HI      IO      "\
     "ST      GT      GN"
 
-/*
-#define XTOP_IFACE_HEADER \
-    "IFACE               "\
-    "RX               "\
-    "TX              "\
-    "SUM             "\
-    "MAC             IP"
-*/
-
-#define XTOP_IFACE_HEADER \
-    "IFACE               "\
-    "RX               "\
-    "TX              SUM"
+#define XTOP_IFACE_HEADER "IFACE"
 
 static int g_nInterrupted = 0;
 extern char *optarg;
@@ -699,24 +687,27 @@ XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_args_t *pArgs, xnet_iface_t 
     xstrnlcpyf(sName, sizeof(sName), nLength + 1, XSTR_SPACE_CHAR, "%s", pIface->sName);
     xstrncpy(sLine, sizeof(sLine), sName);
 
-    XBytesToUnit(sData, sizeof(sData), pIface->nBytesReceivedPerSec, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
+    uint8_t nAddrPadding = (pWin->frame.nColumns < 98) ? 12 : 15;
+    xbool_t bShort = (pWin->frame.nColumns < 98) ? XTRUE : XFALSE;
+
+    XBytesToUnit(sData, sizeof(sData), pIface->nBytesReceivedPerSec, bShort);
+    xstrnlcpyf(sRound, sizeof(sRound), nAddrPadding, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
-    XBytesToUnit(sData, sizeof(sData), pIface->nBytesSentPerSec, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
+    XBytesToUnit(sData, sizeof(sData), pIface->nBytesSentPerSec, bShort);
+    xstrnlcpyf(sRound, sizeof(sRound), nAddrPadding, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
     uint64_t nSum = pIface->nBytesReceivedPerSec + pIface->nBytesSentPerSec;
-    XBytesToUnit(sData, sizeof(sData), nSum, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
+    XBytesToUnit(sData, sizeof(sData), nSum, bShort);
+    xstrnlcpyf(sRound, sizeof(sRound), nAddrPadding, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
-    uint8_t nAddrPadding = (pWin->frame.nColumns < 106) ? 7 : 8;
+    nAddrPadding = (pWin->frame.nColumns < 106) ? 7 : 8;
     nAddrPadding = (pWin->frame.nColumns < 104) ? 6 : nAddrPadding;
     nAddrPadding = (pWin->frame.nColumns < 102) ? 5 : nAddrPadding;
     nAddrPadding = (pWin->frame.nColumns < 100) ? 4 : nAddrPadding;
-    nAddrPadding = (pWin->frame.nColumns < 98) ? 3 : nAddrPadding;
+    nAddrPadding = (pWin->frame.nColumns < 89) ? 3 : nAddrPadding;
 
     xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sHWAddr) + nAddrPadding, XSTR_SPACE_CHAR, "%s", pIface->sHWAddr);
     if (strncmp(pIface->sHWAddr, XNET_HWADDR_DEFAULT, 17)) xstrncat(sLine, sizeof(sLine), "%s", sRound);
@@ -762,11 +753,22 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
     xstrnfill(sLine, sizeof(sLine), nPreHdr, XSTR_SPACE_CHAR);
     xstrncat(sLine, sizeof(sLine), "%s", XTOP_IFACE_HEADER);
 
-    uint8_t nSpacePadding = (pWin->frame.nColumns < 106) ? 17 : 18;
+    uint8_t nSpacePadding = (pWin->frame.nColumns < 98) ? 14 : 17;
+
+    xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", "RX");
+    xstrncat(sLine, sizeof(sLine), "%s", sRound);
+
+    xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", "TX");
+    xstrncat(sLine, sizeof(sLine), "%s", sRound);
+
+    xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", "SUM");
+    xstrncat(sLine, sizeof(sLine), "%s", sRound);
+
+    nSpacePadding = (pWin->frame.nColumns < 106) ? 17 : 18;
     nSpacePadding = (pWin->frame.nColumns < 104) ? 16 : nSpacePadding;
     nSpacePadding = (pWin->frame.nColumns < 102) ? 15 : nSpacePadding;
     nSpacePadding = (pWin->frame.nColumns < 100) ? 14 : nSpacePadding;
-    nSpacePadding = (pWin->frame.nColumns < 98) ? 13 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 89) ? 13 : nSpacePadding;
 
     xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", "MAC");
     xstrncat(sLine, sizeof(sLine), "%s", sRound);
@@ -789,17 +791,20 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
         if (pIface != NULL) XTOPApp_AddInterface(pWin, pArgs, pIface, nLength);
     }
 
+    nSpacePadding = (pWin->frame.nColumns < 98) ? 12 : 15;
+    xbool_t bShort = (pWin->frame.nColumns < 98) ? XTRUE : XFALSE;
+
     xstrnlcpyf(sLine, sizeof(sLine), nLength + 1, XSTR_SPACE_CHAR, "%s", "total");
-    XBytesToUnit(sData, sizeof(sData), nSumRX, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
+    XBytesToUnit(sData, sizeof(sData), nSumRX, bShort);
+    xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
-    XBytesToUnit(sData, sizeof(sData), nSumTX, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
+    XBytesToUnit(sData, sizeof(sData), nSumTX, bShort);
+    xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
-    XBytesToUnit(sData, sizeof(sData), nSumRX + nSumTX, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
+    XBytesToUnit(sData, sizeof(sData), nSumRX + nSumTX, bShort);
+    xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
     return XWindow_AddAligned(pWin, sLine, XSTR_CLR_LIGHT_CYAN, XCLI_LEFT);
 }
