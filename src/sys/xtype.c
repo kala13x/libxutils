@@ -51,11 +51,14 @@ size_t XBytesToUnit(char *pDst, size_t nSize, size_t nBytes, xbool_t bShort)
 {
     const char *pUnit;
     double fVal = 0.;
+    xbool_t bIsGB = XFALSE;
 
     if (nBytes > 1073741824)
     {
         fVal = (double)nBytes / (double)1073741824;
         pUnit = bShort ? "G" : "GB";
+        bIsGB = XTRUE;
+
     }
     else if (nBytes > 1048576)
     {
@@ -71,6 +74,13 @@ size_t XBytesToUnit(char *pDst, size_t nSize, size_t nBytes, xbool_t bShort)
     {
         fVal = (double)nBytes;
         pUnit = bShort ? "B" : " B";
+    }
+
+    if (bIsGB)
+    {
+        return bShort ?
+            xstrncpyf(pDst, nSize, "%.0f%s", fVal, pUnit) :
+            xstrncpyf(pDst, nSize, "%.0f %s", fVal, pUnit);
     }
 
     return bShort ?

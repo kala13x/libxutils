@@ -21,7 +21,7 @@
 #include "api.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        2
+#define XTOP_VERSION_MIN        3
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -41,11 +41,11 @@
     "ST      GT      GN"
 
 #define XTOP_IFACE_HEADER \
-    "IFACE                  "\
-    "RX                  "\
-    "TX                 "\
-    "SUM               "\
-    "MAC               IP"
+    "IFACE               "\
+    "RX               "\
+    "TX              "\
+    "SUM           "\
+    "MAC           IP"
 
 static int g_nInterrupted = 0;
 extern char *optarg;
@@ -67,6 +67,7 @@ typedef struct xtop_args_ {
     xbool_t bDaemon;
     xbool_t bServer;
     xbool_t bClient;
+    xbool_t bAscii;
 
     char sLink[XLINK_MAX];
     char sAddr[XLINK_MAX];
@@ -125,7 +126,7 @@ void XTOPApp_DisplayUsage(const char *pName)
 
     printf("Usage: %s [-e <count>] [-i <iface>] [-m <seconds>] [-t <type>]\n", pName);
     printf(" %s [-a <addr>] [-p <port>] [-l <path>] [-u <pid>] [-d] [-s]\n", XTOPApp_WhiteSpace(nLength));
-    printf(" %s [-U <user>] [-P <pass>] [-K <key>] [-c] [-v] [-h]\n\n", XTOPApp_WhiteSpace(nLength));
+    printf(" %s [-U <user>] [-P <pass>] [-K <key>] [-c] [-v] [-x] [-h]\n\n", XTOPApp_WhiteSpace(nLength));
 
     printf("Options are:\n");
     printf("  %s-e%s <count>            # Limit extra CPU info to given number\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
@@ -133,6 +134,7 @@ void XTOPApp_DisplayUsage(const char *pName)
     printf("  %s-m%s <seconds>          # Monitoring interval seconds\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-t%s <type>             # Sort result by selected type%s*%s\n", XSTR_CLR_CYAN, XSTR_FMT_RESET, XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("  %s-u%s <pid>              # Track process CPU and memory usage\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-x%s                    # Use ASCII code to clear screen\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-h%s                    # Print version and usage\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("%sXTOP has a REST API server and client mode to send%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
@@ -156,10 +158,14 @@ void XTOPApp_DisplayUsage(const char *pName)
     printf("   %sf%s: Free on top\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("   %sn%s: Sort by name\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
+    printf("%sIf XTOP window is blinking during refresh, try to use ASCII code%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("%sfor screen clearing. Use CLI argument -x to enable ASCII mode.%s\n\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+
     printf("Examples:\n");
-    printf("1) %s -m 2 -t b -u 2274\n", pName);
-    printf("2) %s -t f -u 2274 -i enp4s0\n", pName);
-    printf("3) %s -sa 127.0.0.1 -p 8080\n\n", pName);
+    printf("1) %s -x -e 8\n", pName);
+    printf("2) %s -m 2 -t b -u 2274\n", pName);
+    printf("3) %s -t f -u 2274 -i enp4s0\n", pName);
+    printf("4) %s -sa 127.0.0.1 -p 8080\n\n", pName);
 }
 
 uint8_t XTOPApp_GetSortType(const char *pArg)
@@ -176,6 +182,7 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
     pArgs->bDaemon = XFALSE;
     pArgs->bServer = XFALSE;
     pArgs->bClient = XFALSE;
+    pArgs->bAscii = XFALSE;
     pArgs->pStats = NULL;
     pArgs->nSort = XTOP_SORT_LEN;
 
@@ -197,7 +204,7 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
     xbool_t bVerbose = XFALSE;
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "a:e:i:K:U:P:l:m:p:t:u:c1:d1:s1:d1:v1:h1")) != -1)
+    while ((nChar = getopt(argc, argv, "a:e:i:K:U:P:l:m:p:t:u:c1:d1:s1:d1:x1:v1:h1")) != -1)
     {
         switch (nChar)
         {
@@ -242,6 +249,9 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
                 break;
             case 's':
                 pArgs->bServer = XTRUE;
+                break;
+            case 'x':
+                pArgs->bAscii = XTRUE;
                 break;
             case 'v':
                 bVerbose = XTRUE;
@@ -683,23 +693,23 @@ XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_args_t *pArgs, xnet_iface_t 
     xstrncpy(sLine, sizeof(sLine), sName);
 
     XBytesToUnit(sData, sizeof(sData), pIface->nBytesReceivedPerSec, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 18, XSTR_SPACE_CHAR, "%s", sData);
+    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
     XBytesToUnit(sData, sizeof(sData), pIface->nBytesSentPerSec, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 18, XSTR_SPACE_CHAR, "%s", sData);
+    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
     uint64_t nSum = pIface->nBytesReceivedPerSec + pIface->nBytesSentPerSec;
     XBytesToUnit(sData, sizeof(sData), nSum, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 18, XSTR_SPACE_CHAR, "%s", sData);
+    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
-    xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sHWAddr) + 8, XSTR_SPACE_CHAR, "%s", pIface->sHWAddr);
+    xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sHWAddr) + 4, XSTR_SPACE_CHAR, "%s", pIface->sHWAddr);
     if (strncmp(pIface->sHWAddr, XNET_HWADDR_DEFAULT, 17)) xstrncat(sLine, sizeof(sLine), "%s", sRound);
     else xstrncat(sLine, sizeof(sLine), "%s%s%s", XSTR_FMT_DIM, sRound, XSTR_FMT_RESET);
 
-    xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sIPAddr) + 8, XSTR_SPACE_CHAR, "%s", pIface->sIPAddr);
+    xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sIPAddr) + 4, XSTR_SPACE_CHAR, "%s", pIface->sIPAddr);
     if (strncmp(pIface->sIPAddr, XNET_IPADDR_DEFAULT, 7)) xstrncat(sLine, sizeof(sLine), "%s", sRound);
     else xstrncat(sLine, sizeof(sLine), "%s%s%s", XSTR_FMT_DIM, sRound, XSTR_FMT_RESET);
 
@@ -755,15 +765,15 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
 
     xstrnlcpyf(sLine, sizeof(sLine), nLength + 1, XSTR_SPACE_CHAR, "%s", "total");
     XBytesToUnit(sData, sizeof(sData), nSumRX, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 18, XSTR_SPACE_CHAR, "%s", sData);
+    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
     XBytesToUnit(sData, sizeof(sData), nSumTX, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 18, XSTR_SPACE_CHAR, "%s", sData);
+    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
     XBytesToUnit(sData, sizeof(sData), nSumRX + nSumTX, XFALSE);
-    xstrnlcpyf(sRound, sizeof(sRound), 18, XSTR_SPACE_CHAR, "%s", sData);
+    xstrnlcpyf(sRound, sizeof(sRound), 15, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
     return XWindow_AddAligned(pWin, sLine, XSTR_CLR_LIGHT_CYAN, XCLI_LEFT);
 }
@@ -1545,13 +1555,15 @@ int main(int argc, char *argv[])
     }
 
     xcli_win_t win;
-    XWindow_Init(&win);
+    XWindow_Init(&win, args.bAscii);
 
     xcli_bar_t bar;
     XProgBar_GetDefaults(&bar);
     bar.bInPercent = XTRUE;
     bar.bInSuffix = XTRUE;
     bar.cLoader = '|';
+
+    xbool_t bFirst = XTRUE;
 
     while (!g_nInterrupted)
     {
@@ -1584,6 +1596,12 @@ int main(int argc, char *argv[])
         {
             XTOPApp_AddNetworkInfo(&win, &args, &netIfaces);
             XArray_Destroy(&netIfaces);
+        }
+
+        if (bFirst)
+        {
+            XWindow_ClearScreen(XFALSE);
+            bFirst = XFALSE;
         }
 
         XWindow_Flush(&win);

@@ -14,6 +14,7 @@
 extern "C" {
 #endif
 
+#include "xstd.h"
 #include "xbuf.h"
 #include "list.h"
 
@@ -45,13 +46,14 @@ typedef struct xcli_wind_ {
     xcli_disp_type_t eType;
     xcli_size_t frameSize;
     xarray_t lineArray;
+    xbool_t bAscii;
 } xcli_win_t;
 
-void XWindow_Init(xcli_win_t *pWin);
+void XWindow_Init(xcli_win_t *pWin, xbool_t bAscii);
 void XWindow_Destroy(xcli_win_t *pWin);
 
 XSTATUS XWindow_UpdateSize(xcli_win_t *pWin);
-int XWindow_ClearScreen();
+int XWindow_ClearScreen(xbool_t bAscii);
 
 XSTATUS XWindow_AddAligned(xcli_win_t *pWin, const char *pInput, const char *pFmt, uint8_t nAlign);
 XSTATUS XWindow_AddLineFmt(xcli_win_t *pWin, const char *pFmt, ...);
