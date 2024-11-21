@@ -70,6 +70,7 @@ add_library(xutils STATIC
     ./src/net/api.c
     ./src/net/ws.c
     ./src/sys/sync.c
+    ./src/sys/pool.c
     ./src/sys/thread.c
     ./src/sys/xcli.c
     ./src/sys/xcpu.c

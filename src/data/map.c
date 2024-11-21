@@ -71,7 +71,7 @@ void XMap_Free(xmap_t *pMap)
 
         if (pMap->nAlloc)
         {
-            xfree(pPool, pMap);
+            xfreen(pPool, pMap, sizeof(xmap_t));
         }
         else
         {
