@@ -1170,11 +1170,10 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_SERVER;
 
-    xsock_type_t eType = pEndpt->bTLS ?
-            XSOCK_SSL_PREFERED_SERVER :
-            XSOCK_TCP_SERVER;
+    uint32_t nFlags = XSOCK_TCP_SERVER;
+    if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
 
-    XSock_Create(pSock, eType, pEndpt->pAddr, pEndpt->nPort);
+    XSock_Create(pSock, nFlags, pEndpt->pAddr, pEndpt->nPort);
     if (pEndpt->bTLS) XSock_SetSSLCert(pSock, &pEndpt->certs);
 
     XSock_ReuseAddr(pSock, XTRUE);
@@ -1247,12 +1246,11 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pApiData->pSessionData = pEndpt->pSessionData;
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_CLIENT;
-    
-    xsock_type_t eType = pEndpt->bTLS ?
-            XSOCK_SSL_PREFERED_CLIENT :
-            XSOCK_TCP_CLIENT;
 
-    XSock_Create(pSock, eType, pApiData->sAddr, pEndpt->nPort);
+    uint32_t nFlags = XSOCK_TCP_CLIENT;
+    if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
+
+    XSock_Create(pSock, nFlags, pApiData->sAddr, pEndpt->nPort);
     XSock_NonBlock(pSock, XTRUE);
 
     if (pApiData->sock.nFD == XSOCK_INVALID)

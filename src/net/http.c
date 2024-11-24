@@ -1011,12 +1011,12 @@ xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t
     if (strncmp(pLink->sProtocol, "http", 4))
         return XHTTP_StatusCb(pRequest, XHTTP_ERRPROTO);
 
-    xsock_type_t eType = XSOCK_TCP_CLIENT;
     xsock_t sock;
+    uint32_t nFlags = XSOCK_TCP_CLIENT;
 
     if (!strncmp(pLink->sProtocol, "https", 5))
     {
-        eType = XSOCK_SSL_PREFERED_CLIENT;
+        nFlags |= XSOCK_SSL;
         XSock_InitSSL();
     }
 
@@ -1024,7 +1024,7 @@ xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t
         XHTTP_SetAuthBasic(pRequest, pLink->sUser, pLink->sPass) <= 0)
             return XHTTP_StatusCb(pRequest, XHTTP_ERRAUTH);
 
-    if (XSock_Setup(&sock, eType, pLink->sHost) == XSOCK_INVALID)
+    if (XSock_Setup(&sock, nFlags, pLink->sHost) == XSOCK_INVALID)
         return XHTTP_StatusCb(pRequest, XHTTP_ERRCONNECT);
 
     if (pRequest->nTimeout)
@@ -1083,13 +1083,13 @@ xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *
     if (strncmp(pLink->sProtocol, "http", 4))
         return XHTTP_StatusCb(pHttp, XHTTP_ERRPROTO);
 
-    xsock_type_t eType = XSOCK_TCP_CLIENT;
+    uint32_t nFlags = XSOCK_TCP_CLIENT;
     xsock_addr_t addrInfo;
     xsock_t sock;
 
     if (!strncmp(pLink->sProtocol, "https", 5))
     {
-        eType = XSOCK_SSL_PREFERED_CLIENT;
+        nFlags |= XSOCK_SSL;
         XSock_InitSSL();
     }
 
@@ -1101,7 +1101,7 @@ xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *
         return XHTTP_StatusCb(pHttp, XHTTP_ERRRESOLVE);
 
     addrInfo.nPort = addrInfo.nPort ? addrInfo.nPort :
-        (XSockType_IsSSL(eType) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT);
+        (XSockFlags_CheckSSL(nFlags) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT);
 
     if (XHTTP_CHECK_FLAG(pHttp->nCbTypes, XHTTP_STATUS) && pHttp->callback != NULL)
     {
@@ -1120,7 +1120,7 @@ xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *
         pHttp->callback(pHttp, &cbCtx);
     }
 
-    if (XSock_Open(&sock, eType, &addrInfo) == XSOCK_INVALID)
+    if (XSock_Open(&sock, nFlags, &addrInfo) == XSOCK_INVALID)
         return XHTTP_StatusCb(pHttp, XHTTP_ERRCONNECT);
 
     if (pHttp->nTimeout)

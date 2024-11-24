@@ -35,7 +35,7 @@ typedef SSIZE_T ssize_t;
 
 xsock_inaddr_t* XSock_InAddr(xsock_t *pSock) { return &pSock->inAddr; }
 xsock_status_t XSock_Status(const xsock_t *pSock) { return pSock->eStatus; }
-xsock_type_t XSock_GetType(const xsock_t *pSock) { return pSock->eType; }
+uint32_t XSock_GetFlags(const xsock_t *pSock) { return pSock->nFlags; }
 
 XSOCKET XSock_GetFD(const xsock_t *pSock) { return pSock->nFD; }
 xbool_t XSock_IsSSL(const xsock_t *pSock) { return (xbool_t)pSock->nSSL; }
@@ -47,19 +47,32 @@ size_t XSock_GetFDMax(const xsock_t *pSock) { return pSock->nFdMax; }
 int XSock_GetSockType(const xsock_t *pSock) { return pSock->nType; }
 int XSock_GetProto(const xsock_t *pSock) { return pSock->nProto; }
 
-xbool_t XSockType_IsSSL(xsock_type_t eType)
+xbool_t XSockFlags_CheckSSL(uint32_t nFlags)
 {
-    if (eType == XSOCK_SSL_PREFERED_CLIENT ||
-        eType == XSOCK_SSL_PREFERED_SERVER ||
-        eType == XSOCK_SSLV2_SERVER ||
-        eType == XSOCK_SSLV3_SERVER ||
-        eType == XSOCK_SSLV2_CLIENT ||
-        eType == XSOCK_SSLV3_CLIENT ||
-        eType == XSOCK_SSLV2_PEER ||
-        eType == XSOCK_SSLV3_PEER)
+    if (XFLAGS_CHECK(nFlags, XSOCK_SSL) ||
+        XFLAGS_CHECK(nFlags, XSOCK_SSLV2) ||
+        XFLAGS_CHECK(nFlags, XSOCK_SSLV3))
             return XTRUE;
 
     return XFALSE;
+}
+
+uint32_t XSockFlags_Adjust(uint32_t nFlags)
+{
+    if (XFLAGS_CHECK(nFlags, XSOCK_SSLV2) ||
+        XFLAGS_CHECK(nFlags, XSOCK_SSLV3))
+    {
+        nFlags |= XSOCK_SSL;
+    }
+
+    if (XFLAGS_CHECK(nFlags, XSOCK_BROADCAST) ||
+        XFLAGS_CHECK(nFlags, XSOCK_MULTICAST) ||
+        XFLAGS_CHECK(nFlags, XSOCK_UNICAST))
+    {
+        nFlags |= XSOCK_UDP;
+    }
+
+    return nFlags;
 }
 
 #ifdef XSOCK_USE_SSL
@@ -140,58 +153,70 @@ static void XSock_SSLConnected(xsock_t *pSock, xbool_t bConnected)
     if (pPriv != NULL) pPriv->bConnected = bConnected;
 }
 
-static xsock_type_t XSock_GetPrefredSSL(xsock_type_t eType)
+static uint32_t XSock_GetPrefredSSL(uint32_t nFlags)
 {
-    if (eType == XSOCK_SSL_PREFERED_CLIENT)
+    if (!XFLAGS_CHECK(nFlags, XSOCK_SSL))
+        return nFlags;
+
+    if (XFLAGS_CHECK(nFlags, XSOCK_CLIENT))
     {
 #ifdef SSLv3_client_method
-        return XSOCK_SSLV3_CLIENT;
+        nFlags |= XSOCK_SSLV3;
 #else
-        return XSOCK_SSLV2_CLIENT;
+        nFlags |= XSOCK_SSLV2;
 #endif
     }
-    else if (eType == XSOCK_SSL_PREFERED_SERVER)
+    else if (XFLAGS_CHECK(nFlags, XSOCK_SERVER))
     {
 #ifdef SSLv3_server_method
-        return XSOCK_SSLV3_SERVER;
+        nFlags |= XSOCK_SSLV3;
 #else
-        return XSOCK_SSLV2_SERVER;
+        nFlags |= XSOCK_SSLV2;
 #endif
     }
 
-    return eType;
+    return nFlags;
 }
 
 static const SSL_METHOD* XSock_GetSSLMethod(xsock_t *pSock)
 {
-    switch (pSock->eType)
+    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_CLIENT))
     {
-        case XSOCK_SSLV2_CLIENT:
-#ifdef SSLv23_client_method
-            return SSLv23_client_method();          
-#else
-            break;
-#endif
-        case XSOCK_SSLV2_SERVER:
-#ifdef SSLv23_server_method
-            return SSLv23_server_method();          
-#else
-            break;
-#endif
-        case XSOCK_SSLV3_CLIENT:
+        if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV3))
+        {
 #ifdef SSLv3_client_method
-            return SSLv3_client_method();          
+            return SSLv3_client_method();
 #else
-            break;
+            return NULL;
 #endif
-        case XSOCK_SSLV3_SERVER:
+        }
+        else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV2))
+        {
+#ifdef SSLv23_client_method
+            return SSLv23_client_method();
+#else
+            return NULL;
+#endif
+        }
+    }
+    else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SERVER))
+    {
+        if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV3))
+        {
 #ifdef SSLv3_server_method
-            return SSLv3_server_method();          
+            return SSLv3_server_method();
 #else
-            break;
+            return NULL;
 #endif
-        default:
-            break;
+        }
+        else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV2))
+        {
+#ifdef SSLv23_server_method
+            return SSLv23_server_method();
+#else
+            return NULL;
+#endif
+        }
     }
 
     return NULL;
@@ -334,6 +359,8 @@ const char* XSock_GetStatusStr(xsock_status_t eStatus)
             return "Can not read from SSL socket";
         case XSOCK_ERR_SSLWRITE:
             return "Can not write to SSL socket";
+        case XSOCK_ERR_FLAGS:
+            return "Invalid or empty socket flags";
         case XSOCK_ERR_INVSSL:
             return "Invalid SSL or SSL context";
         case XSOCK_ERR_SYSCALL:
@@ -384,52 +411,38 @@ XSTATUS XSock_Check(xsock_t *pSock)
     return XSOCK_SUCCESS;
 }
 
-XSTATUS XSock_SetType(xsock_t *pSock, xsock_type_t eType)
+static XSTATUS XSock_SetFlags(xsock_t *pSock, uint32_t nFlags)
 {
     pSock->eStatus = XSOCK_ERR_NONE;
-    pSock->eType = eType;
+    pSock->nFlags = nFlags;
 
-    switch(eType)
+    if (XFLAGS_CHECK(nFlags, XSOCK_TCP))
     {
-        case XSOCK_SSLV2_PEER:
-        case XSOCK_SSLV3_PEER:
-        case XSOCK_SSLV2_CLIENT:
-        case XSOCK_SSLV3_CLIENT:
-        case XSOCK_SSLV2_SERVER:
-        case XSOCK_SSLV3_SERVER:
-        case XSOCK_TCP_CLIENT:
-        case XSOCK_TCP_SERVER:
-        case XSOCK_TCP_PEER:
-            pSock->nProto = IPPROTO_TCP;
-            pSock->nType = SOCK_STREAM;
-            break;
-        case XSOCK_UDP_CLIENT:
-        case XSOCK_UDP_BCAST:
-        case XSOCK_UDP_MCAST:
-        case XSOCK_UDP_UCAST:
-            pSock->nProto = IPPROTO_UDP;
-            pSock->nType = SOCK_DGRAM;
-            break;
-        case XSOCK_TCP_RAW:
-            pSock->nProto = IPPROTO_TCP;
-            pSock->nType = SOCK_RAW;
-            break;
-        case XSOCK_UDP_RAW:
-            pSock->nProto = IPPROTO_UDP;
-            pSock->nType = SOCK_DGRAM;
-            break;
-        case XSOCK_UNDEFINED:
-        default:
-            pSock->eStatus = XSOCK_ERR_SUPPORT;
-            pSock->nProto = XSOCK_ERROR;
-            pSock->nType = XSOCK_ERROR;
-            return XSOCK_ERROR;
+        pSock->nProto = IPPROTO_TCP;
+        pSock->nType = SOCK_STREAM;
+    }
+    else if (XFLAGS_CHECK(nFlags, XSOCK_UDP))
+    {
+        pSock->nProto = IPPROTO_UDP;
+        pSock->nType = SOCK_DGRAM;
+    }
+    else if (XFLAGS_CHECK(nFlags, XSOCK_RAW))
+    {
+        pSock->nProto = IPPROTO_RAW;
+        pSock->nType = SOCK_RAW;
+    }
+    else
+    {
+        pSock->eStatus = XSOCK_ERR_SUPPORT;
+        pSock->nProto = XSOCK_ERROR;
+        pSock->nType = XSOCK_ERROR;
+        return XSOCK_ERROR;
     }
 
     return XSOCK_SUCCESS;
 }
 
-XSTATUS XSock_Init(xsock_t *pSock, xsock_type_t eType, XSOCKET nFD, uint8_t nNB)
+XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD, uint8_t nNB)
 {
     memset(&pSock->inAddr, 0, sizeof(pSock->inAddr));
     pSock->pPrivate = NULL;
@@ -440,10 +453,17 @@ XSTATUS XSock_Init(xsock_t *pSock, xsock_type_t eType, XSOCKET nFD, uint8_t nNB)
     pSock->nFD = nFD;
     pSock->nNB = nNB;
 
- #ifdef XSOCK_USE_SSL
-    eType = XSock_GetPrefredSSL(eType);
+    nFlags = XSockFlags_Adjust(nFlags);
+    if (nFlags == XSOCK_UNDEFINED)
+    {
+        pSock->eStatus = XSOCK_ERR_FLAGS;
+        return XSOCK_ERROR;
+    }
 
-    if (XSockType_IsSSL(eType))
+ #ifdef XSOCK_USE_SSL
+    nFlags = XSock_GetPrefredSSL(nFlags);
+
+    if (XSockFlags_CheckSSL(nFlags))
     {
         pSock->pPrivate = XSock_AllocPriv();
         if (pSock->pPrivate == NULL)
@@ -455,7 +475,7 @@ XSTATUS XSock_Init(xsock_t *pSock, xsock_type_t eType, XSOCKET nFD, uint8_t nNB)
     }
  #endif
 
-    return XSock_SetType(pSock, eType);
+    return XSock_SetFlags(pSock, nFlags);
 }
 
 void XSock_Close(xsock_t *pSock)
@@ -799,11 +819,11 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
     xsocklen_t len = sizeof(pNewSock->inAddr);
 
-    xsock_type_t eType = XSock_IsSSL(pSock) ?
-        (pSock->eType == XSOCK_SSLV2_SERVER ?
-        XSOCK_SSLV2_PEER : XSOCK_SSLV3_PEER) : pSock->eType;
+    uint32_t nFlags = pSock->nFlags;
+    XFLAGS_DISABLE(nFlags, XSOCK_SERVER);
+    XFLAGS_ENABLE(nFlags, XSOCK_PEER);
 
-    if (XSock_Init(pNewSock, eType, XSOCK_INVALID, XFALSE) < 0) return XSOCK_INVALID;
+    if (XSock_Init(pNewSock, nFlags, XSOCK_INVALID, XFALSE) < 0) return XSOCK_INVALID;
     pNewSock->nFD = accept(pSock->nFD, (struct sockaddr*)&pNewSock->inAddr, &len);
 
     if (pNewSock->nFD == XSOCK_INVALID)
@@ -1139,7 +1159,7 @@ XSOCKET XSock_NoDelay(xsock_t *pSock, xbool_t nEnabled)
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
     unsigned int nOpt = (unsigned int)nEnabled;
 
-    if (setsockopt(pSock->nFD, IPPROTO_TCP, TCP_NODELAY, (char*)&nOpt, sizeof(nOpt)) < 0)
+    if (setsockopt(pSock->nFD, pSock->nProto, TCP_NODELAY, (char*)&nOpt, sizeof(nOpt)) < 0)
     {
         pSock->eStatus = XSOCK_ERR_SETOPT;
         XSock_Close(pSock);
@@ -1438,6 +1458,7 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
     const SSL_METHOD *pMethod = XSock_GetSSLMethod(pSock);
     if (pMethod == NULL)
     {
+        printf("SSL Method is NULL\n");
         pSock->eStatus = XSOCK_ERR_SSLMET;
         XSock_Close(pSock);
         return XSOCK_INVALID;
@@ -1491,11 +1512,11 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
 static XSOCKET XSock_SetupTCP(xsock_t *pSock)
 {
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
-    if (pSock->eType == XSOCK_SSLV2_SERVER ||
-        pSock->eType == XSOCK_SSLV3_SERVER ||
-        pSock->eType == XSOCK_TCP_SERVER)
+
+    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SERVER | XSOCK_TCP))
     {
-        if (XSock_Bind(pSock) == XSOCK_INVALID) return XSOCK_INVALID;
+        if (XSock_Bind(pSock) == XSOCK_INVALID)
+            return XSOCK_INVALID;
 
         if (listen(pSock->nFD, (int)pSock->nFdMax) < 0)
         {
@@ -1504,13 +1525,10 @@ static XSOCKET XSock_SetupTCP(xsock_t *pSock)
             return XSOCK_INVALID;
         }
 
-        if (pSock->eType == XSOCK_SSLV2_SERVER ||
-            pSock->eType == XSOCK_SSLV3_SERVER)
-                XSock_InitSSLServer(pSock);
+        if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSL))
+            XSock_InitSSLServer(pSock);
     }
-    else if (pSock->eType == XSOCK_SSLV2_CLIENT ||
-             pSock->eType == XSOCK_SSLV3_CLIENT ||
-             pSock->eType == XSOCK_TCP_CLIENT)
+    else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_CLIENT | XSOCK_TCP))
     {
         if (connect(pSock->nFD, (struct sockaddr *)&pSock->inAddr, sizeof(pSock->inAddr)) < 0)
         {
@@ -1519,9 +1537,8 @@ static XSOCKET XSock_SetupTCP(xsock_t *pSock)
             return XSOCK_INVALID;
         }
 
-        if (pSock->eType == XSOCK_SSLV2_CLIENT ||
-            pSock->eType == XSOCK_SSLV3_CLIENT)
-                XSock_InitSSLClient(pSock);
+        if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSL))
+            XSock_InitSSLClient(pSock);
     }
 
     return pSock->nFD;
@@ -1530,18 +1547,9 @@ static XSOCKET XSock_SetupTCP(xsock_t *pSock)
 static XSOCKET XSock_SetupUDP(xsock_t *pSock)
 {
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
-    int nEnableFlag = 1;
+    int nEnabled = 1;
 
-    if (pSock->eType == XSOCK_UDP_BCAST)
-    {
-        if (setsockopt(pSock->nFD, SOL_SOCKET, SO_BROADCAST, (char*)&nEnableFlag, sizeof nEnableFlag) < 0)
-        {
-            pSock->eStatus = XSOCK_ERR_SETOPT;
-            XSock_Close(pSock);
-            return XSOCK_INVALID;
-        }
-    }
-    else if (pSock->eType == XSOCK_UDP_CLIENT)
+    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_CLIENT | XSOCK_UDP))
     {
         if (connect(pSock->nFD, (struct sockaddr *)&pSock->inAddr, sizeof(pSock->inAddr)) < 0)
         {
@@ -1550,7 +1558,16 @@ static XSOCKET XSock_SetupUDP(xsock_t *pSock)
             return XSOCK_INVALID;
         }
     }
-    else if (pSock->eType == XSOCK_UDP_MCAST)
+    else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_BROADCAST | XSOCK_UDP))
+    {
+        if (setsockopt(pSock->nFD, SOL_SOCKET, SO_BROADCAST, (char*)&nEnabled, sizeof nEnabled) < 0)
+        {
+            pSock->eStatus = XSOCK_ERR_SETOPT;
+            XSock_Close(pSock);
+            return XSOCK_INVALID;
+        }
+    }
+    else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_MULTICAST | XSOCK_UDP))
     {
         if (XSock_ReuseAddr(pSock, 1) == XSOCK_INVALID) return XSOCK_INVALID;
         else if (XSock_Bind(pSock) == XSOCK_INVALID) return XSOCK_INVALID;
@@ -1560,27 +1577,12 @@ static XSOCKET XSock_SetupUDP(xsock_t *pSock)
     return pSock->nFD;
 }
 
-XSOCKET XSock_CreateRAW(xsock_t *pSock, int nProtocol)
+XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const char *pAddr, uint16_t nPort)
 {
-    xsock_type_t eType = (nProtocol == IPPROTO_TCP) ?
-                        XSOCK_TCP_RAW : XSOCK_UDP_RAW;
-
-    XSock_Init(pSock, eType, XSOCK_INVALID, 0);
-    pSock->nFD = socket(AF_INET, SOCK_RAW, nProtocol);
-
-    if (pSock->nFD == XSOCK_INVALID)
-        pSock->eStatus = XSOCK_ERR_CREATE;
-
-    return pSock->nFD;
-}
-
-XSOCKET XSock_CreateAdv(xsock_t *pSock, xsock_type_t eType, size_t nFdMax, const char *pAddr, uint16_t nPort)
-{
-    int nStatus = XSock_Init(pSock, eType, XSOCK_INVALID, 0);
+    int nStatus = XSock_Init(pSock, nFlags, XSOCK_INVALID, XFALSE);
     if (nStatus == XSOCK_ERROR) return XSOCK_INVALID;
 
-    if (pSock->eType != XSOCK_TCP_RAW &&
-        pSock->eType != XSOCK_UDP_RAW)
+    if (!XFLAGS_CHECK(nFlags, XSOCK_RAW))
     {
         pSock->nFdMax = XSTD_FIRSTOF(nFdMax, XSOCK_FD_MAX);
         pSock->nAddr = XSock_NetAddr(pAddr);
@@ -1592,7 +1594,6 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, xsock_type_t eType, size_t nFdMax, const
     }
 
     int nType = pSock->nType;
-
 #ifndef _WIN32
     nType |= FD_CLOEXEC;
 #endif
@@ -1610,12 +1611,12 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, xsock_type_t eType, size_t nFdMax, const
     return pSock->nFD;
 }
 
-XSOCKET XSock_Create(xsock_t *pSock, xsock_type_t eType, const char *pAddr, uint16_t nPort)
+XSOCKET XSock_Create(xsock_t *pSock, uint32_t nFlags, const char *pAddr, uint16_t nPort)
 {
-    return XSock_CreateAdv(pSock, eType, 0, pAddr, nPort);
+    return XSock_CreateAdv(pSock, nFlags, 0, pAddr, nPort);
 }
 
-XSOCKET XSock_Open(xsock_t *pSock, xsock_type_t eType, xsock_addr_t *pAddr)
+XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_addr_t *pAddr)
 {
     if (pAddr->sAddr[0] == XSTR_NUL || !pAddr->nPort)
     {
@@ -1624,10 +1625,10 @@ XSOCKET XSock_Open(xsock_t *pSock, xsock_type_t eType, xsock_addr_t *pAddr)
         return XSOCK_INVALID;
     }
 
-    return XSock_Create(pSock, eType, pAddr->sAddr, pAddr->nPort);
+    return XSock_Create(pSock, nFlags, pAddr->sAddr, pAddr->nPort);
 }
 
-XSOCKET XSock_Setup(xsock_t *pSock, xsock_type_t eType, const char *pAddr)
+XSOCKET XSock_Setup(xsock_t *pSock, uint32_t nFlags, const char *pAddr)
 {
     xsock_addr_t addrInfo;
 
@@ -1638,22 +1639,22 @@ XSOCKET XSock_Setup(xsock_t *pSock, xsock_type_t eType, const char *pAddr)
         return XSOCK_INVALID;
     }
 
-    return XSock_Open(pSock, eType, &addrInfo);
+    return XSock_Open(pSock, nFlags, &addrInfo);
 }
 
-xsock_t* XSock_Alloc(xsock_type_t eType, const char *pAddr, uint16_t nPort)
+xsock_t* XSock_Alloc(uint32_t nFlags, const char *pAddr, uint16_t nPort)
 {
     xsock_t *pSock = (xsock_t*)malloc(sizeof(xsock_t));
     if (!pSock) return NULL;
 
-    XSock_Create(pSock, eType, pAddr, nPort);
+    XSock_Create(pSock, nFlags, pAddr, nPort);
     return pSock;
 }
 
-xsock_t* XSock_New(xsock_type_t eType, xsock_addr_t *pAddr)
+xsock_t* XSock_New(uint32_t nFlags, xsock_addr_t *pAddr)
 {
     if (strlen(pAddr->sAddr) <= 0 || pAddr->nPort == 0) return NULL;
-    return XSock_Alloc(eType, pAddr->sAddr, pAddr->nPort);
+    return XSock_Alloc(nFlags, pAddr->sAddr, pAddr->nPort);
 }
 
 void XSock_Free(xsock_t *pSock)

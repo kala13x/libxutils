@@ -94,6 +94,7 @@ typedef enum {
     XSOCK_ERR_SSLERR,
     XSOCK_ERR_SSLCA,
     XSOCK_ERR_NOSSL,
+    XSOCK_ERR_FLAGS,
     XSOCK_ERR_INVSSL,
     XSOCK_ERR_SYSCALL,
     XSOCK_WANT_READ,
@@ -107,29 +108,26 @@ typedef enum {
     XF_IPV6 = 6
 } xsock_family_t;
 
-/* Supported socket types */
+/* Supported socket types and roles */
 typedef enum {
-    XSOCK_TCP_RAW = (uint8_t)0,
-    XSOCK_UDP_RAW,
-    XSOCK_TCP_PEER,
-    XSOCK_TCP_CLIENT,
-    XSOCK_TCP_SERVER,
+    XSOCK_TCP = (1 << 0),
+    XSOCK_UDP = (1 << 1),
+    XSOCK_RAW = (1 << 2),
+    XSOCK_UNIX = (1 << 3),
 
-    XSOCK_SSL_PREFERED_CLIENT,
-    XSOCK_SSL_PREFERED_SERVER,
-    XSOCK_SSLV2_CLIENT,
-    XSOCK_SSLV2_SERVER,
-    XSOCK_SSLV3_CLIENT,
-    XSOCK_SSLV3_SERVER,
-    XSOCK_SSLV2_PEER,
-    XSOCK_SSLV3_PEER,
+    XSOCK_SSL = (1 << 4),
+    XSOCK_SSLV2 = (1 << 5),
+    XSOCK_SSLV3 = (1 << 6),
 
-    XSOCK_UDP_CLIENT,
-    XSOCK_UDP_MCAST,
-    XSOCK_UDP_BCAST,
-    XSOCK_UDP_UCAST,
-    XSOCK_UNDEFINED
-} xsock_type_t;
+    XSOCK_PEER = (1 << 7),
+    XSOCK_CLIENT = (1 << 8),
+    XSOCK_SERVER = (1 << 9),
+
+    XSOCK_BROADCAST = (1 << 10),
+    XSOCK_MULTICAST = (1 << 11),
+    XSOCK_UNICAST = (1 << 12),
+    XSOCK_UNDEFINED = 0
+} xsock_flags_t;
 
 typedef struct XSocketAddr {
     xsock_family_t eFamily;
@@ -160,8 +158,8 @@ typedef struct XSocketCert {
 typedef struct XSocket {
     xsock_status_t eStatus;
     xsock_inaddr_t inAddr;
-    xsock_type_t eType;
 
+    uint32_t nFlags;
     uint32_t nAddr;
     uint16_t nPort;
 
@@ -176,6 +174,15 @@ typedef struct XSocket {
     void *pPrivate;
 } xsock_t;
 
+// Backward compatibility
+#define XSOCK_TCP_PEER (XSOCK_TCP | XSOCK_PEER)
+#define XSOCK_TCP_SERVER (XSOCK_TCP | XSOCK_SERVER)
+#define XSOCK_TCP_CLIENT (XSOCK_TCP | XSOCK_CLIENT)
+#define XSOCK_UDP_CLIENT (XSOCK_UDP | XSOCK_CLIENT)
+#define XSOCK_UDP_BCAST (XSOCK_UDP | XSOCK_BROADCAST)
+#define XSOCK_UDP_MCAST (XSOCK_UDP | XSOCK_MULTICAST)
+#define XSOCK_UDP_UCAST (XSOCK_UDP | XSOCK_UNICAST)
+
 const char* XSock_GetStatusStr(xsock_status_t eStatus);
 const char* XSock_ErrStr(xsock_t* pSock);
 
@@ -186,8 +193,8 @@ SSL* XSock_GetSSL(xsock_t *pSock);
 
 xsock_inaddr_t* XSock_GetInAddr(xsock_t *pSock);
 xsock_status_t XSock_Status(const xsock_t *pSock);
-xsock_type_t XSock_GetType(const xsock_t *pSock);
-xbool_t XSockType_IsSSL(xsock_type_t eType);
+xbool_t XSockFlags_CheckSSL(uint32_t nFlags);
+uint32_t XSock_GetFlags(const xsock_t *pSock);
 
 uint32_t XSock_GetNetAddr(const xsock_t *pSock);
 uint16_t XSock_GetPort(const xsock_t *pSock);
@@ -205,8 +212,7 @@ void XSock_Close(xsock_t* pSock);
 XSTATUS XSock_MsgPeek(xsock_t* pSock);
 XSTATUS XSock_IsOpen(xsock_t* pSock);
 XSTATUS XSock_Check(xsock_t* pSock);
-XSTATUS XSock_Init(xsock_t* pSock, xsock_type_t eType, XSOCKET nFD, xbool_t nNB);
-XSTATUS XSock_SetType(xsock_t* pSock, xsock_type_t eType);
+XSTATUS XSock_Init(xsock_t* pSock, uint32_t nFlags, XSOCKET nFD, xbool_t nNB);
 
 void XSock_InitSSL(void);
 void XSock_DeinitSSL(void);
@@ -257,14 +263,13 @@ XSOCKET XSock_TimeOutS(xsock_t* pSock, int nSec, int nUsec);
 XSOCKET XSock_Linger(xsock_t* pSock, int nSec);
 XSOCKET XSock_Bind(xsock_t *pSock);
 
-XSOCKET XSock_CreateAdv(xsock_t* pSock, xsock_type_t eType, size_t nFdMax, const char* pAddr, uint16_t nPort);
-XSOCKET XSock_Create(xsock_t* pSock, xsock_type_t eType, const char* pAddr, uint16_t nPort);
-XSOCKET XSock_Open(xsock_t* pSock, xsock_type_t eType, xsock_addr_t* pAddr);
-XSOCKET XSock_Setup(xsock_t* pSock, xsock_type_t eType, const char* pAddr);
-XSOCKET XSock_CreateRAW(xsock_t *pSock, int nProtocol);
+XSOCKET XSock_CreateAdv(xsock_t* pSock, uint32_t nFlags, size_t nFdMax, const char* pAddr, uint16_t nPort);
+XSOCKET XSock_Create(xsock_t* pSock, uint32_t nFlags, const char* pAddr, uint16_t nPort);
+XSOCKET XSock_Open(xsock_t* pSock, uint32_t nFlags, xsock_addr_t* pAddr);
+XSOCKET XSock_Setup(xsock_t* pSock, uint32_t nFlags, const char* pAddr);
 
-xsock_t* XSock_Alloc(xsock_type_t eType, const char* pAddr, uint16_t nPort);
-xsock_t* XSock_New(xsock_type_t eType, xsock_addr_t* pAddr);
+xsock_t* XSock_Alloc(uint32_t nFlags, const char* pAddr, uint16_t nPort);
+xsock_t* XSock_New(uint32_t nFlags, xsock_addr_t* pAddr);
 void XSock_Free(xsock_t* pSock);
 
 #ifdef __cplusplus

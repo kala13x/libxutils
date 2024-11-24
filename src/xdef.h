@@ -36,6 +36,10 @@ typedef uint8_t             xbool_t;
 
 #define XFTON(x) ((x)>=0.0f?(int)((x)+0.5f):(int)((x)-0.5f))
 
+#define XFLAGS_CHECK(c, f) (((c) & (f)) == (f))
+#define XFLAGS_ENABLE(c, f) ((c) |= (f))
+#define XFLAGS_DISABLE(c, f) ((c) &= ~(f))
+
 #ifndef XMSG_MIN
 #define XMSG_MIN        2048
 #endif
