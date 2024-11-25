@@ -165,13 +165,11 @@ typedef struct XSocket {
     xsock_status_t eStatus;
     xsock_addr_t sockAddr;
 
-    uint32_t nFlags;
     uint32_t nAddr;
     uint16_t nPort;
 
+    uint32_t nFlags;
     size_t nFdMax;
-    xbool_t nSSL;
-    xbool_t nNB;
 
     XSOCKET nFD;
     int nDomain;
