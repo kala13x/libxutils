@@ -252,7 +252,7 @@ int XHTTP_Init(xhttp_t *pHttp, xhttp_method_t eMethod, size_t nSize)
     pHttp->nHeaderLength = pHttp->nContentLength = 0;
     pHttp->nStatusCode = pHttp->nHeaderCount = 0;
     pHttp->nAllocated = pHttp->nComplete = 0;
-    pHttp->sVersion[0] = pHttp->sUrl[0] = '\0';
+    pHttp->sVersion[0] = pHttp->sUri[0] = '\0';
     pHttp->sUnixAddr[0] = '\0';
 
     pHttp->callback = NULL;
@@ -289,7 +289,7 @@ int XHTTP_InitRequest(xhttp_t *pHttp, xhttp_method_t eMethod, const char *pUri, 
     const char *pFixedUrl = pUri != NULL ? pUri : "\\";
 
     xstrncpy(pHttp->sVersion, sizeof(pHttp->sVersion), pVersion);
-    xstrncpy(pHttp->sUrl, sizeof(pHttp->sUrl), pFixedUrl);
+    xstrncpy(pHttp->sUri, sizeof(pHttp->sUri), pFixedUrl);
 
     pHttp->eType = XHTTP_REQUEST;
     return nStatus;
@@ -330,7 +330,7 @@ void XHTTP_Reset(xhttp_t *pHttp, xbool_t bHard)
     pHttp->nHeaderCount = 0;
     pHttp->nStatusCode = 0;
     pHttp->nComplete = 0;
-    pHttp->sUrl[0] = '\0';
+    pHttp->sUri[0] = '\0';
 
     pHttp->eMethod = XHTTP_DUMMY;
     pHttp->eType = XHTTP_INITIAL;
@@ -363,8 +363,9 @@ int XHTTP_Copy(xhttp_t *pDst, xhttp_t *pSrc)
     xbyte_buffer_t *pDstBuff = &pDst->rawData;
 
     if (XByteBuffer_Add(pDstBuff, pSrcBuff->pData, pSrcBuff->nUsed) < 0) return XSTDERR;
+    xstrncpy(pDst->sUnixAddr, sizeof(pDst->sUnixAddr), pSrc->sUnixAddr);
     xstrncpy(pDst->sVersion, sizeof(pDst->sVersion), pSrc->sVersion);
-    xstrncpy(pDst->sUrl, sizeof(pDst->sUrl), pSrc->sUrl);
+    xstrncpy(pDst->sUri, sizeof(pDst->sUri), pSrc->sUri);
 
     xmap_t *pSrcMap = &pSrc->headerMap;
     xmap_t *pDstMap = &pDst->headerMap;
@@ -398,7 +399,7 @@ int XHTTP_Copy(xhttp_t *pDst, xhttp_t *pSrc)
 void XHTTP_Clear(xhttp_t *pHttp)
 {
     pHttp->headerMap.clearCb = XHTTP_HeaderClearCb;
-    pHttp->nComplete = 0;
+    pHttp->nComplete = XFALSE;
 
     XMap_Destroy(&pHttp->headerMap);
     XByteBuffer_Clear(&pHttp->rawData);
@@ -421,6 +422,7 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
 {
     char sOption[XHTTP_OPTION_MAX];
     size_t nLength = 0;
+    int nStatus = 0;
 
     va_list args;
     va_start(args, pStr);
@@ -429,42 +431,44 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
 
     if (nLength)
     {
-        char *pValue = xstrdup(sOption);
-        if (pValue == NULL) return XSTDERR;
-
-        char *pKey = xstrdup(pHeader);
-        if (pKey == NULL)
-        {
-            free(pValue);
-            return XSTDERR;
-        }
-
-        xmap_pair_t *pPair = XMap_GetPair(&pHttp->headerMap, pKey);
+        xmap_pair_t *pPair = XMap_GetPair(&pHttp->headerMap, pHeader);
         if (pPair != NULL)
         {
-            if (!pHttp->nAllowUpdate)
+            if (!xstrncmp(pPair->pData, sOption, nLength))
+            {
+                nStatus = (int)pHttp->headerMap.nUsed;
+                return nStatus > 0 ? nStatus : XSTDERR;
+            }
+
+            XASSERT(pHttp->nAllowUpdate, XSTDEXC);
+            free(pPair->pData);
+
+            pPair->pData = xstrdup(sOption);
+            XASSERT(pPair->pData, XSTDERR);
+        }
+        else
+        {
+            char *pValue = xstrdup(sOption);
+            XASSERT(pValue, XSTDERR);
+
+            char *pKey = xstrdup(pHeader);
+            XASSERT_CALL(pKey, free, pValue, XSTDERR);
+
+            nStatus = XMap_Put(&pHttp->headerMap, pKey, pValue);
+            if (nStatus != XMAP_OK)
             {
                 free(pValue);
                 free(pKey);
-                return XSTDINV;
+                return XSTDERR;
             }
-
-            free(pKey);
-            free(pPair->pData);
-            pPair->pData = pValue;
-        }
-        else if (XMap_Put(&pHttp->headerMap, pKey, pValue) != XMAP_OK)
-        {
-            free(pValue);
-            free(pKey);
-            return XSTDERR;
         }
     }
 
-    pHttp->nComplete = 0;
-    if (!pHttp->headerMap.nUsed) return XSTDERR;
+    nStatus = (int)pHttp->headerMap.nUsed;
+    XASSERT_RET((nStatus > 0), XSTDERR);
 
-    return (int)pHttp->headerMap.nUsed;
+    pHttp->nComplete = XFALSE;
+    return nStatus;
 }
 
 size_t XHTTP_GetAuthToken(char *pToken, size_t nSize, const char *pUser, const char *pPass)
@@ -518,7 +522,7 @@ xbyte_buffer_t* XHTTP_Assemble(xhttp_t *pHttp, const uint8_t *pContent, size_t n
     {
         const char *pMethod = XHTTP_GetMethodStr(pHttp->eMethod);
         nStatus = XByteBuffer_AddFmt(pBuffer, "%s %s HTTP/%s\r\n",
-            pMethod, pHttp->sUrl, pHttp->sVersion);
+            pMethod, pHttp->sUri, pHttp->sVersion);
     }
     else if (pHttp->eType == XHTTP_RESPONSE)
     {
@@ -706,7 +710,7 @@ static size_t XHTTP_ParseUrl(xhttp_t *pHttp)
 
     while (nPosit < sizeof(sTmpUrl) - 1 && sTmpUrl[nPosit] == XSTR_SPACE_CHAR) nPosit++;
     while (nLength > 0 && sTmpUrl[nLength] == XSTR_SPACE_CHAR) sTmpUrl[nLength--] = XSTR_NUL;
-    return xstrncpy(pHttp->sUrl, sizeof(pHttp->sUrl), &sTmpUrl[nPosit]);
+    return xstrncpy(pHttp->sUri, sizeof(pHttp->sUri), &sTmpUrl[nPosit]);
 }
 
 static int XHTTP_ParseHeaders(xhttp_t *pHttp)
@@ -1005,14 +1009,12 @@ xhttp_status_t XHTTP_Exchange(xhttp_t *pRequest, xhttp_t *pResponse, xsock_t *pS
     return XHTTP_Receive(pResponse, pSock);
 }
 
-xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t *pLink)
+xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink)
 {
     if (!xstrused(pLink->sProtocol)) xstrncpy(pLink->sProtocol, sizeof(pLink->sProtocol), "http");
-    if (strncmp(pLink->sProtocol, "http", 4)) return XHTTP_StatusCb(pRequest, XHTTP_ERRPROTO);
+    if (strncmp(pLink->sProtocol, "http", 4)) return XHTTP_StatusCb(pHttp, XHTTP_ERRPROTO);
 
-    xsock_t sock;
     uint32_t nFlags = XSOCK_CLIENT;
-
     if (!strncmp(pLink->sProtocol, "https", 5))
     {
         nFlags |= XSOCK_SSL;
@@ -1022,41 +1024,77 @@ xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t
     xsock_info_t addrInfo;
     XSock_InitAddr(&addrInfo);
 
-    if (xstrused(pRequest->sUnixAddr))
+    if (!xstrused(pHttp->sUnixAddr))
     {
-        xstrncpy(addrInfo.sAddr, sizeof(addrInfo.sAddr), pRequest->sUnixAddr);
-        nFlags |= XSOCK_UNIX;
-    }
-    else
-    {
-        nFlags |= XSOCK_TCP;
-
         if (pLink->nPort <= 0)
         {
-            pLink->nPort = XHTTP_DEF_PORT;
+            pLink->nPort = XFlags_IsSSL(nFlags) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT;
             xstrncat(pLink->sHost, sizeof(pLink->sHost), ":%d", pLink->nPort);
         }
 
         if (XSock_GetAddr(&addrInfo, pLink->sHost) < 0)
-            return XHTTP_StatusCb(pRequest, XHTTP_ERRRESOLVE);
+            return XHTTP_StatusCb(pHttp, XHTTP_ERRRESOLVE);
 
-        addrInfo.nPort = addrInfo.nPort > 0 ? addrInfo.nPort :
-            (XFlags_IsSSL(nFlags) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT);
+        if (!addrInfo.nPort) addrInfo.nPort = pLink->nPort;
+        nFlags |= XSOCK_TCP;
     }
-
-    if (XHTTP_SetAuthBasic(pRequest, pLink->sUser, pLink->sPass) < 0)
-        return XHTTP_StatusCb(pRequest, XHTTP_ERRAUTH);
-
-    if (XSock_Open(&sock, nFlags, &addrInfo) == XSOCK_INVALID)
-        return XHTTP_StatusCb(pRequest, XHTTP_ERRCONNECT);
-
-    if (pRequest->nTimeout)
+    else
     {
-        XSOCKET nFD = XSock_TimeOutR(&sock, (int)pRequest->nTimeout, 0);
-        if (nFD == XSOCK_INVALID) return XHTTP_StatusCb(pRequest, XHTTP_ERRTIMEO);
+        xstrncpy(addrInfo.sAddr, sizeof(addrInfo.sAddr), pHttp->sUnixAddr);
+        nFlags |= XSOCK_UNIX;
     }
 
-    xhttp_status_t eStatus = XHTTP_Exchange(pRequest, pResponse, &sock);
+    int nStatus = XHTTP_SetAuthBasic(pHttp, pLink->sUser, pLink->sPass);
+    if (nStatus < 0) return XHTTP_StatusCb(pHttp, XHTTP_ERRAUTH);
+
+    if (XHTTP_CHECK_FLAG(pHttp->nCbTypes, XHTTP_STATUS) && pHttp->callback != NULL)
+    {
+        char sBuffer[XHTTP_OPTION_MAX];
+        xhttp_ctx_t cbCtx;
+
+        if (XFlags_IsUnix(nFlags))
+            cbCtx.nLength = xstrncpyf(
+                sBuffer, sizeof(sBuffer),
+                "Connecting to unix server: %s",
+                addrInfo.sAddr
+            );
+        else
+            cbCtx.nLength = xstrncpyf(
+                sBuffer, sizeof(sBuffer),
+                "Connecting to remote server: %s:%d",
+                addrInfo.sAddr, addrInfo.nPort
+            );
+
+        cbCtx.pData = sBuffer;
+        cbCtx.eCbType = XHTTP_STATUS;
+        cbCtx.eStatus = XHTTP_RESOLVED;
+        pHttp->callback(pHttp, &cbCtx);
+    }
+
+    if (XSock_Open(pSock, nFlags, &addrInfo) == XSOCK_INVALID)
+        return XHTTP_StatusCb(pHttp, XHTTP_ERRCONNECT);
+
+    if (pHttp->nTimeout)
+    {
+        XSOCKET nFD = XSock_TimeOutR(pSock, (int)pHttp->nTimeout, 0);
+        if (nFD == XSOCK_INVALID) return XHTTP_StatusCb(pHttp, XHTTP_ERRTIMEO);
+    }
+
+    return XHTTP_CONNECTED;
+}
+
+xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t *pLink)
+{
+    xsock_t sock;
+    xhttp_status_t eStatus = XHTTP_Connect(pRequest, &sock, pLink);
+
+    if (eStatus != XHTTP_CONNECTED)
+    {
+        XSock_Close(&sock);
+        return eStatus;
+    }
+
+    eStatus = XHTTP_Exchange(pRequest, pResponse, &sock);
     XSock_Close(&sock);
     return eStatus;
 }
@@ -1094,73 +1132,16 @@ xhttp_status_t XHTTP_Perform(xhttp_t *pHttp, xsock_t *pSock, const uint8_t *pBod
 
 xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *pBody, size_t nLength)
 {
-    if (!xstrused(pLink->sProtocol)) xstrncpy(pLink->sProtocol, sizeof(pLink->sProtocol), "http");
-    if (strncmp(pLink->sProtocol, "http", 4)) return XHTTP_StatusCb(pHttp, XHTTP_ERRPROTO);
-
-    uint32_t nFlags = XSOCK_CLIENT;
     xsock_t sock;
+    xhttp_status_t eStatus = XHTTP_Connect(pHttp, &sock, pLink);
 
-    if (!strncmp(pLink->sProtocol, "https", 5))
+    if (eStatus != XHTTP_CONNECTED)
     {
-        nFlags |= XSOCK_SSL;
-        XSock_InitSSL();
+        XSock_Close(&sock);
+        return eStatus;
     }
 
-    xsock_info_t addrInfo;
-    XSock_InitAddr(&addrInfo);
-
-    if (xstrused(pHttp->sUnixAddr))
-    {
-        xstrncpy(addrInfo.sAddr, sizeof(addrInfo.sAddr), pHttp->sUnixAddr);
-        nFlags |= XSOCK_UNIX;
-    }
-    else
-    {
-        nFlags |= XSOCK_TCP;
-
-        if (pLink->nPort <= 0)
-        {
-            pLink->nPort = XHTTP_DEF_PORT;
-            xstrncat(pLink->sHost, sizeof(pLink->sHost), ":%d", pLink->nPort);
-        }
-
-        if (XSock_GetAddr(&addrInfo, pLink->sHost) < 0)
-            return XHTTP_StatusCb(pHttp, XHTTP_ERRRESOLVE);
-
-        addrInfo.nPort = addrInfo.nPort > 0 ? addrInfo.nPort :
-            (XFlags_IsSSL(nFlags) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT);
-    }
-
-    if (XHTTP_SetAuthBasic(pHttp, pLink->sUser, pLink->sPass) < 0)
-        return XHTTP_StatusCb(pHttp, XHTTP_ERRAUTH);
-
-    if (XHTTP_CHECK_FLAG(pHttp->nCbTypes, XHTTP_STATUS) && pHttp->callback != NULL)
-    {
-        char sBuffer[XHTTP_OPTION_MAX];
-        xhttp_ctx_t cbCtx;
-
-        cbCtx.nLength = xstrncpyf(
-            sBuffer, sizeof(sBuffer),
-            "Connecting to remote server: %s:%d",
-            addrInfo.sAddr, addrInfo.nPort
-        );
-
-        cbCtx.pData = sBuffer;
-        cbCtx.eCbType = XHTTP_STATUS;
-        cbCtx.eStatus = XHTTP_RESOLVED;
-        pHttp->callback(pHttp, &cbCtx);
-    }
-
-    if (XSock_Open(&sock, nFlags, &addrInfo) == XSOCK_INVALID)
-        return XHTTP_StatusCb(pHttp, XHTTP_ERRCONNECT);
-
-    if (pHttp->nTimeout)
-    {
-        XSOCKET nFD = XSock_TimeOutR(&sock, (int)pHttp->nTimeout, 0);
-        if (nFD == XSOCK_INVALID) return XHTTP_StatusCb(pHttp, XHTTP_ERRTIMEO);
-    }
-
-    xhttp_status_t eStatus = XHTTP_Perform(pHttp, &sock, pBody, nLength);
+    eStatus = XHTTP_Perform(pHttp, &sock, pBody, nLength);
     XSock_Close(&sock);
     return eStatus;
 }
@@ -1178,9 +1159,9 @@ xhttp_status_t XHTTP_SoloPerform(xhttp_t *pHttp, xhttp_method_t eMethod, const c
     const char *pVer = XUtils_VersionShort();
 
     if (XLink_Parse(&link, pLink) < 0) return XHTTP_ERRLINK;
-    if (XHTTP_InitRequest(pHttp, eMethod, link.sUrl, NULL) < 0) return XHTTP_ERRINIT;
+    if (XHTTP_InitRequest(pHttp, eMethod, link.sUri, NULL) < 0) return XHTTP_ERRINIT;
 
-    int nStatus = XHTTP_AddHeader(pHttp, "Host", "%s", link.sHost);
+    int nStatus = XHTTP_AddHeader(pHttp, "Host", "%s", link.sAddr);
     if (nStatus == XSTDERR) return XHTTP_ERRSETHDR;
     else if (nStatus == XSTDNON) return XHTTP_ERREXISTS;
 

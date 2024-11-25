@@ -75,7 +75,7 @@ int handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
 
     xlogn("Received handhshake request: fd(%d), uri(%s), buff(%zu)",
-        (int)pData->sock.nFD, pHandle->sUrl, pHandle->rawData.nUsed);
+        (int)pData->sock.nFD, pHandle->sUri, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
     if (pHeader != NULL)

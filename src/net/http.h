@@ -31,6 +31,7 @@ extern "C" {
 #define XHTTP_HEADER_SIZE       4096
 #define XHTTP_OPTION_MAX        1024
 #define XHTTP_FIELD_MAX         128
+#define XHTTP_ADDR_MAX          256
 #define XHTTP_URL_MAX           2048
 #define XHTTP_RX_SIZE           4096
 
@@ -71,6 +72,7 @@ typedef enum {
     XHTTP_ERRASSEMBLE,
     XHTTP_TERMINATED,
     XHTTP_INCOMPLETE,
+    XHTTP_CONNECTED,
     XHTTP_RESOLVED,
     XHTTP_COMPLETE,
     XHTTP_BIGCNT,
@@ -122,9 +124,9 @@ struct xhttp_ {
     xbool_t nAllocated;
     xbool_t nComplete;
 
+    char sUnixAddr[XHTTP_ADDR_MAX];
     char sVersion[XHTTP_FIELD_MAX];
-    char sUrl[XHTTP_URL_MAX];
-    char sUnixAddr[XPATH_MAX];
+    char sUri[XHTTP_URL_MAX];
 };
 
 xbool_t XHTTP_IsSuccessCode(xhttp_t *pHandle);
@@ -169,6 +171,7 @@ xhttp_status_t XHTTP_ReadHeader(xhttp_t *pHttp, xsock_t *pSock);
 xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock);
 xhttp_status_t XHTTP_Receive(xhttp_t *pHttp, xsock_t *pSock);
 
+xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink);
 xhttp_status_t XHTTP_Exchange(xhttp_t *pRequest, xhttp_t *pResponse, xsock_t *pSock);
 xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t *pLink);
 xhttp_status_t XHTTP_EasyExchange(xhttp_t *pRequest, xhttp_t *pResponse, const char *pLink);

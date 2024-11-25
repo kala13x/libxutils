@@ -1018,13 +1018,13 @@ int XTOPApp_GetRemoteStats(xtop_args_t *pArgs, xtop_stats_t *pStats)
         return XSTDERR;
     }
 
-    if (XHTTP_InitRequest(&handle, XHTTP_GET, link.sUrl, NULL) < 0)
+    if (XHTTP_InitRequest(&handle, XHTTP_GET, link.sUri, NULL) < 0)
     {
         xloge("Failed to initialize HTTP request: %d", errno);
         return XSTDERR;
     }
 
-    if (XHTTP_AddHeader(&handle, "Host", "%s", link.sHost) < 0 ||
+    if (XHTTP_AddHeader(&handle, "Host", "%s", link.sAddr) < 0 ||
         XHTTP_AddHeader(&handle, "User-Agent", "xutils/%s", pVer) < 0)
     {
         xloge("Failed to initialize HTTP request: %d", errno);
@@ -1108,8 +1108,8 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
     *pRequest = XTOP_NONE;
 
-    xlogn("Received request: fd(%d), method(%s), url(%s)",
-        (int)pData->sock.nFD, XHTTP_GetMethodStr(pHandle->eMethod), pHandle->sUrl);
+    xlogn("Received request: fd(%d), method(%s), uri(%s)",
+        (int)pData->sock.nFD, XHTTP_GetMethodStr(pHandle->eMethod), pHandle->sUri);
 
     if (pHandle->eMethod != XHTTP_GET)
     {
@@ -1117,10 +1117,10 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
         return XAPI_RespondHTTP(pData, XTOP_NOTALLOWED, XAPI_NONE);
     }
 
-    xarray_t *pArr = xstrsplit(pHandle->sUrl, "/");
+    xarray_t *pArr = xstrsplit(pHandle->sUri, "/");
     if (pArr == NULL)
     {
-        xlogw("Invalid request URL or API endpoint: %s", pHandle->sUrl);
+        xlogw("Invalid request URL or API endpoint: %s", pHandle->sUri);
         return XAPI_RespondHTTP(pData, XTOP_INVALID, XAPI_NONE);
     }
 
@@ -1139,7 +1139,7 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     if (*pRequest == XTOP_NONE)
     {
-        xlogw("Requested API endpoint is not found: %s", pHandle->sUrl);
+        xlogw("Requested API endpoint is not found: %s", pHandle->sUri);
         return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NONE);
     }
 

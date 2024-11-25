@@ -330,6 +330,8 @@ const char* XSock_GetStatusStr(xsock_status_t eStatus)
             return "Can not get flags from the socket";
         case XSOCK_ERR_ACCEPT:
             return "Can not accept to the socket";
+        case XSOCK_ERR_ARGS:
+            return "Invalid arguments for the socket";
         case XSOCK_ERR_CONNECT:
             return "Can not connect to the socket";
         case XSOCK_ERR_LISTEN:
@@ -478,7 +480,9 @@ static XSTATUS XSock_SetFlags(xsock_t *pSock, uint32_t nFlags)
 
 XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
 {
+    XASSERT_RET((pSock != NULL), XSOCK_ERROR);
     memset(&pSock->sockAddr, 0, sizeof(pSock->sockAddr));
+
     pSock->pPrivate = NULL;
     pSock->nDomain = 0;
     pSock->nProto = 0;
@@ -871,7 +875,8 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
     XFLAGS_DISABLE(nFlags, XSOCK_NB);
     XFLAGS_ENABLE(nFlags, XSOCK_PEER);
 
-    if (XSock_Init(pNewSock, nFlags, XSOCK_INVALID) < 0) return XSOCK_INVALID;
+    XSTATUS nStatus = XSock_Init(pNewSock, nFlags, XSOCK_INVALID);
+    if (nStatus < 0) return XSOCK_INVALID;
 
     xsockaddr_t* pSockAddr = XSock_GetSockAddr(pSock);
     xsocklen_t nAddrLen = XSock_GetAddrLen(pSock);
@@ -1664,8 +1669,15 @@ static void XSock_SetupAddr(xsock_t *pSock, size_t nFdMax, const char *pAddr, ui
 
 XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const char *pAddr, uint16_t nPort)
 {
-    int nStatus = XSock_Init(pSock, nFlags, XSOCK_INVALID);
+    XSTATUS nStatus = XSock_Init(pSock, nFlags, XSOCK_INVALID);
     if (nStatus == XSOCK_ERROR) return XSOCK_INVALID;
+
+    if (!xstrused(pAddr) || (!nPort && !XFlags_IsUnix(nFlags)))
+    {
+        pSock->eStatus = XSOCK_ERR_ARGS;
+        pSock->nFD = XSOCK_INVALID;
+        return XSOCK_INVALID;
+    }
 
     int nType = pSock->nType;
 #ifndef _WIN32
@@ -1696,9 +1708,10 @@ XSOCKET XSock_Create(xsock_t *pSock, uint32_t nFlags, const char *pAddr, uint16_
 
 XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_info_t *pAddr)
 {
-    if (!xstrused(pAddr->sAddr) || (!pAddr->nPort && !XFlags_IsUnix(nFlags)))
+    if (!xstrused(pAddr->sAddr) ||
+       (!pAddr->nPort && !XFlags_IsUnix(nFlags)))
     {
-        pSock->eStatus = XSOCK_ERR_CREATE;
+        pSock->eStatus = XSOCK_ERR_ARGS;
         pSock->nFD = XSOCK_INVALID;
         return XSOCK_INVALID;
     }
@@ -1708,8 +1721,10 @@ XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_info_t *pAddr)
 
 XSOCKET XSock_Setup(xsock_t *pSock, uint32_t nFlags, const char *pAddr)
 {
-    xsock_info_t addrInfo;
+    if (XFlags_IsUnix(nFlags))
+        return XSock_Create(pSock, nFlags, pAddr, 0);
 
+    xsock_info_t addrInfo;
     if (XSock_GetAddr(&addrInfo, pAddr) <= 0)
     {
         pSock->eStatus = XSOCK_ERR_ADDR;
@@ -1731,7 +1746,13 @@ xsock_t* XSock_Alloc(uint32_t nFlags, const char *pAddr, uint16_t nPort)
 
 xsock_t* XSock_New(uint32_t nFlags, xsock_info_t *pAddr)
 {
-    if (strlen(pAddr->sAddr) <= 0 || pAddr->nPort == 0) return NULL;
+    if (XFlags_IsUnix(nFlags))
+    {
+        if (!xstrused(pAddr->sAddr)) return NULL;
+        return XSock_Alloc(nFlags, pAddr->sAddr, 0);
+    }
+
+    if (!xstrused(pAddr->sAddr) || !pAddr->nPort) return NULL;
     return XSock_Alloc(nFlags, pAddr->sAddr, pAddr->nPort);
 }
 

@@ -57,8 +57,8 @@ int handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
 
-    xlogn("Sending handhshake request: fd(%d), url(%s), buff(%zu)",
-        (int)pData->sock.nFD, pHandle->sUrl, pHandle->rawData.nUsed);
+    xlogn("Sending handhshake request: fd(%d), uri(%s), buff(%zu)",
+        (int)pData->sock.nFD, pHandle->sUri, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
     if (pHeader != NULL)
@@ -266,7 +266,7 @@ int main(int argc, char* argv[])
     endpt.eType = XAPI_WS;
     endpt.pAddr = link.sAddr;
     endpt.nPort = link.nPort;
-    endpt.pUri = link.sUrl;
+    endpt.pUri = link.sUri;
 
     session_data_t sessData;
     endpt.pSessionData = &sessData;

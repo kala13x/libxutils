@@ -31,7 +31,7 @@ extern "C" {
  */
 typedef struct XLink {
     int nPort;
-    char sUrl[XLINK_URL_MAX];
+    char sUri[XLINK_URL_MAX];
     char sHost[XLINK_ADDR_MAX];
     char sAddr[XLINK_ADDR_MAX];
     char sUser[XLINK_INFO_MAX];

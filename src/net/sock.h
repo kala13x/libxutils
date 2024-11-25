@@ -62,6 +62,7 @@ typedef int                 XSOCKET;
 typedef enum {
     XSOCK_ERR_NONE = (uint8_t)0,
     XSOCK_ERR_ALLOC,
+    XSOCK_ERR_ARGS,
     XSOCK_ERR_INVALID,
     XSOCK_ERR_SUPPORT,
     XSOCK_ERR_CONNECT,

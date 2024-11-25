@@ -51,7 +51,7 @@ int XAddr_GetDefaultPort(const char *pProtocol)
 void XLink_Init(xlink_t *pLink)
 {
     pLink->nPort = 0;
-    pLink->sUrl[0] = XSTR_NUL;
+    pLink->sUri[0] = XSTR_NUL;
     pLink->sAddr[0] = XSTR_NUL;
     pLink->sHost[0] = XSTR_NUL;
     pLink->sUser[0] = XSTR_NUL;
@@ -100,8 +100,8 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
         nPosit += (size_t)nTokenLen + 1;
     }
 
-    char *pDst = &pLink->sUrl[0];
-    size_t nDstSize = sizeof(pLink->sUrl);
+    char *pDst = &pLink->sUri[0];
+    size_t nDstSize = sizeof(pLink->sUri);
     if (!nPosit && pInput[0] == '/') nPosit++;
 
     nTokenLen = xstrnsrc(pInput, nLength, "/", nPosit);
@@ -116,17 +116,17 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
         pDst = &pLink->sHost[0];
     }
 
-    size_t nHostLen = 0, nLeft = (nPosit < nLength) ? (nLength - nPosit) : 0;
+    size_t nLeft = (nPosit < nLength) ? (nLength - nPosit) : 0;
     if (nLeft > 0) xstrncpys(pDst, nDstSize, &pInput[nPosit], nLeft);
 
-    size_t nAddrLen = nHostLen = strlen(pLink->sHost);
+    size_t nAddrLen = strlen(pLink->sHost);
     nTokenLen = xstrnsrc(pLink->sHost, nAddrLen, ":", 0);
 
     if (nTokenLen > 0)
     {
         nTokenLen++;
         if (nTokenLen < (int)nAddrLen) pLink->nPort = atoi(&pLink->sHost[nTokenLen]);
-        nHostLen = XSTD_MIN(nAddrLen, (size_t)nTokenLen - 1);
+        nAddrLen = XSTD_MIN(nAddrLen, (size_t)nTokenLen - 1);
     }
 
     if (!pLink->nPort)
@@ -140,13 +140,13 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
         }
     }
 
-    xstrncpys(pLink->sAddr, sizeof(pLink->sAddr), pLink->sHost, nHostLen);
-    if (!xstrused(pLink->sUrl)) xstrncpy(pLink->sUrl, sizeof(pLink->sUrl), "/");
+    xstrncpys(pLink->sAddr, sizeof(pLink->sAddr), pLink->sHost, nAddrLen);
+    if (!xstrused(pLink->sUri)) xstrncpy(pLink->sUri, sizeof(pLink->sUri), "/");
 
-    size_t nUrlLength = strlen(pLink->sUrl);
-    if (nUrlLength > 0 && pLink->sUrl[nUrlLength - 1] != '/')
+    size_t nUrlLength = strlen(pLink->sUri);
+    if (nUrlLength > 0 && pLink->sUri[nUrlLength - 1] != '/')
     {
-        xarray_t *pTokens = xstrsplit(pLink->sUrl, "/");
+        xarray_t *pTokens = xstrsplit(pLink->sUri, "/");
         if (pTokens != NULL)
         {
             size_t nUsed = XArray_Used(pTokens);

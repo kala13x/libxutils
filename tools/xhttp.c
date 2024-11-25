@@ -66,18 +66,18 @@ void XHTTPApp_DisplayUsage(const char *pName)
 {
     int nLength = strlen(pName) + 6;
 
-    printf("==========================================================================\n");
-    printf(" XHTTP tool v%d.%d - (c) 2022 Sandro Kalatozishvili (s.kalatoz@gmail.com)\n",
+    printf("===================================================================\n");
+    printf(" XHTTP v%d.%d - (c) 2022 Sandro Kalatozishvili (s.kalatoz@gmail.com)\n",
         XHTTP_VERSION_MAJ, XHTTP_VERSION_MIN);
-    printf("==========================================================================\n");
+    printf("===================================================================\n");
 
-    printf("Usage: %s [-u <address>] [-l <address>] [-c <content>]\n", pName);
-    printf(" %s [-t <seconds>] [-o <output>] [-m <method>]\n", XHTTPApp_WhiteSpace(nLength));
-    printf(" %s [-x <headers>] [-d] [-f] [-s] [-v] [-w] [-h]\n", XHTTPApp_WhiteSpace(nLength));
+    printf("Usage: %s [-l <address>] [-u <address>] [-c <content>]\n", pName);
+    printf(" %s [-t <seconds>] [-x <headers>] [-o <output>]\n", XHTTPApp_WhiteSpace(nLength));
+    printf(" %s [-m <method>] [-d] [-f] [-s] [-v] [-w] [-h]\n", XHTTPApp_WhiteSpace(nLength));
 
     printf("Options are:\n");
-    printf("  -u <address>          # Unix domain socket address (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("  -l <address>          # HTTP/S address/link (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
+    printf("  -u <address>          # Unix socket address\n");
     printf("  -c <content>          # Content file path\n");
     printf("  -m <method>           # HTTP request method\n");
     printf("  -o <output>           # Output file path\n");
@@ -93,6 +93,7 @@ void XHTTPApp_DisplayUsage(const char *pName)
     printf("1) %s -l https://endpoint.com/ -c body.json -m POST\n", pName);
     printf("2) %s -l endpoint.com/test -t 20 -wo output.txt -s -v\n", pName);
     printf("2) %s -l endpoint.com -x 'X-Is-Custom: True; X-My-Header: Test'\n", pName);
+    printf("2) %s -l http://localhost/endpoint -u /var/run/xutils/unix.sock\n", pName);
 }
 
 int XHTTPApp_ParseArgs(xhttp_args_t *pArgs, int argc, char *argv[])
@@ -373,7 +374,8 @@ int XHTTPApp_Prepare(xhttp_args_t *pArgs, xlink_t *pLink)
     {
         xlogd("Parsed link: %s", pArgs->sAddress);
         printf("Protocol: %s\nHost: %s\nAddr: %s\nPort: %d\nUser: %s\nPass: %s\nFile: %s\nURL: %s\n\n",
-            pLink->sProtocol, pLink->sHost, pLink->sAddr, pLink->nPort, pLink->sUser, pLink->sPass, pLink->sFile, pLink->sUrl);
+              pLink->sProtocol, pLink->sHost, pLink->sAddr, pLink->nPort,
+              pLink->sUser, pLink->sPass, pLink->sFile, pLink->sUri);
     }
 
     if (pArgs->nDownload && !xstrused(pArgs->sOutput))
@@ -410,8 +412,8 @@ int XHTTPApp_Prepare(xhttp_args_t *pArgs, xlink_t *pLink)
 int XHTTPApp_Perform(xhttp_args_t *pArgs, xlink_t *pLink)
 {
     xhttp_t handle;
-    XHTTP_InitRequest(&handle, pArgs->eMethod, pLink->sUrl, NULL);
-    XHTTP_AddHeader(&handle, "Host", "%s", pLink->sHost);
+    XHTTP_InitRequest(&handle, pArgs->eMethod, pLink->sUri, NULL);
+    XHTTP_AddHeader(&handle, "Host", "%s", pLink->sAddr);
     XHTTP_AddHeader(&handle, "User-Agent", "xutils/%s", XUtils_VersionShort());
     XHTTP_SetUnixAddr(&handle, pArgs->sUnixAddr);
     handle.nTimeout = pArgs->nTimeout;
