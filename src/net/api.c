@@ -1232,9 +1232,14 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
     XASSERT((pEndpt->pAddr && pEndpt->nPort), XSTDINV);
     XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
-
     xsock_info_t addrInfo;
-    if (XSock_GetAddr(&addrInfo, pEndpt->pAddr) < 0)
+
+    if (pEndpt->bUnix)
+    {
+        XSock_InitAddr(&addrInfo);
+        xstrncpy(addrInfo.sAddr, sizeof(addrInfo.sAddr), pEndpt->pAddr);
+    }
+    else if (XSock_GetAddr(&addrInfo, pEndpt->pAddr) < 0)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_ERR_RESOLVE);
         return XSTDERR;
@@ -1258,15 +1263,13 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_CLIENT;
 
-    uint32_t nFlags = XSOCK_CLIENT;
+    uint32_t nFlags = XSOCK_CLIENT | XSOCK_NB;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
     if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
     else nFlags |= XSOCK_TCP;
 
     XSock_Create(pSock, nFlags, pApiData->sAddr, pEndpt->nPort);
-    XSock_NonBlock(pSock, XTRUE);
-
-    if (pApiData->sock.nFD == XSOCK_INVALID)
+    if (pSock->nFD == XSOCK_INVALID)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_SOCK, pSock->eStatus);
         XAPI_FreeData(&pApiData);
