@@ -20,9 +20,9 @@
 - [Implementation of linked list](https://github.com/kala13x/libxutils/blob/main/src/data/list.h)
 
 #### Network:
-- [Event based client/server API for HTTP/S, WS/WSS and TCP/SSL connections](https://github.com/kala13x/libxutils/blob/main/src/net/api.h)
+- [Event based client/server API for HTTP/S, WS/WSS and UNIX/TCP connections](https://github.com/kala13x/libxutils/blob/main/src/net/api.h)
+- [Cross-platform socket library with RAW, UNIX, TCP, UDP and SSL support](https://github.com/kala13x/libxutils/blob/main/src/net/sock.h)
 - [Cross-platform event library based on poll(), epoll() and WSAPoll()](https://github.com/kala13x/libxutils/blob/main/src/net/event.h)
-- [Cross-platform socket library with TCP, UDP and SSL support](https://github.com/kala13x/libxutils/blob/main/src/net/sock.h)
 - [Web Socket client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/ws.h)
 - [HTTP client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/http.h)
 - [MDTP client/server library](https://github.com/kala13x/libxutils/blob/main/src/net/mdtp.h)
