@@ -41,6 +41,7 @@ typedef struct xhttp_args_ {
     size_t nDone;
 
     xbyte_buffer_t content;
+    char sUnixAddr[XPATH_MAX];
     char sAddress[XHTTP_URL_MAX];
     char sHeaders[XLINE_MAX];
     char sContent[XPATH_MAX];
@@ -70,10 +71,12 @@ void XHTTPApp_DisplayUsage(const char *pName)
         XHTTP_VERSION_MAJ, XHTTP_VERSION_MIN);
     printf("==========================================================================\n");
 
-    printf("Usage: %s [-l <address>] [-c <content>] [-m <method>] [-d] [-f] [-s]\n", pName);
-    printf(" %s [-t <seconds>] [-o <output>] [-x <headers>] [-v] [-w] [-h]\n", XHTTPApp_WhiteSpace(nLength));
+    printf("Usage: %s [-u <address>] [-l <address>] [-c <content>]\n", pName);
+    printf(" %s [-t <seconds>] [-o <output>] [-m <method>]\n", XHTTPApp_WhiteSpace(nLength));
+    printf(" %s [-x <headers>] [-d] [-f] [-s] [-v] [-w] [-h]\n", XHTTPApp_WhiteSpace(nLength));
 
     printf("Options are:\n");
+    printf("  -u <address>          # Unix domain socket address (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("  -l <address>          # HTTP/S address/link (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("  -c <content>          # Content file path\n");
     printf("  -m <method>           # HTTP request method\n");
@@ -109,16 +112,20 @@ int XHTTPApp_ParseArgs(xhttp_args_t *pArgs, int argc, char *argv[])
     pArgs->nDone = 0;
 
     xstrncpy(pArgs->sSpeed, sizeof(pArgs->sSpeed), "N/A");
+    xstrnul(pArgs->sUnixAddr);
     xstrnul(pArgs->sAddress);
     xstrnul(pArgs->sHeaders);
     xstrnul(pArgs->sContent);
     xstrnul(pArgs->sOutput);
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "l:c:m:o:t:x:d1:f1:s1:v1:w1:h1")) != -1)
+    while ((nChar = getopt(argc, argv, "u:l:c:m:o:t:x:d1:f1:s1:v1:w1:h1")) != -1)
     {
         switch (nChar)
         {
+            case 'u':
+                xstrncpy(pArgs->sUnixAddr, sizeof(pArgs->sUnixAddr), optarg);
+                break;
             case 'l':
                 xstrncpy(pArgs->sAddress, sizeof(pArgs->sAddress), optarg);
                 break;
@@ -406,6 +413,7 @@ int XHTTPApp_Perform(xhttp_args_t *pArgs, xlink_t *pLink)
     XHTTP_InitRequest(&handle, pArgs->eMethod, pLink->sUrl, NULL);
     XHTTP_AddHeader(&handle, "Host", "%s", pLink->sHost);
     XHTTP_AddHeader(&handle, "User-Agent", "xutils/%s", XUtils_VersionShort());
+    XHTTP_SetUnixAddr(&handle, pArgs->sUnixAddr);
     handle.nTimeout = pArgs->nTimeout;
 
     uint16_t nCallbacks = XHTTP_ERROR | XHTTP_READ_CNT | XHTTP_WRITE | XHTTP_STATUS;

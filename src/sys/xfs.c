@@ -376,10 +376,11 @@ int XFile_ReadLine(xfile_t *pFile, char* pLine, size_t nSize, size_t nLineNum)
 
 xbool_t XPath_Exists(const char *pPath)
 {
-    xstat_t st;
-    memset(&st, 0, sizeof(xstat_t));
-    if (stat(pPath, &st) < 0) return XFALSE;
-    return XTRUE;
+    if (!xstrused(pPath)) return XFALSE;
+    xstat_t statbuf;
+
+    memset(&statbuf, 0, sizeof(xstat_t));
+    return (stat(pPath, &statbuf) < 0) ? XFALSE : XTRUE;
 }
 
 char XPath_GetType(xmode_t nMode)
@@ -855,7 +856,7 @@ int XDir_Create(const char *pDir, xmode_t nMode)
     return XDir_Make(sDir, nMode);
 }
 
-int XPath_Unlink(const char *pPath)
+int XPath_Remove(const char *pPath)
 {
     xstat_t statbuf;
     if (!stat(pPath, &statbuf))
@@ -887,7 +888,7 @@ int XDir_Remove(const char *pPath)
             }
 
             size_t nLen = xstrncpyf(pNewPath, nSize, "%s/%s", pPath, dir.pCurrEntry);
-            if (nLen > 0) nStatus = XPath_Unlink(pNewPath);
+            if (nLen > 0) nStatus = XPath_Remove(pNewPath);
             free(pNewPath);
         }
 

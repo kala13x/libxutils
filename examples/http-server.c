@@ -24,6 +24,7 @@ typedef struct {
     char sKeyPath[XPATH_MAX];
     char sAddr[XSOCK_ADDR_MAX];
     uint16_t nPort;
+    xbool_t bForce;
     xbool_t bUnix;
     xbool_t bSSL;
 } xhttps_args_t;
@@ -34,7 +35,7 @@ void signal_callback(int sig)
     g_nInterrupted = 1;
 }
 
-int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int handle_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
@@ -43,6 +44,13 @@ int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
         xlogn("%s: fd(%d)", pStr, nFD);
     else if (pCtx->eCbType == XAPI_CB_ERROR)
         xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
+
+    if (pCtx->nStatus == XAPI_DESTROY)
+    {
+        xapi_t *pApi = pCtx->pApi;
+        xhttps_args_t *pArgs = (xhttps_args_t*)pApi->pUserCtx;
+        if (pArgs->bUnix) XPath_Remove(pArgs->sAddr);
+    }
 
     return XAPI_CONTINUE;
 }
@@ -112,7 +120,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
     {
         case XAPI_CB_ERROR:
         case XAPI_CB_STATUS:
-            return print_status(pCtx, pData);
+            return handle_status(pCtx, pData);
         case XAPI_CB_READ:
             return handle_request(pCtx, pData);
         case XAPI_CB_WRITE:
@@ -151,6 +159,7 @@ void display_usage(const char *pName)
     printf("  -k <path>            # SSL Key file path\n");
     printf("  -r <path>            # SSL CA file path\n");
     printf("  -s                   # SSL (WSS) mode\n");
+    printf("  -f                   # Force bind socket\n");
     printf("  -u                   # Use unix socket\n");
     printf("  -h                   # Version and usage\n\n");
 }
@@ -162,10 +171,12 @@ xbool_t parse_args(xhttps_args_t *pArgs, int argc, char *argv[])
     pArgs->sCaPath[0] = XSTR_NUL;
     pArgs->sAddr[0] = XSTR_NUL;
     pArgs->nPort = XSTDNON;
+    pArgs->bForce = XFALSE;
+    pArgs->bUnix = XFALSE;
     pArgs->bSSL = XFALSE;
     int nChar = XSTDNON;
 
-    while ((nChar = getopt(argc, argv, "a:p:c:k:r:u1:s1:h1")) != -1)
+    while ((nChar = getopt(argc, argv, "a:p:c:k:r:f1:u1:s1:h1")) != -1)
     {
         switch (nChar)
         {
@@ -183,6 +194,9 @@ xbool_t parse_args(xhttps_args_t *pArgs, int argc, char *argv[])
                 break;
             case 'p':
                 pArgs->nPort = atoi(optarg);
+                break;
+            case 'f':
+                pArgs->bForce = XTRUE;
                 break;
             case 'u':
                 pArgs->bUnix = XTRUE;
@@ -219,15 +233,6 @@ xbool_t parse_args(xhttps_args_t *pArgs, int argc, char *argv[])
     return XTRUE;
 }
 
-static void clear_unix_path(xhttps_args_t *pArgs)
-{
-    if (pArgs->bUnix)
-    {
-        XPath_Exists(pArgs->sAddr);
-        XPath_Unlink(pArgs->sAddr);
-    }
-}
-
 int main(int argc, char* argv[])
 {
     xlog_defaults();
@@ -256,7 +261,7 @@ int main(int argc, char* argv[])
     endpt.nPort = args.nPort;
     endpt.bUnix = args.bUnix;
     endpt.bTLS = args.bSSL;
-    clear_unix_path(&args);
+    endpt.bForce = args.bForce;
 
     if (endpt.bTLS)
     {
@@ -278,8 +283,6 @@ int main(int argc, char* argv[])
     do status = XAPI_Service(&api, 100);
     while (status == XEVENT_STATUS_SUCCESS);
 
-    clear_unix_path(&args);
     XAPI_Destroy(&api);
-
     return 0;
 }

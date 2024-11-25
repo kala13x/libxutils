@@ -90,7 +90,7 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     xapi_data_t *pData = (xapi_data_t*)malloc(sizeof(xapi_data_t));
     XASSERT((pData != NULL), NULL);
 
-    XSock_Init(&pData->sock, XSOCK_UNDEFINED, XSOCK_INVALID, XFALSE);
+    XSock_Init(&pData->sock, XSOCK_UNDEFINED, XSOCK_INVALID);
     XByteBuffer_Init(&pData->rxBuffer, XSTDNON, XFALSE);
     XByteBuffer_Init(&pData->txBuffer, XSTDNON, XFALSE);
 
@@ -1145,6 +1145,7 @@ void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
     pEndpt->pUri = NULL;
     pEndpt->bTLS = XFALSE;
     pEndpt->bUnix = XFALSE;
+    pEndpt->bForce = XFALSE;
 }
 
 XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
@@ -1178,6 +1179,7 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pApiData->eRole = XAPI_SERVER;
 
     uint32_t nFlags = XSOCK_SERVER;
+    if (pEndpt->bForce) nFlags |= XSOCK_FORCE;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
     if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
     else nFlags |= XSOCK_TCP;
@@ -1231,7 +1233,7 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     XASSERT((pEndpt->pAddr && pEndpt->nPort), XSTDINV);
     XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
 
-    xsock_addr_t addrInfo;
+    xsock_info_t addrInfo;
     if (XSock_GetAddr(&addrInfo, pEndpt->pAddr) < 0)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_ERR_RESOLVE);

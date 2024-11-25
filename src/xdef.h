@@ -25,6 +25,8 @@ typedef mode_t              xmode_t;
 typedef pid_t               xpid_t;
 #endif
 
+typedef struct sockaddr     xsockaddr_t;
+
 typedef uint8_t             xbool_t;
 #define XTRUE               1
 #define XFALSE              0

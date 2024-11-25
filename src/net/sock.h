@@ -59,9 +59,9 @@ typedef int                 XSOCKET;
 #define XSOCK_ADDR_MAX      128
 
 typedef union {
-    struct sockaddr_in inet_addr;
-    struct sockaddr_un unix_addr;
-} xsock_inaddr_t;
+    struct sockaddr_in inAddr;
+    struct sockaddr_un unAddr;
+} xsock_addr_t;
 
 /* Socket errors */
 typedef enum {
@@ -129,17 +129,20 @@ typedef enum {
     XSOCK_BROADCAST = (1 << 10),
     XSOCK_MULTICAST = (1 << 11),
     XSOCK_UNICAST = (1 << 12),
+
+    XSOCK_NB = (1 << 13),
+    XSOCK_FORCE = (1 << 14),
     XSOCK_UNDEFINED = 0
 } xsock_flags_t;
 
-typedef struct XSocketAddr {
+typedef struct XSocketInfo {
     xsock_family_t eFamily;
     uint32_t nAddr;
     uint16_t nPort;
     char sAddr[XSOCK_ADDR_MAX];
     char sHost[XSOCK_INFO_MAX];
     char sName[XSOCK_INFO_MAX];
-} xsock_addr_t;
+} xsock_info_t;
 
 typedef struct XSocketSSLCert {
     uint8_t nStatus;
@@ -160,9 +163,7 @@ typedef struct XSocketCert {
 /* XSocket */
 typedef struct XSocket {
     xsock_status_t eStatus;
-    xsock_inaddr_t inAddr;
-    xsocklen_t nAddrLen;
-    void *pSockAddr;
+    xsock_addr_t sockAddr;
 
     uint32_t nFlags;
     uint32_t nAddr;
@@ -197,10 +198,14 @@ SSL_CTX* XSock_GetSSLCTX(xsock_t *pSock);
 SSL* XSock_GetSSL(xsock_t *pSock);
 #endif
 
-xsock_inaddr_t* XSock_GetInAddr(xsock_t *pSock);
+xsock_addr_t* XSock_GetInAddr(xsock_t *pSock);
 xsock_status_t XSock_Status(const xsock_t *pSock);
-xbool_t XSockFlags_CheckSSL(uint32_t nFlags);
 uint32_t XSock_GetFlags(const xsock_t *pSock);
+xbool_t XFlags_IsUnix(uint32_t nFlags);
+xbool_t XFlags_IsSSL(uint32_t nFlags);
+
+struct sockaddr* XSock_GetSockAddr(xsock_t *pSock);
+xsocklen_t XSock_GetAddrLen(xsock_t *pSock);
 
 uint32_t XSock_GetNetAddr(const xsock_t *pSock);
 uint16_t XSock_GetPort(const xsock_t *pSock);
@@ -218,7 +223,7 @@ void XSock_Close(xsock_t* pSock);
 XSTATUS XSock_MsgPeek(xsock_t* pSock);
 XSTATUS XSock_IsOpen(xsock_t* pSock);
 XSTATUS XSock_Check(xsock_t* pSock);
-XSTATUS XSock_Init(xsock_t* pSock, uint32_t nFlags, XSOCKET nFD, xbool_t nNB);
+XSTATUS XSock_Init(xsock_t* pSock, uint32_t nFlags, XSOCKET nFD);
 
 void XSock_InitSSL(void);
 void XSock_DeinitSSL(void);
@@ -254,10 +259,10 @@ size_t XSock_SinAddr(const struct in_addr inAddr, char* pAddr, size_t nSize);
 size_t XSock_IPAddr(xsock_t* pSock, char* pAddr, size_t nSize);
 size_t XSock_IPStr(const uint32_t nAddr, char* pStr, size_t nSize);
 
-void XSock_InitAddr(xsock_addr_t* pAddr);
-XSTATUS XSock_AddrInfo(xsock_addr_t* pAddr, xsock_family_t eFam, const char* pHost);
-XSTATUS XSock_GetAddr(xsock_addr_t* pAddr, const char* pHost);
-XSTATUS XSock_Addr(xsock_addr_t* pInfo, struct sockaddr_in* pAddr, size_t nSize);
+void XSock_InitAddr(xsock_info_t* pAddr);
+XSTATUS XSock_AddrInfo(xsock_info_t* pAddr, xsock_family_t eFam, const char* pHost);
+XSTATUS XSock_GetAddr(xsock_info_t* pAddr, const char* pHost);
+XSTATUS XSock_Addr(xsock_info_t* pInfo, struct sockaddr_in* pAddr, size_t nSize);
 
 XSOCKET XSock_AddMembership(xsock_t* pSock, const char* pGroup);
 XSOCKET XSock_ReuseAddr(xsock_t* pSock, xbool_t nEnabled);
@@ -271,11 +276,11 @@ XSOCKET XSock_Bind(xsock_t *pSock);
 
 XSOCKET XSock_CreateAdv(xsock_t* pSock, uint32_t nFlags, size_t nFdMax, const char* pAddr, uint16_t nPort);
 XSOCKET XSock_Create(xsock_t* pSock, uint32_t nFlags, const char* pAddr, uint16_t nPort);
-XSOCKET XSock_Open(xsock_t* pSock, uint32_t nFlags, xsock_addr_t* pAddr);
+XSOCKET XSock_Open(xsock_t* pSock, uint32_t nFlags, xsock_info_t* pAddr);
 XSOCKET XSock_Setup(xsock_t* pSock, uint32_t nFlags, const char* pAddr);
 
 xsock_t* XSock_Alloc(uint32_t nFlags, const char* pAddr, uint16_t nPort);
-xsock_t* XSock_New(uint32_t nFlags, xsock_addr_t* pAddr);
+xsock_t* XSock_New(uint32_t nFlags, xsock_info_t* pAddr);
 void XSock_Free(xsock_t* pSock);
 
 #ifdef __cplusplus

@@ -253,6 +253,7 @@ int XHTTP_Init(xhttp_t *pHttp, xhttp_method_t eMethod, size_t nSize)
     pHttp->nStatusCode = pHttp->nHeaderCount = 0;
     pHttp->nAllocated = pHttp->nComplete = 0;
     pHttp->sVersion[0] = pHttp->sUrl[0] = '\0';
+    pHttp->sUnixAddr[0] = '\0';
 
     pHttp->callback = NULL;
     pHttp->pUserCtx = NULL;
@@ -271,6 +272,12 @@ int XHTTP_Init(xhttp_t *pHttp, xhttp_method_t eMethod, size_t nSize)
 
     xbyte_buffer_t *pBuffer = &pHttp->rawData;
     return XByteBuffer_Init(pBuffer, nSize, XSTDNON);
+}
+
+size_t XHTTP_SetUnixAddr(xhttp_t *pHttp, const char *pUnixAddr)
+{
+    XASSERT_RET((pHttp && xstrused(pUnixAddr)), XSTDERR);
+    return xstrncpy(pHttp->sUnixAddr, sizeof(pHttp->sUnixAddr), pUnixAddr);
 }
 
 int XHTTP_InitRequest(xhttp_t *pHttp, xhttp_method_t eMethod, const char *pUri, const char *pVer)
@@ -439,7 +446,7 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
             {
                 free(pValue);
                 free(pKey);
-                return XSTDNON;
+                return XSTDINV;
             }
 
             free(pKey);
@@ -475,6 +482,7 @@ size_t XHTTP_GetAuthToken(char *pToken, size_t nSize, const char *pUser, const c
 
 int XHTTP_SetAuthBasic(xhttp_t *pHttp, const char *pUser, const char *pPwd)
 {
+    if (!xstrused(pUser) || !xstrused(pPwd)) return XSTDNON;
     xbool_t nAllowUpdate = pHttp->nAllowUpdate;
     char sToken[XHTTP_OPTION_MAX];
     int nStatus = 0;
@@ -999,17 +1007,8 @@ xhttp_status_t XHTTP_Exchange(xhttp_t *pRequest, xhttp_t *pResponse, xsock_t *pS
 
 xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t *pLink)
 {
-    if (!xstrused(pLink->sProtocol)) 
-        xstrncpy(pLink->sProtocol, sizeof(pLink->sProtocol), "http");
-
-    if (!pLink->nPort)
-    {
-        pLink->nPort = XHTTP_DEF_PORT;
-        xstrncat(pLink->sHost, sizeof(pLink->sHost), ":%d", pLink->nPort);
-    }
-
-    if (strncmp(pLink->sProtocol, "http", 4))
-        return XHTTP_StatusCb(pRequest, XHTTP_ERRPROTO);
+    if (!xstrused(pLink->sProtocol)) xstrncpy(pLink->sProtocol, sizeof(pLink->sProtocol), "http");
+    if (strncmp(pLink->sProtocol, "http", 4)) return XHTTP_StatusCb(pRequest, XHTTP_ERRPROTO);
 
     xsock_t sock;
     uint32_t nFlags = XSOCK_TCP_CLIENT;
@@ -1020,11 +1019,33 @@ xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t
         XSock_InitSSL();
     }
 
-    if (xstrused(pLink->sUser) && xstrused(pLink->sPass) &&
-        XHTTP_SetAuthBasic(pRequest, pLink->sUser, pLink->sPass) <= 0)
-            return XHTTP_StatusCb(pRequest, XHTTP_ERRAUTH);
+    xsock_info_t addrInfo;
+    XSock_InitAddr(&addrInfo);
 
-    if (XSock_Setup(&sock, nFlags, pLink->sHost) == XSOCK_INVALID)
+    if (xstrused(pRequest->sUnixAddr))
+    {
+        xstrncpy(addrInfo.sAddr, sizeof(addrInfo.sAddr), pRequest->sUnixAddr);
+        nFlags |= XSOCK_UNIX;
+    }
+    else
+    {
+        if (pLink->nPort <= 0)
+        {
+            pLink->nPort = XHTTP_DEF_PORT;
+            xstrncat(pLink->sHost, sizeof(pLink->sHost), ":%d", pLink->nPort);
+        }
+
+        if (XSock_GetAddr(&addrInfo, pLink->sHost) < 0)
+            return XHTTP_StatusCb(pRequest, XHTTP_ERRRESOLVE);
+
+        addrInfo.nPort = addrInfo.nPort > 0 ? addrInfo.nPort :
+            (XFlags_IsSSL(nFlags) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT);
+    }
+
+    if (XHTTP_SetAuthBasic(pRequest, pLink->sUser, pLink->sPass) < 0)
+        return XHTTP_StatusCb(pRequest, XHTTP_ERRAUTH);
+
+    if (XSock_Open(&sock, nFlags, &addrInfo) == XSOCK_INVALID)
         return XHTTP_StatusCb(pRequest, XHTTP_ERRCONNECT);
 
     if (pRequest->nTimeout)
@@ -1071,20 +1092,10 @@ xhttp_status_t XHTTP_Perform(xhttp_t *pHttp, xsock_t *pSock, const uint8_t *pBod
 
 xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *pBody, size_t nLength)
 {
-    if (!xstrused(pLink->sProtocol)) 
-        xstrncpy(pLink->sProtocol, sizeof(pLink->sProtocol), "http");
-
-    if (!pLink->nPort)
-    {
-        pLink->nPort = XHTTP_DEF_PORT;
-        xstrncat(pLink->sHost, sizeof(pLink->sHost), ":%d", pLink->nPort);
-    }
-
-    if (strncmp(pLink->sProtocol, "http", 4))
-        return XHTTP_StatusCb(pHttp, XHTTP_ERRPROTO);
+    if (!xstrused(pLink->sProtocol)) xstrncpy(pLink->sProtocol, sizeof(pLink->sProtocol), "http");
+    if (strncmp(pLink->sProtocol, "http", 4)) return XHTTP_StatusCb(pHttp, XHTTP_ERRPROTO);
 
     uint32_t nFlags = XSOCK_TCP_CLIENT;
-    xsock_addr_t addrInfo;
     xsock_t sock;
 
     if (!strncmp(pLink->sProtocol, "https", 5))
@@ -1093,15 +1104,31 @@ xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *
         XSock_InitSSL();
     }
 
-    if (xstrused(pLink->sUser) && xstrused(pLink->sPass) &&
-        XHTTP_SetAuthBasic(pHttp, pLink->sUser, pLink->sPass) <= 0)
-            return XHTTP_StatusCb(pHttp, XHTTP_ERRAUTH);
+    xsock_info_t addrInfo;
+    XSock_InitAddr(&addrInfo);
 
-    if (XSock_GetAddr(&addrInfo, pLink->sHost) < 0)
-        return XHTTP_StatusCb(pHttp, XHTTP_ERRRESOLVE);
+    if (xstrused(pHttp->sUnixAddr))
+    {
+        xstrncpy(addrInfo.sAddr, sizeof(addrInfo.sAddr), pHttp->sUnixAddr);
+        nFlags |= XSOCK_UNIX;
+    }
+    else
+    {
+        if (pLink->nPort <= 0)
+        {
+            pLink->nPort = XHTTP_DEF_PORT;
+            xstrncat(pLink->sHost, sizeof(pLink->sHost), ":%d", pLink->nPort);
+        }
 
-    addrInfo.nPort = addrInfo.nPort ? addrInfo.nPort :
-        (XSockFlags_CheckSSL(nFlags) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT);
+        if (XSock_GetAddr(&addrInfo, pLink->sHost) < 0)
+            return XHTTP_StatusCb(pHttp, XHTTP_ERRRESOLVE);
+
+        addrInfo.nPort = addrInfo.nPort > 0 ? addrInfo.nPort :
+            (XFlags_IsSSL(nFlags) ? XHTTP_SSL_PORT : XHTTP_DEF_PORT);
+    }
+
+    if (XHTTP_SetAuthBasic(pHttp, pLink->sUser, pLink->sPass) < 0)
+        return XHTTP_StatusCb(pHttp, XHTTP_ERRAUTH);
 
     if (XHTTP_CHECK_FLAG(pHttp->nCbTypes, XHTTP_STATUS) && pHttp->callback != NULL)
     {

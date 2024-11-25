@@ -125,7 +125,7 @@ int read_event(xevents_t *pEvents, xevent_data_t *pEvData)
     else
     {
         xsock_t clientSock;
-        XSock_Init(&clientSock, XSOCK_TCP_PEER, pEvData->nFD, XTRUE);
+        XSock_Init(&clientSock, XSOCK_TCP_PEER | XSOCK_NB, pEvData->nFD);
 
         xhttp_t *pHandle = (xhttp_t*)pEvData->pContext;
         xhttp_status_t eStatus = XHTTP_Receive(pHandle, &clientSock);
@@ -179,7 +179,7 @@ int write_event(xevents_t *pEvents, xevent_data_t *pEvData)
     if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
     xsock_t socket;
-    XSock_Init(&socket, XSOCK_TCP_PEER, pEvData->nFD, XTRUE);
+    XSock_Init(&socket, XSOCK_TCP_PEER | XSOCK_NB, pEvData->nFD);
 
     int nSent = XSock_Write(&socket, pBuffer->pData, pBuffer->nUsed);
     if (nSent <= 0)
