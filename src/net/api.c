@@ -1144,13 +1144,20 @@ void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
     pEndpt->pAddr = NULL;
     pEndpt->pUri = NULL;
     pEndpt->bTLS = XFALSE;
+    pEndpt->bUnix = XFALSE;
 }
 
 XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
     XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
-    XASSERT((pEndpt->pAddr && pEndpt->nPort), XSTDINV);
     XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
+    XASSERT((pEndpt->pAddr != NULL), XSTDINV);
+
+    if (!pEndpt->nPort && !pEndpt->bUnix)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_INVALID_ARGS);
+        return XSTDERR;
+    }
 
     xapi_data_t *pApiData = XAPI_NewData(pApi, pEndpt->eType);
     if (pApiData == NULL)
@@ -1170,8 +1177,10 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_SERVER;
 
-    uint32_t nFlags = XSOCK_TCP_SERVER;
+    uint32_t nFlags = XSOCK_SERVER;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
+    if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
+    else nFlags |= XSOCK_TCP;
 
     XSock_Create(pSock, nFlags, pEndpt->pAddr, pEndpt->nPort);
     if (pEndpt->bTLS) XSock_SetSSLCert(pSock, &pEndpt->certs);
@@ -1247,8 +1256,10 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_CLIENT;
 
-    uint32_t nFlags = XSOCK_TCP_CLIENT;
+    uint32_t nFlags = XSOCK_CLIENT;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
+    if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
+    else nFlags |= XSOCK_TCP;
 
     XSock_Create(pSock, nFlags, pApiData->sAddr, pEndpt->nPort);
     XSock_NonBlock(pSock, XTRUE);

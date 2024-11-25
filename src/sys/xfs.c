@@ -855,7 +855,7 @@ int XDir_Create(const char *pDir, xmode_t nMode)
     return XDir_Make(sDir, nMode);
 }
 
-int XDir_Unlink(const char *pPath)
+int XPath_Unlink(const char *pPath)
 {
     xstat_t statbuf;
     if (!stat(pPath, &statbuf))
@@ -887,7 +887,7 @@ int XDir_Remove(const char *pPath)
             }
 
             size_t nLen = xstrncpyf(pNewPath, nSize, "%s/%s", pPath, dir.pCurrEntry);
-            if (nLen > 0) nStatus = XDir_Unlink(pNewPath);
+            if (nLen > 0) nStatus = XPath_Unlink(pNewPath);
             free(pNewPath);
         }
 

@@ -114,7 +114,7 @@ void XDir_Close(xdir_t *pDir);
 int XDir_Open(xdir_t *pDir, const char *pPath);
 int XDir_Read(xdir_t *pDir, char *pFile, size_t nSize);
 int XDir_Create(const char *pDir, xmode_t mode);
-int XDir_Unlink(const char *pPath);
+int XPath_Unlink(const char *pPath);
 int XDir_Valid(const char *pPath);
 int XDir_Remove(const char *pPath);
 

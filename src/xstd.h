@@ -41,6 +41,7 @@
 #include <sys/socket.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/un.h>
 
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
@@ -55,6 +56,7 @@
 #include <ws2tcpip.h>
 #include <winsock2.h>
 #include <windows.h>
+#include <afunix.h>
 #include <direct.h>
 #include <io.h>
 #endif

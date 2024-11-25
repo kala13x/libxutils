@@ -58,7 +58,10 @@ typedef int                 XSOCKET;
 #define XSOCK_INFO_MAX      256
 #define XSOCK_ADDR_MAX      128
 
-typedef struct sockaddr_in  xsock_inaddr_t;
+typedef union {
+    struct sockaddr_in inet_addr;
+    struct sockaddr_un unix_addr;
+} xsock_inaddr_t;
 
 /* Socket errors */
 typedef enum {
@@ -158,6 +161,8 @@ typedef struct XSocketCert {
 typedef struct XSocket {
     xsock_status_t eStatus;
     xsock_inaddr_t inAddr;
+    xsocklen_t nAddrLen;
+    void *pSockAddr;
 
     uint32_t nFlags;
     uint32_t nAddr;
@@ -168,6 +173,7 @@ typedef struct XSocket {
     xbool_t nNB;
 
     XSOCKET nFD;
+    int nDomain;
     int nProto;
     int nType;
 
