@@ -44,7 +44,7 @@ typedef int                 XSOCKET;
 #define XSHUT_RDWR          SHUT_RDWR
 #define XMSG_NOSIGNAL       MSG_NOSIGNAL
 #define XMSG_DONTWAIT       MSG_DONTWAIT
-#define XSOCK_INVALID       -1
+#define XSOCK_INVALID       XSTDERR
 #endif
 
 #define XSOCK_SUCCESS       XSTDOK
@@ -57,11 +57,6 @@ typedef int                 XSOCKET;
 #define XSOCK_FD_MAX        120000
 #define XSOCK_INFO_MAX      256
 #define XSOCK_ADDR_MAX      128
-
-typedef union {
-    struct sockaddr_in inAddr;
-    struct sockaddr_un unAddr;
-} xsock_addr_t;
 
 /* Socket errors */
 typedef enum {
@@ -160,6 +155,11 @@ typedef struct XSocketCert {
     int nVerifyFlags;
 } xsock_cert_t;
 
+typedef union {
+    struct sockaddr_in inAddr;
+    struct sockaddr_un unAddr;
+} xsock_addr_t;
+
 /* XSocket */
 typedef struct XSocket {
     xsock_status_t eStatus;
@@ -183,6 +183,9 @@ typedef struct XSocket {
 #define XSOCK_TCP_PEER (XSOCK_TCP | XSOCK_PEER)
 #define XSOCK_TCP_SERVER (XSOCK_TCP | XSOCK_SERVER)
 #define XSOCK_TCP_CLIENT (XSOCK_TCP | XSOCK_CLIENT)
+#define XSOCK_UNIX_PEER (XSOCK_UNIX | XSOCK_PEER)
+#define XSOCK_UNIX_SERVER (XSOCK_UNIX | XSOCK_SERVER)
+#define XSOCK_UNIX_CLIENT (XSOCK_UNIX | XSOCK_CLIENT)
 #define XSOCK_UDP_CLIENT (XSOCK_UDP | XSOCK_CLIENT)
 #define XSOCK_UDP_BCAST (XSOCK_UDP | XSOCK_BROADCAST)
 #define XSOCK_UDP_MCAST (XSOCK_UDP | XSOCK_MULTICAST)
@@ -196,13 +199,12 @@ SSL_CTX* XSock_GetSSLCTX(xsock_t *pSock);
 SSL* XSock_GetSSL(xsock_t *pSock);
 #endif
 
-xsock_addr_t* XSock_GetInAddr(xsock_t *pSock);
 xsock_status_t XSock_Status(const xsock_t *pSock);
 uint32_t XSock_GetFlags(const xsock_t *pSock);
 xbool_t XFlags_IsUnix(uint32_t nFlags);
 xbool_t XFlags_IsSSL(uint32_t nFlags);
 
-struct sockaddr* XSock_GetSockAddr(xsock_t *pSock);
+xsockaddr_t* XSock_GetSockAddr(xsock_t *pSock);
 xsocklen_t XSock_GetAddrLen(xsock_t *pSock);
 
 uint32_t XSock_GetNetAddr(const xsock_t *pSock);

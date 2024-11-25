@@ -1011,7 +1011,7 @@ xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t
     if (strncmp(pLink->sProtocol, "http", 4)) return XHTTP_StatusCb(pRequest, XHTTP_ERRPROTO);
 
     xsock_t sock;
-    uint32_t nFlags = XSOCK_TCP_CLIENT;
+    uint32_t nFlags = XSOCK_CLIENT;
 
     if (!strncmp(pLink->sProtocol, "https", 5))
     {
@@ -1029,6 +1029,8 @@ xhttp_status_t XHTTP_LinkExchange(xhttp_t *pRequest, xhttp_t *pResponse, xlink_t
     }
     else
     {
+        nFlags |= XSOCK_TCP;
+
         if (pLink->nPort <= 0)
         {
             pLink->nPort = XHTTP_DEF_PORT;
@@ -1095,7 +1097,7 @@ xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *
     if (!xstrused(pLink->sProtocol)) xstrncpy(pLink->sProtocol, sizeof(pLink->sProtocol), "http");
     if (strncmp(pLink->sProtocol, "http", 4)) return XHTTP_StatusCb(pHttp, XHTTP_ERRPROTO);
 
-    uint32_t nFlags = XSOCK_TCP_CLIENT;
+    uint32_t nFlags = XSOCK_CLIENT;
     xsock_t sock;
 
     if (!strncmp(pLink->sProtocol, "https", 5))
@@ -1114,6 +1116,8 @@ xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *
     }
     else
     {
+        nFlags |= XSOCK_TCP;
+
         if (pLink->nPort <= 0)
         {
             pLink->nPort = XHTTP_DEF_PORT;
