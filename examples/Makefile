@@ -19,8 +19,9 @@ CFLAGS += -I../src \
 	-I../src/sys
 
 EXECS = array \
+	async-server \
+	basic-server \
 	http-server \
-	tcp-server \
 	ws-server \
 	ws-client \
 	statcov \

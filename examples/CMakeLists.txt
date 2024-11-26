@@ -43,8 +43,9 @@ endif()
 # replace with your actual source files
 set(SOURCE_FILES 
     array.c
+    async-server.c
+    basic-server.c
     http-server.c
-    tcp-server.c
     ws-server.c
     ws-client.c
     statcov.c
