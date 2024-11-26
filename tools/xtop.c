@@ -21,7 +21,7 @@
 #include "api.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        4
+#define XTOP_VERSION_MIN        5
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -760,8 +760,18 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
         if (xstrused(pIface->sName) == XTRUE && nTrackLen > 0 && nTrackID < 0 &&
             !strncmp(pArgs->sName, pIface->sName, nTrackLen)) nTrackID = (int)i;
 
-        size_t nNextLength = strlen(pIface->sName);
-        if (nNextLength > nLength) nLength = nNextLength;
+        size_t nNextLength = strnlen(pIface->sName, sizeof(pIface->sName));
+        if (nNextLength > 12)
+        {
+            nNextLength = 12;
+            pIface->sName[9] = '.';
+            pIface->sName[10] = '.';
+            pIface->sName[11] = '.';
+            pIface->sName[12] = XSTR_NUL;
+        }
+
+        if (nNextLength > nLength)
+            nLength = nNextLength;
     }
 
     /* If iface length is less than "total", take "total" length as maximum */
