@@ -44,6 +44,7 @@ endif()
 set(SOURCE_FILES 
     array.c
     async-server.c
+    async-client.c
     basic-server.c
     http-server.c
     ws-server.c

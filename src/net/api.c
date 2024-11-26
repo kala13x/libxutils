@@ -227,7 +227,7 @@ XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent)
 {
     XASSERT((pData != NULL), XSTDERR);
 
-    if (!(pData->nEvents & nEvent))
+    if (!XFLAGS_CHECK(pData->nEvents, nEvent))
     {
         int nEvents = pData->nEvents | nEvent;
         return XAPI_SetEvents(pData, nEvents);
@@ -240,7 +240,7 @@ XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent)
 {
     XASSERT((pData != NULL), XSTDERR);
 
-    if (pData->nEvents & nEvent)
+    if (XFLAGS_CHECK(pData->nEvents, nEvent))
     {
         int nEvents = pData->nEvents & ~nEvent;
         return XAPI_SetEvents(pData, nEvents);
@@ -259,6 +259,12 @@ xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pApiData)
 {
     XASSERT_RET(pApiData, NULL);
     return &pApiData->txBuffer;
+}
+
+xbyte_buffer_t* XAPI_GetRxBuff(xapi_data_t *pApiData)
+{
+    XASSERT_RET(pApiData, NULL);
+    return &pApiData->rxBuffer;
 }
 
 XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer)
@@ -1157,7 +1163,7 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     if (!pEndpt->nPort && !pEndpt->bUnix)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_INVALID_ARGS);
-        return XSTDERR;
+        return XSTDINV;
     }
 
     xapi_data_t *pApiData = XAPI_NewData(pApi, pEndpt->eType);
@@ -1230,9 +1236,15 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
     XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
-    XASSERT((pEndpt->pAddr && pEndpt->nPort), XSTDINV);
     XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
+    XASSERT((pEndpt->pAddr != NULL), XSTDINV);
     xsock_info_t addrInfo;
+
+    if (!pEndpt->nPort && !pEndpt->bUnix)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_INVALID_ARGS);
+        return XSTDINV;
+    }
 
     if (pEndpt->bUnix)
     {

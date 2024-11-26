@@ -157,6 +157,7 @@ const char* XAPI_GetStatus(xapi_ctx_t *pCtx);
 const char* XAPI_GetStatusStr(xapi_status_t eStatus);
 
 xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pApiData);
+xbyte_buffer_t* XAPI_GetRxBuff(xapi_data_t *pApiData);
 XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer);
 
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx, size_t nRxSize);

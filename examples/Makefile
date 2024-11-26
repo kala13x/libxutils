@@ -20,6 +20,7 @@ CFLAGS += -I../src \
 
 EXECS = array \
 	async-server \
+	async-client \
 	basic-server \
 	http-server \
 	ws-server \

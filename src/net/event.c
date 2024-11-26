@@ -161,6 +161,7 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     pEvents->eventCallback = callBack;
     pEvents->pUserSpace = pUser;
     pEvents->bUseHash = bUseHash;
+    pEvents->nEventCount = 0;
 
     if (pEvents->bUseHash && XHash_Init(&pEvents->hashMap, XEvents_ClearCb, pEvents) < 0)
     {
@@ -192,9 +193,7 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
         return XEVENT_STATUS_EALLOC;
     }
 
-    pEvents->nEventCount = 0;
     uint32_t i = 0;
-
     for (i = 0; i < pEvents->nEventMax; i++)
     {
         pEvents->pEventArray[i].revents = 0;
@@ -254,11 +253,12 @@ xevent_status_t XEvents_Add(xevents_t *pEv, xevent_data_t* pData, int nEvents)
     if (epoll_ctl(pEv->nEventFd, EPOLL_CTL_ADD, pData->nFD, &event) < 0) return XEVENT_STATUS_ECTL;
 #else
     if (pEv->nEventCount >= pEv->nEventMax) return XEVENT_STATUS_ECTL;
-    pData->nIndex = pEv->nEventCount++;
+    pData->nIndex = pEv->nEventCount;
     pEv->pEventArray[pData->nIndex].revents = 0;
     pEv->pEventArray[pData->nIndex].events = (short)nEvents;
     pEv->pEventArray[pData->nIndex].fd = pData->nFD;
 #endif
+    pEv->nEventCount++;
 
     if (pEv->bUseHash && XHash_Insert(&pEv->hashMap, pData, 0, (int)pData->nFD) < 0)
     {
@@ -268,9 +268,9 @@ xevent_status_t XEvents_Add(xevents_t *pEv, xevent_data_t* pData, int nEvents)
         pEv->pEventArray[pData->nIndex].revents = 0;
         pEv->pEventArray[pData->nIndex].events = 0;
         pEv->pEventArray[pData->nIndex].fd = XSOCK_INVALID;
-        pEv->nEventCount--;
         pData->nIndex = -1;
 #endif
+        pEv->nEventCount--;
         return XEVENT_STATUS_EINSERT;
     }
 
@@ -353,7 +353,11 @@ xevent_status_t XEvents_Delete(xevents_t *pEv, xevent_data_t *pData)
     XSTATUS nStatus = XSTDERR;
 
 #ifdef __linux__
-    if (pData->nFD >= 0) nStatus = epoll_ctl(pEv->nEventFd, EPOLL_CTL_DEL, pData->nFD, NULL);
+    if (pData->nFD >= 0)
+    {
+        nStatus = epoll_ctl(pEv->nEventFd, EPOLL_CTL_DEL, pData->nFD, NULL);
+        if (nStatus >= 0 && pEv->nEventCount) pEv->nEventCount--;
+    }
 #else
     if (pData->nIndex >= 0 && (uint32_t)pData->nIndex < pEv->nEventCount)
     {

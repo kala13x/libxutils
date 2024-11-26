@@ -1,10 +1,10 @@
 /*!
- *  @file libxutils/examples/async-server.c
+ *  @file libxutils/examples/async-client.c
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  *
- * @brief Implementation of high performance event based non-blocking async server.
+ * @brief Implementation of high performance event based non-blocking async client.
  * The library will use poll(), epoll() or WSAPoll() depending on the operating system.
  */
 
@@ -19,12 +19,8 @@ static int g_nInterrupted = 0;
 extern char *optarg;
 
 typedef struct {
-    char sCaPath[XPATH_MAX];
-    char sCertPath[XPATH_MAX];
-    char sKeyPath[XPATH_MAX];
     char sAddr[XSOCK_ADDR_MAX];
     uint16_t nPort;
-    xbool_t bForce;
     xbool_t bUnix;
     xbool_t bSSL;
 } xunix_srv_args_t;
@@ -45,33 +41,32 @@ int handle_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
     else if (pCtx->eCbType == XAPI_CB_ERROR)
         xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
 
-    if (pCtx->nStatus == XAPI_DESTROY)
-    {
-        xapi_t *pApi = pCtx->pApi;
-        xunix_srv_args_t *pArgs = (xunix_srv_args_t*)pApi->pUserCtx;
-        if (pArgs->bUnix) XPath_Remove(pArgs->sAddr);
-    }
-
     return XAPI_CONTINUE;
 }
 
-int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int handle_read(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xbyte_buffer_t *pBuffer = XAPI_GetRxBuff(pData);
 
-    xlogn("Received data: fd(%d), buff(%zu)",
-        (int)pData->sock.nFD, pBuffer->nUsed);
+    xlogn("Received response: fd(%d), buff(%zu): %s",
+        (int)pData->sock.nFD, pBuffer->nUsed, (char*)pBuffer->pData);
 
-    // Echo response
-    XByteBuffer_AddBuff(&pData->txBuffer, pBuffer);
+    return XAPI_DISCONNECT;
+}
 
-    return XAPI_EnableEvent(pData, XPOLLOUT);
+int handle_write(xapi_ctx_t *pCtx, xapi_data_t *pData)
+{
+    xbyte_buffer_t *pBuffer = XAPI_GetTxBuff(pData);
+
+    XByteBuffer_AddFmt(pBuffer, "My simple request");
+
+    return XAPI_EnableEvent(pData, XPOLLOUT | XPOLLIN);
 }
 
 int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xlogn("Accepted connection: fd(%d)", (int)pData->sock.nFD);
-    return XAPI_SetEvents(pData, XPOLLIN);
+    xlogn("Conected to server: fd(%d)", (int)pData->sock.nFD);
+    return XAPI_SetEvents(pData, XPOLLOUT);
 }
 
 int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -82,18 +77,17 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_STATUS:
             return handle_status(pCtx, pData);
         case XAPI_CB_READ:
-            return handle_request(pCtx, pData);
-        case XAPI_CB_ACCEPTED:
+            return handle_read(pCtx, pData);
+        case XAPI_CB_WRITE:
+            return handle_write(pCtx, pData);
+        case XAPI_CB_CONNECTED:
             return init_data(pCtx, pData);
-        case XAPI_CB_LISTENING:
-            xlogn("Server started listening: fd(%d)", (int)pData->sock.nFD);
-            break;
         case XAPI_CB_CLOSED:
             xlogn("Connection closed: fd(%d)", (int)pData->sock.nFD);
-            break;
-        case XAPI_CB_COMPLETE:
-            xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
             return XAPI_DISCONNECT;
+        case XAPI_CB_COMPLETE:
+            xlogn("Request sent: fd(%d)", (int)pData->sock.nFD);
+            break;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XAPI_DISCONNECT;
             break;
@@ -107,29 +101,21 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
 void display_usage(const char *pName)
 {
     printf("============================================================\n");
-    printf(" XAPI server example - xutils: %s\n", XUtils_Version());
+    printf(" XAPI client example - xutils: %s\n", XUtils_Version());
     printf("============================================================\n");
     printf("Usage: %s [options]\n\n", pName);
     printf("Options are:\n");
     printf("  -a <addr>            # Listener address (%s*%s)\n", XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("  -p <port>            # Listener port\n");
-    printf("  -c <path>            # SSL Cert file path\n");
-    printf("  -k <path>            # SSL Key file path\n");
-    printf("  -r <path>            # SSL CA file path\n");
     printf("  -s                   # SSL mode\n");
-    printf("  -f                   # Force bind socket\n");
     printf("  -u                   # Use unix socket\n");
     printf("  -h                   # Version and usage\n\n");
 }
 
 xbool_t parse_args(xunix_srv_args_t *pArgs, int argc, char *argv[])
 {
-    pArgs->sCertPath[0] = XSTR_NUL;
-    pArgs->sKeyPath[0] = XSTR_NUL;
-    pArgs->sCaPath[0] = XSTR_NUL;
     pArgs->sAddr[0] = XSTR_NUL;
     pArgs->nPort = XSTDNON;
-    pArgs->bForce = XFALSE;
     pArgs->bUnix = XFALSE;
     pArgs->bSSL = XFALSE;
     int nChar = XSTDNON;
@@ -141,20 +127,8 @@ xbool_t parse_args(xunix_srv_args_t *pArgs, int argc, char *argv[])
             case 'a':
                 xstrncpy(pArgs->sAddr, sizeof(pArgs->sAddr), optarg);
                 break;
-            case 'c':
-                xstrncpy(pArgs->sCertPath, sizeof(pArgs->sCertPath), optarg);
-                break;
-            case 'k':
-                xstrncpy(pArgs->sKeyPath, sizeof(pArgs->sKeyPath), optarg);
-                break;
-            case 'r':
-                xstrncpy(pArgs->sCaPath, sizeof(pArgs->sCaPath), optarg);
-                break;
             case 'p':
                 pArgs->nPort = atoi(optarg);
-                break;
-            case 'f':
-                pArgs->bForce = XTRUE;
                 break;
             case 'u':
                 pArgs->bUnix = XTRUE;
@@ -177,14 +151,6 @@ xbool_t parse_args(xunix_srv_args_t *pArgs, int argc, char *argv[])
     if (!pArgs->nPort && !pArgs->bUnix)
     {
         xloge("Missing listener port");
-        return XFALSE;
-    }
-
-    if (pArgs->bSSL &&
-        (!xstrused(pArgs->sCertPath) ||
-         !xstrused(pArgs->sKeyPath)))
-    {
-        xloge("Missing SSL cert or key path");
         return XFALSE;
     }
 
@@ -219,26 +185,23 @@ int main(int argc, char* argv[])
     endpt.nPort = args.nPort;
     endpt.bUnix = args.bUnix;
     endpt.bTLS = args.bSSL;
-    endpt.bForce = args.bForce;
 
-    if (endpt.bTLS)
-    {
-        endpt.certs.pCaPath = args.sCaPath;
-        endpt.certs.pKeyPath = args.sKeyPath;
-        endpt.certs.pCertPath = args.sCertPath;
-#ifdef SSL_VERIFY_PEER
-        endpt.certs.nVerifyFlags = SSL_VERIFY_PEER;
-#endif
-    }
-
-    if (XAPI_Listen(&api, &endpt) < 0)
+    if (XAPI_Connect(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;
     }
 
     xevent_status_t status;
-    do status = XAPI_Service(&api, 100);
+    do
+    {
+        status = XAPI_Service(&api, 100);
+        if (status != XEVENT_STATUS_SUCCESS) break;
+
+        // Manualy break if no more events
+        xevents_t *pEvents = &api.events;
+        if (!pEvents->nEventCount) break;
+    }
     while (status == XEVENT_STATUS_SUCCESS);
 
     XAPI_Destroy(&api);

@@ -111,11 +111,11 @@ typedef struct XEvents {
     int                     nEventFd;           /* EPOLL file decriptor */
 #else
     struct pollfd*          pEventArray;        /* POLL event array */
-    uint32_t                nEventCount;        /* Number of event fds in array */
 #endif
 
     xevent_cb_t             eventCallback;      /* Service callback */
     void*                   pUserSpace;         /* User space pointer */
+    uint32_t                nEventCount;        /* Number of event fds in array */
     uint32_t                nEventMax;          /* Max allowed file descriptors */
 
     xbool_t                 bUseHash;           /* Flag to enable/disable hash map usage*/
