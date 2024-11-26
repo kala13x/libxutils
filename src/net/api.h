@@ -166,6 +166,7 @@ void XAPI_Destroy(xapi_t *pApi);
 XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent);
 XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent);
 XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents);
+size_t XAPI_GetEventCount(xapi_t *pApi);
 
 XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus);
 XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey);

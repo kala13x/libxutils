@@ -201,6 +201,13 @@ static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
     return XAPI_StatusToEvent(pApi, nStatus);
 }
 
+size_t XAPI_GetEventCount(xapi_t *pApi)
+{
+    XASSERT_RET((pApi != NULL), XSTDNON);
+    xevents_t *pEvents = &pApi->events;
+    return pEvents->nEventCount;
+}
+
 XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
 {
     XASSERT((pData && pData->pEvData), XSTDERR);

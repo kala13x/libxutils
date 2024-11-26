@@ -49,7 +49,8 @@ int handle_read(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xbyte_buffer_t *pBuffer = XAPI_GetRxBuff(pData);
 
     xlogn("Received response: fd(%d), buff(%zu): %s",
-        (int)pData->sock.nFD, pBuffer->nUsed, (char*)pBuffer->pData);
+        (int)pData->sock.nFD, pBuffer->nUsed,
+        (const char*)pBuffer->pData);
 
     return XAPI_DISCONNECT;
 }
@@ -57,10 +58,15 @@ int handle_read(xapi_ctx_t *pCtx, xapi_data_t *pData)
 int handle_write(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xbyte_buffer_t *pBuffer = XAPI_GetTxBuff(pData);
-
     XByteBuffer_AddFmt(pBuffer, "My simple request");
+    return XAPI_EnableEvent(pData, XPOLLOUT);
+}
 
-    return XAPI_EnableEvent(pData, XPOLLOUT | XPOLLIN);
+int send_complete(xapi_ctx_t *pCtx, xapi_data_t *pData)
+{
+    xlogn("Request sent: fd(%d)", (int)pData->sock.nFD);
+    XAPI_DisableEvent(pData, XPOLLOUT);
+    return XAPI_EnableEvent(pData, XPOLLIN);
 }
 
 int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -82,12 +88,11 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
             return handle_write(pCtx, pData);
         case XAPI_CB_CONNECTED:
             return init_data(pCtx, pData);
+        case XAPI_CB_COMPLETE:
+            return send_complete(pCtx, pData);
         case XAPI_CB_CLOSED:
             xlogn("Connection closed: fd(%d)", (int)pData->sock.nFD);
             return XAPI_DISCONNECT;
-        case XAPI_CB_COMPLETE:
-            xlogn("Request sent: fd(%d)", (int)pData->sock.nFD);
-            break;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XAPI_DISCONNECT;
             break;
@@ -192,17 +197,14 @@ int main(int argc, char* argv[])
         return XSTDERR;
     }
 
-    xevent_status_t status;
-    do
+    while (!g_nInterrupted)
     {
-        status = XAPI_Service(&api, 100);
+        xevent_status_t status = XAPI_Service(&api, 100);
         if (status != XEVENT_STATUS_SUCCESS) break;
 
         // Manualy break if no more events
-        xevents_t *pEvents = &api.events;
-        if (!pEvents->nEventCount) break;
+        if (!XAPI_GetEventCount(&api)) break;
     }
-    while (status == XEVENT_STATUS_SUCCESS);
 
     XAPI_Destroy(&api);
     return 0;
