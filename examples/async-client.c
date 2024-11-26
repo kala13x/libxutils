@@ -65,7 +65,10 @@ int handle_write(xapi_ctx_t *pCtx, xapi_data_t *pData)
 int send_complete(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xlogn("Request sent: fd(%d)", (int)pData->sock.nFD);
-    XAPI_DisableEvent(pData, XPOLLOUT);
+
+    xbyte_buffer_t *pBuffer = XAPI_GetTxBuff(pData);
+    if (!pBuffer->nUsed) XAPI_DisableEvent(pData, XPOLLOUT);
+
     return XAPI_EnableEvent(pData, XPOLLIN);
 }
 
