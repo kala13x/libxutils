@@ -58,12 +58,6 @@ xbool_t XFlags_IsSSL(uint32_t nFlags)
     return XFALSE;
 }
 
-xbool_t XFlags_IsUnix(uint32_t nFlags)
-{
-    if (XFLAGS_CHECK(nFlags, XSOCK_UNIX)) return XTRUE;
-    return XFALSE;
-}
-
 static uint32_t XFlags_Adjust(uint32_t nFlags)
 {
     if (XFLAGS_CHECK(nFlags, XSOCK_SSLV2) ||
@@ -1672,7 +1666,7 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
     XSTATUS nStatus = XSock_Init(pSock, nFlags, XSOCK_INVALID);
     if (nStatus == XSOCK_ERROR) return XSOCK_INVALID;
 
-    if (!xstrused(pAddr) || (!nPort && !XFlags_IsUnix(nFlags)))
+    if (!xstrused(pAddr) || (!nPort && !XFLAGS_CHECK(nFlags, XSOCK_UNIX)))
     {
         pSock->eStatus = XSOCK_ERR_ARGS;
         pSock->nFD = XSOCK_INVALID;
@@ -1708,8 +1702,7 @@ XSOCKET XSock_Create(xsock_t *pSock, uint32_t nFlags, const char *pAddr, uint16_
 
 XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_info_t *pAddr)
 {
-    if (!xstrused(pAddr->sAddr) ||
-       (!pAddr->nPort && !XFlags_IsUnix(nFlags)))
+    if (!xstrused(pAddr->sAddr) || (!pAddr->nPort && !XFLAGS_CHECK(nFlags, XSOCK_UNIX)))
     {
         pSock->eStatus = XSOCK_ERR_ARGS;
         pSock->nFD = XSOCK_INVALID;
@@ -1721,7 +1714,7 @@ XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_info_t *pAddr)
 
 XSOCKET XSock_Setup(xsock_t *pSock, uint32_t nFlags, const char *pAddr)
 {
-    if (XFlags_IsUnix(nFlags))
+    if (XFLAGS_CHECK(nFlags, XSOCK_UNIX))
         return XSock_Create(pSock, nFlags, pAddr, 0);
 
     xsock_info_t addrInfo;
@@ -1746,7 +1739,7 @@ xsock_t* XSock_Alloc(uint32_t nFlags, const char *pAddr, uint16_t nPort)
 
 xsock_t* XSock_New(uint32_t nFlags, xsock_info_t *pAddr)
 {
-    if (XFlags_IsUnix(nFlags))
+    if (XFLAGS_CHECK(nFlags, XSOCK_UNIX))
     {
         if (!xstrused(pAddr->sAddr)) return NULL;
         return XSock_Alloc(nFlags, pAddr->sAddr, 0);

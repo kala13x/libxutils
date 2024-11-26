@@ -1052,7 +1052,7 @@ xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink)
         char sBuffer[XHTTP_OPTION_MAX];
         xhttp_ctx_t cbCtx;
 
-        if (XFlags_IsUnix(nFlags))
+        if (XFLAGS_CHECK(nFlags, XSOCK_UNIX))
             cbCtx.nLength = xstrncpyf(
                 sBuffer, sizeof(sBuffer),
                 "Connecting to unix server: %s",
