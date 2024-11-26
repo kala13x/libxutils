@@ -138,6 +138,14 @@ int XTop_GetNetworkStats(xtop_stats_t *pStats, xarray_t *pIfaces)
         if (pDstIface == NULL) continue;
 
         memcpy(pDstIface, pSrcIface, sizeof(xnet_iface_t));
+        if (strnlen(pDstIface->sName, sizeof(pDstIface->sName) - 1) > 12)
+        {
+            pDstIface->sName[9] = '.';
+            pDstIface->sName[10] = '.';
+            pDstIface->sName[11] = '.';
+            pDstIface->sName[12] = XSTR_NUL;
+        }
+
         if (XArray_AddData(pIfaces, pDstIface, 0) < 0) free(pDstIface); 
     }
 

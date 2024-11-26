@@ -683,19 +683,19 @@ XSTATUS XTOPApp_AddCPUExtra(xcli_win_t *pWin, xtop_args_t *pArgs, xcli_bar_t *pB
 
 static uint8_t XTOPApp_GetAddrSpacePadding(xcli_win_t *pWin)
 {
-    uint8_t nSpacePadding = (pWin->frame.nColumns < 106) ? 7 : 8;
-    nSpacePadding = (pWin->frame.nColumns < 104) ? 6 : nSpacePadding;
-    nSpacePadding = (pWin->frame.nColumns < 102) ? 5 : nSpacePadding;
-    nSpacePadding = (pWin->frame.nColumns < 100) ? 4 : nSpacePadding;
-    nSpacePadding = (pWin->frame.nColumns < 98) ? 5 : nSpacePadding;
-    nSpacePadding = (pWin->frame.nColumns < 91) ? 4 : nSpacePadding;
-    nSpacePadding = (pWin->frame.nColumns < 89) ? 3 : nSpacePadding;
+    uint8_t nSpacePadding = (pWin->frame.nColumns < 112) ? 7 : 8;
+    nSpacePadding = (pWin->frame.nColumns < 110) ? 6 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 108) ? 5 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 106) ? 4 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 104) ? 5 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 97) ? 4 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 95) ? 3 : nSpacePadding;
     return nSpacePadding;
 }
 
 static xbool_t XTOPApp_IsNarrowInterface(xcli_win_t *pWin)
 {
-    return (pWin->frame.nColumns < 98) ? XTRUE : XFALSE;
+    return (pWin->frame.nColumns < 104) ? XTRUE : XFALSE;
 }
 
 static uint8_t XTOPApp_GetIfaceSpacePadding(xcli_win_t *pWin, xbool_t bIsHeader)
