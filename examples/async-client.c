@@ -23,7 +23,7 @@ typedef struct {
     uint16_t nPort;
     xbool_t bUnix;
     xbool_t bSSL;
-} xunix_srv_args_t;
+} xasync_client_args_t;
 
 void signal_callback(int sig)
 {
@@ -120,7 +120,7 @@ void display_usage(const char *pName)
     printf("  -h                   # Version and usage\n\n");
 }
 
-xbool_t parse_args(xunix_srv_args_t *pArgs, int argc, char *argv[])
+xbool_t parse_args(xasync_client_args_t *pArgs, int argc, char *argv[])
 {
     pArgs->sAddr[0] = XSTR_NUL;
     pArgs->nPort = XSTDNON;
@@ -175,7 +175,7 @@ int main(int argc, char* argv[])
     int nSignals[2] = { SIGTERM, SIGINT };
     XSig_Register(nSignals, 2, signal_callback);
 
-    xunix_srv_args_t args;
+    xasync_client_args_t args;
     if (!parse_args(&args, argc, argv))
     {
         display_usage(argv[0]);

@@ -27,7 +27,7 @@ typedef struct {
     xbool_t bForce;
     xbool_t bUnix;
     xbool_t bSSL;
-} xunix_srv_args_t;
+} xasync_srv_args_t;
 
 void signal_callback(int sig)
 {
@@ -48,7 +48,7 @@ int handle_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (pCtx->nStatus == XAPI_DESTROY)
     {
         xapi_t *pApi = pCtx->pApi;
-        xunix_srv_args_t *pArgs = (xunix_srv_args_t*)pApi->pUserCtx;
+        xasync_srv_args_t *pArgs = (xasync_srv_args_t*)pApi->pUserCtx;
         if (pArgs->bUnix) XPath_Remove(pArgs->sAddr);
     }
 
@@ -122,7 +122,7 @@ void display_usage(const char *pName)
     printf("  -h                   # Version and usage\n\n");
 }
 
-xbool_t parse_args(xunix_srv_args_t *pArgs, int argc, char *argv[])
+xbool_t parse_args(xasync_srv_args_t *pArgs, int argc, char *argv[])
 {
     pArgs->sCertPath[0] = XSTR_NUL;
     pArgs->sKeyPath[0] = XSTR_NUL;
@@ -201,7 +201,7 @@ int main(int argc, char* argv[])
     int nSignals[2] = { SIGTERM, SIGINT };
     XSig_Register(nSignals, 2, signal_callback);
 
-    xunix_srv_args_t args;
+    xasync_srv_args_t args;
     if (!parse_args(&args, argc, argv))
     {
         display_usage(argv[0]);

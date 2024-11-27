@@ -761,7 +761,7 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
             !strncmp(pArgs->sName, pIface->sName, nTrackLen)) nTrackID = (int)i;
 
         size_t nNextLength = strnlen(pIface->sName, sizeof(pIface->sName));
-        if (nNextLength > 12)
+        if (pWin->frame.nColumns < 132 && nNextLength > 12)
         {
             nNextLength = 12;
             pIface->sName[9] = '.';
