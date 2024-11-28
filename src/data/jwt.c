@@ -174,7 +174,7 @@ XSTATUS XJWT_AddHeader(xjwt_t *pJWT, const char *pHeader, size_t nHeaderLen, xbo
     if (bIsEncoded)
     {
         pJWT->pHeader = (char*)malloc(nHeaderLen + 1);
-        XASSERT(pHeader, XSTDERR);
+        XASSERT(pJWT->pHeader, XSTDERR);
 
         memcpy(pJWT->pHeader, pHeader, nHeaderLen);
         pJWT->pHeader[nHeaderLen] = '\0';
