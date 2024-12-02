@@ -77,7 +77,7 @@ int XNTP_GetDate(const char *pAddr, uint16_t nPort, xtime_t *pTime)
     if (!nPort) nPort = XNTP_DEF_PORT;
 
     xsock_info_t sockAddr;
-    XSock_GetAddr(&sockAddr, pAddr);
+    XSock_GetAddrInfo(&sockAddr, pAddr);
     sockAddr.nPort = nPort;
 
     xsock_t sock;

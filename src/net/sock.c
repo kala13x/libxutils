@@ -955,10 +955,10 @@ size_t XSock_SinAddr(const struct in_addr inAddr, char *pAddr, size_t nSize)
     return XSock_IPStr(inAddr.s_addr, pAddr, nSize);
 }
 
-size_t XSock_IPAddr(xsock_t *pSock, char *pAddr, size_t nSize)
+size_t XSock_IPAddr(const xsock_t *pSock, char *pAddr, size_t nSize)
 {
-    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_UNIX)) return 0;
-    struct sockaddr_in *pInAddr = &pSock->sockAddr.inAddr;
+    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_UNIX)) return XSOCK_NONE;
+    const struct sockaddr_in *pInAddr = &pSock->sockAddr.inAddr;
     return XSock_SinAddr(pInAddr->sin_addr, pAddr, nSize);
 }
 
@@ -977,7 +977,6 @@ XSTATUS XSock_AddrInfo(xsock_info_t *pAddr, xsock_family_t eFam, const char *pHo
     hints.ai_next = NULL;
 
     if (getaddrinfo(pHost, NULL, &hints, &res)) return nRetVal;
-    xstrncpy(pAddr->sHost, sizeof(pAddr->sHost), pHost);
     pAddr->eFamily = XF_UNDEF;
 
     for (rp = res; rp != NULL; rp = rp->ai_next)
@@ -1019,9 +1018,8 @@ XSTATUS XSock_AddrInfo(xsock_info_t *pAddr, xsock_family_t eFam, const char *pHo
     return nRetVal;
 }
 
-void XSock_InitAddr(xsock_info_t *pAddr)
+void XSock_InitInfo(xsock_info_t *pAddr)
 {
-    pAddr->sHost[0] = XSTR_NUL;
     pAddr->sName[0] = XSTR_NUL;
     pAddr->sAddr[0] = XSTR_NUL;
     pAddr->nAddr = XSTDNON;
@@ -1029,9 +1027,9 @@ void XSock_InitAddr(xsock_info_t *pAddr)
     pAddr->eFamily = XF_UNDEF;
 }
 
-XSTATUS XSock_GetAddr(xsock_info_t *pAddr, const char *pHost)
+XSTATUS XSock_GetAddrInfo(xsock_info_t *pAddr, const char *pHost)
 {
-    XSock_InitAddr(pAddr);
+    XSock_InitInfo(pAddr);
     if (pHost == NULL) return XSOCK_ERROR;
 
     char sHost[XSOCK_INFO_MAX + XSOCK_ADDR_MAX];
@@ -1049,9 +1047,9 @@ XSTATUS XSock_GetAddr(xsock_info_t *pAddr, const char *pHost)
     return pAddr->nPort ? XSOCK_SUCCESS : XSOCK_NONE;
 }
 
-XSTATUS XSock_Addr(xsock_info_t *pInfo, struct sockaddr_in *pAddr, size_t nSize)
+XSTATUS XSock_GetAddr(xsock_info_t *pInfo, struct sockaddr_in *pAddr, size_t nSize)
 {
-    XSock_InitAddr(pInfo);
+    XSock_InitInfo(pInfo);
     pInfo->eFamily = XF_IPV4;
 
     struct hostent *pHostInfo = gethostbyaddr((char*)&pAddr->sin_addr.s_addr, (int)nSize, AF_INET);
@@ -1259,7 +1257,7 @@ XSOCKET XSock_AddMembership(xsock_t* pSock, const char* pGroup)
     return pSock->nFD;
 }
 
-XSTATUS XSock_LoadPKCS12(xsocket_ssl_cert_t *pCert, const char *p12Path, const char *p12Pass)
+XSTATUS XSock_LoadPKCS12(xsock_ssl_cert_t *pCert, const char *p12Path, const char *p12Pass)
 {
     pCert->nStatus = 0;
 #ifdef XSOCK_USE_SSL
@@ -1335,7 +1333,7 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
 
     if (xstrused(pCert->p12Path))
     {
-        xsocket_ssl_cert_t sslCert;
+        xsock_ssl_cert_t sslCert;
         if (!XSock_LoadPKCS12(&sslCert, pCert->p12Path, pCert->p12Pass))
         {
             pSock->eStatus = XSOCK_ERR_PKCS12;
@@ -1715,7 +1713,7 @@ XSOCKET XSock_Setup(xsock_t *pSock, uint32_t nFlags, const char *pAddr)
         return XSock_Create(pSock, nFlags, pAddr, 0);
 
     xsock_info_t addrInfo;
-    if (XSock_GetAddr(&addrInfo, pAddr) <= 0)
+    if (XSock_GetAddrInfo(&addrInfo, pAddr) <= 0)
     {
         pSock->eStatus = XSOCK_ERR_ADDR;
         pSock->nFD = XSOCK_INVALID;

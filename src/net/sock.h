@@ -107,7 +107,7 @@ typedef enum {
     XF_IPV6 = 6
 } xsock_family_t;
 
-/* Supported socket types and roles */
+/* Supported socket types, roles and flags */
 typedef enum {
     XSOCK_TCP = (1 << 0),
     XSOCK_UDP = (1 << 1),
@@ -133,7 +133,6 @@ typedef enum {
 
 typedef struct XSocketInfo {
     char sAddr[XSOCK_ADDR_MAX];
-    char sHost[XSOCK_INFO_MAX];
     char sName[XSOCK_INFO_MAX];
     xsock_family_t eFamily;
     uint32_t nAddr;
@@ -145,7 +144,7 @@ typedef struct XSocketSSLCert {
     void *pCert;
     void *pKey;
     void *pCa;
-} xsocket_ssl_cert_t;
+} xsock_ssl_cert_t;
 
 typedef struct XSocketCert {
     const char *pCertPath;
@@ -226,7 +225,7 @@ void XSock_InitSSL(void);
 void XSock_DeinitSSL(void);
 int XSock_LastSSLError(char* pDst, size_t nSize);
 
-XSTATUS XSock_LoadPKCS12(xsocket_ssl_cert_t* pCert, const char* p12Path, const char* p12Pass);
+XSTATUS XSock_LoadPKCS12(xsock_ssl_cert_t* pCert, const char* p12Path, const char* p12Pass);
 XSOCKET XSock_SetSSLCert(xsock_t* pSock, xsock_cert_t* pCert);
 void XSock_InitCert(xsock_cert_t *pCert);
 
@@ -253,13 +252,13 @@ XSOCKET XSock_AcceptNB(xsock_t* pSock);
 
 uint32_t XSock_NetAddr(const char* pAddr);
 size_t XSock_SinAddr(const struct in_addr inAddr, char* pAddr, size_t nSize);
-size_t XSock_IPAddr(xsock_t* pSock, char* pAddr, size_t nSize);
+size_t XSock_IPAddr(const xsock_t* pSock, char* pAddr, size_t nSize);
 size_t XSock_IPStr(const uint32_t nAddr, char* pStr, size_t nSize);
 
-void XSock_InitAddr(xsock_info_t* pAddr);
+void XSock_InitInfo(xsock_info_t* pAddr);
+XSTATUS XSock_GetAddrInfo(xsock_info_t* pAddr, const char* pHost);
 XSTATUS XSock_AddrInfo(xsock_info_t* pAddr, xsock_family_t eFam, const char* pHost);
-XSTATUS XSock_GetAddr(xsock_info_t* pAddr, const char* pHost);
-XSTATUS XSock_Addr(xsock_info_t* pInfo, struct sockaddr_in* pAddr, size_t nSize);
+XSTATUS XSock_GetAddr(xsock_info_t* pInfo, struct sockaddr_in* pAddr, size_t nSize);
 
 XSOCKET XSock_AddMembership(xsock_t* pSock, const char* pGroup);
 XSOCKET XSock_ReuseAddr(xsock_t* pSock, xbool_t nEnabled);

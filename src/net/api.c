@@ -1255,10 +1255,10 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 
     if (pEndpt->bUnix)
     {
-        XSock_InitAddr(&addrInfo);
+        XSock_InitInfo(&addrInfo);
         xstrncpy(addrInfo.sAddr, sizeof(addrInfo.sAddr), pEndpt->pAddr);
     }
-    else if (XSock_GetAddr(&addrInfo, pEndpt->pAddr) < 0)
+    else if (XSock_GetAddrInfo(&addrInfo, pEndpt->pAddr) < 0)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_ERR_RESOLVE);
         return XSTDERR;

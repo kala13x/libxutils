@@ -1022,7 +1022,7 @@ xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink)
     }
 
     xsock_info_t addrInfo;
-    XSock_InitAddr(&addrInfo);
+    XSock_InitInfo(&addrInfo);
 
     if (!xstrused(pHttp->sUnixAddr))
     {
@@ -1032,7 +1032,7 @@ xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink)
             xstrncat(pLink->sHost, sizeof(pLink->sHost), ":%d", pLink->nPort);
         }
 
-        if (XSock_GetAddr(&addrInfo, pLink->sHost) < 0)
+        if (XSock_GetAddrInfo(&addrInfo, pLink->sHost) < 0)
             return XHTTP_StatusCb(pHttp, XHTTP_ERRRESOLVE);
 
         if (!addrInfo.nPort) addrInfo.nPort = pLink->nPort;
