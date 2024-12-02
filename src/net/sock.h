@@ -132,12 +132,12 @@ typedef enum {
 } xsock_flags_t;
 
 typedef struct XSocketInfo {
-    xsock_family_t eFamily;
-    uint32_t nAddr;
-    uint16_t nPort;
     char sAddr[XSOCK_ADDR_MAX];
     char sHost[XSOCK_INFO_MAX];
     char sName[XSOCK_INFO_MAX];
+    xsock_family_t eFamily;
+    uint32_t nAddr;
+    uint16_t nPort;
 } xsock_info_t;
 
 typedef struct XSocketSSLCert {
@@ -166,11 +166,9 @@ typedef struct XSocket {
     xsock_status_t eStatus;
     xsock_addr_t sockAddr;
 
+    uint32_t nFlags;
     uint32_t nAddr;
     uint16_t nPort;
-
-    uint32_t nFlags;
-    size_t nFdMax;
 
     XSOCKET nFD;
     int nDomain;
@@ -209,7 +207,6 @@ xsocklen_t XSock_GetAddrLen(xsock_t *pSock);
 
 uint32_t XSock_GetNetAddr(const xsock_t *pSock);
 uint16_t XSock_GetPort(const xsock_t *pSock);
-size_t XSock_GetFDMax(const xsock_t *pSock);
 int XSock_GetSockType(const xsock_t *pSock);
 int XSock_GetProto(const xsock_t *pSock);
 

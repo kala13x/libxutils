@@ -44,7 +44,6 @@ xbool_t XSock_IsNB(const xsock_t *pSock) { return XFLAGS_CHECK(pSock->nFlags, XS
 
 uint32_t XSock_GetNetAddr(const xsock_t *pSock) { return pSock->nAddr; }
 uint16_t XSock_GetPort(const xsock_t *pSock) { return pSock->nPort; }
-size_t XSock_GetFDMax(const xsock_t *pSock) { return pSock->nFdMax; }
 int XSock_GetSockType(const xsock_t *pSock) { return pSock->nType; }
 int XSock_GetProto(const xsock_t *pSock) { return pSock->nProto; }
 
@@ -481,7 +480,6 @@ XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
     pSock->nDomain = 0;
     pSock->nProto = 0;
     pSock->nType = 0;
-    pSock->nFdMax = 0;
     pSock->nAddr = 0;
     pSock->nPort = 0;
     pSock->nFD = nFD;
@@ -1567,16 +1565,16 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
     return XSOCK_INVALID;
 }
 
-static XSOCKET XSock_SetupStream(xsock_t *pSock)
+static XSOCKET XSock_SetupStream(xsock_t *pSock, size_t nFdMax)
 {
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
 
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SERVER))
     {
-        if (XSock_Bind(pSock) == XSOCK_INVALID)
-            return XSOCK_INVALID;
+        if (XSock_Bind(pSock) == XSOCK_INVALID) return XSOCK_INVALID;
+        nFdMax = XSTD_FIRSTOF(nFdMax, XSOCK_FD_MAX);
 
-        if (listen(pSock->nFD, (int)pSock->nFdMax) < 0)
+        if (listen(pSock->nFD, (int)nFdMax) < 0)
         {
             pSock->eStatus = XSOCK_ERR_LISTEN;
             XSock_Close(pSock);
@@ -1641,7 +1639,7 @@ static XSOCKET XSock_SetupDgram(xsock_t *pSock)
     return pSock->nFD;
 }
 
-static void XSock_SetupAddr(xsock_t *pSock, size_t nFdMax, const char *pAddr, uint16_t nPort)
+static void XSock_SetupAddr(xsock_t *pSock, const char *pAddr, uint16_t nPort)
 {
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_UNIX))
     {
@@ -1651,7 +1649,6 @@ static void XSock_SetupAddr(xsock_t *pSock, size_t nFdMax, const char *pAddr, ui
     }
     else if (!XFLAGS_CHECK(pSock->nFlags, XSOCK_RAW))
     {
-        pSock->nFdMax = XSTD_FIRSTOF(nFdMax, XSOCK_FD_MAX);
         pSock->nAddr = XSock_NetAddr(pAddr);
         pSock->nPort = nPort;
 
@@ -1685,8 +1682,8 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
         return XSOCK_INVALID;
     }
 
-    XSock_SetupAddr(pSock, nFdMax, pAddr, nPort);
-    if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock);
+    XSock_SetupAddr(pSock, pAddr, nPort);
+    if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock, nFdMax);
     else if (pSock->nType == SOCK_DGRAM) XSock_SetupDgram(pSock);
 
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_NB))

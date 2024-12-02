@@ -49,6 +49,11 @@ extern char *optarg;
 #define XTOP_NOTFOUND       404
 #define XTOP_NOTALLOWED     405
 
+#define XIFACE_HDR_NARROW_PADDING   14
+#define XIFACE_HDR_WIDE_PADDING     17
+#define XIFACE_NAME_NARROW_PADDING  12
+#define XIFACE_NAME_WIDE_PADDING    15
+
 typedef enum {
     XTOP_NONE = (uint8_t)0,
     XTOP_NETWORK,
@@ -681,31 +686,47 @@ XSTATUS XTOPApp_AddCPUExtra(xcli_win_t *pWin, xtop_args_t *pArgs, xcli_bar_t *pB
     return nStatus;
 }
 
-static uint8_t XTOPApp_GetAddrSpacePadding(xcli_win_t *pWin)
+static xbool_t XTOPApp_IsNarrowInterface(xcli_win_t *pWin)
+{
+    return (pWin->frame.nColumns < 102) ? XTRUE : XFALSE;
+}
+
+static uint8_t XTOPApp_GetIfaceSpacePadding(xcli_win_t *pWin, xbool_t bIsHeader)
+{
+    if (XTOPApp_IsNarrowInterface(pWin))
+    {
+        return bIsHeader ?
+            XIFACE_HDR_NARROW_PADDING :
+            XIFACE_NAME_NARROW_PADDING;
+    }
+
+    return bIsHeader ?
+        XIFACE_HDR_WIDE_PADDING :
+        XIFACE_NAME_WIDE_PADDING;
+}
+
+static uint8_t XTOPApp_GetAddrSpacePadding(xcli_win_t *pWin, size_t nMaxIPLen)
 {
     uint8_t nSpacePadding = (pWin->frame.nColumns < 112) ? 7 : 8;
     nSpacePadding = (pWin->frame.nColumns < 110) ? 6 : nSpacePadding;
     nSpacePadding = (pWin->frame.nColumns < 108) ? 5 : nSpacePadding;
     nSpacePadding = (pWin->frame.nColumns < 106) ? 4 : nSpacePadding;
-    nSpacePadding = (pWin->frame.nColumns < 104) ? 5 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 104) ? 3 : nSpacePadding;
+    nSpacePadding = (pWin->frame.nColumns < 102) ? 5 : nSpacePadding;
     nSpacePadding = (pWin->frame.nColumns < 97) ? 4 : nSpacePadding;
     nSpacePadding = (pWin->frame.nColumns < 95) ? 3 : nSpacePadding;
+
+    if (nSpacePadding < 4 && !XTOPApp_IsNarrowInterface(pWin))
+    {
+        if (nMaxIPLen < 10) nSpacePadding += 3;
+        else if (nMaxIPLen < 12) nSpacePadding += 2;
+        else if (nMaxIPLen < 14) nSpacePadding += 1;
+    }
+
     return nSpacePadding;
 }
 
-static xbool_t XTOPApp_IsNarrowInterface(xcli_win_t *pWin)
-{
-    return (pWin->frame.nColumns < 104) ? XTRUE : XFALSE;
-}
-
-static uint8_t XTOPApp_GetIfaceSpacePadding(xcli_win_t *pWin, xbool_t bIsHeader)
-{
-    xbool_t bNarrow = XTOPApp_IsNarrowInterface(pWin);
-    if (bIsHeader) return bNarrow ? 14 : 17;
-    return bNarrow ? 12 : 15;
-}
-
-XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_args_t *pArgs, xnet_iface_t *pIface, size_t nLength)
+XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_args_t *pArgs, size_t nMaxIPLen, xnet_iface_t *pIface, size_t nLength)
 {
     char sLine[XLINE_MAX], sName[XSTR_TINY], sRound[XSTR_TINY], sData[XSTR_TINY];
     xstrnlcpyf(sName, sizeof(sName), nLength + 1, XSTR_SPACE_CHAR, "%s", pIface->sName);
@@ -727,7 +748,7 @@ XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_args_t *pArgs, xnet_iface_t 
     xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
 
-    nSpacePadding = XTOPApp_GetAddrSpacePadding(pWin);
+    nSpacePadding = XTOPApp_GetAddrSpacePadding(pWin, nMaxIPLen);
     xstrnlcpyf(sRound, sizeof(sRound), strlen(pIface->sHWAddr) + nSpacePadding, XSTR_SPACE_CHAR, "%s", pIface->sHWAddr);
     if (strncmp(pIface->sHWAddr, XNET_HWADDR_DEFAULT, 17)) xstrncat(sLine, sizeof(sLine), "%s", sRound);
     else xstrncat(sLine, sizeof(sLine), "%s%s%s", XSTR_FMT_DIM, sRound, XSTR_FMT_RESET);
@@ -746,8 +767,8 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
     size_t i, nLength = 0;
     int nTrackID = -1;
 
-    size_t nSumRX, nSumTX;
-    nSumRX = nSumTX = 0;
+    size_t nSumRX, nSumTX, nMaxIPLen = 0;
+    nSumRX = nSumTX = nMaxIPLen = 0;
 
     for (i = 0; i < pIfaces->nUsed; i++)
     {
@@ -759,6 +780,9 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
 
         if (xstrused(pIface->sName) == XTRUE && nTrackLen > 0 && nTrackID < 0 &&
             !strncmp(pArgs->sName, pIface->sName, nTrackLen)) nTrackID = (int)i;
+
+        size_t nIPAddrLen = strnlen(pIface->sIPAddr, sizeof(pIface->sIPAddr));
+        if (nIPAddrLen > nMaxIPLen) nMaxIPLen = nIPAddrLen;
 
         size_t nNextLength = strnlen(pIface->sName, sizeof(pIface->sName));
         if (pWin->frame.nColumns < 132 && nNextLength > 12)
@@ -792,7 +816,7 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
     xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", "SUM");
     xstrncat(sLine, sizeof(sLine), "%s", sRound);
 
-    nSpacePadding = XTOPApp_GetAddrSpacePadding(pWin) + 10;
+    nSpacePadding = XTOPApp_GetAddrSpacePadding(pWin, nMaxIPLen) + 10;
     xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", "MAC");
     xstrncat(sLine, sizeof(sLine), "%s", sRound);
 
@@ -804,14 +828,14 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *p
     if (nTrackID >= 0)
     {
         xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, nTrackID);
-        if (pIface != NULL) XTOPApp_AddInterface(pWin, pArgs, pIface, nLength);
+        if (pIface != NULL) XTOPApp_AddInterface(pWin, pArgs, nMaxIPLen, pIface, nLength);
     }
 
     for (i = 0; i < pIfaces->nUsed; i++)
     {
         if (nTrackID >= 0 && i == nTrackID) continue; 
         xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, i);
-        if (pIface != NULL) XTOPApp_AddInterface(pWin, pArgs, pIface, nLength);
+        if (pIface != NULL) XTOPApp_AddInterface(pWin, pArgs, nMaxIPLen, pIface, nLength);
     }
 
     nSpacePadding = XTOPApp_GetIfaceSpacePadding(pWin, XFALSE);
