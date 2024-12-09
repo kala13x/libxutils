@@ -613,108 +613,68 @@ void XAES_DecryptBlock(xaes_context_t *pCtx, uint8_t output[XAES_BLOCK_SIZE], co
 uint8_t* XAES_Encrypt(xaes_context_t *pCtx, const uint8_t *pInput, size_t *pLength)
 {
     if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
-    uint8_t *pInputPtr = NULL;
-    size_t nDataLength = 0;
+    size_t nPaddingLen = ((*pLength / XAES_BLOCK_SIZE) + 1) * XAES_BLOCK_SIZE;
+    size_t nOriginalLen = *pLength;
+
+    uint8_t *pOutput = (uint8_t*)malloc(nPaddingLen + 1);
+    if (!pOutput) return NULL;
 
     uint8_t iv[XAES_BLOCK_SIZE];
     memcpy(iv, pCtx->IV, sizeof(iv));
 
-    if (*pLength % XAES_BLOCK_SIZE)
-    {
-        size_t nCount = *pLength / XAES_BLOCK_SIZE;
-        size_t nPart = *pLength - nCount * XAES_BLOCK_SIZE;
-        nDataLength = *pLength + (XAES_BLOCK_SIZE - nPart);
-    }
-
-    if (nDataLength)
-    {
-        pInputPtr = (uint8_t*)malloc(nDataLength + 1);
-        if (pInputPtr == NULL) return NULL;
-
-        memcpy(pInputPtr, pInput, *pLength);
-        memset(pInputPtr + *pLength, 0, nDataLength - *pLength);
-    }
-
-    const uint8_t *pData = pInputPtr != NULL ? pInputPtr : pInput;
-    nDataLength = nDataLength ? nDataLength : *pLength;
-
-    uint8_t *pOutput = (uint8_t*)malloc(nDataLength + 1);
-    if (pOutput == NULL)
-    {
-        free(pInputPtr);
-        return NULL;
-    }
+    // Copy input data and add PKCS#7 padding
+    memcpy(pOutput, pInput, nOriginalLen);
+    uint8_t nPadding = nPaddingLen - nOriginalLen;
+    memset(pOutput + nOriginalLen, nPadding, nPadding);
 
     uint8_t *pOffset = pOutput;
-    size_t nDataLeft = nDataLength;
+    size_t nDataLeft = nPaddingLen;
 
     while (nDataLeft > 0)
     {
-        uint8_t i;
+        size_t i;
         for (i = 0; i < XAES_BLOCK_SIZE; i++)
-            pOffset[i] = pData[i] ^ iv[i];
+            pOffset[i] ^= iv[i];
 
         XAES_EncryptBlock(pCtx, pOffset, pOffset);
         memcpy(iv, pOffset, XAES_BLOCK_SIZE);
 
         nDataLeft -= XAES_BLOCK_SIZE;
         pOffset += XAES_BLOCK_SIZE;
-        pData += XAES_BLOCK_SIZE;
     }
 
-    *pLength = nDataLength;
+    *pLength = nPaddingLen;
     pOutput[*pLength] = '\0';
 
-    free(pInputPtr);
     return pOutput;
 }
 
-uint8_t* XAES_Decrypt(xaes_context_t *pCtx, const  uint8_t *pInput, size_t *pLength)
+uint8_t* XAES_Decrypt(xaes_context_t *pCtx, const uint8_t *pInput, size_t *pLength)
 {
     if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
-    uint8_t *pInputPtr = NULL;
-    size_t nDataLength = 0;
+
+    size_t nInputLength = *pLength;
+    if (nInputLength % XAES_BLOCK_SIZE != 0) return NULL;
+
+    uint8_t *pOutput = (uint8_t*)malloc(nInputLength + 1);
+    if (!pOutput) return NULL;
 
     uint8_t iv[XAES_BLOCK_SIZE];
     memcpy(iv, pCtx->IV, sizeof(iv));
 
-    if (*pLength % XAES_BLOCK_SIZE)
-    {
-        size_t nCount = *pLength / XAES_BLOCK_SIZE;
-        size_t nPart = *pLength - nCount * XAES_BLOCK_SIZE;
-        nDataLength = *pLength + (XAES_BLOCK_SIZE - nPart);
-    }
-
-    if (nDataLength)
-    {
-        pInputPtr = (uint8_t*)malloc(nDataLength + 1);
-        if (pInputPtr == NULL) return NULL;
-
-        memcpy(pInputPtr, pInput, *pLength);
-        memset(pInputPtr + *pLength, 0, nDataLength - *pLength);
-    }
-
-    const uint8_t *pData = pInputPtr != NULL ? pInputPtr : pInput;
-    nDataLength = nDataLength ? nDataLength : *pLength;
-
-    uint8_t *pOutput = (uint8_t*)malloc(nDataLength + 1);
-    if (pOutput == NULL)
-    {
-        free(pInputPtr);
-        return NULL;
-    }
-
+    const uint8_t *pData = pInput;
     uint8_t *pOffset = pOutput;
-    size_t nDataLeft = nDataLength;
+    size_t nDataLeft = nInputLength;
 
     while (nDataLeft > 0)
     {
-        uint8_t i, ivTmp[XAES_BLOCK_SIZE];
+        uint8_t ivTmp[XAES_BLOCK_SIZE];
         memcpy(ivTmp, pData, XAES_BLOCK_SIZE);
         XAES_DecryptBlock(pCtx, pOffset, pData);
 
+        size_t i;
         for (i = 0; i < XAES_BLOCK_SIZE; i++)
-            pOffset[i] = pOffset[i] ^ iv[i];
+            pOffset[i] ^= iv[i];
 
         memcpy(iv, ivTmp, XAES_BLOCK_SIZE);
         nDataLeft -= XAES_BLOCK_SIZE;
@@ -722,13 +682,27 @@ uint8_t* XAES_Decrypt(xaes_context_t *pCtx, const  uint8_t *pInput, size_t *pLen
         pData += XAES_BLOCK_SIZE;
     }
 
-    pOutput[nDataLength] = '\0';
-    *pLength = nDataLength;
+    // Remove PKCS#7 padding
+    uint8_t nPadding = pOutput[nInputLength - 1];
+    if (!nPadding || nPadding > XAES_BLOCK_SIZE)
+    {
+        free(pOutput);
+        return NULL;
+    }
 
-    while (nDataLength && pOutput[nDataLength] == '\0') nDataLength--;
-    if (*pLength != nDataLength) *pLength = nDataLength + 1;
+    size_t i;
+    for (i = 0; i < nPadding; i++)
+    {
+        if (pOutput[nInputLength - 1 - i] != nPadding)
+        {
+            free(pOutput);
+            return NULL;
+        }
+    }
 
-    free(pInputPtr);
+    *pLength = nInputLength - nPadding;
+    pOutput[*pLength] = '\0';
+
     return pOutput;
 }
 
