@@ -178,16 +178,25 @@ static void XCrypt_DisplayUsage(const char *pName)
 
 static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
 {
-    if (xstrused(pArgs->sKeyFile))
-    {
-        pKey->nLength = XPath_Read(pArgs->sKeyFile, (uint8_t*)pArgs->sKey, sizeof(pArgs->sKey));
-        if (pKey->nLength && pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
-        pArgs->sKeyFile[0] = XSTR_NUL;
-    }
-
     if (xstrused(pArgs->sKey))
     {
         pKey->nLength = xstrncpy(pKey->sKey, sizeof(pKey->sKey), pArgs->sKey);
+        if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
+        return pKey->nLength ? XTRUE : XFALSE;
+    }
+
+    char sKey[XSTR_MID];
+    sKey[0] = XSTR_NUL;
+
+#ifdef XCRYPT_USE_SSL
+    if (xstrused(pArgs->sKeyFile) &&
+        (pKey->eCipher == XC_RS256 || pKey->eCipher == XC_RSAPR || pKey->eCipher == XC_RSA))
+            pKey->nLength = XPath_Read(pArgs->sKeyFile, (uint8_t*)sKey, sizeof(sKey));
+#endif
+
+    if (xstrused(sKey))
+    {
+        pKey->nLength = xstrncpy(pKey->sKey, sizeof(pKey->sKey), sKey);
         if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
         return pKey->nLength ? XTRUE : XFALSE;
     }
@@ -203,7 +212,6 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
 
     if (!pArgs->bDecrypt || pArgs->bForce)
     {
-        char sKey[XSTR_MIN];
         printf("Re-enter keyword for the cipher '%s': ", pCipher);
 
         if (!XCLI_GetPass(NULL, sKey, sizeof(sKey)))
