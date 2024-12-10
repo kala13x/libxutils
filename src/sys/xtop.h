@@ -47,6 +47,7 @@ typedef struct XNetIface {
     int64_t nBytesSent;
     int64_t nBandwidth;
     int32_t nType;
+    xbool_t bActive;
 
     char sName[XNAME_MAX];
     char sHWAddr[XADDR_MAX];

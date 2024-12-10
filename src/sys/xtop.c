@@ -132,7 +132,7 @@ int XTop_GetNetworkStats(xtop_stats_t *pStats, xarray_t *pIfaces)
     for (i = 0; i < nUsed; i++)
     {
         xnet_iface_t *pSrcIface = (xnet_iface_t*)XArray_GetData(&pStats->netIfaces, i);
-        if (pSrcIface == NULL) continue;
+        if (pSrcIface == NULL || !pSrcIface->bActive) continue;
 
         xnet_iface_t *pDstIface = (xnet_iface_t*)malloc(sizeof(xnet_iface_t));
         if (pDstIface == NULL) continue;
@@ -163,16 +163,23 @@ static void XTop_UpdateNetworkStats(xtop_stats_t *pStats)
     XSync_Lock(&pStats->netLock);
     xarray_t *pIfaces = &pStats->netIfaces;
 
+    unsigned int i;
+    for (i = 0; i < pIfaces->nUsed; i++)
+    {
+        xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, i);
+        pIface->bActive = XFALSE;
+    }
+
     struct dirent *pEntry = readdir(pDir);
     while(pEntry != NULL) 
     {
         /* Found an entry, but ignore . and .. */
         if (!strcmp(".", pEntry->d_name) || 
             !strcmp("..", pEntry->d_name))
-            {
-                pEntry = readdir(pDir);
-                continue;
-            }
+        {
+            pEntry = readdir(pDir);
+            continue;
+        }
 
         char sBuffer[XPROC_BUFFER_SIZE];
         char sIfacePath[XPATH_MAX];
@@ -262,6 +269,8 @@ static void XTop_UpdateNetworkStats(xtop_stats_t *pStats)
                         xstrncpy(netIface.sIPAddr, sizeof(netIface.sIPAddr), XNET_IPADDR_DEFAULT);
 
                     memcpy(pIface, &netIface, sizeof(xnet_iface_t));
+
+                    pIface->bActive = XTRUE;
                     nHaveIface = XTRUE;
                 }
             }
@@ -273,6 +282,7 @@ static void XTop_UpdateNetworkStats(xtop_stats_t *pStats)
             if (pNewIface != NULL)
             {
                 memcpy(pNewIface, &netIface, sizeof(xnet_iface_t));
+                pNewIface->bActive = XTRUE;
 
                 if (XAddr_GetIFCIP(pNewIface->sName, pNewIface->sIPAddr, sizeof(pNewIface->sIPAddr)) <= 0)
                     xstrncpy(pNewIface->sIPAddr, sizeof(pNewIface->sIPAddr), XNET_IPADDR_DEFAULT);
@@ -282,6 +292,14 @@ static void XTop_UpdateNetworkStats(xtop_stats_t *pStats)
         }
 
         pEntry = readdir(pDir);
+    }
+
+    // Remove unused interfaces
+    for (i = 0; i < pIfaces->nUsed; i++)
+    {
+        xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, i);
+        if (pIface == NULL || pIface->bActive) continue;
+        XArray_Delete(pIfaces, i--);
     }
 
     closedir(pDir);

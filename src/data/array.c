@@ -357,6 +357,16 @@ void XArray_Delete(xarray_t *pArr, size_t nIndex)
 {
     xarray_data_t *pData = XArray_Get(pArr, nIndex);
     if (pData != NULL) XArray_ClearData(pArr, pData);
+
+    size_t i;
+    for (i = nIndex; i < pArr->nUsed; i++)
+    {
+        if ((i + 1) >= pArr->nUsed) break;
+        pArr->pData[i] = pArr->pData[i+1];
+    }
+
+    pArr->pData[--pArr->nUsed] = NULL;
+    XArray_Realloc(pArr);
 }
 
 xarray_data_t* XArray_Set(xarray_t *pArr, size_t nIndex, xarray_data_t *pNewData)
