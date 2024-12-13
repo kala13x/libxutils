@@ -67,7 +67,7 @@ typedef struct xtop_args_ {
     xbool_t bDaemon;
     xbool_t bServer;
     xbool_t bClient;
-    xbool_t bAscii;
+    xbool_t bClear;
 
     char sLink[XLINK_MAX];
     char sAddr[XLINK_MAX];
@@ -135,7 +135,7 @@ void XTOPApp_DisplayUsage(const char *pName)
     printf("  %s-m%s <seconds>          # Monitoring interval seconds\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-t%s <type>             # Sort result by selected type%s*%s\n", XSTR_CLR_CYAN, XSTR_FMT_RESET, XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("  %s-u%s <pid>              # Track process CPU and memory usage\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s-x%s                    # Use ASCII code to clear screen\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s-x%s                    # Use system clear instead of ASCII code\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s-h%s                    # Print version and usage\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("%sXTOP has a REST API server and client mode to send%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
@@ -159,8 +159,8 @@ void XTOPApp_DisplayUsage(const char *pName)
     printf("   %sf%s: Free on top\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("   %sn%s: Sort by name\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
-    printf("%sIf XTOP window is blinking during refresh, try to use ASCII code%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
-    printf("%sfor screen clearing. Use CLI argument -x to enable ASCII mode.%s\n\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("%sIf XTOP refresh does not clear the window, try system clear%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("%sfor screen clearing. Use CLI argument -x to system clear mode.%s\n\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
 
     printf("Examples:\n");
     printf("1) %s -x -e 8\n", pName);
@@ -179,11 +179,11 @@ uint8_t XTOPApp_GetSortType(const char *pArg)
 }
 
 int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
-{
+{bClear
     pArgs->bDaemon = XFALSE;
     pArgs->bServer = XFALSE;
     pArgs->bClient = XFALSE;
-    pArgs->bAscii = XFALSE;
+    pArgs->bClear = XFALSE;
     pArgs->pStats = NULL;
     pArgs->nSort = XTOP_SORT_LEN;
 
@@ -253,7 +253,7 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
                 pArgs->bServer = XTRUE;
                 break;
             case 'x':
-                pArgs->bAscii = XTRUE;
+                pArgs->bClear = XTRUE;
                 break;
             case 'v':
                 bVerbose = XTRUE;
@@ -1645,7 +1645,7 @@ int main(int argc, char *argv[])
     }
 
     xcli_win_t win;
-    XWindow_Init(&win, args.bAscii);
+    XWindow_Init(&win, !args.bClear);
 
     xcli_bar_t bar;
     XProgBar_GetDefaults(&bar);

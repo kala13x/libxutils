@@ -25,7 +25,7 @@
 #define XCRYPT_VER_MIN      1
 #define XCRYPT_BUILD_NUM    21
 
-#define XAES_KEY_LENGTH     128
+#define XAES_KEY_LENGTH     256
 #define XHEX_COLUMNS        16
 extern char *optarg;
 
