@@ -181,6 +181,8 @@ static void XCrypt_DisplayUsage(const char *pName)
 
 static xbool_t XCrypt_ApplyHMAC(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
 {
+    if (!pArgs->bHybrid) return XTRUE;
+
     char sHSKey[XSTR_MID];
     sHSKey[0] = XSTR_NUL;
 
@@ -225,18 +227,26 @@ static xbool_t XCrypt_ApplyHMAC(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
     return XTRUE;
 }
 
+static xbool_t XCrypt_SetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey, size_t nLength)
+{
+    xbool_t bStatus = nLength ? XTRUE : XFALSE;
+    pKey->nLength = nLength;
+
+    if (pKey->eCipher == XC_AES)
+    {
+        bStatus = XCrypt_ApplyHMAC(pArgs, pKey);
+        pKey->nLength = pArgs->nKeySize;
+    }
+
+    return bStatus;
+}
+
 static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
 {
     if (xstrused(pArgs->sKey))
     {
-        pKey->nLength = xstrncpy(pKey->sKey, sizeof(pKey->sKey), pArgs->sKey);
-        if (pKey->eCipher == XC_AES)
-        {
-            if (pArgs->bHybrid) return XCrypt_ApplyHMAC(pArgs, pKey);
-            pKey->nLength = pArgs->nKeySize;
-        }
-
-        return pKey->nLength ? XTRUE : XFALSE;
+        size_t nLength = xstrncpy(pKey->sKey, sizeof(pKey->sKey), pArgs->sKey);
+        return XCrypt_SetKey(pArgs, pKey, nLength);
     }
 
     char sKey[XSTR_MID];
@@ -282,13 +292,8 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
         }
     }
 
-    if (pArgs->bHybrid && pKey->eCipher == XC_AES)
-        return XCrypt_ApplyHMAC(pArgs, pKey);
-
-    if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
-    else pKey->nLength = strlen(pKey->sKey);
-
-    return XTRUE;
+    size_t nLength = strlen(pKey->sKey);
+    return XCrypt_SetKey(pArgs, pKey, nLength);
 }
 
 static XSTATUS XCrypt_ValidateArgs(xcrypt_args_t *pArgs)
@@ -308,7 +313,7 @@ static XSTATUS XCrypt_ValidateArgs(xcrypt_args_t *pArgs)
     if ((!pArgs->bPrint &&
         !xstrused(pArgs->sOutput)) ||
         (!xstrused(pArgs->sText) && 
-        !xstrused(pArgs->sInput))) return XSTDNON;
+         !xstrused(pArgs->sInput))) return XSTDNON;
 
     if (XPath_Exists(pArgs->sOutput) && pArgs->bForce == XFALSE)
     {
