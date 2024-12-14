@@ -179,7 +179,7 @@ uint8_t XTOPApp_GetSortType(const char *pArg)
 }
 
 int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
-{bClear
+{
     pArgs->bDaemon = XFALSE;
     pArgs->bServer = XFALSE;
     pArgs->bClient = XFALSE;

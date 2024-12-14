@@ -18,12 +18,13 @@
 #include "crc32.h"
 #include "sha256.h"
 #include "sha1.h"
+#include "hmac.h"
 #include "aes.h"
 #include "rsa.h"
 
 #define XCRYPT_VER_MAX      0
 #define XCRYPT_VER_MIN      1
-#define XCRYPT_BUILD_NUM    21
+#define XCRYPT_BUILD_NUM    22
 
 #define XAES_KEY_LENGTH     256
 #define XHEX_COLUMNS        16
@@ -41,6 +42,7 @@ typedef struct
 
     size_t nKeySize;
     xbool_t bDecrypt;
+    xbool_t bHybrid;
     xbool_t bForce;
     xbool_t bPrint;
     xbool_t bHex;
@@ -129,6 +131,7 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   -s                  # Key size for AES %s", pRSADesc);
     xlog("   -h                  # Display output as a HEX");
     xlog("   -p                  # Print output to stdout");
+    xlog("   -x                  # Hybryd mode for AES");
     xlog("   -v                  # Version and usage\n");
 
     xlog("Supported ciphers:");
@@ -176,12 +179,63 @@ static void XCrypt_DisplayUsage(const char *pName)
 #endif
 }
 
+static xbool_t XCrypt_ApplyHMAC(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
+{
+    char sHSKey[XSTR_MID];
+    sHSKey[0] = XSTR_NUL;
+
+    printf("Enter keyword for the cipher 'h256': ");
+    if (!XCLI_GetPass(NULL, sHSKey, sizeof(sHSKey)))
+    {
+        xloge("Failed to read keyword: %d", errno);
+        return XFALSE;
+    }
+
+    if (!pArgs->bDecrypt || pArgs->bForce)
+    {
+        char sKey[XSTR_MID];
+        sKey[0] = XSTR_NUL;
+
+        printf("Re-enter keyword for the cipher 'h256': ");
+        if (!XCLI_GetPass(NULL, sKey, sizeof(sKey)))
+        {
+            xloge("Failed to read keyword: %d", errno);
+            return XFALSE;
+        }
+
+        if (strcmp(sHSKey, sKey))
+        {
+            xloge("Keyword do not match");
+            return XFALSE;
+        }
+    }
+
+    char *pHMAC = XHMAC_SHA256_NEW((uint8_t*)pKey->sKey, strlen(pKey->sKey),
+                                   (uint8_t*)sHSKey, strlen(sHSKey));
+    if (pHMAC == NULL)
+    {
+        xloge("Failed to generate HMAC key");
+        return XFALSE;
+    }
+
+    pKey->nLength = pArgs->nKeySize;
+    xstrncpy(pKey->sKey, sizeof(pKey->sKey), pHMAC);
+
+    free(pHMAC);
+    return XTRUE;
+}
+
 static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
 {
     if (xstrused(pArgs->sKey))
     {
         pKey->nLength = xstrncpy(pKey->sKey, sizeof(pKey->sKey), pArgs->sKey);
-        if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
+        if (pKey->eCipher == XC_AES)
+        {
+            if (pArgs->bHybrid) return XCrypt_ApplyHMAC(pArgs, pKey);
+            pKey->nLength = pArgs->nKeySize;
+        }
+
         return pKey->nLength ? XTRUE : XFALSE;
     }
 
@@ -192,7 +246,6 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
     if (xstrused(pArgs->sKeyFile) &&
         (pKey->eCipher == XC_RS256 || pKey->eCipher == XC_RSAPR || pKey->eCipher == XC_RSA))
             pKey->nLength = XPath_Read(pArgs->sKeyFile, (uint8_t*)sKey, sizeof(sKey));
-#endif
 
     if (xstrused(sKey))
     {
@@ -200,6 +253,7 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
         if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
         return pKey->nLength ? XTRUE : XFALSE;
     }
+#endif
 
     const char *pCipher = XCrypt_GetCipherStr(pKey->eCipher);
     printf("Enter keyword for the cipher '%s': ", pCipher);
@@ -213,6 +267,7 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
     if (!pArgs->bDecrypt || pArgs->bForce)
     {
         printf("Re-enter keyword for the cipher '%s': ", pCipher);
+        sKey[0] = XSTR_NUL;
 
         if (!XCLI_GetPass(NULL, sKey, sizeof(sKey)))
         {
@@ -226,6 +281,9 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
             return XFALSE;
         }
     }
+
+    if (pArgs->bHybrid && pKey->eCipher == XC_AES)
+        return XCrypt_ApplyHMAC(pArgs, pKey);
 
     if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nKeySize;
     else pKey->nLength = strlen(pKey->sKey);
@@ -313,7 +371,7 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
     memset(pArgs, 0, sizeof(xcrypt_args_t));
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "c:i:o:g:k:K:t:s:d1:f1:h1:p1:s1:v1")) != -1)
+    while ((nChar = getopt(argc, argv, "c:i:o:g:k:K:t:s:d1:f1:h1:p1:s1:x1:v1")) != -1)
     {
         switch (nChar)
         {
@@ -354,6 +412,9 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
                 break;
             case 'p':
                 pArgs->bPrint = XTRUE;
+                break;
+            case 'x':
+                pArgs->bHybrid = XTRUE;
                 break;
             case 'v':
             default:
