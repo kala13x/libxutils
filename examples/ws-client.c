@@ -271,7 +271,7 @@ int main(int argc, char* argv[])
     session_data_t sessData;
     endpt.pSessionData = &sessData;
 
-    if (XAPI_Connect(&api, &endpt) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt, XAPI_CLIENT) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

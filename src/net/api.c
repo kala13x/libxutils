@@ -1324,3 +1324,15 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 
     return XSTDOK;
 }
+
+XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
+{
+    switch (eRole)
+    {
+        case XAPI_SERVER: return XAPI_Listen(pApi, pEndpt);
+        case XAPI_CLIENT: return XAPI_Connect(pApi, pEndpt);
+        default: break;
+    }
+
+    return XSTDERR;
+}

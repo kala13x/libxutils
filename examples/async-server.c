@@ -231,7 +231,7 @@ int main(int argc, char* argv[])
 #endif
     }
 
-    if (XAPI_Listen(&api, &endpt) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt, XAPI_SERVER) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

@@ -194,7 +194,7 @@ int main(int argc, char* argv[])
     endpt.bUnix = args.bUnix;
     endpt.bTLS = args.bSSL;
 
-    if (XAPI_Connect(&api, &endpt) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt, XAPI_CLIENT) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;
