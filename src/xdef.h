@@ -34,6 +34,7 @@ typedef uint8_t             xbool_t;
 #define XATOMIC             volatile xatomic_t
 
 #define XCHAR(var,size) char var[size] = {'\0'}
+#define XARR_SIZE(arr)  (sizeof(arr) / sizeof(arr[0]))
 #define XARG_SIZE(val)  val, sizeof(val)
 
 #define XFTON(x) ((x)>=0.0f?(int)((x)+0.5f):(int)((x)-0.5f))
@@ -218,6 +219,12 @@ typedef uint8_t             xbool_t;
 # define XASSERT_FREE   XASSERT_FREE_RET
 # define XASSERT_CALL   XASSERT_CALL_RET
 #endif
+
+#ifdef _XUTILS_BACKTRACE_SIZE
+# define XUTILS_BACKTRACE_SIZE _XUTILS_BACKTRACE_SIZE
+#else
+# define XUTILS_BACKTRACE_SIZE 10
+#endif /* XUTILS_BACKTRACE_SIZE */
 
 #ifndef XSTD_MIN
 #define XSTD_MIN(a,b)(a<b?a:b)

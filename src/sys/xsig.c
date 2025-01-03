@@ -14,51 +14,52 @@
 #include <execinfo.h>
 #endif
 
-#define BACKTRACE_SIZE 10
+#ifndef XUTILS_BACKTRACE_SIZE
+#define XUTILS_BACKTRACE_SIZE 10
+#endif /* XUTILS_BACKTRACE_SIZE */
 
-#ifdef __linux__
-void xutils_dbg_backtrace(void)
+void XUtils_Backtrace(void)
 {
-    void *pAddrs[BACKTRACE_SIZE];
-    char **pSymbol;
+#ifdef __linux__
+    void *pAddrs[XUTILS_BACKTRACE_SIZE];
+    char **pSymbol = NULL;
     int i = 0;
 
-    int nSize = backtrace(pAddrs, sizeof(pAddrs) / sizeof(pAddrs[0]));
-    if (nSize <= 0)
+    int nCount = backtrace(pAddrs, XARR_SIZE(pAddrs));
+    if (nCount <= 0)
     {
-        printf("No backtrace available\n");
+        xlogw("No backtrace available");
         return;
     }
-    printf("Backtrace with %d functions\n", nSize);
 
-    pSymbol = backtrace_symbols(pAddrs, nSize);
+    xlogd("Backtrace with %d functions", nCount);
+
+    pSymbol = backtrace_symbols(pAddrs, nCount);
     if (pSymbol == NULL)
     {
-        printf("Can not get symbols for backtrace\n");
+        xloge("Can not get symbols for backtrace");
         return;
     }
 
-    for (i = 0; i < nSize; ++i)
-        printf("Function %d: %s\n", i, pSymbol[i]);
+    for (i = 0; i < nCount; ++i)
+        xlogi("Function %d: %s", i, pSymbol[i]);
 
     if (pSymbol) free(pSymbol);
-}
 #endif
+}
 
-void errex(const char * pMsg, ...)
+void XUtils_ErrExit(const char * pFmt, ...)
 {
-    if (pMsg != NULL)
+    if (pFmt != NULL)
     {
-        char sMsg[XMSG_MIN];
+        char sMsg[XMSG_MID];
         va_list args;
 
-        va_start(args, pMsg);
-        vsnprintf(sMsg, sizeof(sMsg), pMsg, args);
+        va_start(args, pFmt);
+        vsnprintf(sMsg, sizeof(sMsg), pFmt, args);
         va_end(args);
 
-        printf("<%s:%d> %s: %s\n",
-            __FILE__, __LINE__,
-            __FUNCTION__, sMsg);
+        xloge("%s", sMsg);
     }
 
     exit(EXIT_FAILURE);
@@ -73,12 +74,12 @@ void XSig_Callback(int nSig)
         case SIGILL:
 #ifdef __linux__
         case SIGBUS:
-        xutils_dbg_backtrace();
 #endif
+            XUtils_Backtrace();
             break;
         case SIGINT:
         case SIGTERM:
-            printf("Received interrupt/termination signal\n");
+            xlogi("Received interrupt/termination signal");
             break;
         default:
             break;
@@ -109,12 +110,8 @@ int XSig_Register(int *pSignals, size_t nCount, xsig_cb_t callback)
     return 0;
 }
 
-int XSig_ExitSignals(void)
+int XSig_RegExitSigs(void)
 {
-    int nSignals[5];
-    nSignals[0] = SIGINT;
-    nSignals[1] = SIGILL;
-    nSignals[3] = SIGSEGV;
-    nSignals[4] = SIGTERM;
+    int nSignals[4] = { SIGINT, SIGILL, SIGSEGV, SIGTERM };
     return XSig_Register(nSignals, 4, XSig_Callback);
 }

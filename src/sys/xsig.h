@@ -11,17 +11,21 @@
 #ifndef __XUTILS_ERREX_H__
 #define __XUTILS_ERREX_H__
 
+#include "xlog.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef void(*xsig_cb_t)(int);
 
-int XSig_Register(int *pSignals, size_t nCount, xsig_cb_t callback);
-int XSig_ExitSignals(void);
+void XUtils_Backtrace(void);
+void XUtils_ErrExit(const char *pFmt, ...);
 
-void xutils_dbg_backtrace(void);
-void errex(const char * errmsg, ...);
+#define errex(...) XUtils_ErrExit(XLOG_THROW_LOCATION __VA_ARGS__)
+
+int XSig_Register(int *pSignals, size_t nCount, xsig_cb_t callback);
+int XSig_RegExitSigs(void);
 
 #ifdef __cplusplus
 }
