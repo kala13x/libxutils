@@ -133,7 +133,7 @@ static xbool_t XLog_OpenFile(xlog_file_t *pFile, const xlog_cfg_t *pCfg, const x
     }
 
 #ifdef _WIN32
-    if (fopen_s(&pFile->pHandle, sFilePath, "a")) pFile->pHandle = NULL;
+    if (fopen_s(&pFile->pHandle, pFile->sFilePath, "a")) pFile->pHandle = NULL;
 #else
     pFile->pHandle = fopen(pFile->sFilePath, "a");
 #endif
