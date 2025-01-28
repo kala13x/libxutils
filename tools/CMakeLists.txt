@@ -47,8 +47,8 @@ set(SOURCE_FILES
     xcrypt.c
     xpass.c
     xhttp.c
-    xjson.c
-    xtop.c
+    json.c
+    mon.c
     xsrc.c)
 
 foreach(sourcefile ${SOURCE_FILES})

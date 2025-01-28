@@ -8,7 +8,7 @@
  */
 
 #include "xstd.h"
-#include "xbuf.h"
+#include "buf.h"
 
 uint8_t *XByteData_Dup(const uint8_t *pBuff, size_t nLength)
 {

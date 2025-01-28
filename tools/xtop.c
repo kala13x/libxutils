@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/examples/xtop.c
+ *  @file libxutils/examples/mon.c
  * 
  *  This source is part of "libxutils" project
  *  2015-2022  Sun Dro (s.kalatoz@gmail.com)
@@ -9,16 +9,16 @@
  */
 
 #include "xstd.h"
-#include "xsig.h"
-#include "xjson.h"
-#include "xstr.h"
-#include "xcli.h"
-#include "xlog.h"
-#include "xtop.h"
+#include "sig.h"
+#include "json.h"
+#include "str.h"
 #include "addr.h"
+#include "log.h"
 #include "xver.h"
+#include "mon.h"
 #include "xfs.h"
 #include "api.h"
+#include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
 #define XTOP_VERSION_MIN        5
@@ -60,10 +60,10 @@ typedef enum {
     XTOP_MEMORY,
     XTOP_CPU,
     XTOP_ALL
-} xtop_request_t;
+} xmon_request_t;
 
-typedef struct xtop_args_ {
-    xtop_stats_t *pStats;
+typedef struct xmon_args_ {
+    xmon_stats_t *pStats;
     xbool_t bDaemon;
     xbool_t bServer;
     xbool_t bClient;
@@ -83,7 +83,7 @@ typedef struct xtop_args_ {
     uint16_t nPort;
     uint8_t nSort;
     xpid_t nPID;
-} xtop_args_t;
+} xmon_args_t;
 
 void XTOPApp_SignalCallback(int sig)
 {
@@ -178,7 +178,7 @@ uint8_t XTOPApp_GetSortType(const char *pArg)
     return XTOP_SORT_DISABLE;
 }
 
-int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
+int XTOPApp_ParseArgs(xmon_args_t *pArgs, int argc, char *argv[])
 {
     pArgs->bDaemon = XFALSE;
     pArgs->bServer = XFALSE;
@@ -291,8 +291,8 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
             pArgs->sAddr, pArgs->nPort, XTOP_API_URI);
     }
 
-    if (!pArgs->nIntervalU) pArgs->nIntervalU = XTOP_INTERVAL_USEC;
-    else pArgs->nIntervalU *= XTOP_INTERVAL_USEC;
+    if (!pArgs->nIntervalU) pArgs->nIntervalU = XMON_INTERVAL_USEC;
+    else pArgs->nIntervalU *= XMON_INTERVAL_USEC;
 
     if (xstrused(pArgs->sLogs))
     {
@@ -320,7 +320,7 @@ int XTOPApp_ParseArgs(xtop_args_t *pArgs, int argc, char *argv[])
 
 int XTOPApp_CompareCPUs(const void *pData1, const void *pData2, void *pContext)
 {
-    xtop_args_t *pArgs = (xtop_args_t*)pContext;
+    xmon_args_t *pArgs = (xmon_args_t*)pContext;
     xcpu_info_t *pInfo1 = (xcpu_info_t*)((xarray_data_t*)pData1)->pData;
     xcpu_info_t *pInfo2 = (xcpu_info_t*)((xarray_data_t*)pData2)->pData;
 
@@ -331,7 +331,7 @@ int XTOPApp_CompareCPUs(const void *pData1, const void *pData2, void *pContext)
 
 int XTOPApp_CompareIFaces(const void *pData1, const void *pData2, void *pContext)
 {
-    xtop_args_t *pArgs = (xtop_args_t*)pContext;
+    xmon_args_t *pArgs = (xmon_args_t*)pContext;
     xnet_iface_t *pIface1 = (xnet_iface_t*)((xarray_data_t*)pData1)->pData;
     xnet_iface_t *pIface2 = (xnet_iface_t*)((xarray_data_t*)pData2)->pData;
 
@@ -663,7 +663,7 @@ XSTATUS XTOPApp_AddCPUInfo(xcli_win_t *pWin, xcpu_info_t *pCore)
     return XWindow_AddLineFmt(pWin, "%s", sLine);
 }
 
-XSTATUS XTOPApp_AddCPUExtra(xcli_win_t *pWin, xtop_args_t *pArgs, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
+XSTATUS XTOPApp_AddCPUExtra(xcli_win_t *pWin, xmon_args_t *pArgs, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
 {
     XWindow_AddAligned(pWin, XTOP_CPU_HEADER, XSTR_BACK_BLUE, XCLI_LEFT);
     XSTATUS nStatus = XTOPApp_AddCPUInfo(pWin, &pCPU->sum);
@@ -733,7 +733,7 @@ static uint8_t XTOPApp_GetAddrSpacePadding(xcli_win_t *pWin, size_t nMaxIPLen)
     return nSpacePadding;
 }
 
-XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_args_t *pArgs, size_t nMaxIPLen, xnet_iface_t *pIface, size_t nLength)
+XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xmon_args_t *pArgs, size_t nMaxIPLen, xnet_iface_t *pIface, size_t nLength)
 {
     char sLine[XLINE_MAX], sName[XSTR_TINY], sRound[XSTR_TINY], sData[XSTR_TINY];
     xstrnlcpyf(sName, sizeof(sName), nLength + 1, XSTR_SPACE_CHAR, "%s", pIface->sName);
@@ -767,7 +767,7 @@ XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_args_t *pArgs, size_t nMaxIP
     return XWindow_AddLineFmt(pWin, "%s", sLine);
 }
 
-XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_args_t *pArgs, xarray_t *pIfaces)
+XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xmon_args_t *pArgs, xarray_t *pIfaces)
 {
     if (pArgs->nSort) XArray_Sort(pIfaces, XTOPApp_CompareIFaces, pArgs);
     size_t nTrackLen = strlen(pArgs->sName);
@@ -883,7 +883,7 @@ void XTOPApp_ParseCoreObj(xjson_obj_t *pCoreObj, xcpu_info_t *pCore)
     pCore->nID = XJSON_GetU32(XJSON_GetObject(pCoreObj, "id"));
 }
 
-int XTOPApp_GetJSONStats(xtop_stats_t *pStats, xjson_t *pJson)
+int XTOPApp_GetJSONStats(xmon_stats_t *pStats, xjson_t *pJson)
 {
     xcpu_stats_t *pCpuStats = &pStats->cpuStats;
     xmem_info_t *pMemInfo = &pStats->memInfo;
@@ -1052,7 +1052,7 @@ int XTOPApp_GetJSONStats(xtop_stats_t *pStats, xjson_t *pJson)
     return XSTDOK;
 }
 
-int XTOPApp_GetRemoteStats(xtop_args_t *pArgs, xtop_stats_t *pStats)
+int XTOPApp_GetRemoteStats(xmon_args_t *pArgs, xmon_stats_t *pStats)
 {
     const char *pVer = XUtils_VersionShort();
     xhttp_t handle;
@@ -1146,11 +1146,11 @@ int XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
 int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xtop_args_t *pArgs = (xtop_args_t*)pData->pApi->pUserCtx;
+    xmon_args_t *pArgs = (xmon_args_t*)pData->pApi->pUserCtx;
     int nStatus = XAPI_AuthorizeHTTP(pData, pArgs->sToken, pArgs->sKey);
     if (nStatus <= 0) return nStatus;
 
-    xtop_request_t *pRequest = (xtop_request_t*)pData->pSessionData;
+    xmon_request_t *pRequest = (xmon_request_t*)pData->pSessionData;
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
     *pRequest = XTOP_NONE;
 
@@ -1192,10 +1192,10 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
-int XTOPApp_AppendMemoryJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
+int XTOPApp_AppendMemoryJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
 {
     xmem_info_t memInfo;
-    XTop_GetMemoryInfo(pStats, &memInfo);
+    XMon_GetMemoryInfo(pStats, &memInfo);
 
     return XString_Append(pJsonStr,
         "\"memory\": {"
@@ -1226,10 +1226,10 @@ int XTOPApp_AppendMemoryJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
         memInfo.nSwapFree);
 }
 
-int XTOPApp_AppendNetworkJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
+int XTOPApp_AppendNetworkJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
 {
     xarray_t netIfaces;
-    if (XTop_GetNetworkStats(pStats, &netIfaces) > 0)
+    if (XMon_GetNetworkStats(pStats, &netIfaces) > 0)
     {
         if (XString_Append(pJsonStr, "\"network\": [") < 0)
         {
@@ -1319,10 +1319,10 @@ int XTOPApp_AppendCoreJson(xcpu_info_t *pCpu, xstring_t *pJsonStr)
         pCpu->nGuestNiced);
 }
 
-int XTOPApp_AppendCPUJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
+int XTOPApp_AppendCPUJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
 {
     xcpu_stats_t cpuStats;
-    if (XTop_GetCPUStats(pStats, &cpuStats) > 0)
+    if (XMon_GetCPUStats(pStats, &cpuStats) > 0)
     {
         XString_Append(pJsonStr,
             "\"cpu\":{"
@@ -1393,9 +1393,9 @@ int XTOPApp_AppendCPUJson(xtop_stats_t *pStats, xstring_t *pJsonStr)
 
 int XTOPApp_AssembleBody(xapi_data_t *pData, xstring_t *pJsonStr)
 {
-    xtop_args_t *pArgs = (xtop_args_t*)pData->pApi->pUserCtx;
-    xtop_stats_t *pStats = (xtop_stats_t*)pArgs->pStats;
-    xtop_request_t eRequest = *(xtop_request_t*)pData->pSessionData;
+    xmon_args_t *pArgs = (xmon_args_t*)pData->pApi->pUserCtx;
+    xmon_stats_t *pStats = (xmon_stats_t*)pArgs->pStats;
+    xmon_request_t eRequest = *(xmon_request_t*)pData->pSessionData;
 
     if (XString_Append(pJsonStr, "{") < 0)
     {
@@ -1503,7 +1503,7 @@ int XTOPApp_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
 int XTOPApp_InitSessionData(xapi_data_t *pData)
 {
-    xtop_request_t *pRequest = (xtop_request_t *)malloc(sizeof(xtop_request_t));
+    xmon_request_t *pRequest = (xmon_request_t *)malloc(sizeof(xmon_request_t));
     if (pRequest == NULL)
     {
         xloge("Failed to allocate memory for session data: %d", errno);
@@ -1553,7 +1553,7 @@ int XTOPApp_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XSTDOK;
 }
 
-int XTOPApp_ServerMode(xtop_args_t *pArgs, xtop_stats_t *pStats)
+int XTOPApp_ServerMode(xmon_args_t *pArgs, xmon_stats_t *pStats)
 {
     xapi_t api;
     XAPI_Init(&api, XTOPApp_ServiceCb, pArgs, XSTDNON);
@@ -1585,8 +1585,8 @@ int XTOPApp_ServerMode(xtop_args_t *pArgs, xtop_stats_t *pStats)
 int main(int argc, char *argv[])
 {
     xlog_init("xtop", XLOG_DEFAULT, XFALSE);
-    xtop_stats_t stats;
-    xtop_args_t args;
+    xmon_stats_t stats;
+    xmon_args_t args;
 
     if (!XTOPApp_ParseArgs(&args, argc, argv))
     {
@@ -1600,7 +1600,7 @@ int main(int argc, char *argv[])
         return XSTDERR;
     }
 
-    if (XTop_InitStats(&stats) < 0)
+    if (XMon_InitStats(&stats) < 0)
     {
         xloge("Failed to initialize stats: %d", errno);
         return XSTDERR;
@@ -1617,28 +1617,28 @@ int main(int argc, char *argv[])
 
     if (!args.bClient)
     {
-        int nStatus = XTop_StartMonitoring(&stats, args.nIntervalU, args.nPID);
+        int nStatus = XMon_StartMonitoring(&stats, args.nIntervalU, args.nPID);
         if (nStatus < 0)
         {
             xloge("Process not found: %d", args.nPID);
-            XTop_DestroyStats(&stats);
+            XMon_DestroyStats(&stats);
             return XSTDERR;
         }
         else if (!nStatus)
         {
             xloge("Failed to start monitoring thread: %d", errno);
-            XTop_DestroyStats(&stats);
+            XMon_DestroyStats(&stats);
             return XSTDERR;
         }
 
-        XTop_WaitLoad(&stats, 1000);
+        XMon_WaitLoad(&stats, 1000);
     }
 
     if (args.bServer)
     {
         int nStatus = XTOPApp_ServerMode(&args, &stats);
-        XTop_StopMonitoring(&stats, 1000);
-        XTop_DestroyStats(&stats);
+        XMon_StopMonitoring(&stats, 1000);
+        XMon_DestroyStats(&stats);
 
         usleep(10000); // Make valgrind happy
         return nStatus;
@@ -1663,10 +1663,10 @@ int main(int argc, char *argv[])
         XWindow_AddEmptyLine(&win);
 
         xcpu_stats_t cpuStats;
-        if (XTop_GetCPUStats(&stats, &cpuStats) > 0)
+        if (XMon_GetCPUStats(&stats, &cpuStats) > 0)
         {
             xmem_info_t memInfo;
-            XTop_GetMemoryInfo(&stats, &memInfo);
+            XMon_GetMemoryInfo(&stats, &memInfo);
 
             XTOPApp_AddCPULoadBar(&win, &bar, &cpuStats);
             XTOPApp_AddOverallBar(&win, &bar, &memInfo, &cpuStats);
@@ -1682,7 +1682,7 @@ int main(int argc, char *argv[])
         }
 
         xarray_t netIfaces;
-        if (XTop_GetNetworkStats(&stats, &netIfaces) > 0)
+        if (XMon_GetNetworkStats(&stats, &netIfaces) > 0)
         {
             XTOPApp_AddNetworkInfo(&win, &args, &netIfaces);
             XArray_Destroy(&netIfaces);
@@ -1699,9 +1699,9 @@ int main(int argc, char *argv[])
     }
 
     if (!args.bClient)
-        XTop_StopMonitoring(&stats, 1000);
+        XMon_StopMonitoring(&stats, 1000);
 
-    XTop_DestroyStats(&stats);
+    XMon_DestroyStats(&stats);
     XWindow_Destroy(&win);
 
     usleep(10000); // Make valgrind happy

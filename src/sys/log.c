@@ -1,5 +1,5 @@
 /*
- *  libxutils/src/sys/xlog.c
+ *  libxutils/src/sys/log.c
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
@@ -7,11 +7,14 @@
  * Advanced logging library for C/C++
  */
 
-#include "xlog.h"
-#include "xstr.h"
+#include "log.h"
+#include "str.h"
 #include "xtime.h"
 
+#define XLOG_FILE_PATH_MAX XLOG_PATH_MAX + XLOG_NAME_MAX + XLOG_TIME_MAX
+
 typedef struct XLogFile {
+    char sFilePath[XLOG_FILE_PATH_MAX];    
     uint8_t nCurrDay;
     FILE *pHandle;
 } xlog_file_t;
@@ -123,20 +126,22 @@ static xbool_t XLog_OpenFile(xlog_file_t *pFile, const xlog_cfg_t *pCfg, const x
 {
     XLog_CloseFile(pFile);
 
-    char sFilePath[XLOG_PATH_MAX + XLOG_NAME_MAX + XLOG_TIME_MAX];
-    snprintf(sFilePath, sizeof(sFilePath), "%s/%s-%04d-%02d-%02d.log",
-        pCfg->sFilePath, pCfg->sFileName, pTime->nYear, pTime->nMonth, pTime->nDay);
+    if (pCfg->bRotate || pFile->sFilePath[0] == XSTR_NUL)
+    {
+        snprintf(pFile->sFilePath, sizeof(pFile->sFilePath), "%s/%s-%04d-%02d-%02d.log",
+            pCfg->sFilePath, pCfg->sFileName, pTime->nYear, pTime->nMonth, pTime->nDay);
+    }
 
 #ifdef _WIN32
     if (fopen_s(&pFile->pHandle, sFilePath, "a")) pFile->pHandle = NULL;
 #else
-    pFile->pHandle = fopen(sFilePath, "a");
+    pFile->pHandle = fopen(pFile->sFilePath, "a");
 #endif
 
     if (pFile->pHandle == NULL)
     {
         printf("<%s:%d> %s: [ERROR] Failed to open file: %s (%s)\n",
-            __FILE__, __LINE__, __func__, sFilePath, XSTRERR);
+            __FILE__, __LINE__, __func__, pFile->sFilePath, XSTRERR);
 
         return XFALSE;
     }
@@ -406,7 +411,10 @@ void XLog_ConfigSet(struct XLogConfig *pCfg)
     if (!pCfg->bToFile ||
         strncmp(pOldCfg->sFilePath, pCfg->sFilePath, sizeof(pOldCfg->sFilePath)) ||
         strncmp(pOldCfg->sFileName, pCfg->sFileName, sizeof(pOldCfg->sFileName)))
-            XLog_CloseFile(pFile); /* Log function will open it again if required */
+    {
+        XLog_CloseFile(pFile); /* Log function will open it again if required */
+        pFile->sFilePath[0] = XSTR_NUL;
+    }
 
     g_xlog.config = *pCfg;
     XSync_Unlock(&g_xlog.lock);
@@ -614,14 +622,14 @@ void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe)
     const char *pFileName = (pName != NULL) ? pName : XLOG_NAME_DEFAULT;
     xstrncpyf(pCfg->sFileName, sizeof(pCfg->sFileName), "%s", pFileName);
 
+    pFile->sFilePath[0] = '\0';
     pFile->pHandle = NULL;
     pFile->nCurrDay = 0;
 
-#ifdef WIN32
+#ifdef _WIN32
     /* Enable color support */
-    HANDLE hOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD dwMode = XSTDNON;
-
+    HANDLE hOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     GetConsoleMode(hOutput, &dwMode);
     dwMode |= ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     SetConsoleMode(hOutput, dwMode);
@@ -637,15 +645,13 @@ void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe)
 void XLog_Destroy(void)
 {
     XSync_Lock(&g_xlog.lock);
-
     XLog_CloseFile(&g_xlog.fileCtx);
-    memset(&g_xlog.config, 0, sizeof(g_xlog.config));
 
+    memset(&g_xlog.config, 0, sizeof(g_xlog.config));
     g_xlog.config.logCallback = NULL;
     g_xlog.config.pCbCtx = NULL;
 
     XSync_Unlock(&g_xlog.lock);
     XSync_Destroy(&g_xlog.lock);
-
     g_bInit = XFALSE;
 }

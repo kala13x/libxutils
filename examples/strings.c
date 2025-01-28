@@ -7,8 +7,8 @@
  */
 
 #include "xstd.h"
-#include "xstr.h"
-#include "xlog.h"
+#include "str.h"
+#include "log.h"
 #include "array.h"
 
 #define UPPER_STRING "TEST STRING WITH UPPER CASE"

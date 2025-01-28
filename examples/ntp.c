@@ -8,7 +8,7 @@
 
 #include "xstd.h"
 #include "xtime.h"
-#include "xlog.h"
+#include "log.h"
 #include "ntp.h"
 
 #define NTP_SERVER "europe.pool.ntp.org"

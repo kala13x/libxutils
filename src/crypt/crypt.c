@@ -8,7 +8,7 @@
  */
 
 #include "crypt.h"
-#include "xbuf.h"
+#include "buf.h"
 #include "aes.h"
 #include "rsa.h"
 #include "md5.h"

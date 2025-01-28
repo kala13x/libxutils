@@ -10,8 +10,8 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "xlog.h"
-#include "xsig.h"
+#include "log.h"
+#include "sig.h"
 #include "xfs.h"
 #include "api.h"
 

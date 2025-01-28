@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/sys/xtype.c
+ *  @file libxutils/src/sys/type.c
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
@@ -8,8 +8,8 @@
  * types and converting operations.
  */
 
-#include "xtype.h"
-#include "xstr.h"
+#include "type.h"
+#include "str.h"
 
 union {
     float fValue;

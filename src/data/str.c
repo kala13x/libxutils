@@ -11,7 +11,7 @@
 #define _GNU_SOURCE
 #endif
 
-#include "xstr.h"
+#include "str.h"
 
 #define XSTR_KEYMAP_SIZE 33
 

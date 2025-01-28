@@ -9,7 +9,7 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "xlog.h"
+#include "log.h"
 
 int main() 
 {

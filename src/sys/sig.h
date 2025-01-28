@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/sys/xsig.h
+ *  @file libxutils/src/sys/sig.h
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
@@ -11,7 +11,7 @@
 #ifndef __XUTILS_ERREX_H__
 #define __XUTILS_ERREX_H__
 
-#include "xlog.h"
+#include "log.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,5 +1,5 @@
 /*
- *  examples/xlog.c
+ *  examples/log.c
  * 
  *  Copyleft (C) 2015  Sun Dro (a.k.a. kala13x)
  *
@@ -8,8 +8,8 @@
 
 
 #include "xstd.h"
-#include "xstr.h"
-#include "xlog.h"
+#include "str.h"
+#include "log.h"
 #include "xtime.h"
 
 int logCallback(const char *pLog, size_t nLength, xlog_flag_t eFlag, void *pCtx)

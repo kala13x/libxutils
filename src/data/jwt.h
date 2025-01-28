@@ -16,8 +16,8 @@ extern "C" {
 
 #include "xstd.h"
 #include "crypt.h"
-#include "xjson.h"
-#include "xstr.h"
+#include "json.h"
+#include "str.h"
 
 typedef enum {
     XJWT_ALG_INVALID = 0,

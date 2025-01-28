@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 #include "xstd.h"
-#include "xbuf.h"
+#include "buf.h"
 
 #define XWS_SEC_WS_VERSION  13
 #define XWS_NONCE_LENGTH    16

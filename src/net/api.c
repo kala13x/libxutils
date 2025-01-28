@@ -12,8 +12,8 @@
 
 #include "api.h"
 #include "xver.h"
-#include "xstr.h"
-#include "xbuf.h"
+#include "str.h"
+#include "buf.h"
 #include "sha1.h"
 #include "base64.h"
 
@@ -1159,6 +1159,7 @@ void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
     pEndpt->bTLS = XFALSE;
     pEndpt->bUnix = XFALSE;
     pEndpt->bForce = XFALSE;
+    pEndpt->nFD = XSOCK_INVALID;
 }
 
 XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
@@ -1325,12 +1326,79 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     return XSTDOK;
 }
 
+XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
+{
+    XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
+    XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
+    XASSERT((pEndpt->nFD != XSOCK_INVALID), XSTDINV);
+
+    xapi_data_t *pApiData = XAPI_NewData(pApi, pEndpt->eType);
+    if (pApiData == NULL)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_ERR_ALLOC);
+        return XSTDERR;
+    }
+
+    const char *pEndpointUri = pEndpt->pUri ? pEndpt->pUri : "/";
+    uint32_t nEvents = pEndpt->nEvents ? pEndpt->nEvents : XPOLLIO;
+
+    xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
+    pApiData->pSessionData = pEndpt->pSessionData;
+    pApiData->nPort = pEndpt->nPort;
+    pApiData->eRole = eRole;
+
+    uint32_t nFlags = XSOCK_EVENT | XSOCK_NB;
+    if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
+    if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
+    else nFlags |= XSOCK_TCP;
+
+    xsock_t *pSock = &pApiData->sock;
+    XSock_Init(pSock, nFlags, pEndpt->nFD);
+
+    /* Create event instance */
+    xevents_t *pEvents = XAPI_GetOrCreateEvents(pApi);
+    if (pEvents == NULL)
+    {
+        XAPI_FreeData(&pApiData);
+        return XSTDERR;
+    }
+
+    /* Add listener socket to the event instance */
+    xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pApiData, pSock->nFD, nEvents, (int)eRole);
+    if (pEvData == NULL)
+    {
+        XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_REGISTER);
+        XAPI_FreeData(&pApiData);
+        return XSTDERR;
+    }
+
+    pApiData->pEvData = pEvData;
+    pApiData->nEvents = nEvents;
+
+    if (XAPI_ServiceCb(pApi, pApiData, XAPI_CB_REGISTERED) < 0)
+    {
+        XEvents_Delete(pEvents, pApiData->pEvData);
+        pApiData->pEvData = NULL;
+        return XSTDERR;
+    }
+
+    return XSTDOK;
+}
+
+XSTATUS XAPI_AddPeer(xapi_t *pApi, xapi_endpoint_t *pEndpt)
+{
+    XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
+    return XAPI_AddEvent(pApi, pEndpt, XAPI_PEER);
+}
+
 XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
 {
     switch (eRole)
     {
+        case XAPI_PEER: return XAPI_AddPeer(pApi, pEndpt);
         case XAPI_SERVER: return XAPI_Listen(pApi, pEndpt);
         case XAPI_CLIENT: return XAPI_Connect(pApi, pEndpt);
+        case XAPI_MANUAL: return XAPI_AddEvent(pApi, pEndpt, eRole);
         default: break;
     }
 

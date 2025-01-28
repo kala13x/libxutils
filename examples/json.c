@@ -8,8 +8,8 @@
 
 #include "xstd.h"
 #include "xfs.h"
-#include "xlog.h"
-#include "xjson.h"
+#include "log.h"
+#include "json.h"
 #include "pool.h"
 
 int main(int argc, char *argv[])

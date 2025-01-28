@@ -1,5 +1,5 @@
 /*
- *  libxutils/src/sys/xlog.h
+ *  libxutils/src/sys/log.h
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)

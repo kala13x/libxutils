@@ -12,8 +12,8 @@
 #define _GNU_SOURCE
 #endif
 
-#include "xjson.h"
-#include "xstr.h"
+#include "json.h"
+#include "str.h"
 #include "map.h"
 
 #define XOBJ_INITIAL_SIZE   2

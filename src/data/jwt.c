@@ -8,7 +8,7 @@
  */
 
 #include "jwt.h"
-#include "xstr.h"
+#include "str.h"
 #include "array.h"
 #include "hmac.h"
 #include "base64.h"

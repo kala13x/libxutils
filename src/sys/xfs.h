@@ -16,8 +16,8 @@ extern "C" {
 #endif
 
 #include "xstd.h"
-#include "xstr.h"
-#include "xbuf.h"
+#include "str.h"
+#include "buf.h"
 #include "array.h"
 
 #if !defined(S_ISREG) && defined(S_IFMT) && defined(S_IFREG)

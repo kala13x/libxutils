@@ -11,7 +11,7 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "xstr.h"
+#include "str.h"
 #include "http.h"
 #include "crypt.h"
 #include "base64.h"

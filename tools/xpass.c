@@ -8,11 +8,11 @@
  */
 
 #include "xstd.h"
-#include "xjson.h"
-#include "xtype.h"
-#include "xlog.h"
-#include "xstr.h"
-#include "xcli.h"
+#include "json.h"
+#include "type.h"
+#include "log.h"
+#include "str.h"
+#include "cli.h"
 #include "xver.h"
 #include "xfs.h"
 #include "crypt.h"

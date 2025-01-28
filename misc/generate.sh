@@ -42,12 +42,12 @@ modules=(
     "crypt: SHA1"
     "data: ARRAY"
     "data: HASH"
+    "data: JSON"
     "data: JWT"
     "data: LIST"
     "data: MAP"
-    "data: XBUF"
-    "data: XJSON"
-    "data: XSTR"
+    "data: BUF"
+    "data: STR"
     "net: ADDR"
     "net: EVENT"
     "net: HTTP"
@@ -60,14 +60,14 @@ modules=(
     "sys: SYNC"
     "sys: POOL"
     "sys: THREAD"
-    "sys: XCLI"
-    "sys: XCPU"
+    "sys: TYPE"
+    "sys: CLI"
+    "sys: CPU"
+    "sys: MON"
+    "sys: LOG"
+    "sys: SIG"
     "sys: XFS"
-    "sys: XLOG"
-    "sys: XSIG"
     "sys: XTIME"
-    "sys: XTOP"
-    "sys: XTYPE"
 )
 
 enable_aes() {
@@ -98,7 +98,7 @@ enable_pool() {
     USE_POOL=y
 }
 
-enable_xsig() {
+enable_sig() {
     USE_XSIG=y
 }
 
@@ -109,17 +109,17 @@ enable_array() {
 
 enable_md5() {
     USE_MD5=y
-    enable_xstr
+    enable_str
 }
 
 enable_sha256() {
     USE_SHA256=y
-    enable_xstr
+    enable_str
 }
 
 enable_sha1() {
     USE_SHA1=y
-    enable_xstr
+    enable_str
 }
 
 enable_hash() {
@@ -127,12 +127,12 @@ enable_hash() {
     enable_list
 }
 
-enable_xbuf() {
+enable_buf() {
     USE_XBUF=y
-    enable_xstr
+    enable_str
 }
 
-enable_xstr() {
+enable_str() {
     USE_XSTR=y
     enable_array
     enable_pool
@@ -145,17 +145,17 @@ enable_thread() {
 
 enable_xtime() {
     USE_XTIME=y
-    enable_xstr
+    enable_str
 }
 
-enable_xtype() {
+enable_type() {
     USE_XTYPE=y
-    enable_xstr
+    enable_str
 }
 
 enable_ws() {
     USE_WS=y
-    enable_xbuf
+    enable_buf
 }
 
 enable_rsa() {
@@ -186,14 +186,14 @@ enable_addr() {
     USE_ADDR=y
     enable_array
     enable_sock
-    enable_xstr
+    enable_str
 }
 
-enable_xjson() {
+enable_json() {
     USE_XJSON=y
     enable_map
     enable_pool
-    enable_xstr
+    enable_str
     enable_array
 }
 
@@ -202,8 +202,8 @@ enable_crypt() {
     enable_aes
     enable_rsa
     enable_hmac
-    enable_xbuf
-    enable_xstr
+    enable_buf
+    enable_str
     enable_crc32
     enable_base64
     enable_sha256
@@ -216,14 +216,14 @@ enable_hmac() {
     enable_base64
     enable_sha256
     enable_sha1
-    enable_xstr
+    enable_str
     enable_md5
 }
 
 enable_jwt() {
     USE_JWT=y
-    enable_xstr
-    enable_xjson
+    enable_str
+    enable_json
     enable_array
     enable_crypt
     enable_hmac
@@ -235,31 +235,31 @@ enable_http() {
     enable_addr
     enable_sock
     enable_map
-    enable_xbuf
-    enable_xstr
+    enable_buf
+    enable_str
     enable_crypt
     enable_base64
 }
 
 enable_mdtp() {
     USE_MDTP=y
-    enable_xbuf
-    enable_xstr
-    enable_xjson
+    enable_buf
+    enable_str
+    enable_json
 }
 
 enable_sock() {
     USE_SOCK=y
     enable_sync
-    enable_xbuf
-    enable_xstr
+    enable_buf
+    enable_str
 }
 
 enable_api() {
     USE_API=y
     enable_base64
     enable_event
-    enable_xbuf
+    enable_buf
     enable_sha1
     enable_sock
     enable_http
@@ -267,44 +267,44 @@ enable_api() {
     enable_ws
 }
 
-enable_xcli() {
+enable_cli() {
     USE_XCLI=y
-    enable_xstr
+    enable_str
     enable_list
-    enable_xbuf
+    enable_buf
     enable_xtime
 }
 
-enable_xcpu() {
+enable_cpu() {
     USE_XCPU=y
     enable_sync
-    enable_xstr
+    enable_str
     enable_xfs
 }
 
 enable_xfs() {
     USE_XFS=y
     enable_array
-    enable_xbuf
-    enable_xstr
+    enable_buf
+    enable_str
     enable_sync
 }
 
-enable_xlog() {
+enable_log() {
     USE_XLOG=y
     enable_xtime
-    enable_xstr
+    enable_str
     enable_sync
 }
 
-enable_xtop() {
+enable_mon() {
     USE_XTOP=y
     enable_thread
-    enable_xtype
+    enable_type
     enable_array
     enable_sync
     enable_addr
-    enable_xstr
+    enable_str
     enable_xfs
 }
 

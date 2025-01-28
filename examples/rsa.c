@@ -8,7 +8,7 @@
  */
 
 #include "xstd.h"
-#include "xlog.h"
+#include "log.h"
 #include "xfs.h"
 #include "crypt.h"
 

@@ -57,9 +57,9 @@ add_library(xutils STATIC
     ./src/data/jwt.c
     ./src/data/list.c
     ./src/data/map.c
-    ./src/data/xbuf.c
-    ./src/data/xjson.c
-    ./src/data/xstr.c
+    ./src/data/buf.c
+    ./src/data/json.c
+    ./src/data/str.c
     ./src/net/addr.c
     ./src/net/event.c
     ./src/net/http.c
@@ -72,14 +72,14 @@ add_library(xutils STATIC
     ./src/sys/sync.c
     ./src/sys/pool.c
     ./src/sys/thread.c
-    ./src/sys/xcli.c
-    ./src/sys/xcpu.c
+    ./src/sys/cli.c
+    ./src/sys/cpu.c
     ./src/sys/xfs.c
-    ./src/sys/xlog.c
-    ./src/sys/xsig.c
+    ./src/sys/log.c
+    ./src/sys/sig.c
     ./src/sys/xtime.c
-    ./src/sys/xtop.c
-    ./src/sys/xtype.c
+    ./src/sys/mon.c
+    ./src/sys/type.c
 )
 
 install(TARGETS xutils DESTINATION lib)

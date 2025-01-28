@@ -8,7 +8,7 @@
 
 #include "xstd.h"
 #include "sock.h"
-#include "xlog.h"
+#include "log.h"
 #include "xtime.h"
 
 int main(int argc, char *argv[])

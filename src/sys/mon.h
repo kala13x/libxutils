@@ -1,11 +1,11 @@
 /*!
- *  @file libxutils/src/sys/xtop.h
+ *  @file libxutils/src/sys/mon.h
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  * 
- * @brief Get process and system statistics about 
- * cpu usage, network usage, memory usage, etc...
+ * @brief xutils resource monitor implementation. 
+ * CPU usage, network usage, memory usage, etc...
  */
 
 #ifndef __XUTILS_XPROC_H__
@@ -27,7 +27,7 @@
 #define XPROC_FILE_UPTIME           "/proc/uptime"
 #define XPROC_FILE_STAT             "/proc/stat"
 
-#define XTOP_INTERVAL_USEC  1000000
+#define XMON_INTERVAL_USEC  1000000
 #define XMEMBERS_MAX        128
 
 #ifdef __cplusplus
@@ -129,19 +129,19 @@ typedef struct XTopStats {
     xarray_t netIfaces;
     xtask_t monitoring;
     xpid_t nPID;
-} xtop_stats_t;
+} xmon_stats_t;
 
 #ifndef _WIN32
-int XTop_InitStats(xtop_stats_t *pStats);
-void XTop_DestroyStats(xtop_stats_t *pStats);
+int XMon_InitStats(xmon_stats_t *pStats);
+void XMon_DestroyStats(xmon_stats_t *pStats);
 
-int XTop_StartMonitoring(xtop_stats_t *pStats, uint32_t nIntervalU, xpid_t nPID);
-uint32_t XTop_StopMonitoring(xtop_stats_t *pStats, uint32_t nWaitUsecs);
-uint32_t XTop_WaitLoad(xtop_stats_t *pStats, uint32_t nWaitUsecs);
+int XMon_StartMonitoring(xmon_stats_t *pStats, uint32_t nIntervalU, xpid_t nPID);
+uint32_t XMon_StopMonitoring(xmon_stats_t *pStats, uint32_t nWaitUsecs);
+uint32_t XMon_WaitLoad(xmon_stats_t *pStats, uint32_t nWaitUsecs);
 
-int XTop_GetNetworkStats(xtop_stats_t *pStats, xarray_t *pIfaces);
-int XTop_GetMemoryInfo(xtop_stats_t *pStats, xmem_info_t *pInfo);
-int XTop_GetCPUStats(xtop_stats_t *pStats, xcpu_stats_t *pCpuStats);
+int XMon_GetNetworkStats(xmon_stats_t *pStats, xarray_t *pIfaces);
+int XMon_GetMemoryInfo(xmon_stats_t *pStats, xmem_info_t *pInfo);
+int XMon_GetCPUStats(xmon_stats_t *pStats, xcpu_stats_t *pCpuStats);
 #endif
 
 #ifdef __cplusplus

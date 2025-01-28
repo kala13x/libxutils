@@ -10,9 +10,9 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "xlog.h"
-#include "xsig.h"
-#include "xcli.h"
+#include "log.h"
+#include "sig.h"
+#include "cli.h"
 #include "addr.h"
 #include "api.h"
 

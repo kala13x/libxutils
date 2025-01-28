@@ -9,8 +9,8 @@
 
 #include "xstd.h"
 #include "crypt.h"
-#include "xjson.h"
-#include "xlog.h"
+#include "json.h"
+#include "log.h"
 #include "jwt.h"
 #include "xfs.h"
 

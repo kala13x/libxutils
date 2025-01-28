@@ -37,6 +37,7 @@ typedef enum {
     XAPI_CB_HANDSHAKE_REQUEST,
     XAPI_CB_HANDSHAKE_RESPONSE,
     XAPI_CB_HANDSHAKE_ANSWER,
+    XAPI_CB_REGISTERED,
     XAPI_CB_CONNECTED,
     XAPI_CB_LISTENING,
     XAPI_CB_INTERRUPT,
@@ -96,6 +97,7 @@ typedef struct xapi_endpoint_ {
     const char *pUri;
     uint32_t nEvents;
     uint16_t nPort;
+    XSOCKET nFD;
     xbool_t bForce;
     xbool_t bUnix;
     xbool_t bTLS;
@@ -174,6 +176,8 @@ XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char
 void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt);
 XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt);
 XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt);
+XSTATUS XAPI_AddPeer(xapi_t *pApi, xapi_endpoint_t *pEndpt);
+XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole);
 XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole);
 
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs);

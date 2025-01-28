@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/sys/xcpu.c
+ *  @file libxutils/src/sys/cpu.c
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
@@ -11,9 +11,9 @@
 #define _GNU_SOURCE
 #endif
 
-#include "xcpu.h"
+#include "cpu.h"
 #include "sync.h"
-#include "xstr.h"
+#include "str.h"
 #include "xfs.h"
 
 #define XCPU_INFO_FILE      "/proc/cpuinfo"
@@ -79,7 +79,7 @@ int XCPU_SetAffinity(int *pCPUs, size_t nCount, xpid_t nPID)
 
     if (nPID == XCPU_CALLER_PID) nPID = syscall(SYS_gettid);
     return sched_setaffinity(nPID, sizeof(mask), &mask);
-#elif WIN32
+#elif _WIN32
     size_t i = 0;
     for (i = 0; i < nCount; i++)
     {
@@ -122,7 +122,7 @@ int XCPU_AddAffinity(int nCPU, xpid_t nPID)
     }
 
     return XSTDNON;
-#elif WIN32
+#elif _WIN32
     return XCPU_SetSingle(nCPU, nPID);
 #else
     return XSTDERR;

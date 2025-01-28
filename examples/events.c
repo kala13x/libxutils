@@ -10,11 +10,11 @@
 
 #include "xstd.h"
 #include "event.h"
-#include "xsig.h"
+#include "sig.h"
 #include "http.h"
 #include "sock.h"
-#include "xbuf.h"
-#include "xlog.h"
+#include "buf.h"
+#include "log.h"
 #include "xver.h"
 
 static int g_nInterrupted = 0;

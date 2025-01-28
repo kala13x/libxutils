@@ -12,7 +12,7 @@
 #include "array.h"
 #include "addr.h"
 #include "sock.h"
-#include "xstr.h"
+#include "str.h"
 
 typedef struct XProtocolPorts {
     const char* pProtocol;

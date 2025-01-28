@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 #include "xstd.h"
-#include "xbuf.h"
+#include "buf.h"
 
 #ifdef _XUTILS_USE_SSL
 #define OPENSSL_API_COMPAT XSSL_MINIMAL_API
@@ -118,16 +118,17 @@ typedef enum {
     XSOCK_SSLV2 = (1 << 5),
     XSOCK_SSLV3 = (1 << 6),
 
-    XSOCK_PEER = (1 << 7),
-    XSOCK_CLIENT = (1 << 8),
-    XSOCK_SERVER = (1 << 9),
+    XSOCK_EVENT = (1 << 7),
+    XSOCK_PEER = (1 << 8),
+    XSOCK_CLIENT = (1 << 9),
+    XSOCK_SERVER = (1 << 10),
 
-    XSOCK_BROADCAST = (1 << 10),
-    XSOCK_MULTICAST = (1 << 11),
-    XSOCK_UNICAST = (1 << 12),
+    XSOCK_BROADCAST = (1 << 11),
+    XSOCK_MULTICAST = (1 << 12),
+    XSOCK_UNICAST = (1 << 13),
 
-    XSOCK_NB = (1 << 13),
-    XSOCK_FORCE = (1 << 14),
+    XSOCK_NB = (1 << 14),
+    XSOCK_FORCE = (1 << 15),
     XSOCK_UNDEFINED = 0
 } xsock_flags_t;
 

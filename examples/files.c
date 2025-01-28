@@ -7,7 +7,7 @@
  */
 
 #include "xstd.h"
-#include "xlog.h"
+#include "log.h"
 #include "xfs.h"
 
 int main(int argc, char *argv[]) 

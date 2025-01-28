@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/examples/xjson.c
+ *  @file libxutils/examples/json.c
  *
  *  This source is part of "libxutils" project
  *  2019-2021  Sun Dro (s.kalatoz@gmail.com)
@@ -8,12 +8,12 @@
  */
 
 #include "xstd.h"
-#include "pool.h"
-#include "xjson.h"
-#include "xbuf.h"
-#include "xstr.h"
-#include "xlog.h"
+#include "str.h"
+#include "log.h"
 #include "xfs.h"
+#include "pool.h"
+#include "json.h"
+#include "buf.h"
 
 extern char *optarg;
 

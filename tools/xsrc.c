@@ -8,9 +8,9 @@
  */
 
 #include "xstd.h"
-#include "xtype.h"
-#include "xstr.h"
-#include "xlog.h"
+#include "type.h"
+#include "str.h"
+#include "log.h"
 #include "xfs.h"
 
 #define XSEARCH_VERSION_MAX     1

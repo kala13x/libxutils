@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/sys/xcli.h
+ *  @file libxutils/src/sys/cli.h
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 #include "xstd.h"
-#include "xbuf.h"
+#include "buf.h"
 #include "list.h"
 
 #define XCLI_BAR_INTERVAL   100000

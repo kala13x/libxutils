@@ -13,10 +13,10 @@
 
 #### Containrers:
 - [Dynamically allocated array with sort and search features](https://github.com/kala13x/libxutils/blob/main/src/data/array.h)
-- [Dynamically allocated byte and data buffers](https://github.com/kala13x/libxutils/blob/main/src/data/xbuf.h)
+- [Dynamically allocated byte and data buffers](https://github.com/kala13x/libxutils/blob/main/src/data/buf.h)
 - [Dynamically allocated key-value pair map](https://github.com/kala13x/libxutils/blob/main/src/data/map.h)
 - [Dynamically allocated hash map](https://github.com/kala13x/libxutils/blob/main/src/data/hash.h)
-- [Dynamically allocated C string](https://github.com/kala13x/libxutils/blob/main/src/data/xstr.h)
+- [Dynamically allocated C string](https://github.com/kala13x/libxutils/blob/main/src/data/str.h)
 - [Implementation of linked list](https://github.com/kala13x/libxutils/blob/main/src/data/list.h)
 
 #### Network:
@@ -41,20 +41,20 @@
 
 #### System:
 - [Cross-platform file and directory operations](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
-- [Cross-platform CPU affinity manipulation](https://github.com/kala13x/libxutils/blob/main/src/sys/xcpu.h)
+- [Cross-platform CPU affinity manipulation](https://github.com/kala13x/libxutils/blob/main/src/sys/cpu.h)
 - [Implementation of advanced file search](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
 - [System time manipulation library](https://github.com/kala13x/libxutils/blob/main/src/sys/xtime.h)
-- [Performance monitoring library](https://github.com/kala13x/libxutils/blob/main/src/sys/xtop.h)
+- [Performance monitoring library](https://github.com/kala13x/libxutils/blob/main/src/sys/mon.h)
 - [Simple and fast memory pool](https://github.com/kala13x/libxutils/blob/main/src/sys/pool.h)
-- [Advanced logging library](https://github.com/kala13x/libxutils/blob/main/src/sys/xlog.h)
+- [Advanced logging library](https://github.com/kala13x/libxutils/blob/main/src/sys/log.h)
 
 #### Miscellaneous:
-- [JSON parser and writer library with lint and minify support](https://github.com/kala13x/libxutils/blob/main/src/data/xjson.h)
+- [JSON parser and writer library with lint and minify support](https://github.com/kala13x/libxutils/blob/main/src/data/json.h)
 - [Implementation of JSON Web Tokens with HS256 and RS256](https://github.com/kala13x/libxutils/blob/main/src/data/jwt.h)
 - [Cross-platform synchronization library](https://github.com/kala13x/libxutils/blob/main/src/sys/sync.h)
 - [Cross-platform multithreading library](https://github.com/kala13x/libxutils/blob/main/src/sys/thread.h)
-- [Command-Line interface operations](https://github.com/kala13x/libxutils/blob/main/src/sys/xcli.h)
-- [C String manipulation library](https://github.com/kala13x/libxutils/blob/main/src/data/xstr.h)
+- [Command-Line interface operations](https://github.com/kala13x/libxutils/blob/main/src/sys/cli.h)
+- [C String manipulation library](https://github.com/kala13x/libxutils/blob/main/src/data/str.h)
 
 ### Installation
 There are several ways to build and install the project.
@@ -186,7 +186,7 @@ cmake . && make
 #### XTOP and more
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/misc/xtop.png" alt="alternate text">
+    <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/misc/mon.png" alt="alternate text">
 </p>
 
 `XTOP` is `HTOP` like performance monitor that supports to monitor CPU, memory, and network traffic into a single window. In addition, it has powerful `REST API` client/server mode and much more.

@@ -9,7 +9,7 @@
  */
 
 #include "xtime.h"
-#include "xstr.h"
+#include "str.h"
 
 #if defined(__linux__) && defined(CLOCK_REALTIME)
 #define XTIME_USE_CLOCK

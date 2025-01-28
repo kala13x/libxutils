@@ -12,7 +12,7 @@
 #include "sha256.h"
 #include "base64.h"
 #include "md5.h"
-#include "xstr.h"
+#include "str.h"
 
 XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
 {

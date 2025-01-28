@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/sys/xcli.c
+ *  @file libxutils/src/sys/cli.c
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
@@ -8,8 +8,8 @@
  */
 
 #include "xstd.h"
-#include "xcli.h"
-#include "xstr.h"
+#include "cli.h"
+#include "str.h"
 #include "xtime.h"
 
 #ifdef __linux__

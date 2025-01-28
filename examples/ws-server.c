@@ -10,8 +10,8 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "xlog.h"
-#include "xsig.h"
+#include "log.h"
+#include "sig.h"
 #include "api.h"
 
 static int g_nInterrupted = 0;

@@ -19,7 +19,7 @@ typedef SSIZE_T ssize_t;
 
 #include "sock.h"
 #include "sync.h"
-#include "xstr.h"
+#include "str.h"
 #include "xfs.h"
 
 /*

@@ -9,7 +9,7 @@
  */
 
 #include "xfs.h"
-#include "xstr.h"
+#include "str.h"
 #include "sync.h"
 
 #define XFILE_BUF_SIZE      4096

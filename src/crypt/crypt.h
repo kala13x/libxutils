@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 #include "xstd.h"
-#include "xstr.h"
+#include "str.h"
 
 uint8_t* XCrypt_AES(const uint8_t *pInput, size_t *pLength, const uint8_t *pKey, size_t nKeyLen, const uint8_t *pIV);
 uint8_t* XDecrypt_AES(const uint8_t *pInput, size_t *pLength, const uint8_t *pKey, size_t nKeyLen, const uint8_t *pIV);

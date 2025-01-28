@@ -16,8 +16,8 @@
 #include "addr.h"
 #include "sock.h"
 #include "map.h"
-#include "xbuf.h"
-#include "xtype.h"
+#include "buf.h"
+#include "type.h"
 
 #ifdef __cplusplus
 extern "C" {

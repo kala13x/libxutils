@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/sys/xsig.c
+ *  @file libxutils/src/sys/sig.c
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
@@ -8,7 +8,7 @@
  */
 
 #include "xstd.h"
-#include "xsig.h"
+#include "sig.h"
 
 #ifdef __linux__
 #include <execinfo.h>

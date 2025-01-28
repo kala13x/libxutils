@@ -9,7 +9,7 @@
 
 #include "xstd.h"
 #include "xver.h"
-#include "xstr.h"
+#include "str.h"
 #include "sync.h"
 
 static XATOMIC g_nHaveVerShort = 0;

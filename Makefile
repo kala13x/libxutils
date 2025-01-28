@@ -22,12 +22,12 @@ OBJS = xver.$(OBJ) \
     sha1.$(OBJ) \
     array.$(OBJ) \
     hash.$(OBJ) \
+    json.$(OBJ) \
     jwt.$(OBJ) \
     list.$(OBJ) \
     map.$(OBJ) \
-    xbuf.$(OBJ) \
-    xjson.$(OBJ) \
-    xstr.$(OBJ) \
+    buf.$(OBJ) \
+    str.$(OBJ) \
     addr.$(OBJ) \
     event.$(OBJ) \
     http.$(OBJ) \
@@ -40,14 +40,14 @@ OBJS = xver.$(OBJ) \
     sync.$(OBJ) \
     pool.$(OBJ) \
     thread.$(OBJ) \
-    xcli.$(OBJ) \
-    xcpu.$(OBJ) \
+    type.$(OBJ) \
+    cli.$(OBJ) \
+    cpu.$(OBJ) \
+    mon.$(OBJ) \
+    log.$(OBJ) \
+    sig.$(OBJ) \
     xfs.$(OBJ) \
-    xlog.$(OBJ) \
-    xsig.$(OBJ) \
     xtime.$(OBJ) \
-    xtop.$(OBJ) \
-    xtype.$(OBJ) \
 
 OBJECTS = $(patsubst %,$(ODIR)/%,$(OBJS))
 INSTALL_INC = /usr/local/include/xutils

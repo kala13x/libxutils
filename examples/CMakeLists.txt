@@ -55,7 +55,7 @@ set(SOURCE_FILES
     events.c
     files.c
     json.c
-    xlog.c
+    log.c
     list.c
     ntp.c
     jwt.c

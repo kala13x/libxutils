@@ -7,7 +7,7 @@
  */
 
 #include "list.h"
-#include "xlog.h"
+#include "log.h"
 
 typedef struct {
     char *pName;
