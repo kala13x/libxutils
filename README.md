@@ -124,11 +124,11 @@ USE_CRYPT=n
 USE_XTIME=n
 USE_EVENT=y
 USE_LIST=n
-USE_XBUF=n
+USE_BUF=n
 USE_HASH=n
 USE_SOCK=n
-USE_XLOG=y
-USE_XSTR=n
+USE_LOG=y
+USE_STR=n
 ...
 ```
 After updating the configuration, use the `build.sh` script to generate the `Makefile` and build the project.
