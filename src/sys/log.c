@@ -476,34 +476,26 @@ void XLog_SeparatorSet(const char *pSeparator)
 
 void XLog_ColorFormatSet(xlog_coloring_t eFmt)
 {
-    XASSERT_VOID_RET(g_bInit);
-    XSync_Lock(&g_xlog.lock);
-    g_xlog.config.eColorFormat = eFmt;
-    XSync_Unlock(&g_xlog.lock);
+    xlog_cfg_t *pCfg = &g_xlog.config;
+    XSYNC_ATOMIC_SET(&pCfg->eColorFormat, eFmt);
 }
 
 void XLog_TimeFormatSet(xlog_timing_t eFmt)
 {
-    XASSERT_VOID_RET(g_bInit);
-    XSync_Lock(&g_xlog.lock);
-    g_xlog.config.eTimeFormat = eFmt;
-    XSync_Unlock(&g_xlog.lock);
+    xlog_cfg_t *pCfg = &g_xlog.config;
+    XSYNC_ATOMIC_SET(&pCfg->eTimeFormat, eFmt);
 }
 
 void XLog_IndentSet(xbool_t bEnable)
 {
-    XASSERT_VOID_RET(g_bInit);
-    XSync_Lock(&g_xlog.lock);
-    g_xlog.config.bIndent = bEnable;
-    XSync_Unlock(&g_xlog.lock);
+    xlog_cfg_t *pCfg = &g_xlog.config;
+    XSYNC_ATOMIC_SET(&pCfg->bIndent, bEnable);
 }
 
 void XLog_FlushSet(xbool_t bEnable)
 {
-    XASSERT_VOID_RET(g_bInit);
-    XSync_Lock(&g_xlog.lock);
-    g_xlog.config.bFlush = bEnable;
-    XSync_Unlock(&g_xlog.lock);
+    xlog_cfg_t *pCfg = &g_xlog.config;
+    XSYNC_ATOMIC_SET(&pCfg->bFlush, bEnable);
 }
 
 void XLog_FileLogSet(xbool_t bEnable)
@@ -522,43 +514,32 @@ void XLog_FileLogSet(xbool_t bEnable)
 
 void XLog_ScreenLogSet(xbool_t bEnable)
 {
-    XASSERT_VOID_RET(g_bInit);
-    XSync_Lock(&g_xlog.lock);
-    g_xlog.config.bToScreen = bEnable;
-    XSync_Unlock(&g_xlog.lock);
+    xlog_cfg_t *pCfg = &g_xlog.config;
+    XSYNC_ATOMIC_SET(&pCfg->bToScreen, bEnable);
 }
 
 void XLog_TraceTid(xbool_t bEnable)
 {
-    XASSERT_VOID_RET(g_bInit);
-    XSync_Lock(&g_xlog.lock);
-    g_xlog.config.bTraceTid = bEnable;
-    XSync_Unlock(&g_xlog.lock);
+    xlog_cfg_t *pCfg = &g_xlog.config;
+    XSYNC_ATOMIC_SET(&pCfg->bTraceTid, bEnable);
 }
 
 void XLog_UseHeap(xbool_t bEnable)
 {
-    XASSERT_VOID_RET(g_bInit);
-    XSync_Lock(&g_xlog.lock);
-    g_xlog.config.bUseHeap = bEnable;
-    XSync_Unlock(&g_xlog.lock);
+    xlog_cfg_t *pCfg = &g_xlog.config;
+    XSYNC_ATOMIC_SET(&pCfg->bUseHeap, bEnable);
 }
 
 void XLog_FlagsSet(uint16_t nFlags)
 {
-    XASSERT_VOID_RET(g_bInit);
-    XSync_Lock(&g_xlog.lock);
-    g_xlog.config.nFlags = nFlags;
-    XSync_Unlock(&g_xlog.lock);
+    xlog_cfg_t *pCfg = &g_xlog.config;
+    XSYNC_ATOMIC_SET(&pCfg->nFlags, nFlags);
 }
 
 uint16_t XLog_FlagsGet(void)
 {
     XASSERT_RET(g_bInit, XSTDNON);
-    XSync_Lock(&g_xlog.lock);
-    uint16_t nFlags = g_xlog.config.nFlags;
-    XSync_Unlock(&g_xlog.lock);
-    return nFlags;
+    return g_xlog.config.nFlags;
 }
 
 size_t XLog_PathSet(const char *pPath)
