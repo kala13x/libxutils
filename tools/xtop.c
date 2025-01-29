@@ -21,7 +21,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        5
+#define XTOP_VERSION_MIN        6
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -1030,6 +1030,7 @@ int XTOPApp_GetJSONStats(xmon_stats_t *pStats, xjson_t *pJson)
             pIfcObj->nPacketsSent = XJSON_GetU64(XJSON_GetObject(pArrItemObj, "packetsSent"));
             pIfcObj->nBytesSent = XJSON_GetU64(XJSON_GetObject(pArrItemObj, "bytesSent"));
             pIfcObj->nBandwidth = XJSON_GetU64(XJSON_GetObject(pArrItemObj, "bandwidth"));
+            pIfcObj->bActive = XJSON_GetBool(XJSON_GetObject(pArrItemObj, "active"));
             pIfcObj->nType = XJSON_GetU32(XJSON_GetObject(pArrItemObj, "type"));
 
             const char *pName = XJSON_GetString(XJSON_GetObject(pArrItemObj, "name"));
@@ -1257,7 +1258,8 @@ int XTOPApp_AppendNetworkJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
                     "\"bytesSentPerSec\": %lu,"
                     "\"packetsSentPerSec\": %lu,"
                     "\"bytesReceivedPerSec\": %lu,"
-                    "\"packetsReceivedPerSec\": %lu"
+                    "\"packetsReceivedPerSec\": %lu,"
+                    "\"active\": %s"
                 "}",
                 pIface->sName,
                 pIface->nType,
@@ -1271,7 +1273,8 @@ int XTOPApp_AppendNetworkJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
                 pIface->nBytesSentPerSec,
                 pIface->nPacketsSentPerSec,
                 pIface->nBytesReceivedPerSec,
-                pIface->nPacketsReceivedPerSec);
+                pIface->nPacketsReceivedPerSec,
+                pIface->bActive ? "true" : "false");
 
             if (pJsonStr->nStatus < 0 ||
                 (i + 1 < nUsed &&
