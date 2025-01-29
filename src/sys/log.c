@@ -29,6 +29,7 @@ typedef struct XLogCtx {
     const char *pFormat;
     xlog_flag_t eFlag;
     xbool_t bNewLine;
+    uint32_t nUsec;
     xtime_t time;
 } xlog_ctx_t;
 
@@ -233,7 +234,7 @@ static size_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSiz
     xlog_cfg_t *pCfg = &g_xlog.config;
     const xtime_t *pTime = &pCtx->time;
     char sDate[XLOG_TIME_MAX] = XSTR_INIT;
-    uint32_t nMsecTime = XTime_GetUsec() / 1000;
+    uint32_t nMsecTime = pCtx->nUsec / 1000;
 
     if (pCfg->eTimeFormat == XLOG_TIME)
     {
@@ -298,8 +299,7 @@ void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFormat, ...)
         g_xlog.config.bToFile))
     {
         xlog_ctx_t ctx;
-        XTime_Get(&ctx.time);
-
+        ctx.nUsec = XTime_Get(&ctx.time);
         ctx.eFlag = eFlag;
         ctx.pFormat = pFormat;
         ctx.bNewLine = bNewLine;

@@ -339,12 +339,13 @@ uint64_t XTime_GetStamp(void)
     return (uint64_t)now.nSec * 1000000 + nTimeStamp;
 }
 
-void XTime_Get(xtime_t *pTime) 
+uint32_t XTime_Get(xtime_t *pTime)
 {
     xtime_spec_t now;
     XTime_GetClock(&now);
     XTime_FromEpoch(pTime, now.nSec);
     pTime->nFraq = (uint8_t)(now.nNanoSec / 10000000);
+    return (uint32_t)(now.nNanoSec / 1000);
 }
 
 size_t XTime_GetStr(char *pDst, size_t nSize, xtime_fmt_t eFmt)
