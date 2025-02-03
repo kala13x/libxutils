@@ -186,7 +186,7 @@ cmake . && make
 #### XTOP and more
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/misc/mon.png" alt="alternate text">
+    <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/misc/xtop.png" alt="alternate text">
 </p>
 
 `XTOP` is `HTOP` like performance monitor that supports to monitor CPU, memory, and network traffic into a single window. In addition, it has powerful `REST API` client/server mode and much more.

@@ -304,9 +304,9 @@ int XTime_GetClock(xtime_spec_t *pTs)
     pTs->nSec = ts.tv_sec;
 #elif _WIN32
     const uint64_t nEpoch = ((uint64_t)116444736000000000ULL);
-    SYSTEMTIME  sysTime;
-    FILETIME    fileTime;
-    uint64_t    nTime;
+    SYSTEMTIME sysTime;
+    FILETIME fileTime;
+    uint64_t nTime;
 
     GetSystemTime(&sysTime);
     SystemTimeToFileTime(&sysTime, &fileTime);
