@@ -1217,7 +1217,7 @@ static int XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, const
             return XSTDNON;
         }
 
-        while (nPosit && pBuffer[nPosit] != '\n') nPosit--;
+        while (nPosit > 1 && pBuffer[nPosit] != '\n') nPosit--;
         if (pBuffer[nPosit] == '\n') nPosit++;
 
         int nEnd = xstrsrc(&pBuffer[nPosit], "\n");
