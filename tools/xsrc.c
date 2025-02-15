@@ -382,9 +382,11 @@ static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
     /* Do not display additional info if verbose is not set */
     if (!((xsearch_args_t*)pSearch->pUserCtx)->bVerbose)
     {
-        if (!pEntry->nLineNum && !xstrused(sLine)) xlog("%s%s%s", sEntry, pArrow, sLinkPath);
-        else if (xstrused(pEntry->sLine) && xstrused(sLine)) xlog("%s: %s", sEntry, sLine);
-        else xlog("%s:%s%d%s %s", sEntry, XSTR_FMT_BOLD, pEntry->nLineNum, XSTR_FMT_RESET, sLine);
+        if (pEntry->nLineNum && xstrused(sLine))
+            xlog("%s:%s%d%s %s", sEntry, XSTR_FMT_BOLD, pEntry->nLineNum, XSTR_FMT_RESET, sLine);
+        else if (xstrused(sLine)) xlog("%s: %s", sEntry, sLine);
+        else xlog("%s%s%s", sEntry, pArrow, sLinkPath);
+
         return;
     }
 
