@@ -1272,7 +1272,7 @@ static int XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, const
             XFile_SearchName(pSearch, pSearchName) :
             !strcmp(pSearch->pFileName, pSearchName);
 
-        if (!bFound && !xstrused(pSearch->sText)) return XSTDNON;
+        if (!bFound) return XSTDNON;
     }
 
     XSTATUS nStatus = XSTDOK;
