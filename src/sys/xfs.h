@@ -170,6 +170,7 @@ struct XFileSearch {
     xbool_t bSearchLines;           // Search in file lines
     xbool_t bInsensitive;           // Case insensitive search
     xbool_t bRecursive;             // Recursive search
+    xbool_t bFilesOnly;             // Show files only
     void *pUserCtx;                 // User space
 
     /* Search criteria */
