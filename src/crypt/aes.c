@@ -624,7 +624,7 @@ uint8_t* XAES_Encrypt(xaes_context_t *pCtx, const uint8_t *pInput, size_t *pLeng
 
     // Copy input data and add PKCS#7 padding
     memcpy(pOutput, pInput, nOriginalLen);
-    uint8_t nPadding = nPaddingLen - nOriginalLen;
+    uint8_t nPadding = (uint8_t)(nPaddingLen - nOriginalLen);
     memset(pOutput + nOriginalLen, nPadding, nPadding);
 
     uint8_t *pOffset = pOutput;

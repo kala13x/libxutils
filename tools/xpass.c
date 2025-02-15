@@ -401,7 +401,7 @@ static xbool_t XPass_ParseConfig(xpass_ctx_t *pCtx)
     xbyte_buffer_t buffer;
     if (!XPath_LoadBuffer(pCtx->sConf, &buffer))
     {
-        xloge("Can not parse config file: %s (%d)", pCtx->sConf, errno);
+        xloge("Can not load config file: %s (%d)", pCtx->sConf, errno);
         XByteBuffer_Clear(&buffer);
         return XFALSE;
     }

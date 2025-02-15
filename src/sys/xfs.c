@@ -297,10 +297,7 @@ uint8_t* XFile_LoadSize(xfile_t *pFile, size_t nMaxSize, size_t *pSize)
     do
     {
         size_t nFreeSpace = nAllowedToRead - nOffset;
-        size_t nReadSize = pFile->nBlockSize < nFreeSpace ?
-                           pFile->nBlockSize : nFreeSpace;
-
-        nReadSize = nReadSize < nMaxSize ? nReadSize : nMaxSize;
+        size_t nReadSize = XSTD_MIN(pFile->nBlockSize, nFreeSpace);
         if (nReadSize == 0) break;
 
         nBytes = XFile_Read(pFile, &pBuffer[nOffset], nReadSize);
@@ -1293,8 +1290,12 @@ static int XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, const
         if (pSearch->bInsensitive) xstrcase((char*)buffer.pData, XSTR_LOWER);
         size_t nTextLen = strlen(pSearch->sText);
 
+#ifndef _WIN32
         void *pOffset = memmem(buffer.pData, buffer.nUsed, pSearch->sText, nTextLen);
         if (pOffset != NULL) nPosit = (int)((uint8_t *)pOffset - buffer.pData);
+#else
+        nPosit = xstrsrc((char*)buffer.pData, pSearch->sText);
+#endif
 
         if (nPosit < 0 || nPosit >= (int)buffer.nUsed)
         {
