@@ -74,6 +74,7 @@
 #define XSTR_INIT                   { XSTR_NUL }
 
 #define XSTR_AVAIL(arr)((int)sizeof(arr)-(int)strlen(arr))
+#define XSTR_NAVAIL(arr,n)((int)n-(int)strlen(arr))
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,6 +90,8 @@ typedef enum {
 /////////////////////////////////////////////////////////////////////////
 
 xarray_t* xstrsplit(const char *pString, const char *pDlmt);
+xarray_t* xstrsplite(const char *pString, const char *pDlmt);
+
 char* xstrrep(const char *pOrig, const char *pRep, const char *pWith);
 int xstrnrep(char *pDst, size_t nSize, const char *pOrig, const char *pRep, const char *pWith);
 char *xstrpdup(xpool_t *pPool, const char *pStr);

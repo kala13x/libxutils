@@ -15,8 +15,9 @@
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0
-#define XSEARCH_BUILD_NUMBER    10
+#define XSEARCH_BUILD_NUMBER    11
 
+#define XSEARCH_MAX_READ_SIZE   1024 * 1024 * 1024
 #define XSEARCH_INFO_LEN        128
 #define XSEARCH_TIME_LEN        12
 #define XSEARCH_SIZE_LEN        32
@@ -35,8 +36,11 @@ typedef struct {
     char sFileName[XNAME_MAX];
     char sText[XSTR_MID];
     xbool_t bInsensitive;
+    xbool_t bSearchLines;
     xbool_t bRecursive;
     xbool_t bVerbose;
+    size_t nMaxRead;
+    size_t nMaxSize;
     int nPermissions;
     int nLinkCount;
     int nFileTypes;
@@ -46,7 +50,7 @@ typedef struct {
 void signal_callback(int sig)
 {
     printf("\nInterrupted with signal: %d\n", sig);
-    XSYNC_ATOMIC_SET(&g_interrupted, 1);    
+    XSYNC_ATOMIC_SET(&g_interrupted, 1);
 }
 
 static int XSearch_GetFileTypes(const char *pTypes)
@@ -93,10 +97,10 @@ static int XSearch_GetPermissins(const char *pPerm)
 
 void XSearch_Usage(const char *pName)
 {
-    printf("==========================================================\n");
-    printf("Advanced File Search - Version: %d.%d build %d (%s)\n", 
+    printf("============================================================\n");
+    printf(" Advanced File Search - Version: %d.%d build %d (%s)\n",
         XSEARCH_VERSION_MAX, XSEARCH_VERSION_MIN, XSEARCH_BUILD_NUMBER, __DATE__);
-    printf("==========================================================\n");
+    printf("============================================================\n");
 
     int i, nLength = strlen(pName) + 6;
     char sWhiteSpace[nLength + 1];
@@ -104,19 +108,22 @@ void XSearch_Usage(const char *pName)
     for (i = 0; i < nLength; i++) sWhiteSpace[i] = ' ';
     sWhiteSpace[nLength] = 0;
 
-    printf("Usage: %s [-f <name>] [-n <bytes>] [-g <text>] [-i]\n", pName);
-    printf(" %s [-d <target_path>] [-l <link_count>] [-r]\n", sWhiteSpace);
-    printf(" %s [-p <permissions>] [-t <types>] [-h] [-v]\n\n", sWhiteSpace);
+    printf("Usage: %s [-f <name>] [-s <size>] [-t <types>] [-z <max_size>]\n", pName);
+    printf(" %s [-d <target_path>] [-l <link_count>] [-g <text>] [-n]\n", sWhiteSpace);
+    printf(" %s [-p <permissions>] [-m <max_read>] [-i] [-v] [-r] [-h]\n\n", sWhiteSpace);
 
     printf("Options are:\n");
     printf("  %s-d%s <target_path>    %s# Target directory path%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-f%s <file_name>      %s# Target file name%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-g%s <grep_text>      %s# Search file containing the text%s\n", XSEARCH_ARG_COLORING);
-    printf("  %s-n%s <file_size>      %s# Target file size in bytes%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-s%s <file_size>      %s# Target file size in bytes%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-l%s <link_count>     %s# Target file link count%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-p%s <permissions>    %s# Target file permissions (e.g. 'rwxr-xr--')%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-m%s <max_read>       %s# Max size to read text from the file%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-z%s <max_size>       %s# Max size of the file to search%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-t%s <types>          %s# Target file types (*)%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-i%s                  %s# Case insensitive search%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-n%s                  %s# Line by line search text in file%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-r%s                  %s# Recursive search target directory%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-v%s                  %s# Display additional information (verbose)%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-h%s                  %s# Display version and usage information%s\n\n", XSEARCH_ARG_COLORING);
@@ -133,7 +140,8 @@ void XSearch_Usage(const char *pName)
     printf("Notes:\n");
     printf("   1) <file_name> option is supporting wildcard character: '%s*%s'\n", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     printf("   2) <file_types> option is supporting one and more file types: %s-t ldb%s\n", XSTR_FMT_BOLD, XSTR_FMT_RESET);
-    printf("   3) One or more <file_name> argument can be specified by using delimiter: '%s;%s'\n\n", XSTR_FMT_BOLD, XSTR_FMT_RESET);
+    printf("   3) One or more <file_name> argument can be specified by using delimiter: '%s;%s'\n", XSTR_FMT_BOLD, XSTR_FMT_RESET);
+    printf("   4) Max sizes (-m and -z) can be human readable numbers, examples: 1G, 10m, 3k, 11M\n\n");
 
     printf("Examples:\n");
     printf("%sRecursive search of every symlink or a regular file in the root file%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
@@ -145,10 +153,28 @@ void XSearch_Usage(const char *pName)
     printf("%s[xutils@examples]$ %s -rvd /opt -f \"*.cpp;*.java\" -ig test%s\n\n", XSTR_FMT_BOLD, pName, XSTR_FMT_RESET);
 }
 
+static int XSearch_GetSize(char *pSize, size_t *pMaxRead)
+{
+    if (!isdigit(*pSize)) return XSTDERR;
+    size_t nSize = atoi(pSize);
+
+    while (*pSize && isdigit(*pSize)) pSize++;
+    while (*pSize && isspace(*pSize)) pSize++;
+    xstrcase(pSize, XSTR_LOWER);
+
+    if (*pSize == 'k') nSize = nSize * 1024;
+    else if (*pSize == 'm') nSize = nSize * 1024 * 1024;
+    else if (*pSize == 'g') nSize = nSize * 1024 * 1024 * 1024;
+
+    *pMaxRead = nSize;
+    return XSTDOK;
+}
 
 static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
 {
     memset(pArgs, 0, sizeof(xsearch_args_t));
+    char sMaxReadSize[XSEARCH_SIZE_LEN] = {0};
+    char sMaxFileSize[XSEARCH_SIZE_LEN] = {0};
     pArgs->sDirectory[0] = '.';
     pArgs->sDirectory[1] = '/';
     pArgs->sDirectory[2] = '\0';
@@ -156,7 +182,7 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     pArgs->nFileSize = -1;
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "d:f:g:p:t:l:n:i1:r1:v1:h1")) != -1)
+    while ((opt = getopt(argc, argv, "d:f:g:p:t:m:z:l:s:n1:i1:r1:v1:h1")) != -1)
     {
         switch (opt)
         {
@@ -169,6 +195,12 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
             case 'g':
                 xstrncpy(pArgs->sText, sizeof(pArgs->sText), optarg);
                 break;
+            case 'm':
+                xstrncpy(sMaxReadSize, sizeof(sMaxReadSize), optarg);
+                break;
+            case 'z':
+                xstrncpy(sMaxFileSize, sizeof(sMaxFileSize), optarg);
+                break;
             case 'p':
                 pArgs->nPermissions = XSearch_GetPermissins(optarg);
                 break;
@@ -178,8 +210,11 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
             case 'l':
                 pArgs->nLinkCount = atol(optarg);
                 break;
-            case 'n':
+            case 's':
                 pArgs->nFileSize = atol(optarg);
+                break;
+            case 'n':
+                pArgs->bSearchLines = XTRUE;
                 break;
             case 'i':
                 pArgs->bInsensitive = XTRUE;
@@ -201,6 +236,25 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
         xstrcase(pArgs->sFileName, XSTR_LOWER);
         xstrcase(pArgs->sText, XSTR_LOWER);
     }
+
+    if (xstrused(sMaxFileSize))
+    {
+        if (XSearch_GetSize(sMaxFileSize, &pArgs->nMaxSize) < 0)
+        {
+            xloge("Invalid max file size number");
+            return 0;
+        }
+    }
+
+    if (xstrused(sMaxReadSize))
+    {
+        if (XSearch_GetSize(sMaxReadSize, &pArgs->nMaxRead) < 0)
+        {
+            xloge("Invalid max read size number");
+            return 0;
+        }
+    }
+    else pArgs->nMaxRead = XSEARCH_MAX_READ_SIZE;
 
     /* Validate opts */
     if (pArgs->nPermissions < 0 || 
@@ -288,19 +342,48 @@ static void XSearch_ColorizeSymlink(char *pSimlink, size_t nSize, xfile_entry_t 
     }
 }
 
+static void XSearch_ColorizeLine(char *pDst, size_t nSize, xfile_entry_t *pEntry, const char *pText)
+{
+    if (!xstrused(pText) || !pEntry->nLineNum) return;
+    xarray_t *pArr = xstrsplit(pEntry->sLine, pText);
+    if (pArr == NULL) return;
+
+    size_t i = 0;
+    char sColorized[XLINE_MAX];
+    xstrnclr(sColorized, sizeof(sColorized), XSTR_CLR_RED, "%s", pText);
+    xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s", XSTR_FMT_DIM);
+    if (xstrcmp(pEntry->sLine, pText)) xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s%s", sColorized, XSTR_FMT_DIM);
+
+    for (i = 0; i < pArr->nUsed; i++)
+    {
+        const char *pData = (const char*)XArray_GetData(pArr, i);
+        if (pData != NULL) xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s", pData);
+        if (i < pArr->nUsed - 1) xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s%s", sColorized, XSTR_FMT_DIM);
+    }
+
+    xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s", XSTR_FMT_RESET);
+    XArray_Destroy(pArr);
+}
+
 static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
 {
-    char sEntry[XPATH_MAX], sLinkPath[XPATH_MAX], sTime[XSEARCH_TIME_LEN + 1];
+    char sTime[XSEARCH_TIME_LEN + 1];
+    char sLinkPath[XPATH_MAX + 64];
+    char sEntry[XPATH_MAX + 64];
+    char sLine[XLINE_MAX + 64];
+
+    sLinkPath[0] = sEntry[0] = sTime[0] = sLine[0] = XSTR_NUL;
     const char *pArrow = pEntry->eType == XF_SYMLINK ? " -> " : XSTR_EMPTY;
 
-    sLinkPath[0] = sEntry[0] = sTime[0] = XSTR_NUL;
     XSearch_ColorizeEntry(sEntry, sizeof(sEntry), pEntry);
     XSearch_ColorizeSymlink(sLinkPath, sizeof(sLinkPath), pEntry);
+    XSearch_ColorizeLine(sLine, sizeof(sLine), pEntry, pSearch->sText);
 
     /* Do not display additional info if verbose is not set */
     if (!((xsearch_args_t*)pSearch->pUserCtx)->bVerbose)
     {
-        xlog("%s%s%s", sEntry, pArrow, sLinkPath);
+        if (!pEntry->nLineNum) xlog("%s%s%s", sEntry, pArrow, sLinkPath);
+        else xlog("%s:%s%d%s %s", sEntry, XSTR_FMT_BOLD, pEntry->nLineNum, XSTR_FMT_RESET, sLine);
         return;
     }
 
@@ -319,15 +402,23 @@ static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
     XBytesToUnit(sSize, sizeof(sSize), pEntry->nSize, XTRUE);
     xstrnlcpyf(sRound, sizeof(sRound), 7, XSTR_SPACE_CHAR, "%s", sSize);
 
-    xlog("%c%s %lu %s %s %s [%s] %s%s%s",
-        XFile_GetTypeChar(pEntry->eType),
-        pEntry->sPerm, pEntry->nLinkCount,
-        pUname, pGname, sRound, sTime,
-        sEntry, pArrow, sLinkPath);
+    if (pEntry->nLineNum)
+    {
+        xlog("%c%s %lu %s %s %s [%s] %s:%s%d%s %s", XFile_GetTypeChar(pEntry->eType),
+            pEntry->sPerm, pEntry->nLinkCount, pUname, pGname, sRound, sTime,
+            sEntry, XSTR_FMT_BOLD, pEntry->nLineNum, XSTR_FMT_RESET, sLine);
+    }
+    else
+    {
+        xlog("%c%s %lu %s %s %s [%s] %s%s%s", XFile_GetTypeChar(pEntry->eType),
+            pEntry->sPerm, pEntry->nLinkCount, pUname, pGname, sRound, sTime,
+            sEntry, pArrow, sLinkPath);
+    }
 }
 
 int XSearch_Callback(xfile_search_t *pSearch, xfile_entry_t *pEntry, const char *pMsg)
 {
+    if (XSYNC_ATOMIC_GET(&g_interrupted)) return XSTDERR;
     if (pEntry != NULL) XSearch_DisplayEntry(pSearch, pEntry);
     if (pMsg != NULL) xloge("%s (%s)", pMsg, XSTRERR);
     return XSTDNON;
@@ -352,10 +443,13 @@ int main(int argc, char* argv[])
     xstrncpy(srcCtx.sText, sizeof(srcCtx.sText), args.sText);
     srcCtx.nPermissions = args.nPermissions;
     srcCtx.bInsensitive = args.bInsensitive;
+    srcCtx.bSearchLines = args.bSearchLines;
     srcCtx.bRecursive = args.bRecursive;
     srcCtx.nFileTypes = args.nFileTypes;
     srcCtx.nLinkCount = args.nLinkCount;
     srcCtx.nFileSize = args.nFileSize;
+    srcCtx.nMaxRead = args.nMaxRead;
+    srcCtx.nMaxSize = args.nMaxSize;
     srcCtx.callback = XSearch_Callback;
     srcCtx.pUserCtx = &args;
 

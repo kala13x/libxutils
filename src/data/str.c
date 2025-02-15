@@ -926,6 +926,42 @@ xarray_t* xstrsplit(const char *pString, const char *pDlmt)
     return pArray;
 }
 
+xarray_t* xstrsplite(const char *pString, const char *pDlmt)
+{
+    if (!xstrused(pString) || !xstrused(pDlmt)) return NULL;
+
+    char sDlmt[XSTR_MID];
+    size_t nDlmtLen = xstrncpy(sDlmt, sizeof(sDlmt), pDlmt);
+    if (!nDlmtLen) return NULL;
+
+    xarray_t *pArray = XArray_NewPool(XSTDNON, XSTDNON, XFALSE);
+    if (pArray == NULL) return NULL;
+
+    char sToken[XSTR_MAX];
+    int nNext = 0;
+
+    while((nNext = xstrntok(sToken, sizeof(sToken), pString, nNext, sDlmt)) >= 0)
+    {
+        size_t nLength = strlen(sToken);
+        if (!nLength)
+        {
+            XArray_AddData(pArray, XSTR_EMPTY, 1);
+            continue;
+        }
+
+        XArray_AddData(pArray, sToken, nLength+1);
+        if (!nNext) break;
+    }
+
+    if (!pArray->nUsed)
+    {
+        XArray_Destroy(pArray);
+        return NULL;
+    }
+
+    return pArray;
+}
+
 char* xstrtoge(char *pBuffer, size_t nSize, const char *pStr)
 {
     if (pStr == NULL) return NULL;

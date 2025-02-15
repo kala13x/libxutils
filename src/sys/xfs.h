@@ -92,6 +92,7 @@ int XFile_GetLine(xfile_t *pFile, char* pLine, size_t nSize);
 int XFile_GetLineCount(xfile_t *pFile);
 int XFile_ReadLine(xfile_t *pFile, char* pLine, size_t nSize, size_t nLineNum);
 uint8_t* XFile_Load(xfile_t *pFile, size_t *pSize);
+uint8_t* XFile_LoadSize(xfile_t *pFile, size_t nMaxSize, size_t *pSize);
 
 xbool_t XPath_Exists(const char *pPath);
 char XPath_GetType(xmode_t nMode);
@@ -104,11 +105,13 @@ int XPath_ModeToChmod(char *pOutput, size_t nSize, xmode_t nMode);
 
 long XPath_GetSize(const char *pPath);
 uint8_t* XPath_Load(const char *pPath, size_t* pSize);
+uint8_t* XPath_LoadSize(const char *pPath, size_t nMaxSize, size_t* pSize);
 int XPath_CopyFile(const char *pSrc, const char *pDst);
 int XPath_Read(const char *pPath, uint8_t *pBuffer, size_t nSize);
 int XPath_Write(const char *pPath, const char *pFlags, const uint8_t *pData, size_t nSize);
 int XPath_WriteBuffer(const char *pPath, const char *pFlags, xbyte_buffer_t *pBuffer);
 size_t XPath_LoadBuffer(const char *pPath, xbyte_buffer_t *pBuffer);
+size_t XPath_LoadBufferSize(const char *pPath, xbyte_buffer_t *pBuffer, size_t nMaxSize);
 
 void XDir_Close(xdir_t *pDir);
 int XDir_Open(xdir_t *pDir, const char *pPath);
@@ -138,12 +141,14 @@ typedef struct XFileEntry {
     char sLink[XPATH_MAX];
     char sName[XNAME_MAX];
     char sPerm[XPERM_MAX];
+    char sLine[XLINE_MAX];
     xfile_type_t eType;
     size_t nLinkCount;
     uint32_t nGID;
     uint32_t nUID;
     time_t nTime;
     size_t nSize;
+    size_t nLineNum;
     char *pRealPath;
 } xfile_entry_t;
 
@@ -162,6 +167,7 @@ struct XFileSearch {
     /* Search context */
     xfile_search_cb_t callback;     // Search callback
     xarray_t fileArray;             // Found file array
+    xbool_t bSearchLines;           // Search in file lines
     xbool_t bInsensitive;           // Case insensitive search
     xbool_t bRecursive;             // Recursive search
     void *pUserCtx;                 // User space
@@ -174,6 +180,8 @@ struct XFileSearch {
     int nLinkCount;                 // Needed file link count
     int nFileTypes;                 // Needed file types
     int nFileSize;                  // Needed file size
+    size_t nMaxRead;                // Max read size for file
+    size_t nMaxSize;                // Max file size to search
     xbool_t bMulty;                 // Multy file name search
 
     xatomic_t *pInterrupted;        // Interrupt flag pointer
