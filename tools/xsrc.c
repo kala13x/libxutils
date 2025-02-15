@@ -344,7 +344,7 @@ static void XSearch_ColorizeSymlink(char *pSimlink, size_t nSize, xfile_entry_t 
 
 static void XSearch_ColorizeLine(char *pDst, size_t nSize, xfile_entry_t *pEntry, const char *pText)
 {
-    if (!xstrused(pText) || !pEntry->nLineNum) return;
+    if (!xstrused(pText) || !xstrused(pEntry->sLine)) return;
     xarray_t *pArr = xstrsplit(pEntry->sLine, pText);
     if (pArr == NULL) return;
 
@@ -382,7 +382,8 @@ static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
     /* Do not display additional info if verbose is not set */
     if (!((xsearch_args_t*)pSearch->pUserCtx)->bVerbose)
     {
-        if (!pEntry->nLineNum) xlog("%s%s%s", sEntry, pArrow, sLinkPath);
+        if (!pEntry->nLineNum && !xstrused(sLine)) xlog("%s%s%s", sEntry, pArrow, sLinkPath);
+        else if (xstrused(pEntry->sLine) && xstrused(sLine)) xlog("%s: %s", sEntry, sLine);
         else xlog("%s:%s%d%s %s", sEntry, XSTR_FMT_BOLD, pEntry->nLineNum, XSTR_FMT_RESET, sLine);
         return;
     }
@@ -402,11 +403,17 @@ static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
     XBytesToUnit(sSize, sizeof(sSize), pEntry->nSize, XTRUE);
     xstrnlcpyf(sRound, sizeof(sRound), 7, XSTR_SPACE_CHAR, "%s", sSize);
 
-    if (pEntry->nLineNum)
+    if (pEntry->nLineNum && xstrused(sLine))
     {
         xlog("%c%s %lu %s %s %s [%s] %s:%s%d%s %s", XFile_GetTypeChar(pEntry->eType),
             pEntry->sPerm, pEntry->nLinkCount, pUname, pGname, sRound, sTime,
             sEntry, XSTR_FMT_BOLD, pEntry->nLineNum, XSTR_FMT_RESET, sLine);
+    }
+    else if (xstrused(sLine))
+    {
+        xlog("%c%s %lu %s %s %s [%s] %s: %s", XFile_GetTypeChar(pEntry->eType),
+            pEntry->sPerm, pEntry->nLinkCount, pUname, pGname, sRound, sTime,
+            sEntry, sLine);
     }
     else
     {

@@ -1172,43 +1172,79 @@ static int XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, const
         if (pSearch->bInsensitive) xstrcase((char*)pBuffer, XSTR_LOWER);
         int nPosit = xstrsrc(pBuffer, pSearch->sText);
 
-        if (nPosit >= 0 && pSearch->bSearchLines)
+        if (nPosit >= 0)
         {
-            xarray_t *pArr = xstrsplite(pBuffer, "\n");
-            if (pArr != NULL)
+            if (pSearch->bSearchLines)
             {
-                size_t i = 0;
-                for (i = 0; i < pArr->nUsed; i++)
+                xarray_t *pArr = xstrsplite(pBuffer, "\n");
+                if (pArr != NULL)
                 {
-                    char *pLine = (char*)XArray_GetData(pArr, i);
-                    if (xstrsrc(pLine, pSearch->sText) >= 0)
+                    size_t i = 0;
+                    for (i = 0; i < pArr->nUsed; i++)
                     {
-                        xfile_entry_t *pEntry = XFile_NewEntry(pName, pPath, pStat);
-                        if (pEntry == NULL)
+                        char *pLine = (char*)XArray_GetData(pArr, i);
+                        if (xstrsrc(pLine, pSearch->sText) >= 0)
                         {
-                            XFile_ErrorCallback(pSearch, "Failed to alloc entry: %s", pPath);
-                            XByteBuffer_Clear(&buffer);
-                            XArray_Destroy(pArr);
-                            return XSTDERR;
-                        }
+                            xfile_entry_t *pEntry = XFile_NewEntry(pName, pPath, pStat);
+                            if (pEntry == NULL)
+                            {
+                                XFile_ErrorCallback(pSearch, "Failed to alloc entry: %s", pPath);
+                                XByteBuffer_Clear(&buffer);
+                                XArray_Destroy(pArr);
+                                return XSTDERR;
+                            }
 
-                        while (*pLine && isspace((unsigned char)*pLine)) pLine++;
-                        xstrncpy(pEntry->sLine, sizeof(pEntry->sLine), pLine);
-                        pEntry->nLineNum = i + 1;
+                            while (*pLine && isspace((unsigned char)*pLine)) pLine++;
+                            xstrncpy(pEntry->sLine, sizeof(pEntry->sLine), pLine);
+                            pEntry->nLineNum = i + 1;
 
-                        if (XFile_SearchCallback(pSearch, pEntry) < 0)
-                        {
-                            XByteBuffer_Clear(&buffer);
-                            XArray_Destroy(pArr);
-                            return XSTDERR;
+                            if (XFile_SearchCallback(pSearch, pEntry) < 0)
+                            {
+                                XByteBuffer_Clear(&buffer);
+                                XArray_Destroy(pArr);
+                                return XSTDERR;
+                            }
                         }
                     }
                 }
-            }
 
-            XByteBuffer_Clear(&buffer);
-            XArray_Destroy(pArr);
-            return XSTDNON;
+                XByteBuffer_Clear(&buffer);
+                XArray_Destroy(pArr);
+                return XSTDNON;
+            }
+            else
+            {
+                while (nPosit && pBuffer[nPosit] != '\n') nPosit--;
+                if (pBuffer[nPosit] == '\n') nPosit++;
+
+                int nEnd = xstrsrc(&pBuffer[nPosit], "\n");
+                if (nEnd > 0)
+                {
+                    char sLine[XSTR_MAX];
+                    xstrncpys(sLine, sizeof(sLine), &pBuffer[nPosit], nEnd);
+
+                    xfile_entry_t *pEntry = XFile_NewEntry(pName, pPath, pStat);
+                    if (pEntry == NULL)
+                    {
+                        XFile_ErrorCallback(pSearch, "Failed to alloc entry: %s", pPath);
+                        XByteBuffer_Clear(&buffer);
+                        return XSTDERR;
+                    }
+
+                    char *pLine = sLine;
+                    while (*pLine && isspace((unsigned char)*pLine)) pLine++;
+                    xstrncpy(pEntry->sLine, sizeof(pEntry->sLine), pLine);
+
+                    if (XFile_SearchCallback(pSearch, pEntry) < 0)
+                    {
+                        XByteBuffer_Clear(&buffer);
+                        return XSTDERR;
+                    }
+
+                    XByteBuffer_Clear(&buffer);
+                    return XSTDNON;
+                }
+            }
         }
 
         XByteBuffer_Clear(&buffer);
