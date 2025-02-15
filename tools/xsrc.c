@@ -15,7 +15,7 @@
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0
-#define XSEARCH_BUILD_NUMBER    12
+#define XSEARCH_BUILD_NUMBER    13
 
 #define XSEARCH_MAX_READ_SIZE   1024 * 1024 * 1024
 #define XSEARCH_INFO_LEN        128
@@ -361,7 +361,11 @@ static void XSearch_ColorizeLine(char *pDst, size_t nSize, xfile_entry_t *pEntry
     if (bJumpSpace) while (*pLine && isspace((unsigned char)*pLine)) pLine++;
 
     xarray_t *pArr = xstrsplit(pLine, pText);
-    if (pArr == NULL) return;
+    if (pArr == NULL)
+    {
+        xstrncpyf(pDst, nSize, "%s%s%s", XSTR_FMT_DIM, pEntry->sLine, XSTR_FMT_RESET);
+        return;
+    }
 
     size_t i = 0;
     char sColorized[XLINE_MAX];
