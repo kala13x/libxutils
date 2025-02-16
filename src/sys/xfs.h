@@ -175,7 +175,7 @@ struct XFileSearch {
     void *pUserCtx;                 // User space
 
     /* Search criteria */
-    const char* pFileName;          // Needed file name
+    char sName[XPATH_MAX];          // Needed file name
     char sText[XSTR_MID];           // Containing text
     xarray_t *pTokens;              // Search name tokens
     int nPermissions;               // Needed file permissions

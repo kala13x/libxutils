@@ -169,10 +169,18 @@ xbool_t xstrncmp(const char *pStr, const char *pCmp, size_t nCmpLen)
     return nDifferent ? XFALSE : XTRUE;
 }
 
+xbool_t xstrncmpn(const char *pStr, size_t nStrLen, const char *pCmp, size_t nCmpLen)
+{
+    XASSERT_RET((pStr && pCmp && nStrLen), XFALSE);
+    XASSERT_RET((nStrLen == nCmpLen), XFALSE);
+    int nDiff = strncmp(pStr, pCmp, nCmpLen);
+    return nDiff ? XFALSE : XTRUE;
+}
+
 xbool_t xstrcmp(const char *pStr, const char *pCmp)
 {
-    XASSERT_RET((pStr && pCmp), XFALSE);
-    return xstrncmp(pStr, pCmp, strlen(pCmp));
+    XASSERT_RET((xstrused(pStr) && xstrused(pCmp)), XFALSE);
+    return xstrncmpn(pStr, strlen(pStr), pCmp, strlen(pCmp));
 }
 
 size_t xstrnfill(char *pDst, size_t nSize, size_t nLength, char cFill)
@@ -544,6 +552,7 @@ size_t xstrnclr(char *pDst, size_t nSize, const char* pClr, const char* pStr, ..
 
 size_t xstrcase(char *pSrc, xstr_case_t eCase)
 {
+    if (xstrused(pSrc)) return 0;
     size_t i, nCopyLength = strlen(pSrc);
     if (!nCopyLength) return 0;
 

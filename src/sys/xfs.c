@@ -1121,7 +1121,7 @@ static xbool_t XFile_SearchMulty(xarray_t *pTokens, const char *pName, size_t nL
         if (pArrData == NULL || pArrData->pData == NULL) continue;
 
         bFound = pArrData->nKey != XSTDOK ?
-            !strncmp((const char *)pArrData->pData, pName, nLength) :
+            xstrncmp((const char *)pArrData->pData, pName, nLength) :
             XFile_SearchTokens((xarray_t*)pArrData->pData, pName, nLength);
 
         if (bFound) break;
@@ -1256,7 +1256,7 @@ static XSTATUS XFile_SearchText(xfile_search_t *pSearch, const char *pPath, cons
 
     xstrncpyf(sPath, sizeof(sPath), "%s%s", pPath, pName);
     XPath_LoadBufferSize(sPath, &buffer, pSearch->nBufferSize);
-    if (buffer.pData == NULL) return XSTDNON;
+    if (buffer.pData == NULL || !buffer.nUsed) return XSTDNON;
 
     if (pSearch->bInsensitive) xstrcase((char*)buffer.pData, XSTR_LOWER);
     int nPosit = xstrsrcb((char*)buffer.pData, buffer.nUsed, pSearch->sText);
@@ -1306,7 +1306,7 @@ static XSTATUS XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, c
         if (!XFILE_CHECK_FL(pSearch->nFileTypes, eType)) return XSTDNON;
     }
 
-    if (xstrused(pSearch->pFileName))
+    if (xstrused(pSearch->sName))
     {
         char sName[XPATH_MAX];
         if (pSearch->bInsensitive) xstrncase(sName, sizeof(sName), XSTR_LOWER, pName);
@@ -1314,7 +1314,7 @@ static XSTATUS XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, c
 
         xbool_t bFound = pSearch->pTokens != NULL ?
             XFile_SearchName(pSearch, pSearchName) :
-            !strcmp(pSearch->pFileName, pSearchName);
+            xstrcmp(pSearch->sName, pSearchName);
 
         if (!bFound) return XSTDNON;
     }
@@ -1371,6 +1371,7 @@ static xarray_t* XFile_TokenizeName(xfile_search_t *pSrcCtx, const char *pFileNa
 
 void XFile_SearchInit(xfile_search_t *pSrcCtx, const char *pFileName)
 {
+    pSrcCtx->pInterrupted = &pSrcCtx->nInterrupted;
     pSrcCtx->bInsensitive = XFALSE;
     pSrcCtx->bSearchLines = XFALSE;
     pSrcCtx->bFilesOnly = XFALSE;
@@ -1378,12 +1379,10 @@ void XFile_SearchInit(xfile_search_t *pSrcCtx, const char *pFileName)
     pSrcCtx->bMulty = XFALSE;
     pSrcCtx->callback = NULL;
     pSrcCtx->pUserCtx = NULL;
-    pSrcCtx->nInterrupted = 0;
 
-    pSrcCtx->pInterrupted = &pSrcCtx->nInterrupted;
     pSrcCtx->pTokens = XFile_TokenizeName(pSrcCtx, pFileName);
+    xstrncpy(pSrcCtx->sName, sizeof(pSrcCtx->sName), pFileName);
 
-    pSrcCtx->pFileName = pFileName;
     pSrcCtx->sText[0] = XSTR_NUL;
     pSrcCtx->nBufferSize = 0;
     pSrcCtx->nPermissions = 0;
@@ -1437,8 +1436,11 @@ int XFile_Search(xfile_search_t *pSearch, const char *pDirectory)
         return XSYNC_ATOMIC_GET(pSearch->pInterrupted) ? XSTDERR : XSTDOK;
     }
 
-    if (xstrused(pSearch->sText) && pSearch->bInsensitive)
+    if (pSearch->bInsensitive)
+    {
+        xstrcase(pSearch->sName, XSTR_LOWER);
         xstrcase(pSearch->sText, XSTR_LOWER);
+    }
 
     while (XDir_Read(&dirHandle, NULL, 0) > 0 && !XSYNC_ATOMIC_GET(pSearch->pInterrupted))
     {
