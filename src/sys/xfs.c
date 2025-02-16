@@ -240,15 +240,15 @@ int XFile_Write(xfile_t *pFile, const void *pBuff, size_t nSize)
 int XFile_Read(xfile_t *pFile, void *pBuff, size_t nSize)
 {
     XASSERT(XFile_IsOpen(pFile), XSTDERR);
-    ssize_t nRead = 0;
 
 #ifdef _WIN32
-    nRead = _read(pFile->nFD, pBuff, (unsigned int)nSize);
+    int nRead = _read(pFile->nFD, pBuff, (unsigned int)nSize);
 #elif EINTR
+    ssize_t nRead = 0;
     do nRead = read(pFile->nFD, pBuff, nSize);
     while (nRead < 0 && errno == EINTR);
 #else
-    nRead = read(pFile->nFD, pBuff, nSize);
+    ssize_t nRead = read(pFile->nFD, pBuff, nSize);
 #endif
 
     if (nRead <= 0 && errno != EAGAIN) pFile->bEOF = XTRUE;
