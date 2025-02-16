@@ -15,7 +15,7 @@
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0
-#define XSEARCH_BUILD_NUMBER    14
+#define XSEARCH_BUILD_NUMBER    15
 
 #define XSEARCH_MAX_READ_SIZE   1024 * 1024 * 1024
 #define XSEARCH_INFO_LEN        128
@@ -389,7 +389,7 @@ static void XSearch_ColorizeLine(char *pDst, size_t nSize, xfile_entry_t *pEntry
     xstrnclr(sColorized, sizeof(sColorized), XSTR_CLR_RED, "%s", pText);
     xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s", XSTR_FMT_DIM);
 
-    if ((!bHasSpace || bJumpSpace) && xstrcmp(pLine, pText))
+    if ((!bHasSpace || bJumpSpace) && xstrncmp(pLine, pText, strlen(pText)))
         xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s%s", sColorized, XSTR_FMT_DIM);
 
     for (i = 0; i < pArr->nUsed; i++)
@@ -424,7 +424,8 @@ static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
     if (!((xsearch_args_t*)pSearch->pUserCtx)->bVerbose)
     {
         if (pEntry->nLineNum && xstrused(sLine))
-            xlog("%s:%s%d%s %s", sEntry, XSTR_FMT_BOLD, pEntry->nLineNum, XSTR_FMT_RESET, sLine);
+            xlog("%s:%s%d%s %s", sEntry, XSTR_FMT_BOLD,
+                pEntry->nLineNum, XSTR_FMT_RESET, sLine);
         else if (xstrused(sLine)) xlog("%s: %s", sEntry, sLine);
         else xlog("%s%s%s", sEntry, pArrow, sLinkPath);
 
