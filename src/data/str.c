@@ -180,7 +180,7 @@ xbool_t xstrncmpn(const char *pStr, size_t nStrLen, const char *pCmp, size_t nCm
 xbool_t xstrcmp(const char *pStr, const char *pCmp)
 {
     XASSERT_RET((xstrused(pStr) && xstrused(pCmp)), XFALSE);
-    return xstrncmpn(pStr, strlen(pStr), pCmp, strlen(pCmp));
+    return strcmp(pStr, pCmp) ? XFALSE : XTRUE;
 }
 
 size_t xstrnfill(char *pDst, size_t nSize, size_t nLength, char cFill)
