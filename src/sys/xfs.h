@@ -36,6 +36,7 @@ typedef struct XFile {
     xmode_t nMode;
     size_t nBlockSize;
     size_t nSize;
+    xbool_t bEOF;
     xbool_t nAlloc;
     int nFlags;
     int nFD;
@@ -181,8 +182,9 @@ struct XFileSearch {
     int nLinkCount;                 // Needed file link count
     int nFileTypes;                 // Needed file types
     int nFileSize;                  // Needed file size
-    size_t nMaxRead;                // Max read size for file
+    size_t nBufferSize;             // Max read buffer size
     size_t nMaxSize;                // Max file size to search
+    size_t nMinSize;                // Min file size to search
     xbool_t bMulty;                 // Multy file name search
 
     xatomic_t *pInterrupted;        // Interrupt flag pointer

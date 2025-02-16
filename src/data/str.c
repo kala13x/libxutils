@@ -638,6 +638,21 @@ int xstrnsrc(const char *pStr, size_t nLen, const char *pSrc, size_t nPos)
     return xstrsrc(&pStr[nPos], pSrc);
 }
 
+int xstrsrcb(const char *pStr, size_t nLength, const char *pSrc)
+{
+    size_t pSearchLen = strlen(pSrc);
+    int nPosit = XSTDERR;
+
+#ifndef _WIN32
+    void *pOffset = memmem(pStr, nLength, pSrc, pSearchLen);
+    if (pOffset != NULL) nPosit = (int)((char*)pOffset - pStr);
+#else
+    nPosit = xstrsrc((char*)pStr, pSrc);
+#endif
+
+    return nPosit;
+}
+
 int xstrsrcp(const char *pStr, const char *pSrc, size_t nPos)
 {
     if (pStr == NULL || pSrc == NULL) return XSTDERR;

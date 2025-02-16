@@ -15,7 +15,7 @@
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0
-#define XSEARCH_BUILD_NUMBER    13
+#define XSEARCH_BUILD_NUMBER    14
 
 #define XSEARCH_MAX_READ_SIZE   1024 * 1024 * 1024
 #define XSEARCH_INFO_LEN        128
@@ -43,6 +43,8 @@ typedef struct {
     xbool_t bVerbose;
     size_t nMaxRead;
     size_t nMaxSize;
+    size_t nMinSize;
+    size_t nMaxBuffer;
     int nPermissions;
     int nLinkCount;
     int nFileTypes;
@@ -110,9 +112,10 @@ void XSearch_Usage(const char *pName)
     for (i = 0; i < nLength; i++) sWhiteSpace[i] = ' ';
     sWhiteSpace[nLength] = 0;
 
-    printf("Usage: %s [-f <name>] [-s <size>] [-t <types>] [-z <max_size>]\n", pName);
-    printf(" %s [-d <target_path>] [-l <link_count>] [-g <text>] [-n] [-o]\n", sWhiteSpace);
-    printf(" %s [-p <permissions>] [-m <max_read>] [-i] [-j] [-v] [-r] [-h]\n\n", sWhiteSpace);
+    printf("Usage: %s [-f <name>] [-s <size>] [-t <types>] [-g <text>]\n", pName);
+    printf(" %s [-l <link_count>] [-p <permissions>] [-d <path>]\n", sWhiteSpace);
+    printf(" %s [-m <max_size>] [-z <min_size>] [-b <read_buff>]\n", sWhiteSpace);
+    printf(" %s [-i] [-n] [-j] [-o] [-r] [-v] [-h]\n\n", sWhiteSpace);
 
     printf("Options are:\n");
     printf("  %s-d%s <target_path>    %s# Target directory path%s\n", XSEARCH_ARG_COLORING);
@@ -121,13 +124,14 @@ void XSearch_Usage(const char *pName)
     printf("  %s-s%s <file_size>      %s# Target file size in bytes%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-l%s <link_count>     %s# Target file link count%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-p%s <permissions>    %s# Target file permissions (e.g. 'rwxr-xr--')%s\n", XSEARCH_ARG_COLORING);
-    printf("  %s-m%s <max_read>       %s# Max size to read text from the file%s\n", XSEARCH_ARG_COLORING);
-    printf("  %s-z%s <max_size>       %s# Max size of the file to search%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-b%s <read_buffer>    %s# Max read buffer size%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-m%s <max_size>       %s# Max size of the file to search%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-z%s <min_size>       %s# Min size of the file to search%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-t%s <types>          %s# Target file types (*)%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-i%s                  %s# Case insensitive search%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-n%s                  %s# Line by line search text in file%s\n", XSEARCH_ARG_COLORING);
-    printf("  %s-o%s                  %s# In case of text search, show files only%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-j%s                  %s# Jump empty spaces while printing the line%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-o%s                  %s# In case of text search, show files only%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-r%s                  %s# Recursive search target directory%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-v%s                  %s# Display additional information (verbose)%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-h%s                  %s# Display version and usage information%s\n\n", XSEARCH_ARG_COLORING);
@@ -179,6 +183,7 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     memset(pArgs, 0, sizeof(xsearch_args_t));
     char sMaxReadSize[XSEARCH_SIZE_LEN] = {0};
     char sMaxFileSize[XSEARCH_SIZE_LEN] = {0};
+    char sMinFileSize[XSEARCH_SIZE_LEN] = {0};
     pArgs->sDirectory[0] = '.';
     pArgs->sDirectory[1] = '/';
     pArgs->sDirectory[2] = '\0';
@@ -186,7 +191,7 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     pArgs->nFileSize = -1;
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "d:f:g:p:t:m:z:l:s:n1:i1:j1:o1:r1:v1:h1")) != -1)
+    while ((opt = getopt(argc, argv, "b:d:f:g:l:m:p:s:t:z:i1:j1:n1:o1:r1:v1:h1")) != -1)
     {
         switch (opt)
         {
@@ -199,11 +204,14 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
             case 'g':
                 xstrncpy(pArgs->sText, sizeof(pArgs->sText), optarg);
                 break;
-            case 'm':
+            case 'b':
                 xstrncpy(sMaxReadSize, sizeof(sMaxReadSize), optarg);
                 break;
-            case 'z':
+            case 'm':
                 xstrncpy(sMaxFileSize, sizeof(sMaxFileSize), optarg);
+                break;
+            case 'z':
+                xstrncpy(sMinFileSize, sizeof(sMinFileSize), optarg);
                 break;
             case 'p':
                 pArgs->nPermissions = XSearch_GetPermissins(optarg);
@@ -251,7 +259,16 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     {
         if (XSearch_GetSize(sMaxFileSize, &pArgs->nMaxSize) < 0)
         {
-            xloge("Invalid max file size number");
+            xloge("Invalid max file size");
+            return 0;
+        }
+    }
+
+    if (xstrused(sMinFileSize))
+    {
+        if (XSearch_GetSize(sMinFileSize, &pArgs->nMinSize) < 0)
+        {
+            xloge("Invalid min file size");
             return 0;
         }
     }
@@ -260,7 +277,7 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     {
         if (XSearch_GetSize(sMaxReadSize, &pArgs->nMaxRead) < 0)
         {
-            xloge("Invalid max read size number");
+            xloge("Invalid max read buffer size");
             return 0;
         }
     }
@@ -482,8 +499,9 @@ int main(int argc, char* argv[])
     srcCtx.nFileTypes = args.nFileTypes;
     srcCtx.nLinkCount = args.nLinkCount;
     srcCtx.nFileSize = args.nFileSize;
-    srcCtx.nMaxRead = args.nMaxRead;
     srcCtx.nMaxSize = args.nMaxSize;
+    srcCtx.nMinSize = args.nMinSize;
+    srcCtx.nBufferSize = args.nMaxBuffer;
     srcCtx.callback = XSearch_Callback;
     srcCtx.pUserCtx = &args;
 

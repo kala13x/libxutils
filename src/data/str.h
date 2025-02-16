@@ -128,6 +128,7 @@ size_t xstrisextra(const char *pOffset);
 char *xstrfill(size_t nLength, char cFill);
 
 int xstrnsrc(const char *pStr, size_t nLen, const char *pSrc, size_t nPos);
+int xstrsrcb(const char *pStr, size_t nLength, const char *pSrc);
 int xstrsrcp(const char *pStr, const char *pSrc, size_t nPos);
 int xstrsrc(const char *pStr, const char *pSrc);
 
