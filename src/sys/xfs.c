@@ -1099,11 +1099,18 @@ static xbool_t XFile_SearchTokens(xarray_t *pTokens, const char *pName, size_t n
     for (i = 0; i < nUsed; i++)
     {
         const char *pTok = (const char*)XArray_GetData(pTokens, i);
-        if (xstrused(pTok))
+        if (xstrused(pTok) && !xstrcmp(pTok, "*"))
         {
+            if (!i && !xstrncmp(pTok, pName, strlen(pTok))) return XFALSE;
             int nPosit = xstrnsrc(pName, nLength, pTok, nOffset);
             if (nPosit < 0) return XFALSE;
+
             nOffset += nPosit;
+            if (nOffset >= nLength) return XFALSE;
+
+            const char *pOffset = (const char*)&pName[nOffset];
+            if (i && i + 1 == nUsed && !xstrcmp(pTok, pOffset)) return XFALSE;
+            nOffset += strlen(pTok);
         }
     }
 
@@ -1334,15 +1341,15 @@ static XSTATUS XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, c
 void XFile_SearchClearCb(xarray_data_t *pArrData)
 {
     if (pArrData == NULL || pArrData->pData == NULL) return;
-    else if (!pArrData->nKey) free(pArrData->pData);
+    else if (!pArrData->nKey) xfree(pArrData->pPool, pArrData->pData);
     else XArray_Destroy((xarray_t*)pArrData->pData);
 }
 
 static xarray_t* XFile_TokenizeName(xfile_search_t *pSrcCtx, const char *pFileName)
 {
     xarray_t *pTokens = NULL;
-    if (xstrsrc(pFileName, "*") >= 0) return xstrsplit(pFileName, "*");
     if (xstrsrc(pFileName, ";") >= 0) pTokens = xstrsplit(pFileName, ";");
+    else if (xstrsrc(pFileName, "*") >= 0) return xstrsplitd(pFileName, "*");
 
     if (pTokens == NULL) return NULL;
     size_t i, nUsed = XArray_Used(pTokens);
@@ -1353,7 +1360,7 @@ static xarray_t* XFile_TokenizeName(xfile_search_t *pSrcCtx, const char *pFileNa
         char *pToken = XArray_GetData(pTokens, i);
         if (xstrsrc(pToken, "*") >= 0)
         {
-            xarray_t *pSubTokens = xstrsplit(pToken, "*");
+            xarray_t *pSubTokens = xstrsplitd(pToken, "*");
             if (pSubTokens != NULL)
             {
                 xarray_data_t *pArrData = XArray_Get(pTokens, i);
@@ -1361,7 +1368,7 @@ static xarray_t* XFile_TokenizeName(xfile_search_t *pSrcCtx, const char *pFileNa
                 pArrData->nKey = XSTDOK;
 
                 pTokens->clearCb = XFile_SearchClearCb;
-                free(pToken);
+                xfree(pTokens->pPool, pToken);
             }
         }
     }

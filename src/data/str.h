@@ -91,6 +91,7 @@ typedef enum {
 
 xarray_t* xstrsplit(const char *pString, const char *pDlmt);
 xarray_t* xstrsplite(const char *pString, const char *pDlmt);
+xarray_t* xstrsplitd(const char *pString, const char *pDlmt);
 
 char* xstrrep(const char *pOrig, const char *pRep, const char *pWith);
 int xstrnrep(char *pDst, size_t nSize, const char *pOrig, const char *pRep, const char *pWith);

@@ -950,6 +950,43 @@ xarray_t* xstrsplit(const char *pString, const char *pDlmt)
     return pArray;
 }
 
+xarray_t* xstrsplitd(const char *pString, const char *pDlmt)
+{
+    if (!xstrused(pString) || !xstrused(pDlmt)) return NULL;
+    xarray_t *pArray = XArray_NewPool(XSTDNON, XSTDNON, XFALSE);
+    if (pArray == NULL) return NULL;
+
+    char sDelimiter[XSTR_MIN];
+    char sToken[XSTR_MAX];
+    int nNext = 0;
+
+    size_t nDlmtLen = xstrncpy(sDelimiter, sizeof(sDelimiter), pDlmt);
+    if (xstrncmp(pString, sDelimiter, nDlmtLen)) XArray_AddData(pArray, sDelimiter, nDlmtLen + 1);
+
+    while((nNext = xstrntok(sToken, sizeof(sToken), pString, nNext, pDlmt)) >= 0)
+    {
+        size_t nLength = strlen(sToken);
+        if (!nLength) continue;
+
+        XArray_AddData(pArray, sToken, nLength + 1);
+        if (nNext <= 0) break;
+
+        if (nNext - nDlmtLen >= 0)
+        {
+            if (xstrncmp(&pString[nNext - nDlmtLen], sDelimiter, nDlmtLen))
+                XArray_AddData(pArray, sDelimiter, nDlmtLen + 1);
+        }
+    }
+
+    if (!pArray->nUsed)
+    {
+        XArray_Destroy(pArray);
+        return NULL;
+    }
+
+    return pArray;
+}
+
 xarray_t* xstrsplite(const char *pString, const char *pDlmt)
 {
     if (!xstrused(pString) || !xstrused(pDlmt)) return NULL;
