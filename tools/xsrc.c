@@ -168,11 +168,14 @@ static int XSearch_GetSize(char *pSize, size_t *pMaxRead)
 
     while (*pSize && isdigit(*pSize)) pSize++;
     while (*pSize && isspace(*pSize)) pSize++;
-    xstrcase(pSize, XSTR_LOWER);
 
-    if (*pSize == 'k') nSize = nSize * 1024;
-    else if (*pSize == 'm') nSize = nSize * 1024 * 1024;
-    else if (*pSize == 'g') nSize = nSize * 1024 * 1024 * 1024;
+    if (*pSize)
+    {
+        char cSize = (char)tolower(*pSize);
+        if (cSize == 'k') nSize = nSize * 1024;
+        else if (cSize == 'm') nSize = nSize * 1024 * 1024;
+        else if (cSize == 'g') nSize = nSize * 1024 * 1024 * 1024;
+    }
 
     *pMaxRead = nSize;
     return XSTDOK;
