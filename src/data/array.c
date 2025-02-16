@@ -74,7 +74,7 @@ void* XArray_Init(xarray_t *pArr, xpool_t *pPool, size_t nSize, uint8_t nFixed)
     pArr->nAlloc = 0;
     pArr->nUsed = 0;
     pArr->pPool = pPool;
-    pArr->nOwnPool = 0;
+    pArr->nHasPool = 0;
 
     if (nSize)
     {
@@ -101,7 +101,7 @@ void* XArray_InitPool(xarray_t *pArr, size_t nPoolSize, size_t nSize, uint8_t nF
         return NULL;
     }
 
-    pArr->nOwnPool = 1;
+    pArr->nHasPool = 1;
     return pData;
 }
 
@@ -132,7 +132,7 @@ xarray_t* XArray_NewPool(size_t nPoolSize, size_t nSize, uint8_t nFixed)
         return NULL;
     }
 
-    pArr->nOwnPool = 1;
+    pArr->nHasPool = 1;
     return pArr;
 }
 
@@ -148,7 +148,7 @@ void XArray_Clear(xarray_t *pArr)
         }
     }
 
-    if (pArr->nOwnPool) XPool_Reset(pArr->pPool);
+    if (pArr->nHasPool) XPool_Reset(pArr->pPool);
     pArr->eStatus = XARRAY_STATUS_EMPTY;
     pArr->nUsed = 0;
 }
@@ -159,7 +159,7 @@ void XArray_Destroy(xarray_t *pArr)
 
     xpool_t *pPool = pArr->pPool;
     uint8_t nAlloc = pArr->nAlloc;
-    uint8_t nOwnPool = pArr->nOwnPool;
+    uint8_t nHasPool = pArr->nHasPool;
 
     xfree(pPool, pArr->pData);
     pArr->pData = NULL;
@@ -167,10 +167,10 @@ void XArray_Destroy(xarray_t *pArr)
     pArr->nSize = 0;
     pArr->nFixed = 0;
     pArr->nAlloc = 0;
-    pArr->nOwnPool = 0;
+    pArr->nHasPool = 0;
 
     if (nAlloc) xfreen(pPool, pArr, sizeof(xarray_t));
-    if (nOwnPool) XPool_Destroy(pPool);
+    if (nHasPool) XPool_Destroy(pPool);
 }
 
 void XArray_Free(xarray_t **ppArr)
@@ -234,11 +234,11 @@ size_t XArray_CheckSpace(xarray_t *pArr)
     if (pArr->pData == NULL)
     {
         uint8_t nAlloc = pArr->nAlloc;
-        uint8_t nOwnPool = pArr->nOwnPool;
+        uint8_t nHasPool = pArr->nHasPool;
         xarray_clear_cb_t clearCb = pArr->clearCb;
 
         XArray_Init(pArr, pArr->pPool, XARRAY_INITIAL_SIZE, 0);
-        pArr->nOwnPool = nOwnPool;
+        pArr->nHasPool = nHasPool;
         pArr->clearCb = clearCb;
         pArr->nAlloc = nAlloc;
     }

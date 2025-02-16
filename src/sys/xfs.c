@@ -1141,8 +1141,8 @@ static xbool_t XFile_SearchName(xfile_search_t *pSearch, const char *pFileName)
 {
     size_t nLength = strlen(pFileName);
     xbool_t bFound = pSearch->bMulty ?
-        XFile_SearchMulty(pSearch->pTokens, pFileName, nLength) :
-        XFile_SearchTokens(pSearch->pTokens, pFileName, nLength);
+        XFile_SearchMulty(&pSearch->nameTokens, pFileName, nLength) :
+        XFile_SearchTokens(&pSearch->nameTokens, pFileName, nLength);
 
     return bFound;
 }
@@ -1319,7 +1319,7 @@ static XSTATUS XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, c
         if (pSearch->bInsensitive) xstrncase(sName, sizeof(sName), XSTR_LOWER, pName);
         const char *pSearchName = pSearch->bInsensitive ? (const char *)sName : pName;
 
-        xbool_t bFound = pSearch->pTokens != NULL ?
+        xbool_t bFound = pSearch->nameTokens.nUsed ?
             XFile_SearchName(pSearch, pSearchName) :
             xstrcmp(pSearch->sName, pSearchName);
 
@@ -1332,7 +1332,7 @@ static XSTATUS XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, c
         if (eType != XF_REGULAR) return XSTDNON;
 
         XSTATUS nStatus = XFile_SearchText(pSearch, pPath, pName, pStat);
-        if (nStatus <= 0) return nStatus;
+        if (nStatus <= XSTDNON) return nStatus;
     }
 
     return XSTDOK;
@@ -1341,21 +1341,21 @@ static XSTATUS XFile_CheckCriteria(xfile_search_t *pSearch, const char *pPath, c
 void XFile_SearchClearCb(xarray_data_t *pArrData)
 {
     if (pArrData == NULL || pArrData->pData == NULL) return;
-    else if (!pArrData->nKey) xfree(pArrData->pPool, pArrData->pData);
+    if (!pArrData->nKey) xfree(pArrData->pPool, pArrData->pData);
     else XArray_Destroy((xarray_t*)pArrData->pData);
 }
 
-static xarray_t* XFile_TokenizeName(xfile_search_t *pSrcCtx, const char *pFileName)
+static size_t XFile_TokenizeName(xfile_search_t *pSrcCtx, const char *pFileName)
 {
-    xarray_t *pTokens = NULL;
-    if (xstrsrc(pFileName, ";") >= 0) pTokens = xstrsplit(pFileName, ";");
-    else if (xstrsrc(pFileName, "*") >= 0) return xstrsplitd(pFileName, "*");
+    xarray_t *pTokens = &pSrcCtx->nameTokens;
+    if (xstrsrc(pFileName, ";") >= 0) xstrsplita(pFileName, ";", pTokens, XFALSE, XFALSE);
+    else if (xstrsrc(pFileName, "*") >= 0) return xstrsplita(pFileName, "*", pTokens, XTRUE, XFALSE);
 
-    if (pTokens == NULL) return NULL;
-    size_t i, nUsed = XArray_Used(pTokens);
+    if (!pTokens->nUsed) return XSTDNON;
     pSrcCtx->bMulty = XTRUE;
+    size_t i;
 
-    for (i = 0; i < nUsed; i++)
+    for (i = 0; i < pTokens->nUsed; i++)
     {
         char *pToken = XArray_GetData(pTokens, i);
         if (xstrsrc(pToken, "*") >= 0)
@@ -1373,7 +1373,7 @@ static xarray_t* XFile_TokenizeName(xfile_search_t *pSrcCtx, const char *pFileNa
         }
     }
 
-    return pTokens;
+    return pTokens->nUsed;
 }
 
 void XFile_SearchInit(xfile_search_t *pSrcCtx, const char *pFileName)
@@ -1387,7 +1387,13 @@ void XFile_SearchInit(xfile_search_t *pSrcCtx, const char *pFileName)
     pSrcCtx->callback = NULL;
     pSrcCtx->pUserCtx = NULL;
 
-    pSrcCtx->pTokens = XFile_TokenizeName(pSrcCtx, pFileName);
+    XArray_InitPool(&pSrcCtx->nameTokens, XSTDNON, XSTDNON, XFALSE);
+    XArray_InitPool(&pSrcCtx->fileArray, XSTDNON, XSTDNON, XFALSE);
+
+    pSrcCtx->fileArray.clearCb = XFile_ArrayClearCb;
+    pSrcCtx->nameTokens.clearCb = XFile_SearchClearCb;
+
+    XFile_TokenizeName(pSrcCtx, pFileName);
     xstrncpy(pSrcCtx->sName, sizeof(pSrcCtx->sName), pFileName);
 
     pSrcCtx->sText[0] = XSTR_NUL;
@@ -1398,24 +1404,18 @@ void XFile_SearchInit(xfile_search_t *pSrcCtx, const char *pFileName)
     pSrcCtx->nFileSize = -1;
     pSrcCtx->nMaxSize = 0;
     pSrcCtx->nMinSize = 0;
-
-    XArray_InitPool(&pSrcCtx->fileArray, XSTDNON, XSTDNON, XFALSE);
-    pSrcCtx->fileArray.clearCb = XFile_ArrayClearCb;
 }
 
 void XFile_SearchDestroy(xfile_search_t *pSrcCtx)
 {
-    if (pSrcCtx == NULL) return;
+    XASSERT_VOID_RET(pSrcCtx);
     XSYNC_ATOMIC_SET(pSrcCtx->pInterrupted, 1);
 
-    if (pSrcCtx->pTokens != NULL)
-    {
-        XArray_Destroy(pSrcCtx->pTokens);
-        pSrcCtx->pTokens = NULL;
-    }
-
+    pSrcCtx->nameTokens.clearCb = XFile_SearchClearCb;
     pSrcCtx->fileArray.clearCb = XFile_ArrayClearCb;
+
     XArray_Destroy(&pSrcCtx->fileArray);
+    XArray_Destroy(&pSrcCtx->nameTokens);
 }
 
 xfile_entry_t* XFile_GetEntry(xfile_search_t *pSearch, int nIndex)

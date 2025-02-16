@@ -166,18 +166,19 @@ typedef int(*xfile_search_cb_t)(xfile_search_t *pSearch, xfile_entry_t *pEntry, 
 
 struct XFileSearch {
     /* Search context */
-    xfile_search_cb_t callback;     // Search callback
     xarray_t fileArray;             // Found file array
+    xarray_t nameTokens;            // Search name tokens
     xbool_t bSearchLines;           // Search in file lines
     xbool_t bInsensitive;           // Case insensitive search
     xbool_t bRecursive;             // Recursive search
     xbool_t bFilesOnly;             // Show files only
+
+    xfile_search_cb_t callback;     // Search callback
     void *pUserCtx;                 // User space
 
     /* Search criteria */
     char sName[XPATH_MAX];          // Needed file name
     char sText[XSTR_MID];           // Containing text
-    xarray_t *pTokens;              // Search name tokens
     int nPermissions;               // Needed file permissions
     int nLinkCount;                 // Needed file link count
     int nFileTypes;                 // Needed file types

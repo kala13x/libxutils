@@ -47,7 +47,7 @@ typedef struct XArray_ {
     xarray_clear_cb_t clearCb;
     xarray_status_t eStatus;
     xpool_t *pPool;
-    uint8_t nOwnPool;
+    uint8_t nHasPool;
     uint8_t nFixed;
     uint8_t nAlloc;
     size_t nSize;

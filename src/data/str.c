@@ -920,107 +920,84 @@ void xstrnul(char *pString)
     pString[0] = XSTR_NUL;
 }
 
-xarray_t* xstrsplit(const char *pString, const char *pDlmt)
+size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbool_t bIncludeDlmt, xbool_t bIncludeEmpty)
 {
-    if (!xstrused(pString) || pDlmt == NULL) return NULL;
-    size_t nDlmtLen = strlen(pDlmt);
-    if (!nDlmtLen) return NULL;
+    if (!xstrused(pString) || !xstrused(pDlmt) || pTokens == NULL) return XSTDNON;
 
-    xarray_t *pArray = XArray_NewPool(XSTDNON, XSTDNON, XFALSE);
-    if (pArray == NULL) return NULL;
-
+    char sDelimiter[XSTR_MIN];
     char sToken[XSTR_MAX];
+
+    size_t nDlmtLen = 0;
     int nNext = 0;
+
+    if (bIncludeDlmt)
+    {
+        nDlmtLen = xstrncpy(sDelimiter, sizeof(sDelimiter), pDlmt);
+        if (xstrncmp(pString, sDelimiter, nDlmtLen)) XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1);
+    }
 
     while((nNext = xstrntok(sToken, sizeof(sToken), pString, nNext, pDlmt)) >= 0)
     {
         size_t nLength = strlen(sToken);
-        if (!nLength) continue;
+        if (!nLength)
+        {
+            if (bIncludeEmpty) XArray_AddData(pTokens, XSTR_EMPTY, sizeof(char));
+            continue;
+        }
 
-        XArray_AddData(pArray, sToken, nLength+1);
-        if (!nNext) break;
+        XArray_AddData(pTokens, sToken, nLength + 1);
+        if (nNext <= 0) break;
+
+        if (bIncludeDlmt && nNext - nDlmtLen >= 0)
+        {
+            if (xstrncmp(&pString[nNext - nDlmtLen], sDelimiter, nDlmtLen))
+                XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1);
+        }
     }
 
-    if (!pArray->nUsed)
-    {
-        XArray_Destroy(pArray);
-        return NULL;
-    }
+    return pTokens->nUsed;
+}
 
-    return pArray;
+xarray_t* xstrsplit(const char *pString, const char *pDlmt)
+{
+    if (!xstrused(pString) || !xstrused(pDlmt)) return NULL;
+
+    xarray_t *pArray = XArray_NewPool(XSTDNON, XSTDNON, XFALSE);
+    if (pArray == NULL) return NULL;
+
+    xstrsplita(pString, pDlmt, pArray, XFALSE, XFALSE);
+    if (pArray->nUsed) return pArray;
+
+    XArray_Destroy(pArray);
+    return NULL;
 }
 
 xarray_t* xstrsplitd(const char *pString, const char *pDlmt)
 {
     if (!xstrused(pString) || !xstrused(pDlmt)) return NULL;
+
     xarray_t *pArray = XArray_NewPool(XSTDNON, XSTDNON, XFALSE);
     if (pArray == NULL) return NULL;
 
-    char sDelimiter[XSTR_MIN];
-    char sToken[XSTR_MAX];
-    int nNext = 0;
+    xstrsplita(pString, pDlmt, pArray, XTRUE, XFALSE);
+    if (pArray->nUsed) return pArray;
 
-    size_t nDlmtLen = xstrncpy(sDelimiter, sizeof(sDelimiter), pDlmt);
-    if (xstrncmp(pString, sDelimiter, nDlmtLen)) XArray_AddData(pArray, sDelimiter, nDlmtLen + 1);
-
-    while((nNext = xstrntok(sToken, sizeof(sToken), pString, nNext, pDlmt)) >= 0)
-    {
-        size_t nLength = strlen(sToken);
-        if (!nLength) continue;
-
-        XArray_AddData(pArray, sToken, nLength + 1);
-        if (nNext <= 0) break;
-
-        if (nNext - nDlmtLen >= 0)
-        {
-            if (xstrncmp(&pString[nNext - nDlmtLen], sDelimiter, nDlmtLen))
-                XArray_AddData(pArray, sDelimiter, nDlmtLen + 1);
-        }
-    }
-
-    if (!pArray->nUsed)
-    {
-        XArray_Destroy(pArray);
-        return NULL;
-    }
-
-    return pArray;
+    XArray_Destroy(pArray);
+    return NULL;
 }
 
 xarray_t* xstrsplite(const char *pString, const char *pDlmt)
 {
     if (!xstrused(pString) || !xstrused(pDlmt)) return NULL;
 
-    char sDlmt[XSTR_MID];
-    size_t nDlmtLen = xstrncpy(sDlmt, sizeof(sDlmt), pDlmt);
-    if (!nDlmtLen) return NULL;
-
     xarray_t *pArray = XArray_NewPool(XSTDNON, XSTDNON, XFALSE);
     if (pArray == NULL) return NULL;
 
-    char sToken[XSTR_MAX];
-    int nNext = 0;
+    xstrsplita(pString, pDlmt, pArray, XFALSE, XTRUE);
+    if (pArray->nUsed) return pArray;
 
-    while((nNext = xstrntok(sToken, sizeof(sToken), pString, nNext, sDlmt)) >= 0)
-    {
-        size_t nLength = strlen(sToken);
-        if (!nLength)
-        {
-            XArray_AddData(pArray, XSTR_EMPTY, 1);
-            continue;
-        }
-
-        XArray_AddData(pArray, sToken, nLength+1);
-        if (!nNext) break;
-    }
-
-    if (!pArray->nUsed)
-    {
-        XArray_Destroy(pArray);
-        return NULL;
-    }
-
-    return pArray;
+    XArray_Destroy(pArray);
+    return NULL;
 }
 
 char* xstrtoge(char *pBuffer, size_t nSize, const char *pStr)
