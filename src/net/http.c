@@ -745,12 +745,11 @@ static int XHTTP_ParseHeaders(xhttp_t *pHttp)
 
             while (pData[nPosit] == ' ' || pData[nPosit] == ':') nPosit++;
             char *pValue = xstracut(pData, nPosit, strlen(pData) - nPosit);
-            
+
             if (pValue == NULL)
             {
-                nStatus = XSTDERR;
                 free(pHeaderStr);
-                break;
+                continue;
             }
 
             if (pValue[0] == XSTR_SPACE_CHAR) xstrnrm(pValue, 0, 1);
