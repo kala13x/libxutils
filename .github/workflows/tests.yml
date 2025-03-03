@@ -28,16 +28,16 @@ jobs:
       - name: Set XCrypt Chain Variable
         run: echo "ENCODING_CHAIN=casear:base64:base64url:xor:hex:reverse:crc32:sha256:sha1:md5:sha1sum:md5sum:sha256sum" >> $GITHUB_ENV
 
-      - name: Run Valgrind Memory Check With xsrc
+      - name: Run Valgrind Memory Check With tools/xsrc
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xsrc -rvd ./
 
-      - name: Run Valgrind Memory Check With xhttp
+      - name: Run Valgrind Memory Check With tools/xhttp
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xhttp -fl github.com
 
-      - name: Run Valgrind Memory Check With xjson
+      - name: Run Valgrind Memory Check With tools/xjson
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xjson -i ./examples/example.json -pl 2
 
-      - name: Run Valgrind Memory Check With xcrypt
+      - name: Run Valgrind Memory Check With tools/xcrypt
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xcrypt -pi ./tools/xutils.c -c -c $ENCODING_CHAIN -k 5
 
       - name: Run Valgrind Memory Check With examples/files
