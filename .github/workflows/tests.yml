@@ -38,7 +38,7 @@ jobs:
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xjson -i ./examples/example.json -pl 2
 
       - name: Run Valgrind Memory Check With tools/xcrypt
-        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xcrypt -pi ./tools/xutils.c -c -c $ENCODING_CHAIN -k 5
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xcrypt -pi ./tools/xutils.c -c $ENCODING_CHAIN -k 5
 
       - name: Run Valgrind Memory Check With examples/files
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/files ./examples/files.c ./examples/files.copy
