@@ -41,22 +41,22 @@ jobs:
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xcrypt -pi ./tools/xutils.c -c $ENCODING_CHAIN -k 5
 
       - name: Run Valgrind Memory Check With examples/files
-        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/files ./examples/files.c ./examples/files.copy
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/files ./examples/files.c ./examples/files.copy
 
       - name: Run Valgrind Memory Check With examples/strings
-        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/strings
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/strings
 
       - name: Run Valgrind Memory Check With examples/thread
-        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/thread
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/thread
 
       - name: Run Valgrind Memory Check With examples/array
-        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/array
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/array
 
       - name: Run Valgrind Memory Check With examples/list
-        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/list
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/list
 
       - name: Run Valgrind Memory Check With examples/jwt
-        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/jwt
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/jwt
 
       - name: Run Valgrind Memory Check With examples/xlog
-        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/xlog
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/xlog
