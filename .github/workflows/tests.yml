@@ -41,7 +41,7 @@ jobs:
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xcrypt -pi ./tools/xutils.c -c $ENCODING_CHAIN -k 5
 
       - name: Run Valgrind Check With tools/xtop
-        run: timeout --signal=SIGINT 10s valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./tools/xtop
+        run: timeout --signal=SIGINT 10s valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xtop
 
       - name: Run Valgrind Check With examples/files
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/files ./examples/files.c ./examples/files.copy
