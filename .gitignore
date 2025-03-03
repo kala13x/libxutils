@@ -52,4 +52,6 @@ Mkfile.old
 dkms.conf
 
 # Local files
+examples/files.copy
 .vscode/
+*.log

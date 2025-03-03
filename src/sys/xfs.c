@@ -1393,10 +1393,12 @@ void XFile_SearchInit(xfile_search_t *pSrcCtx, const char *pFileName)
     pSrcCtx->fileArray.clearCb = XFile_ArrayClearCb;
     pSrcCtx->nameTokens.clearCb = XFile_SearchClearCb;
 
+    pSrcCtx->sName[0] = XSTR_NUL;
+    pSrcCtx->sText[0] = XSTR_NUL;
+
     XFile_TokenizeName(pSrcCtx, pFileName);
     xstrncpy(pSrcCtx->sName, sizeof(pSrcCtx->sName), pFileName);
 
-    pSrcCtx->sText[0] = XSTR_NUL;
     pSrcCtx->nBufferSize = 0;
     pSrcCtx->nPermissions = 0;
     pSrcCtx->nFileTypes = 0;
