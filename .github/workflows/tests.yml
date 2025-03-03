@@ -1,0 +1,62 @@
+name: Valgrind
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: sudo apt-get install -y build-essential valgrind cmake libssl-dev
+
+      - name: Install libxutils
+        run: ./build.sh --install --examples --tools
+
+      - name: Check versions
+        run: |
+          cmake --version
+          xutils -v
+
+      - name: Set XCrypt Chain Variable
+        run: echo "ENCODING_CHAIN=casear:base64:base64url:xor:hex:reverse:crc32:sha256:sha1:md5:sha1sum:md5sum:sha256sum" >> $GITHUB_ENV
+
+      - name: Run Valgrind Memory Check With xsrc
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xsrc -rvd ./
+
+      - name: Run Valgrind Memory Check With xhttp
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xhttp -fl github.com
+
+      - name: Run Valgrind Memory Check With xjson
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xjson -i ./examples/example.json -pl 2
+
+      - name: Run Valgrind Memory Check With xcrypt
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xcrypt -pi ./tools/xutils.c -c -c $ENCODING_CHAIN -k 5
+
+      - name: Run Valgrind Memory Check With examples/files
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/files ./examples/files.c ./examples/files.copy
+
+      - name: Run Valgrind Memory Check With examples/strings
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/strings
+
+      - name: Run Valgrind Memory Check With examples/thread
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/thread
+
+      - name: Run Valgrind Memory Check With examples/array
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/array
+
+      - name: Run Valgrind Memory Check With examples/list
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/list
+
+      - name: Run Valgrind Memory Check With examples/jwt
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/jwt
+
+      - name: Run Valgrind Memory Check With examples/xlog
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/xlog
