@@ -54,11 +54,11 @@ add_library(xutils STATIC
     ./src/crypt/sha1.c
     ./src/data/array.c
     ./src/data/hash.c
+    ./src/data/json.c
     ./src/data/jwt.c
     ./src/data/list.c
     ./src/data/map.c
     ./src/data/buf.c
-    ./src/data/json.c
     ./src/data/str.c
     ./src/net/addr.c
     ./src/net/event.c
@@ -72,14 +72,14 @@ add_library(xutils STATIC
     ./src/sys/sync.c
     ./src/sys/pool.c
     ./src/sys/thread.c
+    ./src/sys/type.c
     ./src/sys/cli.c
     ./src/sys/cpu.c
-    ./src/sys/xfs.c
+    ./src/sys/mon.c
     ./src/sys/log.c
     ./src/sys/sig.c
+    ./src/sys/xfs.c
     ./src/sys/xtime.c
-    ./src/sys/mon.c
-    ./src/sys/type.c
 )
 
 install(TARGETS xutils DESTINATION lib)
