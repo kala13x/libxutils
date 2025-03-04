@@ -23,6 +23,7 @@ EXECS = xutils \
 	xhttp \
 	xjson \
 	xpass \
+	xhost \
 	xtop \
 	xsrc
 
@@ -36,6 +37,7 @@ install:
 	install -m 0755 xutils /usr/local/bin/
 	install -m 0755 xcrypt /usr/local/bin/
 	install -m 0755 xpass /usr/local/bin/
+	install -m 0755 xhost /usr/local/bin/
 	install -m 0755 xjson /usr/local/bin/
 	install -m 0755 xhttp /usr/local/bin/
 	install -m 0755 xtop /usr/local/bin/

@@ -47,6 +47,7 @@ set(SOURCE_FILES
     xcrypt.c
     xpass.c
     xhttp.c
+    xhost.c
     xjson.c
     xtop.c
     xsrc.c)
@@ -58,6 +59,6 @@ foreach(sourcefile ${SOURCE_FILES})
 endforeach()
 
 # install targets
-install(TARGETS xutils xcrypt xpass xjson xhttp xtop xsrc 
+install(TARGETS xutils xcrypt xpass xjson xhttp xhost xtop xsrc
         RUNTIME DESTINATION /usr/local/bin)
 

@@ -197,6 +197,7 @@ After building the sources in `tools` directory, run `sudo make install` command
 - `xpass` - Secure password manager tool for CLI
 - `xjson` - JSON linter and minifier tool for CLI
 - `xhttp` - Powerful HTTP client tool for CLI
+- `xhttp` - Simple tool to modify hosts file
 - `xtop` - Advanced resource monithor for CLI
 - `xsrc` - Advanced file search tool for CLI
 
