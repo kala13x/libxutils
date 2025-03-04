@@ -342,6 +342,32 @@ XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
     return nRetVal;
 }
 
+XSTATUS XLog_Throwe(int nRetVal, const char *pFmt, ...)
+{
+    XASSERT_RET(g_bInit, nRetVal);
+    int nFlag = (nRetVal <= 0) ?
+        XLOG_ERROR : XLOG_NONE;
+
+    if (pFmt == NULL)
+    {
+        xlogfl(nFlag, "%s", XSTRERR);
+        return nRetVal;
+    }
+
+    size_t nSize = 0;
+    va_list args;
+
+    va_start(args, pFmt);
+    char *pDest = xstracpyargs(pFmt, args, &nSize);
+    va_end(args);
+
+    XASSERT(pDest, nRetVal);
+    xlogfl(nFlag, "%s (%s)", pDest, XSTRERR);
+
+    free(pDest);
+    return nRetVal;
+}
+
 void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...)
 {
     XASSERT_RET(g_bInit, pRetVal);

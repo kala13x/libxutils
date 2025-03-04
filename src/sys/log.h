@@ -129,6 +129,7 @@ typedef enum
 
 #define xthrowp(r, ...) XLog_ThrowPtr(r, __VA_ARGS__)
 #define xthrowr(r, ...) XLog_Throw(r, __VA_ARGS__)
+#define xthrowe(...) XLog_Throwe(XSTDERR, __VA_ARGS__)
 #define xthrow(...) XLog_Throw(XSTDERR, __VA_ARGS__)
 
 #define xlog_init(name,flags,safe) XLog_Init(name, flags, safe)
@@ -227,6 +228,7 @@ void XLog_Destroy(void);
 
 void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFormat, ...);
 XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...);
+XSTATUS XLog_Throwe(int nRetVal, const char *pFmt, ...);
 void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...);
 
 #ifdef __cplusplus
