@@ -7,8 +7,6 @@
  * @brief Modify hosts file, add or remove entries.
  */
 
-#define _XUTILS_DEBUG
-
 #include "xstd.h"
 #include "xfs.h"
 #include "str.h"
@@ -23,6 +21,7 @@
 
 typedef struct {
     xbool_t bAdd;
+    xbool_t bAppend;
     xbool_t bRemove;
     xbool_t bVerbose;
     xbool_t bNewLine;
@@ -56,15 +55,15 @@ static void XHost_Usage(const char *pName)
     for (i = 0; i < nLength; i++) sWhiteSpace[i] = ' ';
     sWhiteSpace[nLength] = 0;
 
-    printf("Usage: %s [-a <addr>] [-c] [-u] [-r]\n", pName);
-    printf(" %s [-n <host>] [-d] [-l] [-v] [-h]\n\n", sWhiteSpace);
+    printf("Usage: %s [-a <address>] [-n <hostname>]\n", pName);
+    printf(" %s [-c] [-u] [-r] [-d] [-l] [-v] [-h]\n\n", sWhiteSpace);
 
     printf("Options are:\n");
     printf("  -a <address>          # IP address\n");
-    printf("  -n <host>             # Host name\n");
-    printf("  -c                    # Comment host entry\n");
-    printf("  -u                    # Uncomment host entry\n");
-    printf("  -r                    # Remove host entry\n");
+    printf("  -n <hostname>         # Host name\n");
+    printf("  -c                    # Comment entry\n");
+    printf("  -u                    # Uncomment entry\n");
+    printf("  -r                    # Remove entry\n");
     printf("  -l                    # Insert new line before entry\n");
     printf("  -d                    # Display /etc/hosts file\n");
     printf("  -v                    # Enable verbose logging\n");
@@ -102,7 +101,9 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
     xbool_t bHaveHost = xstrused(pArgs->sHost);
     xbool_t bModify = pArgs->bRemove || pArgs->bComment || pArgs->bUncomment;
 
-    if (!bModify && !pArgs->bDisplay && (!bHaveAddress || !bHaveHost)) return XSTDERR;
+    pArgs->bAppend = !bModify && bHaveAddress && bHaveHost;
+    if (pArgs->bVerbose) xlog_enable(XLOG_DEBUG);
+    if (!pArgs->bAppend && !bModify) pArgs->bDisplay = XTRUE;
     if (bModify && !bHaveAddress && !bHaveHost) return XSTDERR;
 
     return XSTDOK;
@@ -117,7 +118,7 @@ static int XHost_InitContext(xhost_ctx_t *pCtx)
     XASSERT((XFile_Open(&pCtx->file, XHOST_FILE_PATH, "r", NULL) >= 0),
         xthrowe("Failed to open hosts file"));
 
-    XASSERT_CALL((XString_Init(&pCtx->hosts, XLINE_MAX, XFALSE) >= 0),
+    XASSERT_CALL((XString_Init(&pCtx->hosts, XSTDNON, XFALSE) >= 0),
         XFile_Close, &pCtx->file, xthrowe("Failed alloc hosts file buffer"));
 
     return XSTDOK;
@@ -134,7 +135,7 @@ static int XHost_Write(xstring_t *pString)
     xfile_t file;
     if (XFile_Open(&file, XHOST_FILE_PATH, "cwt", NULL) < 0)
     {
-        xloge("Failed to open hosts file: %s", XSTRERR);
+        xloge("Failed to open hosts file for writing: %s", XSTRERR);
         return XSTDERR;
     }
 
@@ -205,7 +206,7 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
             pCtx->sAddr, pCtx->sHost) >= 0),
             xthrowe("Failed to append new host entry"));
 
-        XASSERT((XHost_Write(&pCtx->hosts) >= 0), xthrowe("Failed to write hosts file"));
+        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
         xlogd("Added new entry: %s %s", pCtx->sAddr, pCtx->sHost);
     }
 
@@ -218,7 +219,13 @@ static int XHost_DisplayHosts()
     XASSERT((XPath_LoadBuffer(XHOST_FILE_PATH, &buffer) > 0),
         xthrow("Failed to load hosts file (%s)", XSTRERR));
 
-    if (buffer.pData != NULL) xlog("%s", buffer.pData);
+    if (buffer.pData != NULL && buffer.nUsed > 0)
+    {
+        if (buffer.pData[buffer.nUsed-1] == '\n')
+            buffer.pData[--buffer.nUsed] = XSTR_NUL;
+
+        xlog("%s", buffer.pData);
+    }
 
     XByteBuffer_Clear(&buffer);
     return XSTDNON;
@@ -256,7 +263,7 @@ static int XHost_RemoveEntry(xhost_ctx_t *pCtx, xbool_t bComment)
 
     if (nCount)
     {
-        XASSERT_CALL((XHost_Write(&pCtx->hosts) >= 0), XString_Clear, &pCtx->hosts, XSTDERR);
+        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
         xlogd("%s entres: %d", bComment ? "Commented" : "Removed", nCount);
     }
 
@@ -315,12 +322,6 @@ int main(int argc, char *argv[])
         return XSTDERR;
     }
 
-    if (args.bVerbose)
-    {
-        xlog_enable(XLOG_DEBUG);
-        xlog_indent(XTRUE);
-    }
-
     xhost_ctx_t ctx;
     int nStatus = 0;
 
@@ -328,10 +329,10 @@ int main(int argc, char *argv[])
     xstrncpy(ctx.sAddr, sizeof(ctx.sAddr), args.sAddress);
     xstrncpy(ctx.sHost, sizeof(ctx.sHost), args.sHost);
 
-    if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
+    if (args.bAppend) nStatus = XHost_AddEntry(&ctx, args.bNewLine);
+    else if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
     else if (args.bComment) nStatus = XHost_RemoveEntry(&ctx, XTRUE);
     else if (args.bUncomment) nStatus = XHost_UncommentEntry(&ctx);
-    else nStatus = XHost_AddEntry(&ctx, args.bNewLine);
     if (!nStatus && args.bDisplay) XHost_DisplayHosts();
 
     XHost_ClearContext(&ctx);
