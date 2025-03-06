@@ -593,9 +593,9 @@ int main(int argc, char *argv[])
     ctx.bSearch = args.bSearch;
 
     if (args.bAppend) nStatus = XHost_AddEntry(&ctx, args.bLines);
-    else if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
-    else if (args.bComment) nStatus = XHost_RemoveEntry(&ctx, XTRUE);
     else if (args.bUncomment) nStatus = XHost_UncommentEntry(&ctx);
+    else if (args.bComment) nStatus = XHost_RemoveEntry(&ctx, XTRUE);
+    else if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
     if (!nStatus && args.bDisplay) XHost_DisplayHosts(&ctx, args.bLines);
 
     XHost_ClearContext(&ctx);
