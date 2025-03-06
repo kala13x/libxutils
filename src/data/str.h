@@ -63,6 +63,7 @@
 #define XSTR_MID                    4096
 #define XSTR_MIN                    2048
 #define XSTR_TINY                   256
+#define XSTR_MICRO                  32
 #define XSTR_NPOS                   UINT_MAX
 #define XSTR_STACK                  XSTR_MID
 
@@ -156,6 +157,11 @@ xbool_t xstrused(const char *pStr);
 
 char* xstrtoen(char *pBuffer, size_t nSize, const char *pStr);
 char* xstrtoge(char *pBuffer, size_t nSize, const char *pStr);
+
+size_t xstrnrgb(char *pStr, size_t nSize, int nR, int nG, int nB);
+size_t xstrnyuv(char *pStr, size_t nSize, int nY, int nU, int nV);
+char *xstrrgb(int nR, int nG, int nB);
+char *xstryuv(int nY, int nU, int nV);
 
 /////////////////////////////////////////////////////////////////////////
 // XString Implementation

@@ -505,12 +505,12 @@ static int XHost_UncommentEntry(xhost_ctx_t *pCtx)
 
 static void XHost_AddLineNumber(xstring_t *pString, int nLine)
 {
-    XString_Append(pString, "%s", XSTR_CLR_YELLOW);
-    XString_Append(pString, "%s", XSTR_FMT_DIM);
-    XString_Append(pString, "%d", nLine);
     if (nLine < 10) XString_Append(pString, " ");
+    XString_Append(pString, "  %s", XSTR_FMT_DIM);
+    XString_Append(pString, "%d", nLine);
     if (nLine < 100) XString_Append(pString, " ");
-    XString_Append(pString, "%s ", XSTR_FMT_RESET);
+    if (nLine < 1000) XString_Append(pString, " ");
+    XString_Append(pString, " │%s ", XSTR_FMT_RESET);
 }
 
 static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bLines)
@@ -547,7 +547,10 @@ static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bLines)
         XString_Add(&pCtx->hosts, pCtx->sLine, nPosit);
         while (pCtx->sLine[nEnd] && !isspace((unsigned char)pCtx->sLine[nEnd])) nEnd++;
 
-        XString_Append(&pCtx->hosts, "%s", XSTR_CLR_CYAN);
+        char sColor[XSTR_MICRO]; // Create amethyst color
+        xstrnrgb(sColor, sizeof(sColor), 198, 145, 255);
+
+        XString_Append(&pCtx->hosts, "%s", sColor);
         XString_Add(&pCtx->hosts, &pCtx->sLine[nPosit], nEnd - nPosit);
         XString_Append(&pCtx->hosts, "%s", XSTR_FMT_RESET);
 

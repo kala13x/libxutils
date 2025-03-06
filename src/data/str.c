@@ -415,6 +415,43 @@ size_t xstrnlcpyf(char *pDst, size_t nSize, size_t nFLen, char cFChar, const cha
     return nBytes + nFLen;
 }
 
+size_t xstrnrgb(char *pStr, size_t nSize, int nR, int nG, int nB)
+{
+    if (pStr == NULL || !nSize) return 0;
+    return xstrncpyf(pStr, nSize, "\x1B[38;2;%d;%d;%dm", nR, nG, nB);
+}
+
+size_t xstrnyuv(char *pStr, size_t nSize, int nY, int nU, int nV)
+{
+    int nR = (int)(nY + 1.4075 * (nV - 128));
+    int nG = (int)(nY - 0.3455 * (nU - 128) - 0.7169 * (nV - 128));
+    int nB = (int)(nY + 1.7790 * (nU - 128));
+
+    nR = nR < 0 ? 0 : XSTD_MIN(nR, 255);
+    nG = nG < 0 ? 0 : XSTD_MIN(nG, 255);
+    nB = nB < 0 ? 0 : XSTD_MIN(nB, 255);
+
+    return xstrnrgb(pStr, nSize, nR, nG, nB);
+}
+
+char *xstrrgb(int nR, int nG, int nB)
+{
+    char *sRetVal = (char*)malloc(XSTR_MICRO);
+    size_t nLen = xstrnrgb(sRetVal, sizeof(sRetVal), nR, nG, nB);
+    if (nLen) return sRetVal;
+    free(sRetVal);
+    return NULL;
+}
+
+char *xstryuv(int nY, int nU, int nV)
+{
+    char *sRetVal = (char*)malloc(XSTR_MICRO);
+    size_t nLen = xstrnyuv(sRetVal, sizeof(sRetVal), nY, nU, nV);
+    if (nLen) return sRetVal;
+    free(sRetVal);
+    return NULL;
+}
+
 size_t xstrisextra(const char *pOffset)
 {
     if (!strncmp(pOffset, XSTR_CLR_LIGHT_MAGENTA, 7) ||
