@@ -78,7 +78,7 @@ static void XHost_Usage(const char *pName)
     printf("  -u                    # Uncomment entry\n");
     printf("  -r                    # Remove entry\n");
     printf("  -s                    # Search Entry\n");
-    printf("  -l                    # Insert new line before entry\n");
+    printf("  -l                    # Show or add lines\n");
     printf("  -d                    # Display /etc/hosts file\n");
     printf("  -w                    # Match whole words in entry\n");
     printf("  -v                    # Enable verbose logging\n");
@@ -389,8 +389,7 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
             return XSTDERR;
         }
 
-        XASSERT((XString_Append(&pCtx->hosts, "%s%s %s\n",
-            bNewLine ? XSTR_NEW_LINE : XSTR_EMPTY,
+        XASSERT((XString_Append(&pCtx->hosts, "%s %s\n",
             pCtx->sAddr, pCtx->sHost) >= 0),
             xthrowe("Failed to append new host entry"));
 
