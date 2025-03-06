@@ -17,7 +17,7 @@
 #define XHOST_FILE_PATH     "/etc/hosts"
 #define XHOST_VERSION_MAX   1
 #define XHOST_VERSION_MIN   0
-#define XHOST_BUILD_NUMBER  5
+#define XHOST_BUILD_NUMBER  6
 
 typedef struct {
     xbool_t bAdd;
@@ -25,6 +25,7 @@ typedef struct {
     xbool_t bRemove;
     xbool_t bVerbose;
     xbool_t bLines;
+    xbool_t bSearch;
     xbool_t bComment;
     xbool_t bDisplay;
     xbool_t bUncomment;
@@ -39,6 +40,7 @@ typedef struct {
     char sHost[XLINE_MAX];
     char sLine[XLINE_MAX];
     xbool_t bWholeWords;
+    xbool_t bSearch;
     size_t nLineNumber;
     xstring_t hosts;
     xfile_t file;
@@ -54,10 +56,10 @@ extern char *optarg;
 
 static void XHost_Usage(const char *pName)
 {
-    printf("===========================================================\n");
+    printf("==========================================================\n");
     printf(" XHost (Add or modify hosts) - v%d.%d build %d (%s)\n",
         XHOST_VERSION_MAX, XHOST_VERSION_MIN, XHOST_BUILD_NUMBER, __DATE__);
-    printf("===========================================================\n");
+    printf("==========================================================\n");
 
     int i, nLength = strlen(pName) + 6;
     char sWhiteSpace[nLength + 1];
@@ -66,7 +68,7 @@ static void XHost_Usage(const char *pName)
     sWhiteSpace[nLength] = 0;
 
     printf("Usage: %s [-a <address>] [-n <hostname>] [-x <number>]\n", pName);
-    printf(" %s [-c] [-u] [-r] [-d] [-l] [-v] [-w] [-h]\n\n", sWhiteSpace);
+    printf(" %s [-c] [-u] [-r] [-d] [-l] [-s] [-v] [-w] [-h]\n\n", sWhiteSpace);
 
     printf("Options are:\n");
     printf("  -a <address>          # IP address\n");
@@ -75,6 +77,7 @@ static void XHost_Usage(const char *pName)
     printf("  -c                    # Comment entry\n");
     printf("  -u                    # Uncomment entry\n");
     printf("  -r                    # Remove entry\n");
+    printf("  -s                    # Search Entry\n");
     printf("  -l                    # Insert new line before entry\n");
     printf("  -d                    # Display /etc/hosts file\n");
     printf("  -w                    # Match whole words in entry\n");
@@ -83,8 +86,8 @@ static void XHost_Usage(const char *pName)
 
     printf("Examples:\n");
     printf("1) %s -a 10.10.17.1 -n example.com\n", pName);
-    printf("2) %s -a 10.12.19.1 -r\n", pName);
-    printf("2) %s -n test.com -rd\n", pName);
+    printf("2) %s -a 192.168.0.17 -rw\n", pName);
+    printf("3) %s -n test.com -rdl\n", pName);
 }
 
 static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
@@ -92,7 +95,7 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
     memset(pArgs, 0, sizeof(xhost_args_t));
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "a:n:x:c1:d1:u1:l1:r1:v1:w1:h1")) != -1)
+    while ((opt = getopt(argc, argv, "a:n:x:c1:d1:u1:l1:r1:s1:v1:w1:h1")) != -1)
     {
         switch (opt)
         {
@@ -104,6 +107,7 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
             case 'u': pArgs->bUncomment = XTRUE; break;
             case 'l': pArgs->bLines = XTRUE; break;
             case 'r': pArgs->bRemove = XTRUE; break;
+            case 's': pArgs->bSearch = XTRUE; break;
             case 'v': pArgs->bVerbose = XTRUE; break;
             case 'w': pArgs->bWholeWords = XTRUE; break;
             case 'h': return XSTDERR;
@@ -114,11 +118,12 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
     xbool_t bHaveAddress = xstrused(pArgs->sAddress);
     xbool_t bHaveHost = xstrused(pArgs->sHost);
     xbool_t bModify = pArgs->bRemove || pArgs->bComment || pArgs->bUncomment;
+    pArgs->bAppend = !bModify && !pArgs->bSearch && ((bHaveAddress && bHaveHost) || pArgs->nLineNumber);
 
-    pArgs->bAppend = !bModify && ((bHaveAddress && bHaveHost) || pArgs->nLineNumber);
-    if (bModify && !bHaveAddress && !bHaveHost && !pArgs->nLineNumber) return XSTDERR;
+    if ((bModify || pArgs->bSearch) && !bHaveAddress && !bHaveHost && !pArgs->nLineNumber) return XSTDERR;
     if (!pArgs->bAppend && !bModify) pArgs->bDisplay = XTRUE;
     if (pArgs->bVerbose) xlog_enable(XLOG_DEBUG);
+    if (pArgs->bSearch) pArgs->bDisplay = XTRUE;
 
     return XSTDOK;
 }
@@ -127,6 +132,7 @@ static int XHost_InitContext(xhost_ctx_t *pCtx, xbool_t bReset)
 {
     if (bReset)
     {
+        pCtx->bSearch = XFALSE;
         pCtx->bWholeWords = XFALSE;
         pCtx->nLineNumber = 0;
 
@@ -497,66 +503,66 @@ static void XHost_AddLineNumber(xstring_t *pString, int nLine)
     XString_Append(pString, "%s ", XSTR_FMT_RESET);
 }
 
-static int XHost_DisplayHosts(xbool_t bLines)
+static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bLines)
 {
-    xhost_ctx_t ctx;
-    XASSERT((XHost_InitContext(&ctx, XTRUE) > 0), xthrowe("Failed to init context"));
+    XHost_ClearContext(pCtx);
+    XASSERT((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
 
+    size_t nLineNumber = 0;
     int nPosit = 0;
-    int nLine = 0;
 
-    while (XFile_GetLine(&ctx.file, ctx.sLine, sizeof(ctx.sLine)) > 0)
+    while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
     {
         nPosit = 0;
-        nLine++;
+        nLineNumber++;
 
-        while (ctx.sLine[nPosit] && isspace((unsigned char)ctx.sLine[nPosit])) nPosit++;
-        if (bLines) XHost_AddLineNumber(&ctx.hosts, nLine);
+        if (pCtx->bSearch && (pCtx->nLineNumber != nLineNumber && !XHost_SearchEntry(pCtx))) continue;
+        while (pCtx->sLine[nPosit] && isspace((unsigned char)pCtx->sLine[nPosit])) nPosit++;
+        if (bLines) XHost_AddLineNumber(&pCtx->hosts, nLineNumber);
 
-        if (!ctx.sLine[nPosit] || ctx.sLine[nPosit] == '\n')
+        if (!pCtx->sLine[nPosit] || pCtx->sLine[nPosit] == '\n')
         {
-            XString_Append(&ctx.hosts, "\n");
+            XString_Append(&pCtx->hosts, "\n");
             continue;
         }
 
-        if (ctx.sLine[nPosit] == '#')
+        if (pCtx->sLine[nPosit] == '#')
         {
-            XString_Append(&ctx.hosts, "%s%s%s", XSTR_FMT_DIM, ctx.sLine, XSTR_FMT_RESET);
+            XString_Append(&pCtx->hosts, "%s%s%s", XSTR_FMT_DIM, pCtx->sLine, XSTR_FMT_RESET);
             continue;
         }
 
         int nEnd = nPosit;
-        XString_Add(&ctx.hosts, ctx.sLine, nPosit);
-        while (ctx.sLine[nEnd] && !isspace((unsigned char)ctx.sLine[nEnd])) nEnd++;
+        XString_Add(&pCtx->hosts, pCtx->sLine, nPosit);
+        while (pCtx->sLine[nEnd] && !isspace((unsigned char)pCtx->sLine[nEnd])) nEnd++;
 
-        XString_Append(&ctx.hosts, "%s", XSTR_CLR_CYAN);
-        XString_Add(&ctx.hosts, &ctx.sLine[nPosit], nEnd - nPosit);
-        XString_Append(&ctx.hosts, "%s", XSTR_FMT_RESET);
+        XString_Append(&pCtx->hosts, "%s", XSTR_CLR_CYAN);
+        XString_Add(&pCtx->hosts, &pCtx->sLine[nPosit], nEnd - nPosit);
+        XString_Append(&pCtx->hosts, "%s", XSTR_FMT_RESET);
 
         int nCommentPosit = nEnd;
-        while (ctx.sLine[nCommentPosit] && ctx.sLine[nCommentPosit] != '#') nCommentPosit++;
+        while (pCtx->sLine[nCommentPosit] && pCtx->sLine[nCommentPosit] != '#') nCommentPosit++;
 
-        if (ctx.sLine[nCommentPosit] && ctx.sLine[nCommentPosit] == '#')
+        if (pCtx->sLine[nCommentPosit] && pCtx->sLine[nCommentPosit] == '#')
         {
-            XString_Add(&ctx.hosts, &ctx.sLine[nEnd], nCommentPosit - nEnd);
-            XString_Append(&ctx.hosts, "%s", XSTR_FMT_DIM);
-            XString_Append(&ctx.hosts, "%s", &ctx.sLine[nCommentPosit]);
-            XString_Append(&ctx.hosts, "%s", XSTR_FMT_RESET);
+            XString_Add(&pCtx->hosts, &pCtx->sLine[nEnd], nCommentPosit - nEnd);
+            XString_Append(&pCtx->hosts, "%s", XSTR_FMT_DIM);
+            XString_Append(&pCtx->hosts, "%s", &pCtx->sLine[nCommentPosit]);
+            XString_Append(&pCtx->hosts, "%s", XSTR_FMT_RESET);
         }
         else
         {
-            size_t nLength = strlen(&ctx.sLine[nEnd]);
-            XString_Add(&ctx.hosts, &ctx.sLine[nEnd], nLength);
+            size_t nLength = strlen(&pCtx->sLine[nEnd]);
+            XString_Add(&pCtx->hosts, &pCtx->sLine[nEnd], nLength);
         }
     }
 
-    if (ctx.hosts.nLength)
+    if (pCtx->hosts.nLength)
     {
         xlog_useheap(XTRUE);
-        xlog("%s", ctx.hosts.pData);
+        xlog("%s", pCtx->hosts.pData);
     }
 
-    XHost_ClearContext(&ctx);
     return XSTDNON;
 }
 
@@ -578,14 +584,15 @@ int main(int argc, char *argv[])
     XASSERT((XHost_InitContext(&ctx, XTRUE) > 0), xthrowe("Failed to init context"));
     xstrncpy(ctx.sAddr, sizeof(ctx.sAddr), args.sAddress);
     xstrncpy(ctx.sHost, sizeof(ctx.sHost), args.sHost);
-    ctx.bWholeWords = args.bWholeWords;
     ctx.nLineNumber = args.nLineNumber;
+    ctx.bWholeWords = args.bWholeWords;
+    ctx.bSearch = args.bSearch;
 
     if (args.bAppend) nStatus = XHost_AddEntry(&ctx, args.bLines);
     else if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
     else if (args.bComment) nStatus = XHost_RemoveEntry(&ctx, XTRUE);
     else if (args.bUncomment) nStatus = XHost_UncommentEntry(&ctx);
-    if (!nStatus && args.bDisplay) XHost_DisplayHosts(args.bLines);
+    if (!nStatus && args.bDisplay) XHost_DisplayHosts(&ctx, args.bLines);
 
     XHost_ClearContext(&ctx);
     return nStatus;
