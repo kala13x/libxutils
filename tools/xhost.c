@@ -178,14 +178,16 @@ static int XHost_Write(xstring_t *pString)
 
 static void XHost_RemoveTailSpace(char *sEntry, size_t nLength)
 {
-    if (nLength == 0) return;
-    int nPosit = (int)nLength - 1;
+    if (!nLength || !xstrused(sEntry)) return;
+    size_t nPosit = nLength - 1;
 
-    while (nPosit >= 0 &&
+    while (nPosit > 0 &&
            (isspace((unsigned char)sEntry[nPosit]) ||
-           sEntry[nPosit] == '\n')) nPosit--;
+           sEntry[nPosit] == '\n' ||
+           sEntry[nPosit] == '\r' ||
+           sEntry[nPosit] == '\t')) nPosit--;
 
-    if (nPosit >= 0) sEntry[nPosit + 1] = XSTR_NUL;
+    sEntry[nPosit + 1] = XSTR_NUL;
 }
 
 static xbool_t XHost_ParseEntry(xhost_entry_t *pEntry, const char *pLine)
@@ -407,16 +409,26 @@ static int XHost_RemoveEntry(xhost_ctx_t *pCtx, xbool_t bComment)
 
     while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
     {
-        nLineNumber++;
-
-        if (pCtx->nLineNumber == nLineNumber || XHost_SearchEntry(pCtx))
+        if (pCtx->nLineNumber == ++nLineNumber || XHost_SearchEntry(pCtx))
         {
             xlogd_wn("Found entry: %s", pCtx->sLine);
 
-            if (bComment && XString_Append(&pCtx->hosts, "#%s", pCtx->sLine) < 0)
+            if (bComment)
             {
-                xloge("Failed to add commented line to hosts buffer: %s", XSTRERR);
-                return XSTDERR;
+                int nPosit = 0;
+                while (pCtx->sLine[nPosit] && isspace((unsigned char)pCtx->sLine[nPosit])) nPosit++;
+
+                if (pCtx->sLine[nPosit] && pCtx->sLine[nPosit] == '#')
+                {
+                    XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+                        xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
+
+                    nCount++;
+                    continue;
+                }
+
+                XASSERT((XString_Append(&pCtx->hosts, "#%s", pCtx->sLine) >= 0),
+                    xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
             }
 
             nCount++;
@@ -476,7 +488,6 @@ static int XHost_UncommentEntry(xhost_ctx_t *pCtx)
         }
 
         if (bComment) pCtx->sLine[nPosit] = '#';
-
         XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
             xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
     }
@@ -527,7 +538,8 @@ static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bLines)
 
         if (pCtx->sLine[nPosit] == '#')
         {
-            XString_Append(&pCtx->hosts, "%s%s%s", XSTR_FMT_DIM, pCtx->sLine, XSTR_FMT_RESET);
+            XHost_RemoveTailSpace(pCtx->sLine, strlen(pCtx->sLine));
+            XString_Append(&pCtx->hosts, "%s%s%s\n", XSTR_FMT_DIM, pCtx->sLine, XSTR_FMT_RESET);
             continue;
         }
 
@@ -545,9 +557,8 @@ static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bLines)
         if (pCtx->sLine[nCommentPosit] && pCtx->sLine[nCommentPosit] == '#')
         {
             XString_Add(&pCtx->hosts, &pCtx->sLine[nEnd], nCommentPosit - nEnd);
-            XString_Append(&pCtx->hosts, "%s", XSTR_FMT_DIM);
-            XString_Append(&pCtx->hosts, "%s", &pCtx->sLine[nCommentPosit]);
-            XString_Append(&pCtx->hosts, "%s", XSTR_FMT_RESET);
+            XHost_RemoveTailSpace(&pCtx->sLine[nCommentPosit], strlen(&pCtx->sLine[nCommentPosit]));
+            XString_Append(&pCtx->hosts, "%s%s%s", XSTR_FMT_DIM, &pCtx->sLine[nCommentPosit], XSTR_FMT_RESET);
         }
         else
         {
