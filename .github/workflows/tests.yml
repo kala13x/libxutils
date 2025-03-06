@@ -61,6 +61,9 @@ jobs:
       - name: Run Valgrind Check With examples/list
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/list
 
+      - name: Run Valgrind Check With examples/json
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/json
+
       - name: Run Valgrind Check With examples/jwt
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/jwt
 
