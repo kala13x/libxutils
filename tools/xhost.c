@@ -73,7 +73,7 @@ static void XHost_Usage(const char *pName)
     printf("Options are:\n");
     printf("  -a <address>          # IP address\n");
     printf("  -n <hostname>         # Host name\n");
-    printf("  -x <line>             # Line number\n");
+    printf("  -x <number>           # Line number\n");
     printf("  -c                    # Comment entry\n");
     printf("  -u                    # Uncomment entry\n");
     printf("  -r                    # Remove entry\n");
