@@ -18,7 +18,7 @@
 extern char *optarg;
 
 #define XJSON_LINT_VER_MAX  0
-#define XJSON_LINT_VER_MIN  4
+#define XJSON_LINT_VER_MIN  5
 
 #define XJSON_POOL_SIZE     1024 * 64
 
@@ -43,7 +43,9 @@ void XJSON_DisplayUsage(const char *pName)
     xlog("  -m                  # Minify json file");
     xlog("  -p                  # Pretty print");
     xlog("  -h                  # Version and usage\n");
-    xlog("Example: %s -i example.json -pl 4\n", pName);
+    xlog("Examples:");
+    xlog("1) %s -i example.json -pl 4", pName);
+    xlog("2) cat example.json | %s -p\n", pName);
 }
 
 int XJSON_ParseArgs(xjson_args_t *pArgs, int argc, char *argv[])
@@ -76,7 +78,25 @@ int XJSON_ParseArgs(xjson_args_t *pArgs, int argc, char *argv[])
         }
     }
 
-    return (xstrused(pArgs->sFile)) ? XTRUE : XFALSE;
+    return XTRUE;
+}
+
+size_t XJSon_ReadFromStdin(xbyte_buffer_t *pBuffer)
+{
+    XByteBuffer_Init(pBuffer, XSTR_MID, XFALSE);
+    char sBuffer[XSTR_MID];
+    int nRead = 0;
+
+    while ((nRead = fread(sBuffer, 1, sizeof(sBuffer), stdin)) > 0)
+    {
+        if (!XByteBuffer_Add(pBuffer, (const uint8_t*)sBuffer, nRead))
+        {
+            xloge("Failed append stdin data to buffer: %s", XSTRERR);
+            return XSTDNON;
+        }
+    }
+
+    return pBuffer->nUsed;
 }
 
 int main(int argc, char *argv[])
@@ -92,9 +112,17 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (XPath_LoadBuffer(args.sFile, &buffer) <= 0)
+    if (xstrused(args.sFile))
     {
-        xloge("Failed to load file: %s (%s)", args.sFile, XSTRERR);
+        if (XPath_LoadBuffer(args.sFile, &buffer) <= 0)
+        {
+            xloge("Failed to load file: %s (%s)", args.sFile, XSTRERR);
+            return 1;
+        }
+    }
+    else if (!XJSon_ReadFromStdin(&buffer))
+    {
+        xloge("Failed to read from stdin: %s", XSTRERR);
         return 1;
     }
 
