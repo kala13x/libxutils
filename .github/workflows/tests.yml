@@ -35,7 +35,7 @@ jobs:
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xhttp -dl github.com -v
 
       - name: Run Valgrind Check With tools/xhost
-        run: sudo valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xhost -a 11.11.11.11 -n test.com -vd
+        run: sudo valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xhost -a 11.11.11.11 -n test.com -vdl
 
       - name: Run Valgrind Check With tools/xjson
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xjson -i ./examples/example.json -pl 2
