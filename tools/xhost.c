@@ -40,6 +40,12 @@ typedef struct {
     xfile_t file;
 } xhost_ctx_t;
 
+typedef struct {
+    char sAddr[XLINE_MAX];
+    char sHost[XLINE_MAX];
+    char sComment[XLINE_MAX];
+} xhost_entry_t;
+
 extern char *optarg;
 
 static void XHost_Usage(const char *pName)
@@ -150,19 +156,102 @@ static int XHost_Write(xstring_t *pString)
     return XSTDNON;
 }
 
+static void XHost_RemoveTailSpace(char *sEntry, size_t nLength)
+{
+    if (nLength == 0) return;
+    int nPosit = (int)nLength - 1;
+
+    while (nPosit >= 0 &&
+           (isspace((unsigned char)sEntry[nPosit]) ||
+           sEntry[nPosit] == '\n')) nPosit--;
+
+    if (nPosit >= 0) sEntry[nPosit + 1] = XSTR_NUL;
+}
+
+static xbool_t XHost_ParseEntry(xhost_entry_t *pEntry, const char *pLine)
+{
+    pEntry->sAddr[0] = XSTR_NUL;
+    pEntry->sHost[0] = XSTR_NUL;
+    pEntry->sComment[0] = XSTR_NUL;
+
+    // Skip empty spaces
+    int nPosit = 0;
+    while (pLine[nPosit] && isspace((unsigned char)pLine[nPosit])) nPosit++;
+    if (!pLine[nPosit]) return XFALSE;
+
+    if (pLine[nPosit] == '#')
+    {
+        while (pLine[nPosit] && (pLine[nPosit] == '#' ||
+               isspace((unsigned char)pLine[nPosit]))) nPosit++;
+
+        if (!pLine[nPosit]) return XFALSE;
+        xstrncpy(pEntry->sComment, sizeof(pEntry->sComment), &pLine[nPosit]);
+        XHost_RemoveTailSpace(pEntry->sComment, strlen(pEntry->sComment));
+        return XTRUE;
+    }
+
+    // Get IP addr
+    int nEnd = nPosit;
+    while (pLine[nEnd] && !isspace((unsigned char)pLine[nEnd])) nEnd++;
+    if (!pLine[nPosit]) return XFALSE;
+    xstrncpy(pEntry->sAddr, sizeof(pEntry->sAddr), &pLine[nPosit]);
+    pEntry->sAddr[nEnd - nPosit] = XSTR_NUL;
+
+    // Get host name
+    nPosit = nEnd;
+    while (pLine[nPosit] && isspace((unsigned char)pLine[nPosit])) nPosit++;
+    if (!pLine[nPosit]) return XFALSE;
+    xstrncpy(pEntry->sHost, sizeof(pEntry->sHost), &pLine[nPosit]);
+
+    nPosit = 0;
+    while (pEntry->sHost[nPosit] &&
+           pEntry->sHost[nPosit] != '\n' &&
+           pEntry->sHost[nPosit] != '#') nPosit++;
+
+    if (pEntry->sHost[nPosit] == '#')
+    {
+        pEntry->sHost[nPosit++] = XSTR_NUL;
+        while (pEntry->sHost[nPosit] && isspace((unsigned char)pEntry->sHost[nPosit])) nPosit++;
+        xstrncpy(pEntry->sComment, sizeof(pEntry->sComment), &pEntry->sHost[nPosit]);
+
+        nPosit = 0;
+        while (pEntry->sComment[nPosit] && pEntry->sComment[nPosit] != '\n') nPosit++;
+        if (pEntry->sComment[nPosit] == '\n') pEntry->sComment[nPosit] = XSTR_NUL;
+    }
+
+    if (pEntry->sHost[nPosit] == '\n') pEntry->sHost[nPosit] = XSTR_NUL;
+    XHost_RemoveTailSpace(pEntry->sAddr, strlen(pEntry->sAddr));
+    XHost_RemoveTailSpace(pEntry->sHost, strlen(pEntry->sHost));
+    XHost_RemoveTailSpace(pEntry->sComment, strlen(pEntry->sComment));
+
+    return XTRUE;
+}
+
 static xbool_t XHost_SearchEntry(xhost_ctx_t *pCtx)
 {
     xlogd_wn("Checking entry: %s", pCtx->sLine);
 
-    if (xstrused(pCtx->sHost) && xstrused(pCtx->sAddr))
+    xhost_entry_t entry;
+    XHost_ParseEntry(&entry, pCtx->sLine);
+
+    if (!xstrused(entry.sAddr) ||
+        !xstrused(entry.sHost)) return XFALSE;
+
+    char sSearchLine[XLINE_MAX];
+    xstrncpyf(sSearchLine, sizeof(sSearchLine), "%s %s", pCtx->sAddr, pCtx->sHost);
+
+    xhost_entry_t search;
+    XHost_ParseEntry(&search, sSearchLine);
+
+    if (xstrused(search.sHost) && xstrused(search.sAddr))
     {
-        if (xstrsrc(pCtx->sLine, pCtx->sHost) >= 0 &&
-            xstrsrc(pCtx->sLine, pCtx->sAddr) >= 0) return XTRUE;
+        if (xstrsrc(entry.sHost, search.sHost) >= 0 &&
+            xstrsrc(entry.sAddr, search.sAddr) >= 0) return XTRUE;
     }
-    else 
+    else
     {
-        if (xstrused(pCtx->sHost) && xstrsrc(pCtx->sLine, pCtx->sHost) >= 0) return XTRUE;
-        if (xstrused(pCtx->sAddr) && xstrsrc(pCtx->sLine, pCtx->sAddr) >= 0) return XTRUE;
+        if (xstrused(search.sHost) && xstrsrc(entry.sHost, search.sHost) >= 0) return XTRUE;
+        if (xstrused(search.sAddr) && xstrsrc(entry.sAddr, search.sAddr) >= 0) return XTRUE;
     }
 
     return XFALSE;
@@ -175,10 +264,7 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
 
     while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
     {
-        int nPosit = 0;
-        while (pCtx->sLine[nPosit] && isspace((unsigned char)pCtx->sLine[nPosit])) nPosit++;
-
-        if (pCtx->sLine[nPosit] && pCtx->sLine[nPosit] != '#' && XHost_SearchEntry(pCtx))
+        if (XHost_SearchEntry(pCtx))
         {
             xlogd_wn("Found entry: %s", pCtx->sLine);
             bFound = XTRUE;
@@ -215,33 +301,44 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
 
 static int XHost_DisplayHosts()
 {
-    xbyte_buffer_t buffer;
-    XASSERT((XPath_LoadBuffer(XHOST_FILE_PATH, &buffer) > 0),
-        xthrow("Failed to load hosts file (%s)", XSTRERR));
+    xhost_ctx_t ctx;
+    XASSERT((XHost_InitContext(&ctx) > 0), xthrowe("Failed to init context"));
 
-    if (buffer.pData != NULL && buffer.nUsed > 0)
+    while (XFile_GetLine(&ctx.file, ctx.sLine, sizeof(ctx.sLine)) > 0)
     {
-        if (buffer.pData[buffer.nUsed-1] == '\n')
-            buffer.pData[--buffer.nUsed] = XSTR_NUL;
+        xhost_entry_t entry;
+        XHost_ParseEntry(&entry, ctx.sLine);
 
-        xlog("%s", buffer.pData);
+        if (xstrused(entry.sAddr) && xstrused(entry.sHost))
+        {
+            XString_Append(&ctx.hosts, "%s%s%s %s",
+                    XSTR_CLR_CYAN, entry.sAddr,
+                    XSTR_FMT_RESET, entry.sHost);
+
+            if (!xstrused(entry.sComment)) XString_Append(&ctx.hosts, "\n");
+            else XString_Append(&ctx.hosts, " %s# %s%s\n", XSTR_FMT_DIM, entry.sComment, XSTR_FMT_RESET);
+        }
+        else if (!xstrused(entry.sComment)) XString_Append(&ctx.hosts, "\n");
+        else XString_Append(&ctx.hosts, "%s# %s%s\n", XSTR_FMT_DIM, entry.sComment, XSTR_FMT_RESET);
     }
 
-    XByteBuffer_Clear(&buffer);
+    if (ctx.hosts.nLength)
+    {
+        xlog_useheap(XTRUE);
+        xlog("%s", ctx.hosts.pData);
+    }
+
+    XHost_ClearContext(&ctx);
     return XSTDNON;
 }
 
 static int XHost_RemoveEntry(xhost_ctx_t *pCtx, xbool_t bComment)
 {
     int nCount = 0;
-    int nPosit = 0;
 
     while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
     {
-        nPosit = 0;
-        while (pCtx->sLine[nPosit] && isspace((unsigned char)pCtx->sLine[nPosit])) nPosit++;
-
-        if (pCtx->sLine[nPosit] && pCtx->sLine[nPosit] != '#' && XHost_SearchEntry(pCtx))
+        if (XHost_SearchEntry(pCtx))
         {
             xlogd_wn("Found entry: %s", pCtx->sLine);
 
