@@ -229,19 +229,24 @@ static xbool_t XHost_ParseEntry(xhost_entry_t *pEntry, const char *pLine)
 
 static xbool_t XHost_SearchEntry(xhost_ctx_t *pCtx)
 {
-    xlogd_wn("Checking entry: %s", pCtx->sLine);
-
     xhost_entry_t entry;
     XHost_ParseEntry(&entry, pCtx->sLine);
 
     if (!xstrused(entry.sAddr) ||
         !xstrused(entry.sHost)) return XFALSE;
 
+    xlogd_wn("Checking entry: %s", pCtx->sLine);
     char sSearchLine[XLINE_MAX];
-    xstrncpyf(sSearchLine, sizeof(sSearchLine), "%s %s", pCtx->sAddr, pCtx->sHost);
+
+    xstrncpyf(sSearchLine, sizeof(sSearchLine), "%s %s",
+        xstrused(pCtx->sAddr) ? pCtx->sAddr : "-",
+        xstrused(pCtx->sHost) ? pCtx->sHost : "-");
 
     xhost_entry_t search;
     XHost_ParseEntry(&search, sSearchLine);
+
+    if (!xstrused(pCtx->sAddr)) search.sAddr[0] = XSTR_NUL;
+    if (!xstrused(pCtx->sHost)) search.sHost[0] = XSTR_NUL;
 
     if (xstrused(search.sHost) && xstrused(search.sAddr))
     {
