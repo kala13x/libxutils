@@ -17,7 +17,7 @@
 #define XHOST_FILE_PATH     "/etc/hosts"
 #define XHOST_VERSION_MAX   1
 #define XHOST_VERSION_MIN   0
-#define XHOST_BUILD_NUMBER  6
+#define XHOST_BUILD_NUMBER  7
 
 typedef struct {
     xbool_t bAdd;
@@ -557,10 +557,14 @@ static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bLines)
         }
     }
 
-    if (pCtx->hosts.nLength)
+    if (pCtx->hosts.nLength && pCtx->hosts.pData)
     {
+        char *pData = (char*)pCtx->hosts.pData;
+        size_t nLength = pCtx->hosts.nLength;
+        XHost_RemoveTailSpace(pData, nLength);
+
         xlog_useheap(XTRUE);
-        xlog("%s", pCtx->hosts.pData);
+        xlog("%s", pData);
     }
 
     return XSTDNON;
