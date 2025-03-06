@@ -558,7 +558,7 @@ static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bLines)
         {
             XString_Add(&pCtx->hosts, &pCtx->sLine[nEnd], nCommentPosit - nEnd);
             XHost_RemoveTailSpace(&pCtx->sLine[nCommentPosit], strlen(&pCtx->sLine[nCommentPosit]));
-            XString_Append(&pCtx->hosts, "%s%s%s", XSTR_FMT_DIM, &pCtx->sLine[nCommentPosit], XSTR_FMT_RESET);
+            XString_Append(&pCtx->hosts, "%s%s%s\n", XSTR_FMT_DIM, &pCtx->sLine[nCommentPosit], XSTR_FMT_RESET);
         }
         else
         {
