@@ -17,7 +17,7 @@
 #define XHOST_FILE_PATH     "/etc/hosts"
 #define XHOST_VERSION_MAX   1
 #define XHOST_VERSION_MIN   0
-#define XHOST_BUILD_NUMBER  4
+#define XHOST_BUILD_NUMBER  5
 
 typedef struct {
     xbool_t bAdd;
@@ -123,14 +123,17 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
     return XSTDOK;
 }
 
-static int XHost_InitContext(xhost_ctx_t *pCtx)
+static int XHost_InitContext(xhost_ctx_t *pCtx, xbool_t bReset)
 {
-    pCtx->bWholeWords = XFALSE;
-    pCtx->nLineNumber = 0;
+    if (bReset)
+    {
+        pCtx->bWholeWords = XFALSE;
+        pCtx->nLineNumber = 0;
 
-    pCtx->sAddr[0] = XSTR_NUL;
-    pCtx->sHost[0] = XSTR_NUL;
-    pCtx->sLine[0] = XSTR_NUL;
+        pCtx->sAddr[0] = XSTR_NUL;
+        pCtx->sHost[0] = XSTR_NUL;
+        pCtx->sLine[0] = XSTR_NUL;
+    }
 
     XASSERT((XFile_Open(&pCtx->file, XHOST_FILE_PATH, "r", NULL) >= 0),
         xthrowe("Failed to open hosts file"));
@@ -289,16 +292,52 @@ static xbool_t XHost_SearchEntry(xhost_ctx_t *pCtx)
     return XFALSE;
 }
 
+static int XHost_InsertEntry(xhost_ctx_t *pCtx)
+{
+    if (!xstrused(pCtx->sHost) || !xstrused(pCtx->sAddr)) return XSTDNON;
+    XASSERT((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
+
+    xbool_t bFound = XFALSE;
+    size_t nLineNumber = 0;
+
+    while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
+    {
+        if (pCtx->nLineNumber == ++nLineNumber)
+        {
+            XASSERT((XString_Append(&pCtx->hosts, "%s %s\n",
+                pCtx->sAddr, pCtx->sHost) >= 0),
+                xthrowe("Failed to add new line to hosts buffer"));
+
+            bFound = XTRUE;
+        }
+
+        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+            xthrowe("Failed to add line to hosts buffer"));
+    }
+
+    XFile_Close(&pCtx->file);
+
+    if (bFound)
+    {
+        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        xlogd("Inserted new entry: %s %s", pCtx->sAddr, pCtx->sHost);
+    }
+
+    return XSTDNON;
+}
+
 static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
 {
-    if (!xstrused(pCtx->sHost) && !xstrused(pCtx->sAddr) && !pCtx->nLineNumber) return XSTDNON;
+    xbool_t bHaveEntry = xstrused(pCtx->sHost) && xstrused(pCtx->sAddr);
+    if (!bHaveEntry && !pCtx->nLineNumber) return XSTDNON;
+
     xbool_t bAddedLine = XFALSE;
     xbool_t bFound = XFALSE;
     size_t nLineNumber = 0;
 
     while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
     {
-        if (pCtx->nLineNumber)
+        if (pCtx->nLineNumber && bNewLine && !bHaveEntry)
         {
             if (pCtx->nLineNumber == ++nLineNumber)
             {
@@ -330,6 +369,12 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
 
     if (!bFound)
     {
+        if (pCtx->nLineNumber && bHaveEntry)
+        {
+            XHost_ClearContext(pCtx);
+            return XHost_InsertEntry(pCtx);
+        }
+
         if (pCtx->hosts.pData != NULL && pCtx->hosts.nLength > 0 &&
             pCtx->hosts.pData[pCtx->hosts.nLength - 1] != '\n' &&
             XString_Append(&pCtx->hosts, "\n") < 0)
@@ -455,7 +500,7 @@ static void XHost_AddLineNumber(xstring_t *pString, int nLine)
 static int XHost_DisplayHosts(xbool_t bLines)
 {
     xhost_ctx_t ctx;
-    XASSERT((XHost_InitContext(&ctx) > 0), xthrowe("Failed to init context"));
+    XASSERT((XHost_InitContext(&ctx, XTRUE) > 0), xthrowe("Failed to init context"));
 
     int nPosit = 0;
     int nLine = 0;
@@ -530,7 +575,7 @@ int main(int argc, char *argv[])
     xhost_ctx_t ctx;
     int nStatus = 0;
 
-    XASSERT((XHost_InitContext(&ctx) > 0), xthrowe("Failed to init context"));
+    XASSERT((XHost_InitContext(&ctx, XTRUE) > 0), xthrowe("Failed to init context"));
     xstrncpy(ctx.sAddr, sizeof(ctx.sAddr), args.sAddress);
     xstrncpy(ctx.sHost, sizeof(ctx.sHost), args.sHost);
     ctx.bWholeWords = args.bWholeWords;
