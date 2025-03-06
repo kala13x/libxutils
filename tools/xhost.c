@@ -17,7 +17,7 @@
 #define XHOST_FILE_PATH     "/etc/hosts"
 #define XHOST_VERSION_MAX   1
 #define XHOST_VERSION_MIN   0
-#define XHOST_BUILD_NUMBER  2
+#define XHOST_BUILD_NUMBER  3
 
 typedef struct {
     xbool_t bAdd;
@@ -306,20 +306,44 @@ static int XHost_DisplayHosts()
 
     while (XFile_GetLine(&ctx.file, ctx.sLine, sizeof(ctx.sLine)) > 0)
     {
-        xhost_entry_t entry;
-        XHost_ParseEntry(&entry, ctx.sLine);
+        int nPosit = 0;
+        while (ctx.sLine[nPosit] && isspace((unsigned char)ctx.sLine[nPosit])) nPosit++;
 
-        if (xstrused(entry.sAddr) && xstrused(entry.sHost))
+        if (!ctx.sLine[nPosit] || ctx.sLine[nPosit] == '\n')
         {
-            XString_Append(&ctx.hosts, "%s%s%s %s",
-                    XSTR_CLR_CYAN, entry.sAddr,
-                    XSTR_FMT_RESET, entry.sHost);
-
-            if (!xstrused(entry.sComment)) XString_Append(&ctx.hosts, "\n");
-            else XString_Append(&ctx.hosts, " %s# %s%s\n", XSTR_FMT_DIM, entry.sComment, XSTR_FMT_RESET);
+            XString_Append(&ctx.hosts, "\n");
+            continue;
         }
-        else if (!xstrused(entry.sComment)) XString_Append(&ctx.hosts, "\n");
-        else XString_Append(&ctx.hosts, "%s# %s%s\n", XSTR_FMT_DIM, entry.sComment, XSTR_FMT_RESET);
+
+        if (ctx.sLine[nPosit] == '#')
+        {
+            XString_Append(&ctx.hosts, "%s%s%s", XSTR_FMT_DIM, ctx.sLine, XSTR_FMT_RESET);
+            continue;
+        }
+
+        int nEnd = nPosit;
+        XString_Add(&ctx.hosts, ctx.sLine, nPosit);
+        while (ctx.sLine[nEnd] && !isspace((unsigned char)ctx.sLine[nEnd])) nEnd++;
+
+        XString_Append(&ctx.hosts, "%s", XSTR_CLR_CYAN);
+        XString_Add(&ctx.hosts, &ctx.sLine[nPosit], nEnd - nPosit);
+        XString_Append(&ctx.hosts, "%s", XSTR_FMT_RESET);
+
+        int nCommentPosit = nEnd;
+        while (ctx.sLine[nCommentPosit] && ctx.sLine[nCommentPosit] != '#') nCommentPosit++;
+
+        if (ctx.sLine[nCommentPosit] && ctx.sLine[nCommentPosit] == '#')
+        {
+            XString_Add(&ctx.hosts, &ctx.sLine[nEnd], nCommentPosit - nEnd);
+            XString_Append(&ctx.hosts, "%s", XSTR_FMT_DIM);
+            XString_Append(&ctx.hosts, "%s", &ctx.sLine[nCommentPosit]);
+            XString_Append(&ctx.hosts, "%s", XSTR_FMT_RESET);
+        }
+        else
+        {
+            size_t nLength = strlen(&ctx.sLine[nEnd]);
+            XString_Add(&ctx.hosts, &ctx.sLine[nEnd], nLength);
+        }
     }
 
     if (ctx.hosts.nLength)
