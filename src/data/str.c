@@ -331,7 +331,14 @@ size_t xstrxcpyf(char **pDst, const char *pFmt, ...)
 
 size_t xstrncpy(char *pDst, size_t nSize, const char* pSrc)
 {
-    if (pDst == NULL || !nSize || !xstrused(pSrc)) return 0;
+    if (pDst == NULL || !nSize) return 0;
+
+    if (!xstrused(pSrc))
+    {
+        pDst[0] = XSTR_NUL;
+        return 0;
+    }
+
     size_t nCopySize = strnlen(pSrc, nSize - 1);
     if (nCopySize) memcpy(pDst, pSrc, nCopySize);
     pDst[nCopySize] = XSTR_NUL;

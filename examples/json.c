@@ -159,7 +159,7 @@ int main(int argc, char *argv[])
     {
         xloge("Can't read file: %s (%s)", 
             argv[1], XSTRERR);
-        return 0;
+        return 1;
     }
 
     if (!XJSON_Parse(&json, pPool, pBuffer, nSize))
@@ -170,7 +170,7 @@ int main(int argc, char *argv[])
 
         XJSON_Destroy(&json);
         free(pBuffer);
-        return 0;
+        return 1;
     }
 
     xjson_obj_t *pBigObj = XJSON_GetObject(XJSON_GetArrayItem(json.pRootObj, 0), "bigobj");
