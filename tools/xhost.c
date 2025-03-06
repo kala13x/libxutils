@@ -17,17 +17,19 @@
 #define XHOST_FILE_PATH     "/etc/hosts"
 #define XHOST_VERSION_MAX   1
 #define XHOST_VERSION_MIN   0
-#define XHOST_BUILD_NUMBER  3
+#define XHOST_BUILD_NUMBER  4
 
 typedef struct {
     xbool_t bAdd;
     xbool_t bAppend;
     xbool_t bRemove;
     xbool_t bVerbose;
-    xbool_t bNewLine;
+    xbool_t bLines;
     xbool_t bComment;
     xbool_t bDisplay;
     xbool_t bUncomment;
+    xbool_t bWholeWords;
+    size_t nLineNumber;
     char sAddress[XLINE_MAX];
     char sHost[XLINE_MAX];
 } xhost_args_t;
@@ -36,6 +38,8 @@ typedef struct {
     char sAddr[XLINE_MAX];
     char sHost[XLINE_MAX];
     char sLine[XLINE_MAX];
+    xbool_t bWholeWords;
+    size_t nLineNumber;
     xstring_t hosts;
     xfile_t file;
 } xhost_ctx_t;
@@ -61,17 +65,19 @@ static void XHost_Usage(const char *pName)
     for (i = 0; i < nLength; i++) sWhiteSpace[i] = ' ';
     sWhiteSpace[nLength] = 0;
 
-    printf("Usage: %s [-a <address>] [-n <hostname>]\n", pName);
-    printf(" %s [-c] [-u] [-r] [-d] [-l] [-v] [-h]\n\n", sWhiteSpace);
+    printf("Usage: %s [-a <address>] [-n <hostname>] [-x <number>]\n", pName);
+    printf(" %s [-c] [-u] [-r] [-d] [-l] [-v] [-w] [-h]\n\n", sWhiteSpace);
 
     printf("Options are:\n");
     printf("  -a <address>          # IP address\n");
     printf("  -n <hostname>         # Host name\n");
+    printf("  -x <line>             # Line number\n");
     printf("  -c                    # Comment entry\n");
     printf("  -u                    # Uncomment entry\n");
     printf("  -r                    # Remove entry\n");
     printf("  -l                    # Insert new line before entry\n");
     printf("  -d                    # Display /etc/hosts file\n");
+    printf("  -w                    # Match whole words in entry\n");
     printf("  -v                    # Enable verbose logging\n");
     printf("  -h                    # Print version and usage\n\n");
 
@@ -86,18 +92,20 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
     memset(pArgs, 0, sizeof(xhost_args_t));
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "a:n:c1:d1:u1:l1:r1:v1:h1")) != -1)
+    while ((opt = getopt(argc, argv, "a:n:x:c1:d1:u1:l1:r1:v1:w1:h1")) != -1)
     {
         switch (opt)
         {
             case 'a': xstrncpy(pArgs->sAddress, sizeof(pArgs->sAddress), optarg); break;
             case 'n': xstrncpy(pArgs->sHost, sizeof(pArgs->sHost), optarg); break;
+            case 'x': pArgs->nLineNumber = atoi(optarg); break;
             case 'd': pArgs->bDisplay = XTRUE; break;
             case 'c': pArgs->bComment = XTRUE; break;
             case 'u': pArgs->bUncomment = XTRUE; break;
-            case 'l': pArgs->bNewLine = XTRUE; break;
+            case 'l': pArgs->bLines = XTRUE; break;
             case 'r': pArgs->bRemove = XTRUE; break;
             case 'v': pArgs->bVerbose = XTRUE; break;
+            case 'w': pArgs->bWholeWords = XTRUE; break;
             case 'h': return XSTDERR;
             default: return XSTDERR;
         }
@@ -107,16 +115,19 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
     xbool_t bHaveHost = xstrused(pArgs->sHost);
     xbool_t bModify = pArgs->bRemove || pArgs->bComment || pArgs->bUncomment;
 
-    pArgs->bAppend = !bModify && bHaveAddress && bHaveHost;
-    if (pArgs->bVerbose) xlog_enable(XLOG_DEBUG);
+    pArgs->bAppend = !bModify && ((bHaveAddress && bHaveHost) || pArgs->nLineNumber);
+    if (bModify && !bHaveAddress && !bHaveHost && !pArgs->nLineNumber) return XSTDERR;
     if (!pArgs->bAppend && !bModify) pArgs->bDisplay = XTRUE;
-    if (bModify && !bHaveAddress && !bHaveHost) return XSTDERR;
+    if (pArgs->bVerbose) xlog_enable(XLOG_DEBUG);
 
     return XSTDOK;
 }
 
 static int XHost_InitContext(xhost_ctx_t *pCtx)
 {
+    pCtx->bWholeWords = XFALSE;
+    pCtx->nLineNumber = 0;
+
     pCtx->sAddr[0] = XSTR_NUL;
     pCtx->sHost[0] = XSTR_NUL;
     pCtx->sLine[0] = XSTR_NUL;
@@ -248,15 +259,31 @@ static xbool_t XHost_SearchEntry(xhost_ctx_t *pCtx)
     if (!xstrused(pCtx->sAddr)) search.sAddr[0] = XSTR_NUL;
     if (!xstrused(pCtx->sHost)) search.sHost[0] = XSTR_NUL;
 
-    if (xstrused(search.sHost) && xstrused(search.sAddr))
+    if (pCtx->bWholeWords)
     {
-        if (xstrsrc(entry.sHost, search.sHost) >= 0 &&
-            xstrsrc(entry.sAddr, search.sAddr) >= 0) return XTRUE;
+        if (xstrused(search.sHost) && xstrused(search.sAddr))
+        {
+            if (xstrcmp(entry.sHost, search.sHost) &&
+                xstrcmp(entry.sAddr, search.sAddr)) return XTRUE;
+        }
+        else
+        {
+            if (xstrused(search.sHost) && xstrcmp(entry.sHost, search.sHost)) return XTRUE;
+            if (xstrused(search.sAddr) && xstrcmp(entry.sAddr, search.sAddr)) return XTRUE;
+        }
     }
     else
     {
-        if (xstrused(search.sHost) && xstrsrc(entry.sHost, search.sHost) >= 0) return XTRUE;
-        if (xstrused(search.sAddr) && xstrsrc(entry.sAddr, search.sAddr) >= 0) return XTRUE;
+        if (xstrused(search.sHost) && xstrused(search.sAddr))
+        {
+            if (xstrsrc(entry.sHost, search.sHost) >= 0 &&
+                xstrsrc(entry.sAddr, search.sAddr) >= 0) return XTRUE;
+        }
+        else
+        {
+            if (xstrused(search.sHost) && xstrsrc(entry.sHost, search.sHost) >= 0) return XTRUE;
+            if (xstrused(search.sAddr) && xstrsrc(entry.sAddr, search.sAddr) >= 0) return XTRUE;
+        }
     }
 
     return XFALSE;
@@ -264,12 +291,24 @@ static xbool_t XHost_SearchEntry(xhost_ctx_t *pCtx)
 
 static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
 {
-    if (!xstrused(pCtx->sHost) && !xstrused(pCtx->sAddr)) return XSTDNON;
+    if (!xstrused(pCtx->sHost) && !xstrused(pCtx->sAddr) && !pCtx->nLineNumber) return XSTDNON;
+    xbool_t bAddedLine = XFALSE;
     xbool_t bFound = XFALSE;
+    size_t nLineNumber = 0;
 
     while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
     {
-        if (XHost_SearchEntry(pCtx))
+        if (pCtx->nLineNumber)
+        {
+            if (pCtx->nLineNumber == ++nLineNumber)
+            {
+                XASSERT((XString_Append(&pCtx->hosts, "\n") >= 0),
+                    xthrowe("Failed to add line to hosts buffer"));
+
+                bAddedLine = XTRUE;
+            }
+        }
+        else if (XHost_SearchEntry(pCtx))
         {
             xlogd_wn("Found entry: %s", pCtx->sLine);
             bFound = XTRUE;
@@ -277,10 +316,17 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
         }
 
         XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
-            xthrowe("Failed to add line to hosts buffer"));
+            xthrowe("Failed to add existing line to hosts buffer"));
     }
 
     XFile_Close(&pCtx->file);
+
+    if (bAddedLine)
+    {
+        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        xlogd("Added newline at: %d", pCtx->nLineNumber);
+        return XSTDNON;
+    }
 
     if (!bFound)
     {
@@ -304,15 +350,123 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
     return XSTDNON;
 }
 
-static int XHost_DisplayHosts()
+static int XHost_RemoveEntry(xhost_ctx_t *pCtx, xbool_t bComment)
+{
+    size_t nLineNumber = 0;
+    int nCount = 0;
+
+    while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
+    {
+        nLineNumber++;
+
+        if (pCtx->nLineNumber == nLineNumber || XHost_SearchEntry(pCtx))
+        {
+            xlogd_wn("Found entry: %s", pCtx->sLine);
+
+            if (bComment && XString_Append(&pCtx->hosts, "#%s", pCtx->sLine) < 0)
+            {
+                xloge("Failed to add commented line to hosts buffer: %s", XSTRERR);
+                return XSTDERR;
+            }
+
+            nCount++;
+            continue;
+        }
+
+        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+            xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
+    }
+
+    XFile_Close(&pCtx->file);
+
+    if (nCount)
+    {
+        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        xlogd("%s entres: %d", bComment ? "Commented" : "Removed", nCount);
+    }
+
+    return XSTDNON;
+}
+
+static int XHost_UncommentEntry(xhost_ctx_t *pCtx)
+{
+    size_t nLineNumber = 0;
+    int nPosit = 0;
+    int nCount = 0;
+
+    while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
+    {
+        nPosit = 0;
+        nLineNumber++;
+        xbool_t bComment = XFALSE;
+
+        while (pCtx->sLine[nPosit] && isspace((unsigned char)pCtx->sLine[nPosit])) nPosit++;
+
+        if (pCtx->sLine[nPosit] && pCtx->sLine[nPosit] == '#')
+        {
+            pCtx->sLine[nPosit] = XSTR_SPACE_CHAR;
+            bComment = XTRUE;
+        }
+
+        if (bComment && (pCtx->nLineNumber == nLineNumber || XHost_SearchEntry(pCtx)))
+        {
+            xlogd_wn("Found entry: %s", pCtx->sLine);
+
+            if (bComment) pCtx->sLine[nPosit] = '#';
+            while (pCtx->sLine[nPosit] && pCtx->sLine[nPosit] == '#') nPosit++;
+
+            if (pCtx->sLine[nPosit] && XString_Append(&pCtx->hosts, "%s", &pCtx->sLine[nPosit]) < 0)
+            {
+                xloge("Failed to add uncommented line to hosts buffer: %s", XSTRERR);
+                return XSTDERR;
+            }
+
+            nCount++;
+            continue;
+        }
+
+        if (bComment) pCtx->sLine[nPosit] = '#';
+
+        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+            xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
+    }
+
+    XFile_Close(&pCtx->file);
+
+    if (nCount)
+    {
+        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        xlogd("Uncommented host entres: %d", nCount);
+    }
+
+    return XSTDNON;
+}
+
+static void XHost_AddLineNumber(xstring_t *pString, int nLine)
+{
+    XString_Append(pString, "%s", XSTR_CLR_YELLOW);
+    XString_Append(pString, "%s", XSTR_FMT_DIM);
+    XString_Append(pString, "%d", nLine);
+    if (nLine < 10) XString_Append(pString, " ");
+    if (nLine < 100) XString_Append(pString, " ");
+    XString_Append(pString, "%s ", XSTR_FMT_RESET);
+}
+
+static int XHost_DisplayHosts(xbool_t bLines)
 {
     xhost_ctx_t ctx;
     XASSERT((XHost_InitContext(&ctx) > 0), xthrowe("Failed to init context"));
 
+    int nPosit = 0;
+    int nLine = 0;
+
     while (XFile_GetLine(&ctx.file, ctx.sLine, sizeof(ctx.sLine)) > 0)
     {
-        int nPosit = 0;
+        nPosit = 0;
+        nLine++;
+
         while (ctx.sLine[nPosit] && isspace((unsigned char)ctx.sLine[nPosit])) nPosit++;
+        if (bLines) XHost_AddLineNumber(&ctx.hosts, nLine);
 
         if (!ctx.sLine[nPosit] || ctx.sLine[nPosit] == '\n')
         {
@@ -361,81 +515,6 @@ static int XHost_DisplayHosts()
     return XSTDNON;
 }
 
-static int XHost_RemoveEntry(xhost_ctx_t *pCtx, xbool_t bComment)
-{
-    int nCount = 0;
-
-    while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
-    {
-        if (XHost_SearchEntry(pCtx))
-        {
-            xlogd_wn("Found entry: %s", pCtx->sLine);
-
-            if (bComment && XString_Append(&pCtx->hosts, "#%s", pCtx->sLine) < 0)
-            {
-                xloge("Failed to add commented line to hosts buffer: %s", XSTRERR);
-                return XSTDERR;
-            }
-
-            nCount++;
-            continue;
-        }
-
-        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
-            xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
-    }
-
-    XFile_Close(&pCtx->file);
-
-    if (nCount)
-    {
-        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
-        xlogd("%s entres: %d", bComment ? "Commented" : "Removed", nCount);
-    }
-
-    return XSTDNON;
-}
-
-static int XHost_UncommentEntry(xhost_ctx_t *pCtx)
-{
-    int nPosit = 0;
-    int nCount = 0;
-
-    while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
-    {
-        nPosit = 0;
-        while (pCtx->sLine[nPosit] && isspace((unsigned char)pCtx->sLine[nPosit])) nPosit++;
-
-        if (pCtx->sLine[nPosit] && pCtx->sLine[nPosit] == '#' && XHost_SearchEntry(pCtx))
-        {
-            xlogd_wn("Found entry: %s", pCtx->sLine);
-            while (pCtx->sLine[nPosit] && pCtx->sLine[nPosit] == '#') nPosit++;
-
-            if (pCtx->sLine[nPosit] && XString_Append(&pCtx->hosts, "%s", &pCtx->sLine[nPosit]) < 0)
-            {
-                xloge("Failed to add uncommented line to hosts buffer: %s", XSTRERR);
-                return XSTDERR;
-            }
-
-            nCount++;
-            continue;
-        }
-
-        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
-            xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
-    }
-
-    XFile_Close(&pCtx->file);
-
-    if (nCount)
-    {
-        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
-        xlogd("Uncommented host entres: %d", nCount);
-    }
-
-    return XSTDNON;
-}
-
 int main(int argc, char *argv[])
 {
     xlog_defaults();
@@ -454,12 +533,14 @@ int main(int argc, char *argv[])
     XASSERT((XHost_InitContext(&ctx) > 0), xthrowe("Failed to init context"));
     xstrncpy(ctx.sAddr, sizeof(ctx.sAddr), args.sAddress);
     xstrncpy(ctx.sHost, sizeof(ctx.sHost), args.sHost);
+    ctx.bWholeWords = args.bWholeWords;
+    ctx.nLineNumber = args.nLineNumber;
 
-    if (args.bAppend) nStatus = XHost_AddEntry(&ctx, args.bNewLine);
+    if (args.bAppend) nStatus = XHost_AddEntry(&ctx, args.bLines);
     else if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
     else if (args.bComment) nStatus = XHost_RemoveEntry(&ctx, XTRUE);
     else if (args.bUncomment) nStatus = XHost_UncommentEntry(&ctx);
-    if (!nStatus && args.bDisplay) XHost_DisplayHosts();
+    if (!nStatus && args.bDisplay) XHost_DisplayHosts(args.bLines);
 
     XHost_ClearContext(&ctx);
     return nStatus;
