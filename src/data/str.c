@@ -211,6 +211,7 @@ int xstrncpyarg(char *pDest, size_t nSize, const char *pFmt, va_list args)
 {
     if (pDest == NULL || !nSize) return XSTDERR;
     size_t nLength = 0;
+    xstrnul(pDest);
 
     int nBytes = vsnprintf(pDest, nSize, pFmt, args);
     if (nBytes > 0) nLength = XSTD_MIN((size_t)nBytes, nSize - 1);
@@ -331,14 +332,8 @@ size_t xstrxcpyf(char **pDst, const char *pFmt, ...)
 
 size_t xstrncpy(char *pDst, size_t nSize, const char* pSrc)
 {
-    if (pDst == NULL || !nSize) return 0;
-
-    if (!xstrused(pSrc))
-    {
-        pDst[0] = XSTR_NUL;
-        return 0;
-    }
-
+    xstrnul(pDst);
+    if (pDst == NULL || !nSize || !xstrused(pSrc)) return 0;
     size_t nCopySize = strnlen(pSrc, nSize - 1);
     if (nCopySize) memcpy(pDst, pSrc, nCopySize);
     pDst[nCopySize] = XSTR_NUL;
@@ -347,6 +342,7 @@ size_t xstrncpy(char *pDst, size_t nSize, const char* pSrc)
 
 size_t xstrncpys(char *pDst, size_t nDstSize, const char *pSrc, size_t nSrcLen)
 {
+    xstrnul(pDst);
     if (pDst == NULL || pSrc == NULL || !nDstSize) return 0;
     size_t nCopySize = XSTD_MIN(nSrcLen, nDstSize - 1);
     if (nCopySize) memcpy(pDst, pSrc, nCopySize);
@@ -386,6 +382,7 @@ size_t xstrnlcpyf(char *pDst, size_t nSize, size_t nFLen, char cFChar, const cha
     if (pDst == NULL || !nSize) return 0;
     if (nFLen > nSize) nFLen = nSize - 1;
 
+    xstrnul(pDst);
     size_t nBytes = 0;
     va_list args;
 
@@ -573,7 +570,9 @@ size_t xstrnclr(char *pDst, size_t nSize, const char* pClr, const char* pStr, ..
     if (pDst == NULL || !nSize) return 0;
     char sBuffer[XSTR_STACK];
     char *pBuffer = &sBuffer[0];
+
     uint8_t nAlloc = 0;
+    xstrnul(pDst);
 
     if (nSize > XSTR_STACK)
     {
@@ -1377,7 +1376,7 @@ int XString_Color(xstring_t *pString, const char* pClr, size_t nPosit, size_t nS
     if (pTempStr == NULL) return XSTDERR;
 
     if ((XString_Add(pTempStr, pString->pData, nFirstPart) == XSTDERR) ||
-        (XString_Add(pTempStr, pClr, strlen(pClr)) == XSTDERR) ||
+        (XString_Add(pTempStr, pClr, strnlen(pClr, XSTR_MICRO)) == XSTDERR) ||
         (XString_Add(pTempStr, &pString->pData[nFirstPart], nSize) == XSTDERR) ||
         (XString_Add(pTempStr, XSTR_FMT_RESET, strlen(XSTR_FMT_RESET)) == XSTDERR) ||
         (XString_Add(pTempStr, &pString->pData[nLastPart], nLastSize) == XSTDERR))
