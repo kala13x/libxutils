@@ -17,11 +17,6 @@ extern "C" {
 #include "xstd.h"
 #include "sync.h"
 
-/* Definations for version info */
-#define XLOG_VERSION_MAJOR   1
-#define XLOG_VERSION_MINOR   8
-#define SLOG_BUILD_NUMBER    28
-
 #define XLOG_NAME_DEFAULT   "xlog"
 
 /* Supported colors and tags */
@@ -226,7 +221,7 @@ uint16_t XLog_FlagsGet(void);
 void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe);
 void XLog_Destroy(void);
 
-void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFormat, ...);
+void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFmt, ...);
 XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...);
 XSTATUS XLog_Throwe(int nRetVal, const char *pFmt, ...);
 void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...);

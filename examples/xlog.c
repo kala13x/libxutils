@@ -18,22 +18,12 @@ int logCallback(const char *pLog, size_t nLength, xlog_flag_t eFlag, void *pCtx)
     return 0;
 }
 
-void greet() 
-{
-    printf("=========================================\n");
-    printf("XLog Version: %s\n", XLog_Version(XFALSE));
-    printf("=========================================\n");
-}
-
 int main()
 {
     /* Used variables */
     char char_arg[32];
     strcpy(char_arg, "test string");
     int int_arg = 69;
-
-    /* Greet users */
-    greet();
 
     /* Initialize XLog with default parameters */
     XLog_Init("example", XLOG_ALL, 0);

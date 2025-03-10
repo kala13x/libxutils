@@ -39,9 +39,6 @@ static XATOMIC g_nHaveXLogVerShort = XFALSE;
 static XATOMIC g_nHaveXLogVerLong = XFALSE;
 static XATOMIC g_bInit = XFALSE;
 
-static char g_xlogVerShort[128];
-static char g_xlogVerLong[256];
-
 static const char *XLog_GetIndent(xlog_flag_t eFlag)
 {
     xlog_cfg_t *pCfg = &g_xlog.config;
@@ -287,7 +284,7 @@ static void XLog_DisplayStack(const xlog_ctx_t *pCtx, va_list args)
     XLog_DisplayMessage(pCtx, sLogInfo, nLength, sMessage);
 }
 
-void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFormat, ...)
+void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFmt, ...)
 {
     XASSERT_VOID_RET(g_bInit);
     XSync_Lock(&g_xlog.lock);
@@ -301,14 +298,14 @@ void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFormat, ...)
         xlog_ctx_t ctx;
         ctx.nUsec = XTime_Get(&ctx.time);
         ctx.eFlag = eFlag;
-        ctx.pFormat = pFormat;
+        ctx.pFormat = pFmt;
         ctx.bNewLine = bNewLine;
 
         void(*XLog_DisplayArgs)(const xlog_ctx_t *pCtx, va_list args);
         XLog_DisplayArgs = pCfg->bUseHeap ? XLog_DisplayHeap : XLog_DisplayStack;
 
         va_list args;
-        va_start(args, pFormat);
+        va_start(args, pFmt);
         XLog_DisplayArgs(&ctx, args);
         va_end(args);
     }
@@ -390,32 +387,6 @@ void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...)
 
     free(pDest);
     return pRetVal;
-}
-
-const char* XLog_Version(xbool_t bShort)
-{
-    if (bShort)
-    {
-        if (!g_nHaveXLogVerShort)
-        {
-            xstrncpyf(g_xlogVerShort, sizeof(g_xlogVerShort), "%d.%d.%d",
-                XLOG_VERSION_MAJOR, XLOG_VERSION_MINOR, SLOG_BUILD_NUMBER);
-
-            g_nHaveXLogVerShort = XTRUE;
-        }
-
-        return g_xlogVerShort;
-    }
-
-    if (!g_nHaveXLogVerLong)
-    {
-        xstrncpyf(g_xlogVerLong, sizeof(g_xlogVerLong), "%d.%d build %d (%s)",
-        XLOG_VERSION_MAJOR, XLOG_VERSION_MINOR, SLOG_BUILD_NUMBER, __DATE__);
-
-        g_nHaveXLogVerLong = XTRUE;
-    }
-
-    return g_xlogVerLong;
 }
 
 void XLog_ConfigGet(struct XLogConfig *pCfg)
