@@ -34,9 +34,6 @@ typedef struct XLogCtx {
 } xlog_ctx_t;
 
 static xlog_t g_xlog;
-
-static XATOMIC g_nHaveXLogVerShort = XFALSE;
-static XATOMIC g_nHaveXLogVerLong = XFALSE;
 static XATOMIC g_bInit = XFALSE;
 
 static const char *XLog_GetIndent(xlog_flag_t eFlag)
