@@ -25,7 +25,7 @@ jobs:
         cmake --version
 
     - name: Build with script
-      run: ./build.sh --install --cleanup
+      run: ./build.sh --install --clean
 
     - name: Build with CMake
       run: |

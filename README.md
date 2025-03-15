@@ -71,9 +71,9 @@ List options that build script supports:
 
 - `--tool=<tool>` Specify `Makefile` generation tool or use included `Makefile`.
 - `--install` Install library and the tools after the build.
-- `--cleanup` Cleanup object files after build/installation.
 - `--examples` Include examples in the build.
 - `--tools` Include tools in the build.
+- `--clean` Cleanup object files after build/installation.
 
 You can either choose `cmake`, `smake` or `make` as the tool argument.
 If the tool will not be specified the script will use `cmake` as default.
