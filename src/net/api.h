@@ -54,6 +54,7 @@ typedef enum {
 
 typedef enum {
     XAPI_UNKNOWN = (uint8_t)0,
+    XAPI_NO_STATUS = XAPI_UNKNOWN,
     XAPI_MISSING_KEY,
     XAPI_INVALID_KEY,
     XAPI_INVALID_ARGS,
@@ -66,6 +67,7 @@ typedef enum {
     XAPI_ERR_RESOLVE,
     XAPI_ERR_CRYPT,
     XAPI_ERR_ALLOC,
+    XAPI_ERROR,
     XAPI_STATUS,
     XAPI_DESTROY,
     XAPI_HUNGED,

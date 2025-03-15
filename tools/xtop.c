@@ -1161,14 +1161,14 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (pHandle->eMethod != XHTTP_GET)
     {
         xlogw("Invalid or not supported HTTP method: %s", XHTTP_GetMethodStr(pHandle->eMethod));
-        return XAPI_RespondHTTP(pData, XTOP_NOTALLOWED, XAPI_NONE);
+        return XAPI_RespondHTTP(pData, XTOP_NOTALLOWED, XAPI_NO_STATUS);
     }
 
     xarray_t *pArr = xstrsplit(pHandle->sUri, "/");
     if (pArr == NULL)
     {
         xlogw("Invalid request URL or API endpoint: %s", pHandle->sUri);
-        return XAPI_RespondHTTP(pData, XTOP_INVALID, XAPI_NONE);
+        return XAPI_RespondHTTP(pData, XTOP_INVALID, XAPI_NO_STATUS);
     }
 
     char *pDirect = (char*)XArray_GetData(pArr, 0);
@@ -1187,7 +1187,7 @@ int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (*pRequest == XTOP_NONE)
     {
         xlogw("Requested API endpoint is not found: %s", pHandle->sUri);
-        return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NONE);
+        return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NO_STATUS);
     }
 
     return XAPI_EnableEvent(pData, XPOLLOUT);
