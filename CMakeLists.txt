@@ -79,6 +79,7 @@ add_library(xutils STATIC
     ./src/sys/log.c
     ./src/sys/sig.c
     ./src/sys/xfs.c
+    ./src/sys/search.c
     ./src/sys/xtime.c
 )
 

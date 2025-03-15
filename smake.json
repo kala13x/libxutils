@@ -58,7 +58,8 @@
             "./src/sys/sig.c",
             "./src/sys/xtime.c",
             "./src/sys/mon.c",
-            "./src/sys/type.c"
+            "./src/sys/type.c",
+            "./src/sys/search.c"
         ],
 
         "includes": [

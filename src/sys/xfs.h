@@ -18,7 +18,6 @@ extern "C" {
 #include "xstd.h"
 #include "str.h"
 #include "buf.h"
-#include "array.h"
 
 #if !defined(S_ISREG) && defined(S_IFMT) && defined(S_IFREG)
 #define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
@@ -30,6 +29,17 @@ extern "C" {
 #define XFILE_INVALID XSTDERR
 #define XFILE_UNSETRC XSTDNON
 #define XFILE_SUCCESS XSTDOK
+
+typedef enum {
+    XF_UNKNOWN = 0,
+    XF_BLOCK_DEVICE = (1 << 0),
+    XF_CHAR_DEVICE = (1 << 1),
+    XF_DIRECTORY = (1 << 2),
+    XF_REGULAR = (1 << 3),
+    XF_SYMLINK = (1 << 4),
+    XF_SOCKET = (1 << 5),
+    XF_PIPE = (1 << 6)
+} xfile_type_t;
 
 typedef struct XFile {
     uint64_t nPosit;
@@ -87,6 +97,9 @@ int XFile_Write(xfile_t *pFile, const void *pBuff, size_t nSize);
 int XFile_Read(xfile_t *pFile, void *pBuff, size_t nSize);
 int XFile_Print(xfile_t *pFile, const char *pFmt, ...);
 
+xfile_type_t XFile_GetType(xmode_t nMode);
+char XFile_GetTypeChar(xfile_type_t eType);
+
 int XFile_GetStats(xfile_t *pFile);
 int XFile_Copy(xfile_t *pIn, xfile_t *pOut);
 int XFile_GetLine(xfile_t *pFile, char* pLine, size_t nSize);
@@ -122,88 +135,8 @@ int XPath_Remove(const char *pPath);
 int XDir_Valid(const char *pPath);
 int XDir_Remove(const char *pPath);
 
-///////////////////////////////////////////////////////////////////////////////////////////////
-// Advanced file search implementation
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-typedef enum {
-    XF_UNKNOWN = 0,
-    XF_BLOCK_DEVICE = (1 << 0),
-    XF_CHAR_DEVICE = (1 << 1),
-    XF_DIRECTORY = (1 << 2),
-    XF_REGULAR = (1 << 3),
-    XF_SYMLINK = (1 << 4),
-    XF_SOCKET = (1 << 5),
-    XF_PIPE = (1 << 6)
-} xfile_type_t;
-
-typedef struct XFileEntry {
-    char sPath[XPATH_MAX];
-    char sLink[XPATH_MAX];
-    char sName[XNAME_MAX];
-    char sPerm[XPERM_MAX];
-    char sLine[XLINE_MAX];
-    xfile_type_t eType;
-    size_t nLinkCount;
-    uint32_t nGID;
-    uint32_t nUID;
-    time_t nTime;
-    size_t nSize;
-    size_t nLineNum;
-    char *pRealPath;
-} xfile_entry_t;
-
-void XFile_CreateEntry(xfile_entry_t *pEntry, const char *pName, const char *pPath, xstat_t *pStat);
-xfile_entry_t* XFile_NewEntry(const char *pName, const char *pPath, xstat_t *pStat);
-xfile_entry_t* XFile_AllocEntry();
-
-void XFile_InitEntry(xfile_entry_t *pEntry);
-void XFile_FreeEntry(xfile_entry_t *pEntry);
-char XFile_GetTypeChar(xfile_type_t eType);
-
-typedef struct XFileSearch xfile_search_t;
-typedef int(*xfile_search_cb_t)(xfile_search_t *pSearch, xfile_entry_t *pEntry, const char *pMsg);
-
-struct XFileSearch {
-    /* Search context */
-    xarray_t fileArray;             // Found file array
-    xarray_t nameTokens;            // Search name tokens
-    xbool_t bSearchLines;           // Search in file lines
-    xbool_t bInsensitive;           // Case insensitive search
-    xbool_t bRecursive;             // Recursive search
-    xbool_t bFilesOnly;             // Show files only
-
-    xfile_search_cb_t callback;     // Search callback
-    void *pUserCtx;                 // User space
-
-    /* Search criteria */
-    char sName[XPATH_MAX];          // Needed file name
-    char sText[XSTR_MID];           // Containing text
-    int nPermissions;               // Needed file permissions
-    int nLinkCount;                 // Needed file link count
-    int nFileTypes;                 // Needed file types
-    int nFileSize;                  // Needed file size
-    size_t nBufferSize;             // Max read buffer size
-    size_t nMaxSize;                // Max file size to search
-    size_t nMinSize;                // Min file size to search
-    xbool_t bMulty;                 // Multy file name search
-
-    xatomic_t *pInterrupted;        // Interrupt flag pointer
-    xatomic_t nInterrupted;         // Interrupt flag
-};
-
-void XFile_SearchInit(xfile_search_t *pSrcCtx, const char *pFileName);
-void XFile_SearchDestroy(xfile_search_t *pSrcCtx);
-int XFile_Search(xfile_search_t *pSearch, const char *pDirectory);
-xfile_entry_t* XFile_GetEntry(xfile_search_t *pSearch, int nIndex);
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-// End of advanced file search implementation
-///////////////////////////////////////////////////////////////////////////////////////////////
-
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif /* __XUTILS_XFILE_H__ */

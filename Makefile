@@ -3,51 +3,52 @@
 # https://github.com/kala13x/smake #
 ####################################
 
-CFLAGS = -D_XUTILS_USE_SSL -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU -D_ASSERT_TIMED
+CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU -D_ASSERT_TIMED -D_XUTILS_USE_SSL
 CFLAGS += -I./src/crypt -I./src/data -I./src/net -I./src/sys -I./src
-LIBS = -lssl -lcrypto -lpthread
+LIBS = -lpthread -lssl -lcrypto
 NAME = libxutils.a
 ODIR = ./build
 OBJ = o
 
-OBJS = xver.$(OBJ) \
-    aes.$(OBJ) \
-    base64.$(OBJ) \
-    crc32.$(OBJ) \
-    crypt.$(OBJ) \
-    hmac.$(OBJ) \
-    md5.$(OBJ) \
-    rsa.$(OBJ) \
-    sha256.$(OBJ) \
-    sha1.$(OBJ) \
-    array.$(OBJ) \
-    hash.$(OBJ) \
-    json.$(OBJ) \
-    jwt.$(OBJ) \
-    list.$(OBJ) \
-    map.$(OBJ) \
-    buf.$(OBJ) \
-    str.$(OBJ) \
-    addr.$(OBJ) \
-    event.$(OBJ) \
-    http.$(OBJ) \
-    mdtp.$(OBJ) \
-    ntp.$(OBJ) \
-    rtp.$(OBJ) \
-    sock.$(OBJ) \
-    api.$(OBJ) \
-    ws.$(OBJ) \
-    sync.$(OBJ) \
-    pool.$(OBJ) \
-    thread.$(OBJ) \
-    type.$(OBJ) \
-    cli.$(OBJ) \
-    cpu.$(OBJ) \
-    mon.$(OBJ) \
-    log.$(OBJ) \
-    sig.$(OBJ) \
-    xfs.$(OBJ) \
-    xtime.$(OBJ) \
+OBJS = addr.$(OBJ) \
+	aes.$(OBJ) \
+	api.$(OBJ) \
+	array.$(OBJ) \
+	base64.$(OBJ) \
+	buf.$(OBJ) \
+	cli.$(OBJ) \
+	cpu.$(OBJ) \
+	crc32.$(OBJ) \
+	crypt.$(OBJ) \
+	event.$(OBJ) \
+	hash.$(OBJ) \
+	hmac.$(OBJ) \
+	http.$(OBJ) \
+	json.$(OBJ) \
+	jwt.$(OBJ) \
+	list.$(OBJ) \
+	log.$(OBJ) \
+	map.$(OBJ) \
+	md5.$(OBJ) \
+	mdtp.$(OBJ) \
+	mon.$(OBJ) \
+	ntp.$(OBJ) \
+	pool.$(OBJ) \
+	rsa.$(OBJ) \
+	rtp.$(OBJ) \
+	search.$(OBJ) \
+	sha1.$(OBJ) \
+	sha256.$(OBJ) \
+	sig.$(OBJ) \
+	sock.$(OBJ) \
+	str.$(OBJ) \
+	sync.$(OBJ) \
+	thread.$(OBJ) \
+	type.$(OBJ) \
+	ws.$(OBJ) \
+	xfs.$(OBJ) \
+	xtime.$(OBJ) \
+	xver.$(OBJ)
 
 OBJECTS = $(patsubst %,$(ODIR)/%,$(OBJS))
 INSTALL_INC = /usr/local/include/xutils

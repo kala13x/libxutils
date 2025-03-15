@@ -12,6 +12,7 @@
 #include "str.h"
 #include "log.h"
 #include "xfs.h"
+#include "search.h"
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0
@@ -294,7 +295,7 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     return 1;
 }
 
-static void XSearch_ColorizeEntry(char *pOutput, size_t nSize, xfile_entry_t *pEntry)
+static void XSearch_ColorizeEntry(char *pOutput, size_t nSize, xsearch_entry_t *pEntry)
 {
     xbool_t bIsExec = pEntry->sPerm[XPERM_LEN-1] == 'x' ? XTRUE : XFALSE;
     char *pColor = XSTR_EMPTY;
@@ -350,17 +351,17 @@ static void XSearch_ColorizeEntry(char *pOutput, size_t nSize, xfile_entry_t *pE
         &pEntry->sPath[nOffset], pEntry->sName, XSTR_FMT_RESET);
 }
 
-static void XSearch_ColorizeSymlink(char *pSimlink, size_t nSize, xfile_entry_t *pEntry)
+static void XSearch_ColorizeSymlink(char *pSimlink, size_t nSize, xsearch_entry_t *pEntry)
 {
     if (pEntry->eType == XF_SYMLINK)
     {
         if (pEntry->pRealPath != NULL)
         {
             xstat_t statbuf;
-            xfile_entry_t linkEntry;
+            xsearch_entry_t linkEntry;
             xstat(pEntry->pRealPath, &statbuf);
 
-            XFile_CreateEntry(&linkEntry, NULL, pEntry->sLink, &statbuf);
+            XSearch_CreateEntry(&linkEntry, NULL, pEntry->sLink, &statbuf);
             XSearch_ColorizeEntry(pSimlink, nSize, &linkEntry);
         }
         else
@@ -372,7 +373,7 @@ static void XSearch_ColorizeSymlink(char *pSimlink, size_t nSize, xfile_entry_t 
     }
 }
 
-static void XSearch_ColorizeLine(char *pDst, size_t nSize, xfile_entry_t *pEntry, const char *pText, xbool_t bJumpSpace)
+static void XSearch_ColorizeLine(char *pDst, size_t nSize, xsearch_entry_t *pEntry, const char *pText, xbool_t bJumpSpace)
 {
     if (!xstrused(pText) || !xstrused(pEntry->sLine)) return;
 
@@ -406,7 +407,7 @@ static void XSearch_ColorizeLine(char *pDst, size_t nSize, xfile_entry_t *pEntry
     XArray_Destroy(pArr);
 }
 
-static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
+static void XSearch_DisplayEntry(xsearch_t *pSearch, xsearch_entry_t *pEntry)
 {
     xsearch_args_t *pArgs = (xsearch_args_t*)pSearch->pUserCtx;
     xbool_t bJumpSpace = pArgs->bJumpSpace;
@@ -470,7 +471,7 @@ static void XSearch_DisplayEntry(xfile_search_t *pSearch, xfile_entry_t *pEntry)
     }
 }
 
-int XSearch_Callback(xfile_search_t *pSearch, xfile_entry_t *pEntry, const char *pMsg)
+int XSearch_Callback(xsearch_t *pSearch, xsearch_entry_t *pEntry, const char *pMsg)
 {
     if (XSYNC_ATOMIC_GET(&g_interrupted)) return XSTDERR;
     if (pEntry != NULL) XSearch_DisplayEntry(pSearch, pEntry);
@@ -482,7 +483,7 @@ int main(int argc, char* argv[])
 {
     xlog_defaults();
     xsearch_args_t args;
-    xfile_search_t srcCtx;
+    xsearch_t srcCtx;
 
     if (!XSearch_ParseArgs(&args, argc, argv))
     {
@@ -493,7 +494,7 @@ int main(int argc, char* argv[])
     const char *pDirectory = xstrused(args.sDirectory) ? args.sDirectory : NULL;
     const char *pFileName = xstrused(args.sFileName) ? args.sFileName : NULL;
 
-    XFile_SearchInit(&srcCtx, pFileName);
+    XSearch_Init(&srcCtx, pFileName);
     xstrncpy(srcCtx.sText, sizeof(srcCtx.sText), args.sText);
     srcCtx.nPermissions = args.nPermissions;
     srcCtx.bInsensitive = args.bInsensitive;
@@ -512,8 +513,8 @@ int main(int argc, char* argv[])
     srcCtx.pInterrupted = &g_interrupted;
     signal(SIGINT, signal_callback);
 
-    XFile_Search(&srcCtx, pDirectory);
-    XFile_SearchDestroy(&srcCtx);
+    XSearch(&srcCtx, pDirectory);
+    XSearch_Destroy(&srcCtx);
 
     return XSTDNON;
 }

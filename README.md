@@ -42,9 +42,10 @@
 #### System:
 - [Cross-platform file and directory operations](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
 - [Cross-platform CPU affinity manipulation](https://github.com/kala13x/libxutils/blob/main/src/sys/cpu.h)
-- [Implementation of advanced file search](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
+- [Implementation of advanced file search](https://github.com/kala13x/libxutils/blob/main/src/sys/search.h)
 - [System time manipulation library](https://github.com/kala13x/libxutils/blob/main/src/sys/xtime.h)
 - [Performance monitoring library](https://github.com/kala13x/libxutils/blob/main/src/sys/mon.h)
+- [File and directory operations](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
 - [Simple and fast memory pool](https://github.com/kala13x/libxutils/blob/main/src/sys/pool.h)
 - [Advanced logging library](https://github.com/kala13x/libxutils/blob/main/src/sys/log.h)
 
@@ -109,38 +110,6 @@ make
 sudo make install
 ```
 
-### Build particular files only
-If you want to use particular files and functions, you can configure the library and select only that functionality for the build. In this way, it is possible not to increase the size of the program and to avoid the linkage of unused code.
-
-The `libxutils` project has a config file that contains a list of modules that will be included in the build. This file is used by the `build.sh` script, which resolves dependencies for each enabled module and generates a `CMakeList.txt` file.
-
-Open `xutils.conf` file with a text editor and mark only the functionality you want to include in the build. Use a low-case `y` symbol to enable and any other symbol to disable modules. Removing a related line from the list will also disable the module.
-
-Example:
-```
-...
-USE_ARRAY=n
-USE_CRYPT=n
-USE_XTIME=n
-USE_EVENT=y
-USE_LIST=n
-USE_BUF=n
-USE_HASH=n
-USE_SOCK=n
-USE_LOG=y
-USE_STR=n
-...
-```
-After updating the configuration, use the `build.sh` script to generate the `Makefile` and build the project.
-
-```bash
-./build.sh --tool=cmake
-```
-
-You may notice that when you select only one module, several other modules may be also included in the build. Because some files depend on other files in the project, the `build.sh` script will automatically resolve these dependencies and include required files in the build as well.
-
-For example, if you only mark HTTP library for a build, the socket library will be automatically enabled because HTTP uses some functionality from sockets.
-
 ### Dependencies
 The only dependency that the library uses is the `openssl-devel` package for the `SSL` and `RSA` implementations.\
 You can either install the `openssl-devel` package or disable the `SSL` support in the library.
@@ -186,7 +155,7 @@ cmake . && make
 #### XTOP and more
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/misc/xtop.png" alt="alternate text">
+    <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/examples/xtop.png" alt="alternate text">
 </p>
 
 `XTOP` is `HTOP` like performance monitor that supports to monitor CPU, memory, and network traffic into a single window. In addition, it has powerful `REST API` client/server mode and much more.

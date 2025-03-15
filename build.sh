@@ -7,7 +7,7 @@ TOOL_PATH=$PROJ_PATH/tools
 LIB_PATH=$PROJ_PATH
 
 INSTALL_PREFIX="/usr/local"
-MAKE_TOOL="make"
+MAKE_TOOL="cmake"
 USE_SSL="yes"
 
 EXAMPLES_DONE=0
@@ -111,20 +111,18 @@ build_examples() {
 }
 
 build_library() {
-    cd $PROJ_PATH/misc
-    ./generate.sh $MAKE_TOOL --prefix=$INSTALL_PREFIX --ssl=$USE_SSL
     cd $PROJ_PATH
 
     if [[ $MAKE_TOOL == "make" ]]; then
         make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH
+    elif [[ $MAKE_TOOL == "smake" ]]; then
+        smake . && make -j $CPU_COUNT
+        LIB_PATH=$PROJ_PATH
     elif [[ $MAKE_TOOL == "cmake" ]]; then
         mkdir -p build && cd build
         cmake .. && make -j $CPU_COUNT
         LIB_PATH=$PROJ_PATH/build
-    elif [[ $MAKE_TOOL == "smake" ]]; then
-        smake . && make -j $CPU_COUNT
-        LIB_PATH=$PROJ_PATH
     else
         echo "Unknown build tool: $MAKE_TOOL"
         echo "Specify cmake, smake or make)"
