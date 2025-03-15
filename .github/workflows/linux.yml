@@ -27,9 +27,9 @@ jobs:
     - name: Build with script
       run: ./build.sh --install --cleanup
 
-    - name: Build with CMAKE
+    - name: Build with CMake
       run: |
-        mkdir build
+        mkdir -p build
         cd build
         cmake ..
         make
