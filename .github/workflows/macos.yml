@@ -29,8 +29,8 @@ jobs:
 
     - name: Build with CMake
       run: |
-        mkdir build
         rm -rf build
+        mkdir build
         cd build
         cmake ..
         make
