@@ -25,11 +25,12 @@ jobs:
         cmake --version
 
     - name: Build with script
-      run: ./build.sh --install --clean
+      run: ./build.sh --install
 
     - name: Build with CMake
       run: |
-        mkdir -p build
+        rm -rf build
+        mkdir build
         cd build
         cmake ..
         make

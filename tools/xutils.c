@@ -14,6 +14,12 @@
 int main() 
 {
     xlog_defaults();
+
+#ifdef _XUTILS_USE_SSL
+    xlog("libxutils - v%s (OpenSSL)", XUtils_Version());
+#else
     xlog("libxutils - v%s", XUtils_Version());
+#endif
+
     return XSTDNON;
 }
