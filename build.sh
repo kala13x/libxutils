@@ -5,10 +5,7 @@
 PROJ_PATH=$(pwd -P)/$(dirname "$0")
 TOOL_PATH=$PROJ_PATH/tools
 LIB_PATH=$PROJ_PATH
-
-INSTALL_PREFIX="/usr/local"
 MAKE_TOOL="cmake"
-USE_SSL="yes"
 
 EXAMPLES_DONE=0
 TOOLS_DONE=0
@@ -18,16 +15,6 @@ for arg in "$@"; do
     if [[ $arg == --tool=* || $arg == -m=* ]]; then
         MAKE_TOOL="${arg#*=}"
         echo "Using tool: $MAKE_TOOL"
-    fi
-
-    if [[ $arg == --prefix=* || $arg == -p=* ]]; then
-        INSTALL_PREFIX="${arg#*=}"
-        echo "Using prefix: $INSTALL_PREFIX"
-    fi
-
-    if [[ $arg == --ssl=* || $arg == -s=* ]]; then
-        USE_SSL="${arg#*=}"
-        echo "Using SSL: $USE_SSL"
     fi
 done
 
@@ -145,8 +132,10 @@ install_library() {
     cd $PROJ_PATH
 }
 
-if [[ $USE_SSL == "yes" ]]; then
+search_and_config_ssl() {
+    [[ $MAKE_TOOL == "cmake" ]] && return
     echo "Checking OpenSSL libraries."
+
     LIB_CRYPTO=$(find_lib "libcrypto.so")
     LIB_SSL=$(find_lib "libssl.so")
 
@@ -159,11 +148,11 @@ if [[ $USE_SSL == "yes" ]]; then
     else
         echo 'OpenSSL libraries not found!'
         export XUTILS_USE_SSL=n
-        USE_SSL="no"
     fi
-fi
+}
 
 # Build the library
+search_and_config_ssl
 update_cpu_count
 clean_project
 build_library
