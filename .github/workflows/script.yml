@@ -17,50 +17,35 @@ jobs:
     - name: Install dependencies
       run: sudo apt install -y libssl-dev
 
-    - name: Install CMAKE
+    - name: Install CMake
       run: |
         sudo apt install -y cmake
         cmake --version
 
-    - name: Checkout SMAKE
+    - name: Checkout sMake
       uses: actions/checkout@v3
       with:
         repository: 'kala13x/smake'
         submodules: recursive
         path: 'smake'
 
-    - name: Install SMAKE
+    - name: Install SMake
       run: |
         cd smake
         ./build.sh --install
         smake -V
 
-    - name: Build with SMAKE (SSL)
-      run: |
-        ./build.sh --tool=smake --tools --examples
-        ./tools/xutils
-
-    - name: Build with SMAKE (no SSL)
-      run: |
-        ./build.sh --tool=smake --tools --examples --ssl=no
-        ./tools/xutils
-
-    - name: Build with CMAKE (SSL)
+    - name: Build with CMake
       run: |
         ./build.sh --tool=cmake --tools --examples
         ./tools/build/xutils
 
-    - name: Build with CMAKE (no SSL)
+    - name: Build with SMake
       run: |
-        ./build.sh --tool=cmake --tools --examples --ssl=no
-        ./tools/build/xutils
-
-    - name: Build with Makefile (SSL)
-      run: |
-        ./build.sh --tool=make --tools --examples
+        ./build.sh --tool=smake --tools --examples
         ./tools/xutils
 
-    - name: Build with Makefile (no SSL)
+    - name: Build with Makefile
       run: |
-        ./build.sh --tool=make --tools --examples --ssl=no
+        ./build.sh --tool=make --tools --examples
         ./tools/xutils

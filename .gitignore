@@ -53,5 +53,8 @@ dkms.conf
 
 # Local files
 examples/files.copy
+examples/build/
+tools/build/
+build/
 .vscode/
 *.log

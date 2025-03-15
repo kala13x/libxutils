@@ -60,7 +60,7 @@
 ### Installation
 There are several ways to build and install the project.
 
-#### Using included script (recommended on Linux).
+#### Using included script (recommended on Linux/Mac).
 A relatively simple way to build and install the libary and tools is to use the included build script:
 
 ```bash
@@ -69,16 +69,14 @@ git clone https://github.com/kala13x/libxutils.git && ./libxutils/build.sh --ins
 
 List options that build script supports:
 
-- `--prefix=<path>` Install destination prefix for the library and header files.
 - `--tool=<tool>` Specify `Makefile` generation tool or use included `Makefile`.
-- `--ssl=yes/no` Manually enable or disable SSL support (default: yes).
 - `--install` Install library and the tools after the build.
 - `--cleanup` Cleanup object files after build/installation.
 - `--examples` Include examples in the build.
 - `--tools` Include tools in the build.
 
-You can either choose `cmake`, `smake` or `make` as the tool argument, but `cmake` is recommended on platforms other than the Linux.
-If the tool will not be specified the script will use `make` (included Makefile) as default.
+You can either choose `cmake`, `smake` or `make` as the tool argument.
+If the tool will not be specified the script will use `cmake` as default.
 
 #### Using CMake
 If you have a `CMake` tool installed in your operating system, here is how project can be built and installed using `cmake`:
@@ -119,17 +117,12 @@ Red-Hat family: `sudo dnf install openssl-devel`\
 Debian family: `sudo apt-get install libssl-dev`
 
 #### Disable SSL support in the library
-If you use the `build.sh` script for building the project, you do not need to disable anything manually,\
-the script will automatically disable SSL support if the OpenSSL library is not installed in the system.
+If you use the `cmake`, `smake` or `build.sh` script for building the project, you do not need to disable anything manually,\
+the it will be automatically disabled if the OpenSSL library is not installed in the system.
 
 If you use raw `Makefile` to build the project, all you need to adjust `CFLAGS` and `LIBS` in `Makefile`.
 - Remove `-D_XUTILS_USE_SSL` entry from the `CFLAGS`.
 - Remove `-lssl` and `-lcrypto` entries from the `LIBS`.
-
-Use build script to force disable SSL even if it is installed in the system:
-```bash
-./build.sh --ssl=no
-```
 
 ### Usage
 Just include the required `<xutils/*.h>` header files in your source code and use `-lxutils`\

@@ -24,5 +24,12 @@ jobs:
         gcc --version
         cmake --version
 
+    - name: Build with script
+      run: ./build.sh --install --cleanup
+
     - name: Build with CMake
-      run: ./build.sh --examples --tools --install
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+        make
