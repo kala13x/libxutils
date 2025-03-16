@@ -733,7 +733,7 @@ size_t XPath_LoadBufferSize(const char *pPath, xbyte_buffer_t *pBuffer, size_t n
     return nSize;
 }
 
-int XPath_Write(const char *pPath, const char *pFlags, const uint8_t *pData, size_t nSize)
+int XPath_Write(const char *pPath, const uint8_t *pData, size_t nSize, const char *pFlags)
 {
     if (pPath == NULL || pData == NULL || !nSize) return XSTDERR;
 
@@ -760,10 +760,10 @@ int XPath_Write(const char *pPath, const char *pFlags, const uint8_t *pData, siz
     return nDone;
 }
 
-int XPath_WriteBuffer(const char *pPath, const char *pFlags, xbyte_buffer_t *pBuffer)
+int XPath_WriteBuffer(const char *pPath, xbyte_buffer_t *pBuffer, const char *pFlags)
 {
     if (pPath == NULL || pBuffer == NULL) return XSTDERR;
-    return XPath_Write(pPath, pFlags, pBuffer->pData, pBuffer->nUsed);
+    return XPath_Write(pPath, pBuffer->pData, pBuffer->nUsed, pFlags);
 }
 
 int XDir_Open(xdir_t *pDir, const char *pPath)

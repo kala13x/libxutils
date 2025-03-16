@@ -52,6 +52,7 @@ int XByteBuffer_Insert(xbyte_buffer_t *pBuffer, size_t nPosit, const uint8_t *pD
 int XByteBuffer_Remove(xbyte_buffer_t *pBuffer, size_t nPosit, size_t nSize);
 int XByteBuffer_Delete(xbyte_buffer_t *pBuffer, size_t nPosit, size_t nSize);
 int XByteBuffer_Advance(xbyte_buffer_t *pBuffer, size_t nSize);
+int XByteBuffer_ReadStdin(xbyte_buffer_t *pBuffer);
 int XByteBuffer_NullTerm(xbyte_buffer_t *pBuffer);
 
 typedef struct XDataBuffer {

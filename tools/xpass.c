@@ -704,7 +704,7 @@ static xbool_t XPass_WriteDatabase(xpass_ctx_t *pCtx)
         return XFALSE;
     }
 
-    if (XPath_Write(pCtx->sFile, "cwt", pData, nLength) <= 0)
+    if (XPath_Write(pCtx->sFile, pData, nLength, "cwt") <= 0)
     {
         xloge("Failed to wite data: %s (%d)", pCtx->sFile, errno);
         XJSON_DestroyWriter(&writer);
@@ -881,7 +881,7 @@ static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
     const uint8_t *pData = (const  uint8_t*)writer.pData;
     size_t nLength = writer.nLength;
 
-    if (XPath_Write(pCtx->sConf, "cwt", pData, nLength) <= 0)
+    if (XPath_Write(pCtx->sConf, pData, nLength, "cwt") <= 0)
     {
         xloge("Failed to wite config data: %s (%d)", pCtx->sConf, errno);
         XJSON_FreeObject(pRootObj);

@@ -17,7 +17,7 @@
 #define XHOST_FILE_PATH     "/etc/hosts"
 #define XHOST_VERSION_MAX   1
 #define XHOST_VERSION_MIN   0
-#define XHOST_BUILD_NUMBER  7
+#define XHOST_BUILD_NUMBER  8
 
 typedef struct {
     xbool_t bAdd;

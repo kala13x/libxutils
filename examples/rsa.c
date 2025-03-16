@@ -30,8 +30,8 @@ int main()
     xlog("Generated keys:\n\n%s\n%s", pair.pPrivateKey, pair.pPublicKey);
 
     /* Save generated keys in the files (just for testing) */
-    XPath_Write(XKEY_PRIV, "cwt", (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen);
-    XPath_Write(XKEY_PUB, "cwt", (uint8_t*)pair.pPublicKey, pair.nPubKeyLen);
+    XPath_Write(XKEY_PRIV, (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen, "cwt");
+    XPath_Write(XKEY_PUB, (uint8_t*)pair.pPublicKey, pair.nPubKeyLen, "cwt");
     XRSA_Destroy(&pair);
 
     /* Load  private/public keys from the file */

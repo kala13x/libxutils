@@ -54,7 +54,8 @@ struct XSearchCtx {
     xbool_t bSearchLines;           // Search in file lines
     xbool_t bInsensitive;           // Case insensitive search
     xbool_t bRecursive;             // Recursive search
-    xbool_t bFilesOnly;             // Show files only
+    xbool_t bMatchOnly;             // Search match only
+    xbool_t bReadStdin;             // Read from stdin
 
     xsearch_cb_t callback;     // Search callback
     void *pUserCtx;                 // User space

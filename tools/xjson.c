@@ -84,18 +84,7 @@ int XJSON_ParseArgs(xjson_args_t *pArgs, int argc, char *argv[])
 size_t XJSon_ReadFromStdin(xbyte_buffer_t *pBuffer)
 {
     XByteBuffer_Init(pBuffer, XSTR_MID, XFALSE);
-    char sBuffer[XSTR_MID];
-    int nRead = 0;
-
-    while ((nRead = fread(sBuffer, 1, sizeof(sBuffer), stdin)) > 0)
-    {
-        if (!XByteBuffer_Add(pBuffer, (const uint8_t*)sBuffer, nRead))
-        {
-            xloge("Failed append stdin data to buffer: %s", XSTRERR);
-            return XSTDNON;
-        }
-    }
-
+    XByteBuffer_ReadStdin(pBuffer);
     return pBuffer->nUsed;
 }
 

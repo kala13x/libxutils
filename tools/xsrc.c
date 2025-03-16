@@ -39,7 +39,8 @@ typedef struct {
     xbool_t bInsensitive;
     xbool_t bSearchLines;
     xbool_t bJumpSpace;
-    xbool_t bFilesOnly;
+    xbool_t bReadStdin;
+    xbool_t bMatchOnly;
     xbool_t bRecursive;
     xbool_t bVerbose;
     size_t nMaxRead;
@@ -116,7 +117,7 @@ void XSearch_Usage(const char *pName)
     printf("Usage: %s [-f <name>] [-s <size>] [-t <types>] [-g <text>]\n", pName);
     printf(" %s [-l <link_count>] [-p <permissions>] [-d <path>]\n", sWhiteSpace);
     printf(" %s [-m <max_size>] [-z <min_size>] [-b <read_buff>]\n", sWhiteSpace);
-    printf(" %s [-i] [-n] [-j] [-o] [-r] [-v] [-h]\n\n", sWhiteSpace);
+    printf(" %s [-i] [-n] [-j] [-o] [-r] [-x] [-v] [-h]\n\n", sWhiteSpace);
 
     printf("Options are:\n");
     printf("  %s-d%s <target_path>    %s# Target directory path%s\n", XSEARCH_ARG_COLORING);
@@ -132,8 +133,9 @@ void XSearch_Usage(const char *pName)
     printf("  %s-i%s                  %s# Case insensitive search%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-n%s                  %s# Line by line search text in file%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-j%s                  %s# Jump empty spaces while printing the line%s\n", XSEARCH_ARG_COLORING);
-    printf("  %s-o%s                  %s# In case of text search, show files only%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-o%s                  %s# In case of full search, show matches only%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-r%s                  %s# Recursive search target directory%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-x%s                  %s# Read input from stdin for text search%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-v%s                  %s# Display additional information (verbose)%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-h%s                  %s# Display version and usage information%s\n\n", XSEARCH_ARG_COLORING);
 
@@ -195,7 +197,7 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     pArgs->nFileSize = -1;
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "b:d:f:g:l:m:p:s:t:z:i1:j1:n1:o1:r1:v1:h1")) != -1)
+    while ((opt = getopt(argc, argv, "b:d:f:g:l:m:p:s:t:z:i1:j1:n1:o1:r1:x1:v1:h1")) != -1)
     {
         switch (opt)
         {
@@ -239,10 +241,13 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
                 pArgs->bJumpSpace = XTRUE;
                 break;
             case 'o':
-                pArgs->bFilesOnly = XTRUE;
+                pArgs->bMatchOnly = XTRUE;
                 break;
             case 'r':
                 pArgs->bRecursive = XTRUE;
+                break;
+            case 'x':
+                pArgs->bReadStdin = XTRUE;
                 break;
             case 'v':
                 pArgs->bVerbose = 1;
@@ -295,14 +300,21 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     return 1;
 }
 
-static void XSearch_ColorizeEntry(char *pOutput, size_t nSize, xsearch_entry_t *pEntry)
+static void XSearch_ColorizeEntry(xsearch_t *pSearch, char *pOutput, size_t nSize, xsearch_entry_t *pEntry)
 {
     xbool_t bIsExec = pEntry->sPerm[XPERM_LEN-1] == 'x' ? XTRUE : XFALSE;
     char *pColor = XSTR_EMPTY;
     char *pBack = XSTR_EMPTY;
     char *pFmt = XSTR_EMPTY;
+    char sColor[XSTR_MICRO];
 
-    if (pEntry->eType == XF_SYMLINK)
+    if (pSearch->bReadStdin)
+    {
+        xstrnrgb(sColor, sizeof(sColor), 198, 145, 255);
+        pColor = sColor; // Amethyst color;
+        pFmt = XSTR_FMT_BOLD;
+    }
+    else if (pEntry->eType == XF_SYMLINK)
     {
         if (pEntry->pRealPath == NULL)
         {
@@ -351,7 +363,7 @@ static void XSearch_ColorizeEntry(char *pOutput, size_t nSize, xsearch_entry_t *
         &pEntry->sPath[nOffset], pEntry->sName, XSTR_FMT_RESET);
 }
 
-static void XSearch_ColorizeSymlink(char *pSimlink, size_t nSize, xsearch_entry_t *pEntry)
+static void XSearch_ColorizeSymlink(xsearch_t *pSearch, char *pSimlink, size_t nSize, xsearch_entry_t *pEntry)
 {
     if (pEntry->eType == XF_SYMLINK)
     {
@@ -362,7 +374,7 @@ static void XSearch_ColorizeSymlink(char *pSimlink, size_t nSize, xsearch_entry_
             xstat(pEntry->pRealPath, &statbuf);
 
             XSearch_CreateEntry(&linkEntry, NULL, pEntry->sLink, &statbuf);
-            XSearch_ColorizeEntry(pSimlink, nSize, &linkEntry);
+            XSearch_ColorizeEntry(pSearch, pSimlink, nSize, &linkEntry);
         }
         else
         {
@@ -378,10 +390,9 @@ static void XSearch_ColorizeLine(char *pDst, size_t nSize, xsearch_entry_t *pEnt
     if (!xstrused(pText) || !xstrused(pEntry->sLine)) return;
 
     char *pLine = pEntry->sLine;
-    xbool_t bHasSpace = isspace((unsigned char)*pLine) ? XTRUE : XFALSE;
     if (bJumpSpace) while (*pLine && isspace((unsigned char)*pLine)) pLine++;
 
-    xarray_t *pArr = xstrsplit(pLine, pText);
+    xarray_t *pArr = xstrsplitd(pLine, pText);
     if (pArr == NULL)
     {
         xstrncpyf(pDst, nSize, "%s%s%s", XSTR_FMT_DIM, pEntry->sLine, XSTR_FMT_RESET);
@@ -393,14 +404,18 @@ static void XSearch_ColorizeLine(char *pDst, size_t nSize, xsearch_entry_t *pEnt
     xstrnclr(sColorized, sizeof(sColorized), XSTR_CLR_RED, "%s", pText);
     xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s", XSTR_FMT_DIM);
 
-    if ((!bHasSpace || bJumpSpace) && xstrncmp(pLine, pText, strlen(pText)))
-        xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s%s", sColorized, XSTR_FMT_DIM);
-
     for (i = 0; i < pArr->nUsed; i++)
     {
         const char *pData = (const char*)XArray_GetData(pArr, i);
-        if (pData != NULL) xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s", pData);
-        if (i < pArr->nUsed - 1) xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s%s", sColorized, XSTR_FMT_DIM);
+        if (pData == NULL) continue;
+
+        if (xstrcmp(pData, pText))
+        {
+            xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s%s", sColorized, XSTR_FMT_DIM);
+            continue;
+        }
+
+        xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s", pData);
     }
 
     xstrncatf(pDst, XSTR_NAVAIL(pDst, nSize), "%s", XSTR_FMT_RESET);
@@ -420,12 +435,12 @@ static void XSearch_DisplayEntry(xsearch_t *pSearch, xsearch_entry_t *pEntry)
     sLinkPath[0] = sEntry[0] = sTime[0] = sLine[0] = XSTR_NUL;
     const char *pArrow = pEntry->eType == XF_SYMLINK ? " -> " : XSTR_EMPTY;
 
-    XSearch_ColorizeEntry(sEntry, sizeof(sEntry), pEntry);
-    XSearch_ColorizeSymlink(sLinkPath, sizeof(sLinkPath), pEntry);
+    XSearch_ColorizeEntry(pSearch, sEntry, sizeof(sEntry), pEntry);
+    XSearch_ColorizeSymlink(pSearch, sLinkPath, sizeof(sLinkPath), pEntry);
     XSearch_ColorizeLine(sLine, sizeof(sLine), pEntry, pSearch->sText, bJumpSpace);
 
     /* Do not display additional info if verbose is not set */
-    if (!((xsearch_args_t*)pSearch->pUserCtx)->bVerbose)
+    if (!((xsearch_args_t*)pSearch->pUserCtx)->bVerbose || pSearch->bReadStdin)
     {
         if (pEntry->nLineNum && xstrused(sLine))
             xlog("%s:%s%d%s %s", sEntry, XSTR_FMT_BOLD,
@@ -483,7 +498,7 @@ int main(int argc, char* argv[])
 {
     xlog_defaults();
     xsearch_args_t args;
-    xsearch_t srcCtx;
+    xsearch_t search;
 
     if (!XSearch_ParseArgs(&args, argc, argv))
     {
@@ -494,27 +509,28 @@ int main(int argc, char* argv[])
     const char *pDirectory = xstrused(args.sDirectory) ? args.sDirectory : NULL;
     const char *pFileName = xstrused(args.sFileName) ? args.sFileName : NULL;
 
-    XSearch_Init(&srcCtx, pFileName);
-    xstrncpy(srcCtx.sText, sizeof(srcCtx.sText), args.sText);
-    srcCtx.nPermissions = args.nPermissions;
-    srcCtx.bInsensitive = args.bInsensitive;
-    srcCtx.bSearchLines = args.bSearchLines;
-    srcCtx.bFilesOnly = args.bFilesOnly;
-    srcCtx.bRecursive = args.bRecursive;
-    srcCtx.nFileTypes = args.nFileTypes;
-    srcCtx.nLinkCount = args.nLinkCount;
-    srcCtx.nFileSize = args.nFileSize;
-    srcCtx.nMaxSize = args.nMaxSize;
-    srcCtx.nMinSize = args.nMinSize;
-    srcCtx.nBufferSize = args.nMaxBuffer;
-    srcCtx.callback = XSearch_Callback;
-    srcCtx.pUserCtx = &args;
+    XSearch_Init(&search, pFileName);
+    xstrncpy(search.sText, sizeof(search.sText), args.sText);
+    search.nPermissions = args.nPermissions;
+    search.bInsensitive = args.bInsensitive;
+    search.bSearchLines = args.bSearchLines;
+    search.bMatchOnly = args.bMatchOnly;
+    search.bRecursive = args.bRecursive;
+    search.bReadStdin = args.bReadStdin;
+    search.nFileTypes = args.nFileTypes;
+    search.nLinkCount = args.nLinkCount;
+    search.nFileSize = args.nFileSize;
+    search.nMaxSize = args.nMaxSize;
+    search.nMinSize = args.nMinSize;
+    search.nBufferSize = args.nMaxBuffer;
+    search.callback = XSearch_Callback;
+    search.pUserCtx = &args;
 
-    srcCtx.pInterrupted = &g_interrupted;
+    search.pInterrupted = &g_interrupted;
     signal(SIGINT, signal_callback);
 
-    XSearch(&srcCtx, pDirectory);
-    XSearch_Destroy(&srcCtx);
+    XSearch(&search, pDirectory);
+    XSearch_Destroy(&search);
 
     return XSTDNON;
 }

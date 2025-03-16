@@ -519,7 +519,7 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
         return XSTDERR;
     }
 
-    if (XPath_Write(pPubKeyPath, "cwt", (uint8_t*)pair.pPublicKey, pair.nPubKeyLen) <= 0)
+    if (XPath_Write(pPubKeyPath, (uint8_t*)pair.pPublicKey, pair.nPubKeyLen, "cwt") <= 0)
     {
         xloge("Failed to write public key file: %s (%s)", pPubKeyPath, XSTRERR);
         XRSA_Destroy(&pair);
@@ -527,7 +527,7 @@ XSTATUS XCrypt_GeneratePair(xcrypt_args_t *pArgs)
         return XSTDERR;
     }
 
-    if (XPath_Write(pPrivKeyPath, "cwt", (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen) <= 0)
+    if (XPath_Write(pPrivKeyPath, (uint8_t*)pair.pPrivateKey, pair.nPrivKeyLen, "cwt") <= 0)
     {
         xloge("Failed to write private key file: %s (%s)", pPrivKeyPath, XSTRERR);
         XRSA_Destroy(&pair);
@@ -586,7 +586,7 @@ int main(int argc, char* argv[])
         return XSTDERR;
     }
 
-    if (xstrused(args.sOutput) && XPath_Write(args.sOutput, "cwt", pData, nLength) <= 0)
+    if (xstrused(args.sOutput) && XPath_Write(args.sOutput, pData, nLength, "cwt") <= 0)
     {
         xloge("Failed to open output file: %s (%d)", args.sOutput, errno);
         XByteBuffer_Clear(&buffer);

@@ -122,8 +122,8 @@ uint8_t* XPath_Load(const char *pPath, size_t* pSize);
 uint8_t* XPath_LoadSize(const char *pPath, size_t nMaxSize, size_t* pSize);
 int XPath_CopyFile(const char *pSrc, const char *pDst);
 int XPath_Read(const char *pPath, uint8_t *pBuffer, size_t nSize);
-int XPath_Write(const char *pPath, const char *pFlags, const uint8_t *pData, size_t nSize);
-int XPath_WriteBuffer(const char *pPath, const char *pFlags, xbyte_buffer_t *pBuffer);
+int XPath_Write(const char *pPath, const uint8_t *pData, size_t nSize, const char *pFlags);
+int XPath_WriteBuffer(const char *pPath, xbyte_buffer_t *pBuffer, const char *pFlags);
 size_t XPath_LoadBuffer(const char *pPath, xbyte_buffer_t *pBuffer);
 size_t XPath_LoadBufferSize(const char *pPath, xbyte_buffer_t *pBuffer, size_t nMaxSize);
 
