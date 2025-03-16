@@ -211,7 +211,7 @@ int XByteBuffer_ReadStdin(xbyte_buffer_t *pBuffer)
 {
     if (pBuffer == NULL) return XSTDERR;
     char sBuffer[XSTR_MID];
-    int nRead = 0;
+    size_t nRead = 0;
 
     while ((nRead = fread(sBuffer, 1, sizeof(sBuffer), stdin)) > 0)
     {
