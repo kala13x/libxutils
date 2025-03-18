@@ -11,6 +11,14 @@ EXAMPLES_DONE=0
 TOOLS_DONE=0
 CPU_COUNT=1
 
+# Check if its linux or cmake is not installed
+if [ $OSTYPE == linux-gnu ]; then
+    if ! command -v cmake &> /dev/null; then
+        MAKE_TOOL="make"
+    fi
+fi
+
+# Parse command line arguments
 for arg in "$@"; do
     if [[ $arg == --tool=* || $arg == -m=* ]]; then
         MAKE_TOOL="${arg#*=}"
