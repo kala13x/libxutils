@@ -17,7 +17,9 @@
 #define XHOST_FILE_PATH     "/etc/hosts"
 #define XHOST_VERSION_MAX   1
 #define XHOST_VERSION_MIN   0
-#define XHOST_BUILD_NUMBER  8
+#define XHOST_BUILD_NUMBER  9
+
+#define XHOST_ADDR_LEN_MAX  15
 
 typedef struct {
     xbool_t bAdd;
@@ -31,6 +33,7 @@ typedef struct {
     xbool_t bUncomment;
     xbool_t bWholeWords;
     size_t nLineNumber;
+    size_t nTabSize;
     char sAddress[XLINE_MAX];
     char sHost[XLINE_MAX];
 } xhost_args_t;
@@ -42,6 +45,7 @@ typedef struct {
     xbool_t bWholeWords;
     xbool_t bSearch;
     size_t nLineNumber;
+    size_t nTabSize;
     xstring_t hosts;
     xfile_t file;
 } xhost_ctx_t;
@@ -74,6 +78,7 @@ static void XHost_Usage(const char *pName)
     printf("  -a <address>          # IP address\n");
     printf("  -n <hostname>         # Host name\n");
     printf("  -x <number>           # Line number\n");
+    printf("  -t <size>             # Tab size to lint entries\n");
     printf("  -c                    # Comment entry\n");
     printf("  -u                    # Uncomment entry\n");
     printf("  -r                    # Remove entry\n");
@@ -95,13 +100,14 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
     memset(pArgs, 0, sizeof(xhost_args_t));
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "a:n:x:c1:d1:u1:l1:r1:s1:v1:w1:h1")) != -1)
+    while ((opt = getopt(argc, argv, "a:n:t:x:c1:d1:u1:l1:r1:s1:v1:w1:h1")) != -1)
     {
         switch (opt)
         {
             case 'a': xstrncpy(pArgs->sAddress, sizeof(pArgs->sAddress), optarg); break;
             case 'n': xstrncpy(pArgs->sHost, sizeof(pArgs->sHost), optarg); break;
             case 'x': pArgs->nLineNumber = atoi(optarg); break;
+            case 't': pArgs->nTabSize = atoi(optarg); break;
             case 'd': pArgs->bDisplay = XTRUE; break;
             case 'c': pArgs->bComment = XTRUE; break;
             case 'u': pArgs->bUncomment = XTRUE; break;
@@ -503,6 +509,62 @@ static int XHost_UncommentEntry(xhost_ctx_t *pCtx)
     return XSTDNON;
 }
 
+static int XHost_LintEntries(xhost_ctx_t *pCtx)
+{
+    XHost_ClearContext(pCtx);
+    XASSERT((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
+
+    int nCount = 0;
+
+    while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
+    {
+        xhost_entry_t entry;
+        XHost_ParseEntry(&entry, pCtx->sLine);
+
+        if (xstrused(entry.sAddr) && xstrused(entry.sHost))
+        {
+            size_t nAddrLen = XSTD_MIN(strlen(entry.sAddr), XHOST_ADDR_LEN_MAX);
+            size_t nPadding = XHOST_ADDR_LEN_MAX - nAddrLen;
+
+            XASSERT((XString_Append(&pCtx->hosts, "%s", entry.sAddr) >= 0),
+                xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
+
+            for (size_t i = 0; i < nPadding + pCtx->nTabSize; i++)
+                XString_Append(&pCtx->hosts, " ");
+
+            XString_Append(&pCtx->hosts, "%s", entry.sHost);
+
+            if (xstrused(entry.sComment))
+                XString_Append(&pCtx->hosts, " # %s", entry.sComment);
+
+            XString_Add(&pCtx->hosts, "\n", 1);
+            nCount++;
+            continue;
+        }
+        else if (xstrused(entry.sComment))
+        {
+            XASSERT((XString_Append(&pCtx->hosts, "# %s\n", entry.sComment) >= 0),
+                xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
+
+            nCount++;
+            continue;
+        }
+
+        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+            xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
+    }
+
+    XFile_Close(&pCtx->file);
+
+    if (pCtx->hosts.nLength && pCtx->hosts.pData)
+    {
+        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        xlogd("Linted host entries: %d", nCount);
+    }
+
+    return XSTDNON;
+}
+
 static void XHost_AddLineNumber(xstring_t *pString, int nLine)
 {
     if (nLine < 10) XString_Append(pString, " ");
@@ -603,12 +665,14 @@ int main(int argc, char *argv[])
     xstrncpy(ctx.sHost, sizeof(ctx.sHost), args.sHost);
     ctx.nLineNumber = args.nLineNumber;
     ctx.bWholeWords = args.bWholeWords;
+    ctx.nTabSize = args.nTabSize;
     ctx.bSearch = args.bSearch;
 
     if (args.bAppend) nStatus = XHost_AddEntry(&ctx, args.bLines);
     else if (args.bUncomment) nStatus = XHost_UncommentEntry(&ctx);
     else if (args.bComment) nStatus = XHost_RemoveEntry(&ctx, XTRUE);
     else if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
+    if (!nStatus && args.nTabSize) nStatus = XHost_LintEntries(&ctx);
     if (!nStatus && args.bDisplay) XHost_DisplayHosts(&ctx, args.bLines);
 
     XHost_ClearContext(&ctx);
