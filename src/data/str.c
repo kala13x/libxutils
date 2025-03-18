@@ -692,10 +692,10 @@ int xstrnsrc(const char *pStr, size_t nLen, const char *pSrc, size_t nPos)
 
 int xstrsrcb(const char *pStr, size_t nLength, const char *pSrc)
 {
-    size_t pSearchLen = strlen(pSrc);
     int nPosit = XSTDERR;
 
 #if !defined(_WIN32) && defined(_GNU_SOURCE)
+    size_t pSearchLen = strlen(pSrc);
     void *pOffset = memmem(pStr, nLength, pSrc, pSearchLen);
     if (pOffset != NULL) nPosit = (int)((char*)pOffset - pStr);
 #else
