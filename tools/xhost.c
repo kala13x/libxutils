@@ -515,7 +515,6 @@ static int XHost_LintEntries(xhost_ctx_t *pCtx)
     XASSERT((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
 
     int nCount = 0;
-
     while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
     {
         xhost_entry_t entry;
@@ -530,14 +529,21 @@ static int XHost_LintEntries(xhost_ctx_t *pCtx)
                 xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
 
             for (size_t i = 0; i < nPadding + pCtx->nTabSize; i++)
-                XString_Append(&pCtx->hosts, " ");
+            {
+                XASSERT((XString_Add(&pCtx->hosts, XSTR_SPACE, 1) >= 0),
+                    xthrow("Failed to add spaces to the buffer (%s)", XSTRERR));
+            }
 
-            XString_Append(&pCtx->hosts, "%s", entry.sHost);
+            XASSERT((XString_Append(&pCtx->hosts, "%s", entry.sHost) >= 0),
+                xthrow("Failed to add host line to the buffer (%s)", XSTRERR));
 
             if (xstrused(entry.sComment))
-                XString_Append(&pCtx->hosts, " # %s", entry.sComment);
+                XASSERT((XString_Append(&pCtx->hosts, " # %s", entry.sComment) >= 0),
+                    xthrow("Failed to add comment line to hosts buffer (%s)", XSTRERR));
 
-            XString_Add(&pCtx->hosts, "\n", 1);
+            XASSERT((XString_Add(&pCtx->hosts, XSTR_NEW_LINE, 1) >= 0),
+                xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
+
             nCount++;
             continue;
         }
