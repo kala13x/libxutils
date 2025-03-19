@@ -110,19 +110,13 @@ sudo make install
 
 ### Dependencies
 The only dependency that the library uses is the `openssl-devel` package for the `SSL` and `RSA` implementations.\
-You can either install the `openssl-devel` package or disable the `SSL` support in the library.
+If `openssl` package is not installed on the system, the lib will automatically be compiled without `SSL` support.
 
 #### Install OpenSSL development package
 Red-Hat family: `sudo dnf install openssl-devel`\
-Debian family: `sudo apt-get install libssl-dev`
-
-#### Disable SSL support in the library
-If you use the `cmake`, `smake` or `build.sh` script for building the project, you do not need to disable anything manually,\
-the it will be automatically disabled if the OpenSSL library is not installed in the system.
-
-If you use raw `Makefile` to build the project, all you need to adjust `CFLAGS` and `LIBS` in `Makefile`.
-- Remove `-D_XUTILS_USE_SSL` entry from the `CFLAGS`.
-- Remove `-lssl` and `-lcrypto` entries from the `LIBS`.
+Debian family: `sudo apt-get install libssl-dev`\
+Windows: `choco install openssl`\
+MacOS: `brew install openssl`
 
 ### Usage
 Just include the required `<xutils/*.h>` header files in your source code and use `-lxutils`\
