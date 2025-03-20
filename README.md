@@ -102,6 +102,7 @@ sudo make install
 The project can also be built with a pre-generated `Makefile` for the Linux.
 
 ```bash
+export XUTILS_USE_SSL=y # In case you want to use SSL features
 git clone https://github.com/kala13x/libxutils.git
 cd libxutils
 make
@@ -134,9 +135,10 @@ These sources can also be built by using the `CMake` tool or `Makefile` from tha
 You may need to export the SSL flag accordingly if you are doing a build without the script:
 
 ```bash
+export XUTILS_USE_SSL=y # In case you want to use SSL features
 cd examples
-export XUTILS_USE_SSL=y
-cmake . && make
+cmake .
+make
 ```
 
 #### XTOP and more
