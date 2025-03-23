@@ -183,6 +183,48 @@ xbool_t xstrcmp(const char *pStr, const char *pCmp)
     return strcmp(pStr, pCmp) ? XFALSE : XTRUE;
 }
 
+xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern, size_t nPatternLength)
+{
+    XASSERT_RET((xstrused(pStr) && xstrused(pPattern)), XFALSE);
+    if (!nPatternLength) return !nLength ? XTRUE : XFALSE;
+
+    if (pPattern[0] == '*')
+    {
+        /* Skip multiple '*' characters */
+        while (nPatternLength > 1 && pPattern[1] == '*')
+        {
+            nPatternLength--;
+            pPattern++;
+        }
+
+        /* '*' at the end matches everything */
+        if (nPatternLength == 1) return XTRUE;
+        size_t i;
+
+        for (i = 0; i <= nLength; i++)
+        {
+            if (xstrmatch(pStr + i, nLength - i,
+                pPattern + 1, nPatternLength - 1))
+                    return XTRUE;
+        }
+
+        return XFALSE;
+    }
+
+    if (!nLength) return XFALSE;
+
+    if (pPattern[0] == '?')
+    {
+        return xstrmatch(pStr + 1, nLength - 1,
+            pPattern + 1, nPatternLength - 1);
+    }
+
+    if (pPattern[0] != pStr[0]) return XFALSE;
+
+    return xstrmatch(pStr + 1, nLength - 1,
+        pPattern + 1, nPatternLength - 1);
+}
+
 size_t xstrnfill(char *pDst, size_t nSize, size_t nLength, char cFill)
 {
     if (pDst == NULL || !nSize) return XSTDNON;
