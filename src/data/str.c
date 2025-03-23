@@ -185,7 +185,7 @@ xbool_t xstrcmp(const char *pStr, const char *pCmp)
 
 xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern, size_t nPatternLength)
 {
-    XASSERT_RET((xstrused(pStr) && xstrused(pPattern)), XFALSE);
+    XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
     if (!nPatternLength) return !nLength ? XTRUE : XFALSE;
 
     if (pPattern[0] == '*')
