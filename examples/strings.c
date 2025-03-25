@@ -33,7 +33,11 @@ int main()
         cfg.bUseHeap = 0;
         xlog_set(&cfg);
     }
-
+    else
+    {
+        xloge("xstracpy failed");
+        return XSTDERR;
+    }
 
     char str1[128], str2[128];
     xlog("Initial strings: 1(%s) and 2(%s)", LOVER_STRING, UPPER_STRING);
@@ -79,6 +83,11 @@ int main()
 
         XArray_Destroy(pArr);
     }
+    else
+    {
+        xloge("xstrsplit failed");
+        return XSTDERR;
+    }
 
     // XString
     xstring_t string;
@@ -108,8 +117,12 @@ int main()
     XString_Advance(&string, 40);
     xlog(string.pData);
 
-    if (strlen(string.pData) != string.nLength) 
-        xloge("should not happen: %zu/%zu", strlen(string.pData), string.nLength);
+    if (strlen(string.pData) != string.nLength)
+    {
+        xloge("String lengths are not equal: %zu/%zu", strlen(string.pData), string.nLength);
+        XString_Clear(&string);
+        return XSTDERR;
+    }
 
     xstring_t string2;
     XString_Copy(&string2, &string);
@@ -133,6 +146,13 @@ int main()
         XString_Delete(&string2, 6, strlen(XSTR_CLR_BLUE));
         XString_Delete(&string2, 14, strlen(XSTR_FMT_RESET));
         xlog(string2.pData);
+    }
+    else
+    {
+        xloge("XString_Search failed");
+        XString_Clear(&string);
+        XString_Clear(&string2);
+        return XSTDERR;
     }
 
     XString_ChangeColor(&string2, XSTR_CLR_BLUE);
@@ -163,6 +183,13 @@ int main()
         }
 
         XArray_Destroy(pArr);
+    }
+    else
+    {
+        xloge("XString_SplitStr failed");
+        XString_Clear(&string);
+        XString_Clear(&string2);
+        return XSTDERR;
     }
 
     xstring_t sub;
@@ -204,7 +231,42 @@ int main()
 
         XArray_Destroy(pArr);
     }
+    else
+    {
+        xloge("XString_Split failed");
+        XString_Clear(&string);
+        return XSTDERR;
+    }
 
     XString_Clear(&string);
+
+    // Test pattern matching
+    char pattern[] = "pattern*";
+    size_t plen = strlen((char *)pattern);
+
+    char matchStr1[] = "pattern";
+    size_t slen1 = strlen((char *)matchStr1);
+
+    char matchStr2[] = "pattern.test";
+    size_t slen2 = strlen((char *)matchStr2);
+
+    char matchStr3[] = "not_match.pattern";
+    size_t slen3 = strlen((char *)matchStr3);
+
+    xbool_t match1 = xstrmatch(matchStr1, slen1, pattern, plen);
+    xbool_t match2 = xstrmatch(matchStr2, slen2, pattern, plen);
+    xbool_t match3 = xstrmatch(matchStr3, slen3, pattern, plen);
+
+    if (!match1 || !match2 || match3)
+    {
+        xloge("Pattern matching failed with xstrmatch: %d/%d/%d", match1, match2, match3);
+        return XSTDERR;
+    }
+
+    printf("Matching \"%s\" with pattern \"%s\": %s\n", matchStr1, pattern, match1 ? "MATCH" : "NO MATCH");
+    printf("Matching \"%s\" with pattern \"%s\": %s\n", matchStr2, pattern, match2 ? "MATCH" : "NO MATCH");
+    printf("Matching \"%s\" with pattern \"%s\": %s\n", matchStr3, pattern, match3 ? "MATCH" : "NO MATCH");
+
+
     return 0;
 }
