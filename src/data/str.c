@@ -229,7 +229,7 @@ xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern)
 {
     XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
     if (!nLength) return !xstrused(pPattern) ? XTRUE : XFALSE;
-    size_t nPatternLength = strnlen(pPattern, nLength);
+    size_t nPatternLength = strlen(pPattern);
     return xstrnmatch(pStr, nLength, pPattern, nPatternLength);
 }
 
@@ -241,7 +241,7 @@ xbool_t xstrmatchm(const char *pStr, size_t nLength, const char *pPattern, const
     const char *pDlmt = pDelimiter == NULL ? ";" : pDelimiter;
     if (!xstrsrc(pPattern, pDlmt)) return xstrmatch(pStr, nLength, pPattern);
 
-    xarray_t *pTokens = xstrsplitd(pPattern, pDlmt);
+    xarray_t *pTokens = xstrsplit(pPattern, pDlmt);
     size_t i, nUsed = XArray_Used(pTokens);
     xbool_t bFound = XFALSE;
 

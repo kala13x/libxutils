@@ -275,19 +275,25 @@ int main()
     // Test multy pattern matching
     char multiPattern[] = "pa??ern;te*t;string;rand?m*str*ing*her?!";
     char multiMatchStr1[] = "pattern";
+    char multiMatchStr1a[] = "patterna";
     char multiMatchStr2[] = "random string here!";
     char multiMatchStr3[] = "random bad str here";
 
     xbool_t multiMatch1 = xstrmatchm(multiMatchStr1, strlen(multiMatchStr1), multiPattern, ";");
+    xbool_t multiMatch1a = xstrmatchm(multiMatchStr1a, strlen(multiMatchStr1a), multiPattern, ";");
     xbool_t multiMatch2 = xstrmatchm(multiMatchStr2, strlen(multiMatchStr2), multiPattern, ";");
     xbool_t multiMatch3 = xstrmatchm(multiMatchStr3, strlen(multiMatchStr3), multiPattern, ";");
-    if (!multiMatch1 || !multiMatch2 || multiMatch3)
+
+    if (!multiMatch1 || multiMatch1a || !multiMatch2 || multiMatch3)
     {
-        xloge("Multy pattern matching failed with xstrmatchm: %d/%d/%d", multiMatch1, multiMatch2, multiMatch3);
+        xloge("Multy pattern matching failed with xstrmatchm: %d/%d/%d/%d",
+                    multiMatch1, multiMatch1a, multiMatch2, multiMatch3);
+
         return XSTDERR;
     }
 
     printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr1, multiPattern, multiMatch1 ? "MATCH" : "NO MATCH");
+    printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr1a, multiPattern, multiMatch1a ? "MATCH" : "NO MATCH");
     printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr2, multiPattern, multiMatch2 ? "MATCH" : "NO MATCH");
     printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr3, multiPattern, multiMatch3 ? "MATCH" : "NO MATCH");
 
