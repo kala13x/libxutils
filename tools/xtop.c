@@ -1597,7 +1597,7 @@ int main(int argc, char *argv[])
         return XSTDERR;
     }
 
-    if (args.bDaemon && daemon(XTRUE, XTRUE) < 0)
+    if (args.bDaemon && XUtils_Daemonize(XTRUE, XTRUE) < 0)
     {
         xlogn("Failed to run server as daemon: %d", errno);
         return XSTDERR;

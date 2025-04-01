@@ -21,6 +21,7 @@ typedef void(*xsig_cb_t)(int);
 
 void XUtils_Backtrace(void);
 void XUtils_ErrExit(const char *pFmt, ...);
+int XUtils_Daemonize(int bNoChdir, int bNoClose);
 
 #define errex(...) XUtils_ErrExit(XLOG_THROW_LOCATION __VA_ARGS__)
 

@@ -65,6 +65,35 @@ void XUtils_ErrExit(const char * pFmt, ...)
     exit(EXIT_FAILURE);
 }
 
+int XUtils_Daemonize(int bNoChdir, int bNoClose)
+{
+#ifdef __linux__
+    return daemon(bNoChdir, bNoClose);
+#else
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid > 0) exit(0); // parent exits
+
+    if (setsid() < 0) return -1;
+
+    pid = fork();
+    if (pid < 0) return -1;
+    if (pid > 0) exit(0);
+
+    umask(0);
+    if (!bNoChdir) chdir("/");
+
+    if (!bNoClose)
+    {
+        freopen("/dev/null", "r", stdin);
+        freopen("/dev/null", "w", stdout);
+        freopen("/dev/null", "w", stderr);
+    }
+#endif
+
+    return 0;
+}
+
 void XSig_Callback(int nSig)
 {
     /* Handle signals */
