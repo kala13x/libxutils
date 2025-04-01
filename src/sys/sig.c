@@ -69,6 +69,24 @@ int XUtils_Daemonize(int bNoChdir, int bNoClose)
 {
 #ifdef __linux__
     return daemon(bNoChdir, bNoClose);
+#elif _win32
+    if (CreateProcess(NULL, NULL, NULL, NULL, FALSE,
+        DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+        NULL, NULL, NULL, NULL) == 0) return -1;
+
+    if (!bNoChdir)
+    {
+        SetCurrentDirectory("C:\\");
+    }
+
+    if (!bNoClose)
+    {
+        CloseHandle(GetStdHandle(STD_INPUT_HANDLE));
+        CloseHandle(GetStdHandle(STD_OUTPUT_HANDLE));
+        CloseHandle(GetStdHandle(STD_ERROR_HANDLE));
+    }
+
+    return 0;
 #else
     pid_t pid = fork();
     if (pid < 0) return -1;
