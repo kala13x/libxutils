@@ -242,7 +242,7 @@ int main()
 
     // Test pattern matching
     char pattern[] = "pattern*";
-    size_t plen = strlen((char *)pattern);
+    char pattern2[] = "should*match*this*pattern*";
 
     char matchStr1[] = "pattern";
     size_t slen1 = strlen((char *)matchStr1);
@@ -253,20 +253,43 @@ int main()
     char matchStr3[] = "not_match.pattern";
     size_t slen3 = strlen((char *)matchStr3);
 
-    xbool_t match1 = xstrmatch(matchStr1, slen1, pattern, plen);
-    xbool_t match2 = xstrmatch(matchStr2, slen2, pattern, plen);
-    xbool_t match3 = xstrmatch(matchStr3, slen3, pattern, plen);
+    char matchStr4[] = "should match this cool pattern!";
+    size_t slen4 = strlen((char *)matchStr4);
 
-    if (!match1 || !match2 || match3)
+    xbool_t match1 = xstrmatch(matchStr1, slen1, pattern);
+    xbool_t match2 = xstrmatch(matchStr2, slen2, pattern);
+    xbool_t match3 = xstrmatch(matchStr3, slen3, pattern);
+    xbool_t match4 = xstrmatch(matchStr4, slen4, pattern2);
+
+    if (!match1 || !match2 || match3 || !match4)
     {
-        xloge("Pattern matching failed with xstrmatch: %d/%d/%d", match1, match2, match3);
+        xloge("Pattern matching failed with xstrmatch: %d/%d/%d/%d", match1, match2, match3, match4);
         return XSTDERR;
     }
 
     printf("Matching \"%s\" with pattern \"%s\": %s\n", matchStr1, pattern, match1 ? "MATCH" : "NO MATCH");
     printf("Matching \"%s\" with pattern \"%s\": %s\n", matchStr2, pattern, match2 ? "MATCH" : "NO MATCH");
     printf("Matching \"%s\" with pattern \"%s\": %s\n", matchStr3, pattern, match3 ? "MATCH" : "NO MATCH");
+    printf("Matching \"%s\" with pattern \"%s\": %s\n", matchStr4, pattern2, match4 ? "MATCH" : "NO MATCH");
 
+    // Test multy pattern matching
+    char multiPattern[] = "pa??ern;te*t;string;rand?m*str*ing*her?!";
+    char multiMatchStr1[] = "pattern";
+    char multiMatchStr2[] = "random string here!";
+    char multiMatchStr3[] = "random bad str here";
+
+    xbool_t multiMatch1 = xstrmatchm(multiMatchStr1, strlen(multiMatchStr1), multiPattern, ";");
+    xbool_t multiMatch2 = xstrmatchm(multiMatchStr2, strlen(multiMatchStr2), multiPattern, ";");
+    xbool_t multiMatch3 = xstrmatchm(multiMatchStr3, strlen(multiMatchStr3), multiPattern, ";");
+    if (!multiMatch1 || !multiMatch2 || multiMatch3)
+    {
+        xloge("Multy pattern matching failed with xstrmatchm: %d/%d/%d", multiMatch1, multiMatch2, multiMatch3);
+        return XSTDERR;
+    }
+
+    printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr1, multiPattern, multiMatch1 ? "MATCH" : "NO MATCH");
+    printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr2, multiPattern, multiMatch2 ? "MATCH" : "NO MATCH");
+    printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr3, multiPattern, multiMatch3 ? "MATCH" : "NO MATCH");
 
     return 0;
 }

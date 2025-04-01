@@ -31,6 +31,9 @@ jobs:
       - name: Run Valgrind Check With tools/xsrc
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xsrc -rvd ./
 
+      - name: Run Valgrind Check With tools/xsrc (multy)
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xsrc -rvd ./ -f "*CM*k*.t*;Ma??fil*"
+
       - name: Run Valgrind Check With tools/xhttp
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xhttp -dl github.com -v
 

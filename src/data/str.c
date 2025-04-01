@@ -179,11 +179,11 @@ xbool_t xstrncmpn(const char *pStr, size_t nStrLen, const char *pCmp, size_t nCm
 
 xbool_t xstrcmp(const char *pStr, const char *pCmp)
 {
-    XASSERT_RET((xstrused(pStr) && xstrused(pCmp)), XFALSE);
+    XASSERT_RET(((pStr != NULL) && (pCmp != NULL)), XFALSE);
     return strcmp(pStr, pCmp) ? XFALSE : XTRUE;
 }
 
-xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern, size_t nPatternLength)
+xbool_t xstrnmatch(const char *pStr, size_t nLength, const char *pPattern, size_t nPatternLength)
 {
     XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
     if (!nPatternLength) return !nLength ? XTRUE : XFALSE;
@@ -203,7 +203,7 @@ xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern, size_t
 
         for (i = 0; i <= nLength; i++)
         {
-            if (xstrmatch(pStr + i, nLength - i,
+            if (xstrnmatch(pStr + i, nLength - i,
                 pPattern + 1, nPatternLength - 1))
                     return XTRUE;
         }
@@ -215,14 +215,80 @@ xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern, size_t
 
     if (pPattern[0] == '?')
     {
-        return xstrmatch(pStr + 1, nLength - 1,
+        return xstrnmatch(pStr + 1, nLength - 1,
             pPattern + 1, nPatternLength - 1);
     }
 
     if (pPattern[0] != pStr[0]) return XFALSE;
 
-    return xstrmatch(pStr + 1, nLength - 1,
+    return xstrnmatch(pStr + 1, nLength - 1,
         pPattern + 1, nPatternLength - 1);
+}
+
+xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern)
+{
+    XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
+    if (!nLength) return !xstrused(pPattern) ? XTRUE : XFALSE;
+    size_t nPatternLength = strnlen(pPattern, nLength);
+    return xstrnmatch(pStr, nLength, pPattern, nPatternLength);
+}
+
+xbool_t xstrmatchm(const char *pStr, size_t nLength, const char *pPattern, const char *pDelimiter)
+{
+    XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
+    if (!nLength) return !xstrused(pPattern) ? XTRUE : XFALSE;
+
+    const char *pDlmt = pDelimiter == NULL ? ";" : pDelimiter;
+    if (!xstrsrc(pPattern, pDlmt)) return xstrmatch(pStr, nLength, pPattern);
+
+    xarray_t *pTokens = xstrsplitd(pPattern, pDlmt);
+    size_t i, nUsed = XArray_Used(pTokens);
+    xbool_t bFound = XFALSE;
+
+    for (i = 0; i < nUsed; i++)
+    {
+        xarray_data_t *pArrData = XArray_Get(pTokens, i);
+        if (pArrData == NULL || pArrData->pData == NULL || !pArrData->nSize) continue;
+
+        const char *pToken = (const char *)pArrData->pData;
+        size_t nTokenLength = pArrData->nSize - 1;
+
+        bFound = xstrnmatch(pStr, nLength, pToken, nTokenLength);
+        if (bFound) break;
+    }
+
+    XArray_Destroy(pTokens);
+    return bFound;
+}
+
+xbool_t xstrregex(const char *pStr, size_t nLength, const char *pPattern)
+{
+    XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
+    xarray_t *pTokens = xstrsplitd(pPattern, "*");
+    size_t nUsed = XArray_Used(pTokens);
+
+    if (!nUsed) return xstrcmp(pStr, pPattern);
+    size_t i, nOffset = 0;
+
+    for (i = 0; i < nUsed; i++)
+    {
+        const char *pTok = (const char*)XArray_GetData(pTokens, i);
+        if (xstrused(pTok) && !xstrcmp(pTok, "*"))
+        {
+            if (!i && !xstrncmp(pTok, pStr, strlen(pTok))) return XFALSE;
+            int nPosit = xstrnsrc(pStr, nLength, pTok, nOffset);
+            if (nPosit < 0) return XFALSE;
+
+            nOffset += nPosit;
+            if (nOffset >= nLength) return XFALSE;
+
+            const char *pOffset = (const char*)&pStr[nOffset];
+            if (i && i + 1 == nUsed && !xstrcmp(pTok, pOffset)) return XFALSE;
+            nOffset += strlen(pTok);
+        }
+    }
+
+    return XTRUE;
 }
 
 size_t xstrnfill(char *pDst, size_t nSize, size_t nLength, char cFill)

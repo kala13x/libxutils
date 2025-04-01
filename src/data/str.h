@@ -112,7 +112,11 @@ size_t xstrarglen(const char *pFmt, va_list args);
 size_t xstrxcpyf(char **pDst, const char *pFmt, ...);
 char* xstrxcpy(const char *pFmt, ...);
 
-xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern, size_t nPatternLength);
+xbool_t xstrmatchm(const char *pStr, size_t nLength, const char *pPattern, const char *pDelimiter);
+xbool_t xstrnmatch(const char *pStr, size_t nLength, const char *pPattern, size_t nPatternLength);
+xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern);
+xbool_t xstrregex(const char *pStr, size_t nLength, const char *pPattern);
+
 xbool_t xstrncmpn(const char *pStr, size_t nStrLen, const char *pCmp, size_t nCmpLen);
 xbool_t xstrncmp(const char *pStr, const char *pCmp, size_t nCmpLen);
 xbool_t xstrcmp(const char *pStr, const char *pCmp);

@@ -151,33 +151,6 @@ static int XSearch_Callback(xsearch_t *pSearch, xsearch_entry_t *pEntry)
     return XSTDNON;
 }
 
-static xbool_t XSearch_Tokens(xarray_t *pTokens, const char *pName, size_t nLength)
-{
-    size_t nUsed = XArray_Used(pTokens);
-    if (!nUsed) return XFALSE;
-    size_t i, nOffset = 0;
-
-    for (i = 0; i < nUsed; i++)
-    {
-        const char *pTok = (const char*)XArray_GetData(pTokens, i);
-        if (xstrused(pTok) && !xstrcmp(pTok, "*"))
-        {
-            if (!i && !xstrncmp(pTok, pName, strlen(pTok))) return XFALSE;
-            int nPosit = xstrnsrc(pName, nLength, pTok, nOffset);
-            if (nPosit < 0) return XFALSE;
-
-            nOffset += nPosit;
-            if (nOffset >= nLength) return XFALSE;
-
-            const char *pOffset = (const char*)&pName[nOffset];
-            if (i && i + 1 == nUsed && !xstrcmp(pTok, pOffset)) return XFALSE;
-            nOffset += strlen(pTok);
-        }
-    }
-
-    return XTRUE;
-}
-
 static xbool_t XSearch_Multy(xarray_t *pTokens, const char *pName, size_t nLength)
 {
     size_t i, nCount = XArray_Used(pTokens);
@@ -186,12 +159,12 @@ static xbool_t XSearch_Multy(xarray_t *pTokens, const char *pName, size_t nLengt
     for (i = 0; i < nCount; i++)
     {
         xarray_data_t *pArrData = XArray_Get(pTokens, i);
-        if (pArrData == NULL || pArrData->pData == NULL) continue;
+        if (pArrData == NULL || pArrData->pData == NULL || !pArrData->nSize) continue;
 
-        bFound = pArrData->nKey != XSTDOK ?
-            xstrncmp((const char *)pArrData->pData, pName, nLength) :
-            XSearch_Tokens((xarray_t*)pArrData->pData, pName, nLength);
+        const char *pToken = (const char *)pArrData->pData;
+        size_t nTokenLength = pArrData->nSize - 1;
 
+        bFound = xstrnmatch(pName, nLength, pToken, nTokenLength);
         if (bFound) break;
     }
 
@@ -201,11 +174,9 @@ static xbool_t XSearch_Multy(xarray_t *pTokens, const char *pName, size_t nLengt
 static xbool_t XSearch_Name(xsearch_t *pSearch, const char *pFileName)
 {
     size_t nLength = strlen(pFileName);
-    xbool_t bFound = pSearch->bMulty ?
-        XSearch_Multy(&pSearch->nameTokens, pFileName, nLength) :
-        XSearch_Tokens(&pSearch->nameTokens, pFileName, nLength);
-
-    return bFound;
+    xarray_t *pNames = &pSearch->nameTokens;
+    if (!pNames->nUsed) return xstrmatch(pFileName, nLength, pSearch->sName);
+    return XSearch_Multy(&pSearch->nameTokens, pFileName, nLength);
 }
 
 static XSTATUS XSearch_Lines(xsearch_t *pSearch, xsearch_context_t *pCtx)
@@ -401,10 +372,7 @@ static XSTATUS XSearch_CheckCriteria(xsearch_t *pSearch, const char *pPath, cons
         if (pSearch->bInsensitive) xstrncase(sName, sizeof(sName), XSTR_LOWER, pName);
         const char *pSearchName = pSearch->bInsensitive ? (const char *)sName : pName;
 
-        xbool_t bFound = pSearch->nameTokens.nUsed ?
-            XSearch_Name(pSearch, pSearchName) :
-            xstrcmp(pSearch->sName, pSearchName);
-
+        xbool_t bFound = XSearch_Name(pSearch, pSearchName);
         if (!bFound) return XSTDNON;
     }
 
@@ -427,37 +395,6 @@ void XSearch_ClearCb(xarray_data_t *pArrData)
     else XArray_Destroy((xarray_t*)pArrData->pData);
 }
 
-static size_t XSearch_TokenizeName(xsearch_t *pSrcCtx, const char *pFileName)
-{
-    xarray_t *pTokens = &pSrcCtx->nameTokens;
-    if (xstrsrc(pFileName, ";") >= 0) xstrsplita(pFileName, ";", pTokens, XFALSE, XFALSE);
-    else if (xstrsrc(pFileName, "*") >= 0) return xstrsplita(pFileName, "*", pTokens, XTRUE, XFALSE);
-
-    if (!pTokens->nUsed) return XSTDNON;
-    pSrcCtx->bMulty = XTRUE;
-    size_t i;
-
-    for (i = 0; i < pTokens->nUsed; i++)
-    {
-        char *pToken = XArray_GetData(pTokens, i);
-        if (xstrsrc(pToken, "*") >= 0)
-        {
-            xarray_t *pSubTokens = xstrsplitd(pToken, "*");
-            if (pSubTokens != NULL)
-            {
-                xarray_data_t *pArrData = XArray_Get(pTokens, i);
-                pArrData->pData = pSubTokens;
-                pArrData->nKey = XSTDOK;
-
-                pTokens->clearCb = XSearch_ClearCb;
-                xfree(pTokens->pPool, pToken);
-            }
-        }
-    }
-
-    return pTokens->nUsed;
-}
-
 void XSearch_Init(xsearch_t *pSrcCtx, const char *pFileName)
 {
     pSrcCtx->pInterrupted = &pSrcCtx->nInterrupted;
@@ -466,7 +403,6 @@ void XSearch_Init(xsearch_t *pSrcCtx, const char *pFileName)
     pSrcCtx->bMatchOnly = XFALSE;
     pSrcCtx->bRecursive = XFALSE;
     pSrcCtx->bReadStdin = XFALSE;
-    pSrcCtx->bMulty = XFALSE;
     pSrcCtx->callback = NULL;
     pSrcCtx->pUserCtx = NULL;
 
@@ -479,7 +415,9 @@ void XSearch_Init(xsearch_t *pSrcCtx, const char *pFileName)
     pSrcCtx->sName[0] = XSTR_NUL;
     pSrcCtx->sText[0] = XSTR_NUL;
 
-    XSearch_TokenizeName(pSrcCtx, pFileName);
+    if (xstrsrc(pFileName, ";") >= 0) // Tokenize the file name for multy search
+        xstrsplita(pFileName, ";", &pSrcCtx->nameTokens, XFALSE, XFALSE);
+
     xstrncpy(pSrcCtx->sName, sizeof(pSrcCtx->sName), pFileName);
 
     pSrcCtx->nBufferSize = 0;
