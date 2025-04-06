@@ -460,6 +460,23 @@ xfile_type_t XFile_GetType(xmode_t nMode)
     return 0; // Unknown file format
 }
 
+xbool_t XFile_IsExec(xmode_t nMode)
+{
+#ifdef S_IXUSR
+    if (nMode & S_IXUSR) return XTRUE;
+#endif
+#ifdef S_IXGRP
+    if (nMode & S_IXGRP) return XTRUE;
+#endif
+#ifdef S_IXOTH
+    if (nMode & S_IXOTH) return XTRUE;
+#endif
+#ifdef _WIN32
+    if (nMode & _S_IEXEC) return XTRUE;
+#endif
+    return XFALSE;
+}
+
 char XFile_GetTypeChar(xfile_type_t eType)
 {
     switch (eType)

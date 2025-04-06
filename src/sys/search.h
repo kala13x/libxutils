@@ -28,6 +28,7 @@ typedef struct XSearchEntry {
     char sPerm[XPERM_MAX];
     char sLine[XLINE_MAX];
     xfile_type_t eType;
+    xmode_t nMode;
     size_t nLinkCount;
     uint32_t nGID;
     uint32_t nUID;

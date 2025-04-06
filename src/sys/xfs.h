@@ -38,7 +38,8 @@ typedef enum {
     XF_REGULAR = (1 << 3),
     XF_SYMLINK = (1 << 4),
     XF_SOCKET = (1 << 5),
-    XF_PIPE = (1 << 6)
+    XF_PIPE = (1 << 6),
+    XF_EXEC = (1 << 7)
 } xfile_type_t;
 
 typedef struct XFile {
@@ -99,6 +100,7 @@ int XFile_Print(xfile_t *pFile, const char *pFmt, ...);
 
 xfile_type_t XFile_GetType(xmode_t nMode);
 char XFile_GetTypeChar(xfile_type_t eType);
+xbool_t XFile_IsExec(xmode_t nMode);
 
 int XFile_GetStats(xfile_t *pFile);
 int XFile_Copy(xfile_t *pIn, xfile_t *pOut);

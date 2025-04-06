@@ -75,6 +75,7 @@ static int XSearch_GetFileTypes(const char *pTypes)
             case 'l': nTypes |= XF_SYMLINK; break;
             case 'p': nTypes |= XF_PIPE; break;
             case 's': nTypes |= XF_SOCKET; break;
+            case 'x': nTypes |= XF_EXEC; break;
             default:
             {
                 xloge("Invalid file type");
@@ -146,7 +147,8 @@ void XSearch_Usage(const char *pName)
     printf("   %sf%s: regular file\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("   %sl%s: symbolic link\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("   %sp%s: pipe\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("   %ss%s: socket\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("   %ss%s: socket\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("   %sx%s: executable\n\n", XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("Notes:\n");
     printf("   1) <file_name> option is supporting wildcard character: '%s*%s'\n", XSTR_FMT_BOLD, XSTR_FMT_RESET);
@@ -160,7 +162,7 @@ void XSearch_Usage(const char *pName)
     printf("%s[xutils@examples]$ %s -rvd / -t lf -f \"*.log\" -p rwxrwxrwx%s\n\n", XSTR_FMT_BOLD, pName, XSTR_FMT_RESET);
 
     printf("%sRecursive search of every .cpp and .java file in the \"/opt\" directory%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
-    printf("%sthat contains the case insensitive text \"socket\" and verbose output:%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("%sthat contains the case insensitive text \"test\" and verbose output:%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
     printf("%s[xutils@examples]$ %s -rvd /opt -f \"*.cpp;*.java\" -ig test%s\n\n", XSTR_FMT_BOLD, pName, XSTR_FMT_RESET);
 }
 
@@ -302,7 +304,7 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
 
 static void XSearch_ColorizeEntry(xsearch_t *pSearch, char *pOutput, size_t nSize, xsearch_entry_t *pEntry)
 {
-    xbool_t bIsExec = pEntry->sPerm[XPERM_LEN-1] == 'x' ? XTRUE : XFALSE;
+    xbool_t bIsExec = XFile_IsExec(pEntry->nMode);
     char *pColor = XSTR_EMPTY;
     char *pBack = XSTR_EMPTY;
     char *pFmt = XSTR_EMPTY;

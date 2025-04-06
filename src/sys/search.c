@@ -32,6 +32,7 @@ void XSearch_InitEntry(xsearch_entry_t *pEntry)
     pEntry->nSize = 0;
     pEntry->nGID = 0;
     pEntry->nUID = 0;
+    pEntry->nMode = 0;
 }
 
 void XSearch_CreateEntry(xsearch_entry_t *pEntry, const char *pName, const char *pPath, xstat_t *pStat)
@@ -50,6 +51,7 @@ void XSearch_CreateEntry(xsearch_entry_t *pEntry, const char *pName, const char 
         pEntry->nSize = pStat->st_size;
         pEntry->nGID = pStat->st_gid;
         pEntry->nUID = pStat->st_uid;
+        pEntry->nMode = pStat->st_mode;
     }
 
 #ifndef _WIN32
@@ -362,8 +364,14 @@ static XSTATUS XSearch_CheckCriteria(xsearch_t *pSearch, const char *pPath, cons
 
     if (pSearch->nFileTypes)
     {
-        xfile_type_t eType = XFile_GetType(pStat->st_mode);
-        if (!XFILE_CHECK_FL(pSearch->nFileTypes, eType)) return XSTDNON;
+        if (XFILE_CHECK_FL(pSearch->nFileTypes, XF_EXEC) &&
+            !XFile_IsExec(pStat->st_mode)) return XSTDNON;
+
+        if (pSearch->nFileTypes & ~XF_EXEC)
+        {
+            xfile_type_t eType = XFile_GetType(pStat->st_mode);
+            if (!XFILE_CHECK_FL(pSearch->nFileTypes, eType)) return XSTDNON;
+        }
     }
 
     if (xstrused(pSearch->sName))
