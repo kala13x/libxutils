@@ -42,7 +42,7 @@
 #### System:
 - [Cross-platform file and directory operations](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
 - [Cross-platform CPU affinity manipulation](https://github.com/kala13x/libxutils/blob/main/src/sys/cpu.h)
-- [Implementation of advanced file search](https://github.com/kala13x/libxutils/blob/main/src/sys/search.h)
+- [Implementation of advanced file search](https://github.com/kala13x/libxutils/blob/main/src/sys/srch.h)
 - [System time manipulation library](https://github.com/kala13x/libxutils/blob/main/src/sys/xtime.h)
 - [Performance monitoring library](https://github.com/kala13x/libxutils/blob/main/src/sys/mon.h)
 - [File and directory operations](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)

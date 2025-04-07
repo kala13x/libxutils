@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/sys/search.h
+ *  @file libxutils/src/sys/srch.h
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)

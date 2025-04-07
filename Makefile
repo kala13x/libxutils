@@ -41,7 +41,7 @@ OBJS = addr.$(OBJ) \
 	pool.$(OBJ) \
 	rsa.$(OBJ) \
 	rtp.$(OBJ) \
-	search.$(OBJ) \
+	srch.$(OBJ) \
 	sha1.$(OBJ) \
 	sha256.$(OBJ) \
 	sig.$(OBJ) \

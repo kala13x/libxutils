@@ -59,7 +59,7 @@
             "./src/sys/xtime.c",
             "./src/sys/mon.c",
             "./src/sys/type.c",
-            "./src/sys/search.c"
+            "./src/sys/srch.c"
         ],
 
         "includes": [

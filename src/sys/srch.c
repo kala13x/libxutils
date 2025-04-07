@@ -1,5 +1,5 @@
 /*!
- *  @file libxutils/src/sys/search.c
+ *  @file libxutils/src/sys/srch.c
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
@@ -7,7 +7,7 @@
  * @brief Advanced file search implementation.
  */
 
-#include "search.h"
+#include "srch.h"
  
 typedef struct {
     const char *pBuffer;

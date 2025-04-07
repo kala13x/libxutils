@@ -9,14 +9,14 @@
 
 #include "xstd.h"
 #include "type.h"
+#include "srch.h"
 #include "str.h"
 #include "log.h"
 #include "xfs.h"
-#include "search.h"
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0
-#define XSEARCH_BUILD_NUMBER    15
+#define XSEARCH_BUILD_NUMBER    16
 
 #define XSEARCH_MAX_READ_SIZE   1024 * 1024 * 1024
 #define XSEARCH_INFO_LEN        128
@@ -304,7 +304,6 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
 
 static void XSearch_ColorizeEntry(xsearch_t *pSearch, char *pOutput, size_t nSize, xsearch_entry_t *pEntry)
 {
-    xbool_t bIsExec = XFile_IsExec(pEntry->nMode);
     char *pColor = XSTR_EMPTY;
     char *pBack = XSTR_EMPTY;
     char *pFmt = XSTR_EMPTY;
@@ -313,7 +312,7 @@ static void XSearch_ColorizeEntry(xsearch_t *pSearch, char *pOutput, size_t nSiz
     if (pSearch->bReadStdin)
     {
         xstrnrgb(sColor, sizeof(sColor), 198, 145, 255);
-        pColor = sColor; // Amethyst color;
+        pColor = sColor; // Amethyst color
         pFmt = XSTR_FMT_BOLD;
     }
     else if (pEntry->eType == XF_SYMLINK)
@@ -328,6 +327,20 @@ static void XSearch_ColorizeEntry(xsearch_t *pSearch, char *pOutput, size_t nSiz
         {
             pColor = XSTR_CLR_CYAN;
             pFmt = XSTR_FMT_BOLD;
+        }
+    }
+    else if (pEntry->eType == XF_REGULAR)
+    {
+        if (XFile_IsExec(pEntry->nMode))
+        {
+            pColor = XSTR_CLR_GREEN;
+            pFmt = XSTR_FMT_BOLD;
+        }
+        else if (pEntry->sName[0] == '.')
+        {
+            xstrnrgb(sColor, sizeof(sColor), 192, 192, 192);
+            pColor = sColor; // Silver grey color
+            pFmt = XSTR_FMT_DIM;
         }
     }
     else if (pEntry->eType == XF_DIRECTORY)
@@ -345,11 +358,6 @@ static void XSearch_ColorizeEntry(xsearch_t *pSearch, char *pOutput, size_t nSiz
         pColor = XSTR_CLR_YELLOW;
         pBack = XSTR_BACK_BLACK;
     }
-    else if (pEntry->eType == XF_REGULAR && bIsExec)
-    {
-        pColor = XSTR_CLR_GREEN;
-        pFmt = XSTR_FMT_BOLD;
-    }
     else if (pEntry->eType == XF_CHAR_DEVICE ||
             pEntry->eType == XF_BLOCK_DEVICE)
     {
@@ -361,8 +369,11 @@ static void XSearch_ColorizeEntry(xsearch_t *pSearch, char *pOutput, size_t nSiz
     size_t nOffset = 0;
     while (!strncmp(&pEntry->sPath[nOffset], "./", 2)) nOffset += 2;
 
-    xstrncpyf(pOutput, nSize, "%s%s%s%s%s%s", pColor, pFmt, pBack,
-        &pEntry->sPath[nOffset], pEntry->sName, XSTR_FMT_RESET);
+    char *pQuote = XSTR_EMPTY;
+    if (xstrsrc(pEntry->sName, XSTR_SPACE) > 0) pQuote = "'";
+
+    xstrncpyf(pOutput, nSize, "%s%s%s%s%s%s%s%s", pColor, pFmt, pBack,
+        &pEntry->sPath[nOffset], pQuote, pEntry->sName, pQuote, XSTR_FMT_RESET);
 }
 
 static void XSearch_ColorizeSymlink(xsearch_t *pSearch, char *pSimlink, size_t nSize, xsearch_entry_t *pEntry)
