@@ -466,7 +466,7 @@ static void XSearch_DisplayEntry(xsearch_t *pSearch, xsearch_entry_t *pEntry)
     /* Create size string with indentation */
     char sSize[XSEARCH_SIZE_LEN], sRound[XSEARCH_SIZE_LEN + 8];
     XBytesToUnit(sSize, sizeof(sSize), pEntry->nSize, XTRUE);
-    xstrnlcpyf(sRound, sizeof(sRound), 7, XSTR_SPACE_CHAR, "%s", sSize);
+    xstrnlcpyf(sRound, sizeof(sRound), 8, XSTR_SPACE_CHAR, "%s", sSize);
 
     if (pEntry->nLineNum && xstrused(sLine))
     {
