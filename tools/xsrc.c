@@ -252,7 +252,7 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
                 pArgs->bReadStdin = XTRUE;
                 break;
             case 'v':
-                pArgs->bVerbose = 1;
+                pArgs->bVerbose = XTRUE;
                 break;
             case 'h':
             default:

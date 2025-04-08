@@ -157,6 +157,13 @@ int XSig_Register(int *pSignals, size_t nCount, xsig_cb_t callback)
 
 int XSig_RegExitSigs(void)
 {
-    int nSignals[4] = { SIGINT, SIGILL, SIGSEGV, SIGTERM };
-    return XSig_Register(nSignals, 4, XSig_Callback);
+    int nSignals[5] = { SIGINT, SIGILL, SIGSEGV, SIGTERM };
+    size_t nCount = 4;
+
+#ifdef __linux__
+    nSignals[4] = SIGBUS;
+    nCount++;
+#endif
+
+    return XSig_Register(nSignals, nCount, XSig_Callback);
 }
