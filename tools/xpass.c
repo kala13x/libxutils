@@ -145,7 +145,7 @@ static void XPass_DisplayUsage(const char *pName)
     xlog("   %s-c%s <path>               %s# Configuration file path%s", XPASS_ARG_FMT);
     xlog("   %s-i%s <path>               %s# Input/Database file path%s", XPASS_ARG_FMT);
     xlog("   %s-k%s <size>               %s# AES encryt/decrypt key size%s", XPASS_ARG_FMT);
-    xlog("   %s-f%s                      %s# Force overwrite db/cfg files%s\n", XPASS_ARG_FMT);
+    xlog("   %s-f%s                      %s# Force overwrite db/cfg files%s", XPASS_ARG_FMT);
     xlog("   %s-h%s                      %s# Version and usage%s\n", XPASS_ARG_FMT);
 
     xlog("Required one operation from this list%s*%s:", XSTR_CLR_RED, XSTR_FMT_RESET);
