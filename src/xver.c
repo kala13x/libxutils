@@ -22,7 +22,8 @@ const char* XUtils_Version(void)
     if (!XSYNC_ATOMIC_GET(&g_nHaveVerLong))
     {
         xstrncpyf(g_versionLong, sizeof(g_versionLong), "%d.%d build %d (%s)", 
-            XUTILS_VERSION_MAX, XUTILS_VERSION_MIN, XUTILS_BUILD_NUMBER, __DATE__);
+            XUTILS_VERSION_MAX, XUTILS_VERSION_MIN,
+            XUTILS_BUILD_NUMBER, XUTILS_BUILD_DATE);
 
         XSYNC_ATOMIC_SET(&g_nHaveVerLong, 1);
     }

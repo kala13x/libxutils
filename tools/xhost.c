@@ -17,7 +17,7 @@
 #define XHOST_FILE_PATH     "/etc/hosts"
 #define XHOST_VERSION_MAX   1
 #define XHOST_VERSION_MIN   0
-#define XHOST_BUILD_NUMBER  9
+#define XHOST_BUILD_NUMBER  10
 
 #define XHOST_ADDR_LEN_MAX  15
 
@@ -26,12 +26,13 @@ typedef struct {
     xbool_t bAppend;
     xbool_t bRemove;
     xbool_t bVerbose;
-    xbool_t bLines;
     xbool_t bSearch;
     xbool_t bComment;
     xbool_t bDisplay;
     xbool_t bUncomment;
     xbool_t bWholeWords;
+    xbool_t bInsertLine;
+    xbool_t bHideLines;
     size_t nLineNumber;
     size_t nTabSize;
     char sAddress[XLINE_MAX];
@@ -71,28 +72,29 @@ static void XHost_Usage(const char *pName)
     for (i = 0; i < nLength; i++) sWhiteSpace[i] = ' ';
     sWhiteSpace[nLength] = 0;
 
-    printf("Usage: %s [-a <address>] [-n <hostname>] [-x <number>]\n", pName);
-    printf(" %s [-c] [-u] [-r] [-d] [-l] [-s] [-v] [-w] [-h]\n\n", sWhiteSpace);
+    printf("Usage: %s [-a <addr>] [-n <hostname>] [-l <line>] [-i]\n", pName);
+    printf(" %s [-c] [-u] [-r] [-d] [-s] [-x] [-v] [-w] [-h]\n\n", sWhiteSpace);
 
     printf("Options are:\n");
     printf("  -a <address>          # IP address\n");
     printf("  -n <hostname>         # Host name\n");
-    printf("  -x <number>           # Line number\n");
+    printf("  -l <line>             # Line number\n");
     printf("  -t <size>             # Tab size to lint entries\n");
+    printf("  -i                    # Insert new line\n");
     printf("  -c                    # Comment entry\n");
     printf("  -u                    # Uncomment entry\n");
     printf("  -r                    # Remove entry\n");
     printf("  -s                    # Search Entry\n");
-    printf("  -l                    # Show or add lines\n");
     printf("  -d                    # Display /etc/hosts file\n");
     printf("  -w                    # Match whole words in entry\n");
+    printf("  -x                    # Hide lines during display\n");
     printf("  -v                    # Enable verbose logging\n");
     printf("  -h                    # Print version and usage\n\n");
 
     printf("Examples:\n");
     printf("1) %s -a 10.10.17.1 -n example.com\n", pName);
     printf("2) %s -a 192.168.0.17 -rw\n", pName);
-    printf("3) %s -n test.com -rdl\n", pName);
+    printf("3) %s -n test.com -rd\n", pName);
 }
 
 static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
@@ -100,18 +102,19 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
     memset(pArgs, 0, sizeof(xhost_args_t));
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "a:n:t:x:c1:d1:u1:l1:r1:s1:v1:w1:h1")) != -1)
+    while ((opt = getopt(argc, argv, "a:n:l:t:c1:d1:i1:u1:r1:s1:x1:v1:w1:h1")) != -1)
     {
         switch (opt)
         {
             case 'a': xstrncpy(pArgs->sAddress, sizeof(pArgs->sAddress), optarg); break;
             case 'n': xstrncpy(pArgs->sHost, sizeof(pArgs->sHost), optarg); break;
-            case 'x': pArgs->nLineNumber = atoi(optarg); break;
+            case 'l': pArgs->nLineNumber = atoi(optarg); break;
             case 't': pArgs->nTabSize = atoi(optarg); break;
             case 'd': pArgs->bDisplay = XTRUE; break;
+            case 'i': pArgs->bInsertLine = XTRUE; break;
             case 'c': pArgs->bComment = XTRUE; break;
             case 'u': pArgs->bUncomment = XTRUE; break;
-            case 'l': pArgs->bLines = XTRUE; break;
+            case 'x': pArgs->bHideLines = XTRUE; break;
             case 'r': pArgs->bRemove = XTRUE; break;
             case 's': pArgs->bSearch = XTRUE; break;
             case 'v': pArgs->bVerbose = XTRUE; break;
@@ -124,7 +127,8 @@ static int XHost_ParseArgs(xhost_args_t *pArgs, int argc, char *argv[])
     xbool_t bHaveAddress = xstrused(pArgs->sAddress);
     xbool_t bHaveHost = xstrused(pArgs->sHost);
     xbool_t bModify = pArgs->bRemove || pArgs->bComment || pArgs->bUncomment;
-    pArgs->bAppend = !bModify && !pArgs->bSearch && ((bHaveAddress && bHaveHost) || pArgs->nLineNumber);
+    xbool_t bInsertLine = pArgs->bInsertLine && pArgs->nLineNumber;
+    pArgs->bAppend = !bModify && !pArgs->bSearch && ((bHaveAddress && bHaveHost) || bInsertLine);
 
     if ((bModify || pArgs->bSearch) && !bHaveAddress && !bHaveHost && !pArgs->nLineNumber) return XSTDERR;
     if (!pArgs->bAppend && !bModify) pArgs->bDisplay = XTRUE;
@@ -581,7 +585,7 @@ static void XHost_AddLineNumber(xstring_t *pString, int nLine)
     XString_Append(pString, " │%s ", XSTR_FMT_RESET);
 }
 
-static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bLines)
+static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bHideLines)
 {
     XHost_ClearContext(pCtx);
     XASSERT((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
@@ -596,7 +600,7 @@ static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bLines)
 
         if (pCtx->bSearch && (pCtx->nLineNumber != nLineNumber && !XHost_SearchEntry(pCtx))) continue;
         while (pCtx->sLine[nPosit] && isspace((unsigned char)pCtx->sLine[nPosit])) nPosit++;
-        if (bLines) XHost_AddLineNumber(&pCtx->hosts, nLineNumber);
+        if (!bHideLines) XHost_AddLineNumber(&pCtx->hosts, nLineNumber);
 
         if (!pCtx->sLine[nPosit] || pCtx->sLine[nPosit] == '\n')
         {
@@ -674,12 +678,12 @@ int main(int argc, char *argv[])
     ctx.nTabSize = args.nTabSize;
     ctx.bSearch = args.bSearch;
 
-    if (args.bAppend) nStatus = XHost_AddEntry(&ctx, args.bLines);
+    if (args.bAppend) nStatus = XHost_AddEntry(&ctx, args.bInsertLine);
     else if (args.bUncomment) nStatus = XHost_UncommentEntry(&ctx);
     else if (args.bComment) nStatus = XHost_RemoveEntry(&ctx, XTRUE);
     else if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
     if (!nStatus && args.nTabSize) nStatus = XHost_LintEntries(&ctx);
-    if (!nStatus && args.bDisplay) XHost_DisplayHosts(&ctx, args.bLines);
+    if (!nStatus && args.bDisplay) XHost_DisplayHosts(&ctx, args.bHideLines);
 
     XHost_ClearContext(&ctx);
     return nStatus;

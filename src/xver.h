@@ -10,9 +10,10 @@
 #ifndef __XUTILS_XLIBVER_H__
 #define __XUTILS_XLIBVER_H__
 
-#define XUTILS_VERSION_MAX     2
-#define XUTILS_VERSION_MIN     6
-#define XUTILS_BUILD_NUMBER    49
+#define XUTILS_VERSION_MAX      2
+#define XUTILS_VERSION_MIN      6
+#define XUTILS_BUILD_NUMBER     50
+#define XUTILS_BUILD_DATE       "2025 May 04"
 
 #ifdef __cplusplus
 extern "C" {
