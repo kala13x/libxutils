@@ -322,17 +322,13 @@ XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
         return nRetVal;
     }
 
-    size_t nSize = 0;
-    va_list args;
-
-    va_start(args, pFmt);
-    char *pDest = xstracpyargs(pFmt, args, &nSize);
-    va_end(args);
-
+    char *pDest = NULL;
+    XSTRCPYFMT(pDest, pFmt, NULL);
     XASSERT(pDest, nRetVal);
-    xlogfl(nFlag, "%s", pDest);
 
+    xlogfl(nFlag, "%s", pDest);
     free(pDest);
+
     return nRetVal;
 }
 
@@ -348,17 +344,13 @@ XSTATUS XLog_Throwe(int nRetVal, const char *pFmt, ...)
         return nRetVal;
     }
 
-    size_t nSize = 0;
-    va_list args;
-
-    va_start(args, pFmt);
-    char *pDest = xstracpyargs(pFmt, args, &nSize);
-    va_end(args);
-
+    char *pDest = NULL;
+    XSTRCPYFMT(pDest, pFmt, NULL);
     XASSERT(pDest, nRetVal);
-    xlogfl(nFlag, "%s (%s)", pDest, XSTRERR);
 
+    xlogfl(nFlag, "%s (%s)", pDest, XSTRERR);
     free(pDest);
+
     return nRetVal;
 }
 
@@ -372,17 +364,13 @@ void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...)
         return pRetVal;
     }
 
-    size_t nSize = 0;
-    va_list args;
-
-    va_start(args, pFmt);
-    char *pDest = xstracpyargs(pFmt, args, &nSize);
-    va_end(args);
-
+    char *pDest = NULL;
+    XSTRCPYFMT(pDest, pFmt, NULL);
     XASSERT(pDest, pRetVal);
-    xloge("%s", pDest);
 
+    xloge("%s", pDest);
     free(pDest);
+
     return pRetVal;
 }
 

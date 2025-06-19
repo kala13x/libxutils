@@ -77,6 +77,24 @@
 #define XSTR_AVAIL(arr)((int)sizeof(arr)-(int)strlen(arr))
 #define XSTR_NAVAIL(arr,n)((int)n-(int)strlen(arr))
 
+#define XSTRCPYFMT(dst, fmt, len)                   \
+    do {                                            \
+        va_list args;                               \
+        va_start(args, fmt);                        \
+        dst = xstracpyargs(fmt, args, len);         \
+        va_end(args);                               \
+    }                                               \
+    while (XSTDNON)
+
+#define XSTRNCPYFMT(dst, size, fmt, len)            \
+    do {                                            \
+        va_list args;                               \
+        va_start(args, fmt);                        \
+        *len = xstrncpyarg(dst, size, fmt, args);   \
+        va_end(args);                               \
+    }                                               \
+    while (XSTDNON)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -104,9 +122,9 @@ char* xstracpyn(size_t *nSize, const char *pFmt, ...);
 char* xstralloc(size_t nSize);
 
 int xstrncpyarg(char *pDest, size_t nSize, const char *pFmt, va_list args);
-char* xstrpcpyargs(xpool_t *pPool, const char *pFmt, va_list args, size_t *nSize);
+char* xstrpcpyargs(xpool_t *pPool, const char *pFmt, va_list args, size_t *nDstLength);
 char* xstracpyarg(const char *pFmt, va_list args);
-char* xstracpyargs(const char *pFmt, va_list args, size_t *nSize);
+char* xstracpyargs(const char *pFmt, va_list args, size_t *nDstLength);
 size_t xstrarglen(const char *pFmt, va_list args);
 
 size_t xstrxcpyf(char **pDst, const char *pFmt, ...);

@@ -14,6 +14,39 @@
 #define UPPER_STRING "TEST STRING WITH UPPER CASE"
 #define LOVER_STRING "test string with lower case"
 
+xbool_t va_string_test1(const char *pOriginalString, size_t nOriginalLength, const char *pFmt, ...)
+{
+    char *pDest = NULL;
+    XSTRCPYFMT(pDest, pFmt, NULL);
+    XASSERT(pDest, XFALSE);
+
+    xlog("%s", pDest);
+
+    xbool_t status = xstrcmp(pOriginalString, pDest);
+    XASSERT_CALL(status, free, pDest, XFALSE);
+
+    size_t nLength = strlen(pDest);
+    XASSERT_CALL((nLength == nOriginalLength), free, pDest, XFALSE);
+
+    free(pDest);
+    return XTRUE;
+}
+
+xbool_t va_string_test2(const char *pOriginalString, size_t nOriginalLength, const char *pFmt, ...)
+{
+    size_t nLength = 0;
+    char sDest[XSTR_MIN];
+    sDest[0] = XSTR_NUL;
+
+    XSTRNCPYFMT(sDest, sizeof(sDest), pFmt, &nLength);
+    if (!xstrused(sDest)) return XFALSE;
+
+    xlog("%s (%zu)", sDest, nLength);
+
+    XASSERT((nLength == nOriginalLength), XFALSE);
+    return xstrcmp(pOriginalString, sDest);
+}
+
 int main() 
 {
     xlog_defaults();
@@ -296,6 +329,19 @@ int main()
     printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr1a, multiPattern, multiMatch1a ? "MATCH" : "NO MATCH");
     printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr2, multiPattern, multiMatch2 ? "MATCH" : "NO MATCH");
     printf("Matching \"%s\" with pattern \"%s\": %s\n", multiMatchStr3, multiPattern, multiMatch3 ? "MATCH" : "NO MATCH");
+
+    // Test VA string functions
+    if (!va_string_test1("test string 69", 14, "test %s %d", "string", 69))
+    {
+        xloge("va_string_test1 failed");
+        return XSTDERR;
+    }
+
+    if (!va_string_test2("test string2 96", 15, "test %s %d", "string2", 96))
+    {
+        xloge("va_string_test2 failed");
+        return XSTDERR;
+    }
 
     return 0;
 }

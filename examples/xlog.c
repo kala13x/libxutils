@@ -21,9 +21,10 @@ int logCallback(const char *pLog, size_t nLength, xlog_flag_t eFlag, void *pCtx)
 int main()
 {
     /* Used variables */
+    XSTATUS status = XSTDOK;
+    int int_arg = 69;
     char char_arg[32];
     strcpy(char_arg, "test string");
-    int int_arg = 69;
 
     /* Initialize XLog with default parameters */
     XLog_Init("example", XLOG_ALL, 0);
@@ -72,6 +73,14 @@ int main()
     xlog("just another simple message");
     xlogd("just another debug message");
     xlogt("just another trace message");
+
+    // Test throwing an error
+    status = XLog_Throw(XSTDERR, "This is a test error message with code %d, (%s)", XSTDERR, "test error string");
+    if (status != XSTDERR)
+    {
+        xloge("XLog_Throw failed with status: %d", status);
+        return XSTDERR;
+    }
 
     xlog_destroy();
     return 0;

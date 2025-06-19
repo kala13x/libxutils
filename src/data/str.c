@@ -328,39 +328,43 @@ int xstrncpyarg(char *pDest, size_t nSize, const char *pFmt, va_list args)
     return (int)nLength;
 }
 
-char* xstracpyargs(const char *pFmt, va_list args, size_t *nSize)
+char* xstracpyargs(const char *pFmt, va_list args, size_t *nDstLength)
 {
-    size_t nLength = xstrarglen(pFmt, args);
-    if (!nLength) return NULL;
+    if (nDstLength) *nDstLength = 0;
+    size_t nArgLength = xstrarglen(pFmt, args);
+    if (!nArgLength) return NULL;
 
-    char *pDest = (char*)malloc(++nLength);
+    char *pDest = (char*)malloc(++nArgLength);
     if (pDest == NULL) return NULL;
 
-    *nSize = xstrncpyarg(pDest, nLength, pFmt, args);
-    if (*nSize <= 0 && pDest)
+    size_t nLength = xstrncpyarg(pDest, nArgLength, pFmt, args);
+    if (nLength <= 0 && pDest)
     {
         free(pDest);
         return NULL;
     }
 
+    if (nDstLength) *nDstLength = nLength;
     return pDest;
 }
 
-char* xstrpcpyargs(xpool_t *pPool, const char *pFmt, va_list args, size_t *nSize)
+char* xstrpcpyargs(xpool_t *pPool, const char *pFmt, va_list args, size_t *nDstLength)
 {
-    size_t nLength = xstrarglen(pFmt, args);
-    if (!nLength) return NULL;
+    if (nDstLength) *nDstLength = 0;
+    size_t nArgLength = xstrarglen(pFmt, args);
+    if (!nArgLength) return NULL;
 
-    char *pDest = (char*)xalloc(pPool, ++nLength);
+    char *pDest = (char*)xalloc(pPool, ++nArgLength);
     if (pDest == NULL) return NULL;
 
-    *nSize = xstrncpyarg(pDest, nLength, pFmt, args);
-    if (*nSize <= 0 && pDest)
+    size_t nLength = xstrncpyarg(pDest, nArgLength, pFmt, args);
+    if (nLength <= 0 && pDest)
     {
         xfree(pPool, pDest);
         return NULL;
     }
 
+    if (nDstLength) *nDstLength = nLength;
     return pDest;
 }
 
@@ -372,20 +376,16 @@ char* xstracpyarg(const char *pFmt, va_list args)
 
 char* xstracpy(const char *pFmt, ...)
 {
-    va_list args;
-    va_start(args, pFmt);
-    char *pDest = xstracpyarg(pFmt, args);
-    va_end(args);
+    char *pDest = NULL;
+    XSTRCPYFMT(pDest, pFmt, NULL);
     return pDest;
 }
 
 char* xstracpyn(size_t *nSize, const char *pFmt, ...)
 {
-    *nSize = 0;
-    va_list args;
-    va_start(args, pFmt);
-    char *pDest = xstracpyargs(pFmt, args, nSize);
-    va_end(args);
+    if (nSize) *nSize = 0;
+    char *pDest = NULL;
+    XSTRCPYFMT(pDest, pFmt, nSize);
     return pDest;
 }
 
@@ -1328,13 +1328,10 @@ int XString_Add(xstring_t *pString, const char *pData, size_t nLength)
 
 int XString_Append(xstring_t *pString, const char *pFmt, ...)
 {
-    va_list args;
     size_t nBytes = 0;
+    char *pDest = NULL;
 
-    va_start(args, pFmt);
-    char *pDest = xstracpyargs(pFmt, args, &nBytes);
-    va_end(args);
-
+    XSTRCPYFMT(pDest, pFmt, &nBytes);
     if (pDest == NULL)
     {
         pString->nStatus = XSTDERR;
@@ -1384,13 +1381,10 @@ int XString_Insert(xstring_t *pString, size_t nPosit, const char *pData, size_t 
 
 int XString_InsertFmt(xstring_t *pString, size_t nPosit, const char *pFmt, ...)
 {
-    va_list args;
+    char *pDest = NULL;
     size_t nBytes = 0;
 
-    va_start(args, pFmt);
-    char *pDest = xstracpyargs(pFmt, args, &nBytes);
-    va_end(args);
-
+    XSTRCPYFMT(pDest, pFmt, &nBytes);
     if (pDest == NULL)
     {
         pString->nStatus = XSTDERR;
@@ -1646,28 +1640,24 @@ xstring_t *XString_From(const char *pData, size_t nLength)
 
 xstring_t *XString_FromFmt(const char *pFmt, ...)
 {
-    va_list args;
     size_t nBytes = 0;
+    char *pDest = NULL;
 
-    va_start(args, pFmt);
-    char *pDest = xstracpyargs(pFmt, args, &nBytes);
-    va_end(args);
-
+    XSTRCPYFMT(pDest, pFmt, &nBytes);
     if (pDest == NULL) return NULL;
-    xstring_t* pString = XString_From(pDest, nBytes);
 
+    xstring_t* pString = XString_From(pDest, nBytes);
     free(pDest);
+
     return pString;
 }
 
 int XString_InitFrom(xstring_t *pStr, const char *pFmt, ...)
 {
-    va_list args;
     size_t nBytes = 0;
+    char *pDest = NULL;
 
-    va_start(args, pFmt);
-    char *pDest = xstracpyargs(pFmt, args, &nBytes);
-    va_end(args);
+    XSTRCPYFMT(pDest, pFmt, &nBytes);
     if (pDest == NULL) return XSTDERR;
 
     if (XString_Init(pStr, nBytes, 0) == XSTDERR ||

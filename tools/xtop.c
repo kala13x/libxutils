@@ -21,7 +21,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        6
+#define XTOP_VERSION_MIN        7
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -429,7 +429,7 @@ XSTATUS XTOPApp_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *
             if (i == nNext || nNext >= pCPU->nCoreCount)
             {
                 xstrnfill(sSecond, sizeof(sSecond), pBar->frame.nColumns, XSTR_SPACE_CHAR);
-                return XWindow_AddLineFmt(pWin, "%s%s", sFirst, sSecond);
+                return XCLIWin_AddLineFmt(pWin, "%s%s", sFirst, sSecond);
             }
 
             xcpu_info_t *pSecondCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nNext);
@@ -448,7 +448,7 @@ XSTATUS XTOPApp_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *
                 XTOPApp_FillCPUBar(pBar, pSecondCore, sUsed, sizeof(sUsed));
                 XProgBar_GetOutputAdv(pBar, sSecond, sizeof(sSecond), sUsed, bHidePct);
 
-                XWindow_AddLineFmt(pWin, "%s%s", sFirst, sSecond);
+                XCLIWin_AddLineFmt(pWin, "%s%s", sFirst, sSecond);
                 nUsedCount++;
             }
         }
@@ -557,7 +557,7 @@ XSTATUS XTOPApp_AddOverallBar(xcli_win_t *pWin, xcli_bar_t *pBar, xmem_info_t *p
     XKBToUnit(sBuff, sizeof(sBuff), pMemInfo->nBuffers, XTRUE);
     XKBToUnit(sUsed, sizeof(sUsed), pMemInfo->nMemoryShared, XTRUE);
     XKBToUnit(sCache, sizeof(sCache), pMemInfo->nMemoryCached, XTRUE);
-    XWindow_AddLineFmt(pWin, "%s "
+    XCLIWin_AddLineFmt(pWin, "%s "
                 "%sBuff:%s %s, "
                 "%sShared:%s %s, "
                 "%sCached:%s %s", sLine,
@@ -583,7 +583,7 @@ XSTATUS XTOPApp_AddOverallBar(xcli_win_t *pWin, xcli_bar_t *pBar, xmem_info_t *p
     XProgBar_GetOutputAdv(pBar, sLine, sizeof(sLine), sUsed, bHidePct);
 
     XKBToUnit(sCache, sizeof(sCache), pMemInfo->nSwapCached, XTRUE);
-    XWindow_AddLineFmt(pWin, "%s "
+    XCLIWin_AddLineFmt(pWin, "%s "
                 "%sSwp Cached:%s %s, "
                 "%sLoad avg:%s %s%.2f%s %s%.2f%s %s%.2f%s",
                 sLine, XSTR_CLR_CYAN, XSTR_FMT_RESET,
@@ -599,7 +599,7 @@ XSTATUS XTOPApp_AddOverallBar(xcli_win_t *pWin, xcli_bar_t *pBar, xmem_info_t *p
     /* Create and append process track info next to swap bar */
     XKBToUnit(sUsed, sizeof(sUsed), pMemInfo->nResidentMemory, XTRUE);
     XKBToUnit(sBuff, sizeof(sBuff), pMemInfo->nVirtualMemory, XTRUE);
-    return XWindow_AddLineFmt(pWin, "%s%sRes:%s %s, %sVirt:%s %s, %sUS:%s %.2f, %sKS:%s %.2f", sLine,
+    return XCLIWin_AddLineFmt(pWin, "%s%sRes:%s %s, %sVirt:%s %s, %sUS:%s %.2f, %sKS:%s %.2f", sLine,
                  XSTR_CLR_CYAN, XSTR_FMT_RESET, sUsed, XSTR_CLR_CYAN, XSTR_FMT_RESET, sBuff,
                  XSTR_CLR_CYAN, XSTR_FMT_RESET, XU32ToFloat(pCPU->usage.nUserSpaceUsage),
                  XSTR_CLR_CYAN, XSTR_FMT_RESET, XU32ToFloat(pCPU->usage.nKernelSpace));
@@ -660,12 +660,12 @@ XSTATUS XTOPApp_AddCPUInfo(xcli_win_t *pWin, xcpu_info_t *pCore)
     XTOPApp_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nStealTime), XFALSE);
     XTOPApp_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nGuestTime), XFALSE);
     XTOPApp_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nGuestNiced), XFALSE);
-    return XWindow_AddLineFmt(pWin, "%s", sLine);
+    return XCLIWin_AddLineFmt(pWin, "%s", sLine);
 }
 
 XSTATUS XTOPApp_AddCPUExtra(xcli_win_t *pWin, xmon_args_t *pArgs, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
 {
-    XWindow_AddAligned(pWin, XTOP_CPU_HEADER, XSTR_BACK_BLUE, XCLI_LEFT);
+    XCLIWin_AddAligned(pWin, XTOP_CPU_HEADER, XSTR_BACK_BLUE, XCLI_LEFT);
     XSTATUS nStatus = XTOPApp_AddCPUInfo(pWin, &pCPU->sum);
     if (nStatus <= 0) return nStatus;
 
@@ -764,7 +764,7 @@ XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xmon_args_t *pArgs, size_t nMaxIP
     if (strncmp(pIface->sIPAddr, XNET_IPADDR_DEFAULT, 7)) xstrncat(sLine, sizeof(sLine), "%s", sRound);
     else xstrncat(sLine, sizeof(sLine), "%s%s%s", XSTR_FMT_DIM, sRound, XSTR_FMT_RESET);
 
-    return XWindow_AddLineFmt(pWin, "%s", sLine);
+    return XCLIWin_AddLineFmt(pWin, "%s", sLine);
 }
 
 XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xmon_args_t *pArgs, xarray_t *pIfaces)
@@ -830,7 +830,7 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xmon_args_t *pArgs, xarray_t *p
     xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding - 1, XSTR_SPACE_CHAR, "%s", "IP");
     xstrncat(sLine, sizeof(sLine), "%s", sRound);
 
-    XWindow_AddAligned(pWin, sLine, XSTR_BACK_BLUE, XCLI_LEFT);
+    XCLIWin_AddAligned(pWin, sLine, XSTR_BACK_BLUE, XCLI_LEFT);
     pArgs->nIfaceCount = 0;
 
     if (nTrackID >= 0)
@@ -865,7 +865,7 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xmon_args_t *pArgs, xarray_t *p
     XBytesToUnit(sData, sizeof(sData), nSumRX + nSumTX, bShort);
     xstrnlcpyf(sRound, sizeof(sRound), nSpacePadding, XSTR_SPACE_CHAR, "%s", sData);
     xstrncat(sLine, sizeof(sLine), "%s/s", sRound);
-    return XWindow_AddAligned(pWin, sLine, XSTR_CLR_LIGHT_CYAN, XCLI_LEFT);
+    return XCLIWin_AddAligned(pWin, sLine, XSTR_CLR_LIGHT_CYAN, XCLI_LEFT);
 }
 
 void XTOPApp_ParseCoreObj(xjson_obj_t *pCoreObj, xcpu_info_t *pCore)
@@ -1648,7 +1648,7 @@ int main(int argc, char *argv[])
     }
 
     xcli_win_t win;
-    XWindow_Init(&win, !args.bClear);
+    XCLIWin_Init(&win, !args.bClear);
 
     xcli_bar_t bar;
     XProgBar_GetDefaults(&bar);
@@ -1662,8 +1662,8 @@ int main(int argc, char *argv[])
     {
         if (args.bClient && XTOPApp_GetRemoteStats(&args, &stats) < 0) break;
 
-        XWindow_AddAligned(&win, "[XTOP]", XSTR_BACK_BLUE, XCLI_CENTER);
-        XWindow_AddEmptyLine(&win);
+        //XCLIWin_AddAligned(&win, "[XTOP]", XSTR_BACK_BLUE, XCLI_CENTER);
+        XCLIWin_AddEmptyLine(&win);
 
         xcpu_stats_t cpuStats;
         if (XMon_GetCPUStats(&stats, &cpuStats) > 0)
@@ -1676,11 +1676,11 @@ int main(int argc, char *argv[])
 
             if (args.nCPUExtraMin > 0)
             {
-                XWindow_AddEmptyLine(&win);
+                XCLIWin_AddEmptyLine(&win);
                 XTOPApp_AddCPUExtra(&win, &args, &bar, &memInfo, &cpuStats);
             }
 
-            XWindow_AddEmptyLine(&win);
+            XCLIWin_AddEmptyLine(&win);
             XArray_Destroy(&cpuStats.cores);
         }
 
@@ -1693,11 +1693,11 @@ int main(int argc, char *argv[])
 
         if (bFirst)
         {
-            XWindow_ClearScreen(XFALSE);
+            XCLIWin_ClearScreen(XFALSE);
             bFirst = XFALSE;
         }
 
-        XWindow_Flush(&win);
+        XCLIWin_Flush(&win);
         xusleep(args.nIntervalU);
     }
 
@@ -1705,7 +1705,7 @@ int main(int argc, char *argv[])
         XMon_StopMonitoring(&stats, 1000);
 
     XMon_DestroyStats(&stats);
-    XWindow_Destroy(&win);
+    XCLIWin_Destroy(&win);
 
     usleep(10000); // Make valgrind happy
     return 0;
