@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        9
+#define XTOP_VERSION_MIN        10
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -55,6 +55,9 @@ extern char *optarg;
 #define XIFACE_HDR_WIDE_PADDING     17
 #define XIFACE_NAME_NARROW_PADDING  12
 #define XIFACE_NAME_WIDE_PADDING    15
+
+#define XTOP_ACTIVE_IFACES_RESET    0
+#define XTOP_CORE_COUNT_RESET       -1
 
 #define XTOP_OPT_ON  "["XSTR_CLR_GREEN"on"XSTR_FMT_RESET"] "
 #define XTOP_OPT_OFF "["XSTR_CLR_RED"off"XSTR_FMT_RESET"]"
@@ -90,7 +93,9 @@ typedef struct xmon_ctx_ {
     char sToken[XSTR_MIN];
     char sKey[XSTR_MIN];
 
+    int nRealCores;
     int nCoreCount;
+
     size_t nIntervalU;
     uint16_t nCPUExtraMin;
     uint16_t nActiveIfaces;
@@ -129,6 +134,7 @@ void XTOP_InitContext(xtop_ctx_t *pCtx)
     pCtx->nIfaceCount = 0;
     pCtx->nIntervalU = 0;
     pCtx->nCoreCount = -1;
+    pCtx->nRealCores = -1;
     pCtx->nPort = 0;
     pCtx->nPID = 0;
 }
@@ -191,10 +197,19 @@ void XTOP_DisplayHelp(xtop_ctx_t *pCtx)
     const char *pScreenRendering = pCtx->bLineByLine ? "[lines]" : "[frame]";
     const char *pSortType = XTOP_GetSortTypeName(pCtx->nSort);
 
+    if (pCtx->nCoreCount < 0 && pCtx->nRealCores)
+        pCtx->nCoreCount = pCtx->nRealCores;
+
+    char sSpace[XSTR_TINY] = XSTR_INIT;
+    size_t nSpaceSize = pCtx->nCoreCount >= 10 ? 2 : 3;
+    nSpaceSize = pCtx->nCoreCount >= 100 ? 1 : nSpaceSize;
+    nSpaceSize = pCtx->nCoreCount >= 1000 ? 0 : nSpaceSize;
+    xstrnfill(sSpace, sizeof(sSpace), nSpaceSize, XSTR_SPACE_CHAR);
+
     // S.K. >> Note: Messages may seem not aligned, but they are aligned because of the formatted arguments
     printf("Interactive options are:\n");
-    printf("  %s%s+%s                # Increase CPU core count\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET);
-    printf("  %s%s-%s                # Decrease CPU core count\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s%s+%s [%d] %s        # Increase CPU core count\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pCtx->nCoreCount, sSpace);
+    printf("  %s%s-%s [%d] %s        # Decrease CPU core count\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pCtx->nCoreCount, sSpace);
     printf("  %s%sa%s %s          # Toggle - show CPU sum\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pShowCpuSum);
     printf("  %s%sc%s %s          # Toggle - show all CPU cores\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pShowAllCPU);
     printf("  %s%si%s %s          # Toggle - show all network interfaces\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pShowAllIfaces);
@@ -759,6 +774,7 @@ XSTATUS XTOP_AddCPUInfo(xcli_win_t *pWin, xcpu_info_t *pCore)
 XSTATUS XTOP_AddCPUExtra(xtop_ctx_t *pCtx, xcli_win_t *pWin, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
 {
     XCLIWin_AddAligned(pWin, XTOP_CPU_HEADER, XSTR_BACK_BLUE, XCLI_LEFT);
+    if (pCtx->nRealCores < 0) pCtx->nRealCores = pCPU->nCoreCount;
 
     if (pCtx->bShowCPUSum)
     {
@@ -802,6 +818,7 @@ XSTATUS XTOP_AddCPUExtra(xtop_ctx_t *pCtx, xcli_win_t *pWin, xcli_bar_t *pBar, x
 
 static xbool_t XTOP_IsNarrowInterface(xcli_win_t *pWin)
 {
+    // Below 102 columns we can not fit all interface data without truncation
     return (pWin->frame.nColumns < 102) ? XTRUE : XFALSE;
 }
 
@@ -821,6 +838,7 @@ static uint8_t XTOP_GetIfaceSpacePadding(xcli_win_t *pWin, xbool_t bIsHeader)
 
 static uint8_t XTOP_GetAddrSpacePadding(xcli_win_t *pWin, size_t nMaxIPLen)
 {
+    // Calculate space padding for IP and MAC addresses based on window size
     uint8_t nSpacePadding = (pWin->frame.nColumns < 112) ? 7 : 8;
     nSpacePadding = (pWin->frame.nColumns < 110) ? 6 : nSpacePadding;
     nSpacePadding = (pWin->frame.nColumns < 108) ? 5 : nSpacePadding;
@@ -876,8 +894,9 @@ XSTATUS XTOP_AddInterface(xcli_win_t *pWin, xtop_ctx_t *pCtx, size_t nMaxIPLen, 
 
 XSTATUS XTOP_IsIfaceValidIP(xnet_iface_t *pIface)
 {
-    if (!xstrused(pIface->sIPAddr) ||
-        xstrncmp(pIface->sIPAddr, "0.0.0.0", 7))
+    if (!pIface ||
+        !xstrused(pIface->sIPAddr) ||
+        !strncmp(pIface->sIPAddr, "0.0.0.0", 7))
     {
         return XFALSE;
     }
@@ -887,8 +906,9 @@ XSTATUS XTOP_IsIfaceValidIP(xnet_iface_t *pIface)
 
 xbool_t XTOP_HasIfaceValidMac(xnet_iface_t *pIface)
 {
-    if (!xstrused(pIface->sHWAddr) ||
-        xstrncmp(pIface->sHWAddr, "00:00:00:00:00:00", 17))
+    if (!pIface ||
+        !xstrused(pIface->sHWAddr) ||
+        !strncmp(pIface->sHWAddr, "00:00:00:00:00:00", 17))
     {
         return XFALSE;
     }
@@ -1774,41 +1794,37 @@ static void XTOP_ProcessSTDIN(xtop_ctx_t *pCtx)
 
     while (XCLI_GetChar(&c, XTRUE) == XSTDOK)
     {
+        xbool_t bValid = XTRUE;
+
         if (c == 'c')
         {
             pCtx->bShowAllCPUs = !pCtx->bShowAllCPUs;
-            bRedraw = XTRUE;
             bReset = XTRUE;
         }
         else if (c == 'i')
         {
             pCtx->bShowAllIfaces = !pCtx->bShowAllIfaces;
-            bRedraw = XTRUE;
             bReset = XTRUE;
         }
         else if (c == 'l')
         {
             pCtx->bLineByLine = !pCtx->bLineByLine;
-            bRedraw = XTRUE;
             bReset = XTRUE;
         }
         else if (c == 'x')
         {
             pCtx->bDisplayHeader = !pCtx->bDisplayHeader;
-            pCtx->nCoreCount = -1;
-            bRedraw = XTRUE;
+            pCtx->nCoreCount = XTOP_CORE_COUNT_RESET;
         }
         else if (c == 'a')
         {
             pCtx->bShowCPUSum = !pCtx->bShowCPUSum;
-            bRedraw = XTRUE;
         }
         else if (c == 's')
         {
             if (++pCtx->nSort > XTOP_SORT_MAX)
                 pCtx->nSort = XTOP_SORT_DISABLE;
 
-            bRedraw = XTRUE;
             bReset = XTRUE;
         }
         else if (c == 'h')
@@ -1819,26 +1835,40 @@ static void XTOP_ProcessSTDIN(xtop_ctx_t *pCtx)
         else if (c == 'q')
         {
             pCtx->bQuit = XTRUE;
-            bRedraw = XTRUE;
         }
         else if (c == '+')
         {
             pCtx->nCoreCount++;
-            bRedraw = XTRUE;
+
+            if (pCtx->nRealCores > 0 &&
+                pCtx->nCoreCount > pCtx->nRealCores)
+                pCtx->nCoreCount = pCtx->nRealCores;
         }
         else if (c == '-')
         {
             pCtx->nCoreCount--;
+
+            if (pCtx->nCoreCount < 0)
+                pCtx->nCoreCount = 0;
+        }
+        else
+        {
+            bValid = XFALSE;
+        }
+
+        if (bValid)
+        {
             bRedraw = XTRUE;
         }
     }
 
     if (bReset)
     {
-        pCtx->nActiveIfaces = 0;
-        pCtx->nCoreCount = -1;
+        pCtx->nActiveIfaces = XTOP_ACTIVE_IFACES_RESET;
+        pCtx->nCoreCount = XTOP_CORE_COUNT_RESET;
     }
 
+    // Redraw help message only if its enabled and something is changed
     if (bRedraw) pCtx->bRedrawHelp = pCtx->bDisplayHelp;
 }
 #endif
