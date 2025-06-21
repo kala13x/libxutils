@@ -166,10 +166,10 @@ const char *XTOP_GetSortTypeName(uint8_t nSort)
 
 void XTOP_DisplayHelp(xtop_ctx_t *pCtx)
 {
-    printf("==================================================================\n");
-    printf("XTOP v%d.%d - (c) 2022 Sandro Kalatozishvili (s.kalatoz@gmail.com)\n",
+    printf("======================================================================\n");
+    printf("XTOP v%d.%d - (c) 2022-2025 Sandro Kalatozishvili (s.kalatoz@gmail.com)\n",
         XTOP_VERSION_MAJ, XTOP_VERSION_MIN);
-    printf("==================================================================\n\n");
+    printf("======================================================================\n\n");
 
     printf("CPU usage bar: %s[%s%slow-priority/%s%snormal/%s%skernel/%s%svirtualized%s      %sused%%%s%s]%s\n",
         XSTR_FMT_BOLD, XSTR_FMT_RESET, XSTR_CLR_BLUE, XSTR_FMT_RESET, XSTR_CLR_GREEN, XSTR_FMT_RESET, XSTR_CLR_RED,
@@ -193,29 +193,31 @@ void XTOP_DisplayHelp(xtop_ctx_t *pCtx)
 
     // S.K. >> Note: Messages may seem not aligned, but they are aligned because of the formatted arguments
     printf("Interactive options are:\n");
-    printf("  %s+%s                # Increase CPU core count\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
-    printf("  %s-%s                # Decrease CPU core count\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
-    printf("  %sa%s %s          # Toggle - show CPU sum\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET, pShowCpuSum);
-    printf("  %sc%s %s          # Toggle - show all CPU cores\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET, pShowAllCPU);
-    printf("  %si%s %s          # Toggle - show all network interfaces\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET, pShowAllIfaces);
-    printf("  %sx%s %s          # Toggle - show XTOP header\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET, pShowXTOPHeader);
-    printf("  %ss%s %s         # Toggle - sort (none/busy/free/name/len)\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET, pSortType);
-    printf("  %sl%s %s        # Toggle - screen rendering (lines/frame)\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET, pScreenRendering);
-    printf("  %sh%s %s          # Toggle - show help message\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET, pShowHelpMessage);
-    printf("  %sq%s                # Quit/exit from XTOP\n\n", XSTR_CLR_YELLOW, XSTR_FMT_RESET);
+    printf("  %s%s+%s                # Increase CPU core count\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s%s-%s                # Decrease CPU core count\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("  %s%sa%s %s          # Toggle - show CPU sum\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pShowCpuSum);
+    printf("  %s%sc%s %s          # Toggle - show all CPU cores\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pShowAllCPU);
+    printf("  %s%si%s %s          # Toggle - show all network interfaces\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pShowAllIfaces);
+    printf("  %s%sx%s %s          # Toggle - show XTOP header\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pShowXTOPHeader);
+    printf("  %s%ss%s %s         # Toggle - sort (none/busy/free/name/len)\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pSortType);
+    printf("  %s%sl%s %s        # Toggle - screen rendering (lines/frame)\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pScreenRendering);
+    printf("  %s%sh%s %s          # Toggle - show this help screen\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pShowHelpMessage);
+    printf("  %s%sq%s                # Quit/exit from XTOP\n\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("Command-line options:\n");
     printf("%sRun XTOP with '-h' argument to see help and command line options.%s\n\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+
+    printf("%s%sPress 'h' to return.%s\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET);
 }
 
 void XTOP_DisplayUsage(const char *pName)
 {
     int nLength = strlen(pName) + 6;
 
-    printf("==================================================================\n");
-    printf("XTOP v%d.%d - (c) 2022 Sandro Kalatozishvili (s.kalatoz@gmail.com)\n",
+    printf("======================================================================\n");
+    printf("XTOP v%d.%d - (c) 2022-2025 Sandro Kalatozishvili (s.kalatoz@gmail.com)\n",
         XTOP_VERSION_MAJ, XTOP_VERSION_MIN);
-    printf("==================================================================\n\n");
+    printf("======================================================================\n\n");
 
     printf("CPU usage bar: %s[%s%slow-priority/%s%snormal/%s%skernel/%s%svirtualized%s      %sused%%%s%s]%s\n",
         XSTR_FMT_BOLD, XSTR_FMT_RESET, XSTR_CLR_BLUE, XSTR_FMT_RESET, XSTR_CLR_GREEN, XSTR_FMT_RESET, XSTR_CLR_RED,
