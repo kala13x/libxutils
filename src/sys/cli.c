@@ -12,16 +12,89 @@
 #include "str.h"
 #include "xtime.h"
 
-#ifdef __linux__
-#include <termios.h>
-#endif
-
 #define XBAR_FRAME_BYTES 3
 #define XCLI_PERCENT_MAX 4
 
-int XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
+XSTATUS XCLI_SetInputMode(void *pAttributes)
 {
+#ifdef __linux__
+    struct termios tattr;
+    if (!isatty(STDIN_FILENO)) return XSTDERR;
+
+    struct termios *pSavedAttrs = (struct termios *)pAttributes;
+    tcgetattr(STDIN_FILENO, pSavedAttrs);
+    tcgetattr(STDIN_FILENO, &tattr);
+
+    tattr.c_lflag &= ~(ICANON | ECHO);
+    tattr.c_cc[VMIN] = 1;
+    tattr.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSANOW, &tattr);
+    return XSTDOK;
+#else
+    (void)pAttributes;
+    return XSTDNON;
+#endif
+}
+
+XSTATUS XCLI_RestoreAttributes(void *pAttributes)
+{
+#ifdef __linux__
+    if (pAttributes == NULL) return XSTDERR;
+    struct termios *pSavedAttrs = (struct termios *)pAttributes;
+    tcsetattr(STDIN_FILENO, TCSANOW, pSavedAttrs);
+    return XSTDOK;
+#else
+    (void)pAttributes;
+    return XSTDNON;
+#endif
+}
+
+XSTATUS XCLI_ReadStdin(char *pBuffer, size_t nSize, xbool_t bAsync)
+{
+    if (pBuffer == NULL || !nSize) return XSTDINV;
+    int nLength = XSTDNON;
+    pBuffer[0] = XSTR_NUL;
+
+#ifdef __linux__
+    if (bAsync)
+    {
+        int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+        if (flags < 0) return XSTDERR;
+
+        if (!(flags & O_NONBLOCK))
+            fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    }
+
+    nLength = read(STDIN_FILENO, pBuffer, nSize);
+    if (nLength < 0)
+    {
+        if (errno == EWOULDBLOCK ||
+            errno == EAGAIN) return XSTDNON;
+
+        return XSTDERR;
+    }
+#endif
+
+    if (nSize > 1) pBuffer[nLength] = 0;
+    return nLength;
+}
+
+XSTATUS XCLI_GetChar(char *pChar, xbool_t bAsync)
+{
+#ifdef __linux__
+    if (pChar == NULL) return XSTDERR;
+    return XCLI_ReadStdin(pChar, 1, bAsync);
+#else
+    (void)pChar;
+    return XSTDNON;
+#endif
+}
+
+XSTATUS XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
+{
+    if (pPass == NULL || !nSize) return XSTDERR;
     size_t nLength = XSTDNON;
+
 #ifdef __linux__
     struct termios oflags, nflags;
     tcgetattr(fileno(stdin), &oflags);
@@ -43,10 +116,10 @@ int XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
 #endif
 
     pPass[nLength] = 0;
-    return (int)nLength;
+    return (XSTATUS)nLength;
 }
 
-int XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNewLine)
+XSTATUS XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNewLine)
 {
     XASSERT(pInput, XSTDINV);
     pInput[0] = XSTR_NUL;

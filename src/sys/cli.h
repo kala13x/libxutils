@@ -18,6 +18,10 @@ extern "C" {
 #include "buf.h"
 #include "list.h"
 
+#ifdef __linux__
+#include <termios.h>
+#endif
+
 #define XCLI_BAR_INTERVAL   100000
 #define XCLI_BUF_SIZE       256
 
@@ -30,8 +34,13 @@ typedef struct xcli_size_ {
     size_t nRows;
 } xcli_size_t;
 
-int XCLI_GetPass(const char *pText, char *pPass, size_t nSize);
-int XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNewLine);
+XSTATUS XCLI_SetInputMode(void *pAttributes);
+XSTATUS XCLI_RestoreAttributes(void *pAttributes);
+XSTATUS XCLI_ReadStdin(char *pBuffer, size_t nSize, xbool_t bAsync);
+
+XSTATUS XCLI_GetChar(char *pChar, xbool_t bAsync);
+XSTATUS XCLI_GetPass(const char *pText, char *pPass, size_t nSize);
+XSTATUS XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNewLine);
 
 XSTATUS XCLI_GetWindowSize(xcli_size_t *pSize);
 size_t XCLI_CountFormat(xcli_size_t *pSize, const char *pLine, size_t nLength, size_t *pPosit);

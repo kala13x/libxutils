@@ -9,6 +9,7 @@
  */
 
 #include "xstd.h"
+#include "thread.h"
 #include "sig.h"
 #include "json.h"
 #include "str.h"
@@ -21,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        7
+#define XTOP_VERSION_MIN        8
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -62,8 +63,10 @@ typedef enum {
     XTOP_ALL
 } xmon_request_t;
 
-typedef struct xmon_args_ {
+typedef struct xmon_ctx_ {
     xmon_stats_t *pStats;
+    xbool_t bDisplayHeader;
+    xbool_t bAllIfaces;
     xbool_t bDaemon;
     xbool_t bServer;
     xbool_t bClient;
@@ -77,13 +80,42 @@ typedef struct xmon_args_ {
     char sToken[XSTR_MIN];
     char sKey[XSTR_MIN];
 
+    int nCoreCount;
     size_t nIntervalU;
     uint16_t nCPUExtraMin;
+    uint16_t nActiveIfaces;
     uint16_t nIfaceCount;
     uint16_t nPort;
     uint8_t nSort;
     xpid_t nPID;
-} xmon_args_t;
+} xtop_ctx_t;
+
+void XTOPApp_InitContext(xtop_ctx_t *pCtx)
+{
+    pCtx->bDisplayHeader = XFALSE;
+    pCtx->bAllIfaces = XFALSE;
+    pCtx->bDaemon = XFALSE;
+    pCtx->bServer = XFALSE;
+    pCtx->bClient = XFALSE;
+    pCtx->bClear = XFALSE;
+    pCtx->pStats = NULL;
+    pCtx->nSort = XTOP_SORT_LEN;
+
+    xstrnul(pCtx->sAddr);
+    xstrnul(pCtx->sLogs);
+    xstrnul(pCtx->sLink);
+    xstrnul(pCtx->sName);
+    xstrnul(pCtx->sToken);
+    xstrnul(pCtx->sKey);
+
+    pCtx->nCPUExtraMin = XTOP_CPU_EXTRA_MIN;
+    pCtx->nActiveIfaces = 0;
+    pCtx->nIfaceCount = 0;
+    pCtx->nIntervalU = 0;
+    pCtx->nCoreCount = -1;
+    pCtx->nPort = 0;
+    pCtx->nPID = 0;
+}
 
 void XTOPApp_SignalCallback(int sig)
 {
@@ -178,28 +210,9 @@ uint8_t XTOPApp_GetSortType(const char *pArg)
     return XTOP_SORT_DISABLE;
 }
 
-int XTOPApp_ParseArgs(xmon_args_t *pArgs, int argc, char *argv[])
+int XTOPApp_ParseArgs(xtop_ctx_t *pCtx, int argc, char *argv[])
 {
-    pArgs->bDaemon = XFALSE;
-    pArgs->bServer = XFALSE;
-    pArgs->bClient = XFALSE;
-    pArgs->bClear = XFALSE;
-    pArgs->pStats = NULL;
-    pArgs->nSort = XTOP_SORT_LEN;
-
-    xstrnul(pArgs->sAddr);
-    xstrnul(pArgs->sLogs);
-    xstrnul(pArgs->sLink);
-    xstrnul(pArgs->sName);
-    xstrnul(pArgs->sToken);
-    xstrnul(pArgs->sKey);
-
-    pArgs->nCPUExtraMin = XTOP_CPU_EXTRA_MIN;
-    pArgs->nIfaceCount = 0;
-    pArgs->nIntervalU = 0;
-    pArgs->nPort = 0;
-    pArgs->nPID = 0;
-
+    XTOPApp_InitContext(pCtx);
     char sUser[XNAME_MAX] = XSTR_INIT;
     char sPass[XSTR_TINY] = XSTR_INIT;
 
@@ -211,16 +224,16 @@ int XTOPApp_ParseArgs(xmon_args_t *pArgs, int argc, char *argv[])
         switch (nChar)
         {
             case 'a':
-                xstrncpy(pArgs->sAddr, sizeof(pArgs->sAddr), optarg);
+                xstrncpy(pCtx->sAddr, sizeof(pCtx->sAddr), optarg);
                 break;
             case 'i':
-                xstrncpy(pArgs->sName, sizeof(pArgs->sName), optarg);
+                xstrncpy(pCtx->sName, sizeof(pCtx->sName), optarg);
                 break;
             case 'l':
-                xstrncpy(pArgs->sLogs, sizeof(pArgs->sLogs), optarg);
+                xstrncpy(pCtx->sLogs, sizeof(pCtx->sLogs), optarg);
                 break;
             case 'K':
-                xstrncpy(pArgs->sKey, sizeof(pArgs->sKey), optarg);
+                xstrncpy(pCtx->sKey, sizeof(pCtx->sKey), optarg);
                 break;
             case 'U':
                 xstrncpy(sUser, sizeof(sUser), optarg);
@@ -229,31 +242,31 @@ int XTOPApp_ParseArgs(xmon_args_t *pArgs, int argc, char *argv[])
                 xstrncpy(sPass, sizeof(sPass), optarg);
                 break;
             case 't':
-                pArgs->nSort = XTOPApp_GetSortType(optarg);
+                pCtx->nSort = XTOPApp_GetSortType(optarg);
                 break;
             case 'e':
-                pArgs->nCPUExtraMin = atoi(optarg);
+                pCtx->nCPUExtraMin = atoi(optarg);
                 break;
             case 'm':
-                pArgs->nIntervalU = atoi(optarg);
+                pCtx->nIntervalU = atoi(optarg);
                 break;
             case 'p':
-                pArgs->nPort = atoi(optarg);
+                pCtx->nPort = atoi(optarg);
                 break;
             case 'u':
-                pArgs->nPID = atoi(optarg);
+                pCtx->nPID = atoi(optarg);
                 break;
             case 'c':
-                pArgs->bClient = XTRUE;
+                pCtx->bClient = XTRUE;
                 break;
             case 'd':
-                pArgs->bDaemon = XTRUE;
+                pCtx->bDaemon = XTRUE;
                 break;
             case 's':
-                pArgs->bServer = XTRUE;
+                pCtx->bServer = XTRUE;
                 break;
             case 'x':
-                pArgs->bClear = XTRUE;
+                pCtx->bClear = XTRUE;
                 break;
             case 'v':
                 bVerbose = XTRUE;
@@ -265,54 +278,54 @@ int XTOPApp_ParseArgs(xmon_args_t *pArgs, int argc, char *argv[])
     }
 
     if (xstrused(sUser) || xstrused(sPass))
-        XHTTP_GetAuthToken(pArgs->sToken, sizeof(pArgs->sToken), sUser, sPass);
+        XHTTP_GetAuthToken(pCtx->sToken, sizeof(pCtx->sToken), sUser, sPass);
 
-    if (pArgs->bServer && pArgs->bClient)
+    if (pCtx->bServer && pCtx->bClient)
     {
         xloge("Please specify only server or client mode");
         return XFALSE;
     }
 
-    if (pArgs->bDaemon && !pArgs->bServer)
+    if (pCtx->bDaemon && !pCtx->bServer)
     {
         xloge("Daemon argument works only for HTTP server mode");
         return XFALSE;
     }
 
-    if (pArgs->bServer || pArgs->bClient)
+    if (pCtx->bServer || pCtx->bClient)
     {
-        if (!xstrused(pArgs->sAddr) || !pArgs->nPort)
+        if (!xstrused(pCtx->sAddr) || !pCtx->nPort)
         {
             xloge("Missing addr/port arguments for HTTP server or client");
             return XFALSE;
         }
 
-        xstrncpyf(pArgs->sLink, sizeof(pArgs->sLink), "%s:%u%s",
-            pArgs->sAddr, pArgs->nPort, XTOP_API_URI);
+        xstrncpyf(pCtx->sLink, sizeof(pCtx->sLink), "%s:%u%s",
+            pCtx->sAddr, pCtx->nPort, XTOP_API_URI);
     }
 
-    if (!pArgs->nIntervalU) pArgs->nIntervalU = XMON_INTERVAL_USEC;
-    else pArgs->nIntervalU *= XMON_INTERVAL_USEC;
+    if (!pCtx->nIntervalU) pCtx->nIntervalU = XMON_INTERVAL_USEC;
+    else pCtx->nIntervalU *= XMON_INTERVAL_USEC;
 
-    if (xstrused(pArgs->sLogs))
+    if (xstrused(pCtx->sLogs))
     {
-        xlog_path(pArgs->sLogs);
+        xlog_path(pCtx->sLogs);
         xlog_file(XTRUE);
     }
 
-    if (xstrused(pArgs->sName))
+    if (xstrused(pCtx->sName))
     {
         char sIfcPath[XPATH_MAX];
-        xstrncpyf(sIfcPath, sizeof(sIfcPath), "%s/%s", XSYS_CLASS_NET, pArgs->sName);
+        xstrncpyf(sIfcPath, sizeof(sIfcPath), "%s/%s", XSYS_CLASS_NET, pCtx->sName);
 
         if (!XPath_Exists(sIfcPath))
         {
-            xloge("Interface not found: %s", pArgs->sName);
+            xloge("Interface not found: %s", pCtx->sName);
             return XFALSE;
         }
     }
 
-    if (bVerbose && pArgs->bServer)
+    if (bVerbose && pCtx->bServer)
         xlog_enable(XLOG_ALL);
 
     return XTRUE;
@@ -320,27 +333,27 @@ int XTOPApp_ParseArgs(xmon_args_t *pArgs, int argc, char *argv[])
 
 int XTOPApp_CompareCPUs(const void *pData1, const void *pData2, void *pContext)
 {
-    xmon_args_t *pArgs = (xmon_args_t*)pContext;
+    xtop_ctx_t *pCtx = (xtop_ctx_t*)pContext;
     xcpu_info_t *pInfo1 = (xcpu_info_t*)((xarray_data_t*)pData1)->pData;
     xcpu_info_t *pInfo2 = (xcpu_info_t*)((xarray_data_t*)pData2)->pData;
 
-    return (pArgs->nSort == XTOP_SORT_FREE) ?
+    return (pCtx->nSort == XTOP_SORT_FREE) ?
         (int)pInfo2->nIdleTime - (int)pInfo1->nIdleTime:
         (int)pInfo1->nIdleTime - (int)pInfo2->nIdleTime;
 }
 
 int XTOPApp_CompareIFaces(const void *pData1, const void *pData2, void *pContext)
 {
-    xmon_args_t *pArgs = (xmon_args_t*)pContext;
+    xtop_ctx_t *pCtx = (xtop_ctx_t*)pContext;
     xnet_iface_t *pIface1 = (xnet_iface_t*)((xarray_data_t*)pData1)->pData;
     xnet_iface_t *pIface2 = (xnet_iface_t*)((xarray_data_t*)pData2)->pData;
 
-    if (pArgs->nSort == XTOP_SORT_LEN) return (int)strlen(pIface1->sName) - (int)strlen(pIface2->sName);
-    else if (pArgs->nSort == XTOP_SORT_NAME) return strcmp(pIface1->sName, pIface2->sName);
+    if (pCtx->nSort == XTOP_SORT_LEN) return (int)strlen(pIface1->sName) - (int)strlen(pIface2->sName);
+    else if (pCtx->nSort == XTOP_SORT_NAME) return strcmp(pIface1->sName, pIface2->sName);
 
     int nData1 = (int)pIface1->nBytesReceivedPerSec + (int)pIface1->nBytesSentPerSec;
     int nData2 = (int)pIface2->nBytesReceivedPerSec + (int)pIface2->nBytesSentPerSec;
-    return (pArgs->nSort == XTOP_SORT_BUSY) ? nData2 - nData1 : nData1 - nData2;
+    return (pCtx->nSort == XTOP_SORT_BUSY) ? nData2 - nData1 : nData1 - nData2;
 }
 
 int XTOPApp_FillCPUBar(xcli_bar_t *pBar, xcpu_info_t *pCore, char *pDst, size_t nSize)
@@ -663,28 +676,31 @@ XSTATUS XTOPApp_AddCPUInfo(xcli_win_t *pWin, xcpu_info_t *pCore)
     return XCLIWin_AddLineFmt(pWin, "%s", sLine);
 }
 
-XSTATUS XTOPApp_AddCPUExtra(xcli_win_t *pWin, xmon_args_t *pArgs, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
+XSTATUS XTOPApp_AddCPUExtra(xcli_win_t *pWin, xtop_ctx_t *pCtx, xcli_bar_t *pBar, xmem_info_t *pMemInfo, xcpu_stats_t *pCPU)
 {
     XCLIWin_AddAligned(pWin, XTOP_CPU_HEADER, XSTR_BACK_BLUE, XCLI_LEFT);
     XSTATUS nStatus = XTOPApp_AddCPUInfo(pWin, &pCPU->sum);
     if (nStatus <= 0) return nStatus;
 
-    size_t nOccupiedLines = pWin->lines.nUsed + pArgs->nIfaceCount + 3;
-    uint16_t i, nCount = pCPU->nCoreCount;
+    if (pCtx->nCoreCount < 0 ||
+        pCtx->nCoreCount > (int)pCPU->nCoreCount)
+        pCtx->nCoreCount = (int)pCPU->nCoreCount;
 
-    while (nOccupiedLines + nCount > pWin->frame.nRows)
+    size_t i, nOccupiedLines = pWin->lines.nUsed + pCtx->nActiveIfaces + 3;
+
+    while ((nOccupiedLines + pCtx->nCoreCount) > pWin->frame.nRows)
     {
-        if (nCount <= pArgs->nCPUExtraMin) break;
-        nCount--;
+        if (pCtx->nCoreCount <= (int)pCtx->nCPUExtraMin) break;
+        pCtx->nCoreCount--;
     }
 
-    if ((pArgs->nSort && pCPU->nCoreCount &&
-        pArgs->nSort != XTOP_SORT_NAME &&
-        pArgs->nSort != XTOP_SORT_LEN) ||
-        pCPU->nCoreCount != nCount)
-        XArray_Sort(&pCPU->cores, XTOPApp_CompareCPUs, pArgs);
+    if ((pCtx->nSort && pCPU->nCoreCount &&
+        pCtx->nSort != XTOP_SORT_NAME &&
+        pCtx->nSort != XTOP_SORT_LEN) ||
+        pCPU->nCoreCount != pCtx->nCoreCount)
+        XArray_Sort(&pCPU->cores, XTOPApp_CompareCPUs, pCtx);
 
-    for (i = 0; i < nCount; i++)
+    for (i = 0; i < pCtx->nCoreCount; i++)
     {
         xcpu_info_t *pCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, i);
         if (pCore != NULL) nStatus = XTOPApp_AddCPUInfo(pWin, pCore);
@@ -733,7 +749,7 @@ static uint8_t XTOPApp_GetAddrSpacePadding(xcli_win_t *pWin, size_t nMaxIPLen)
     return nSpacePadding;
 }
 
-XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xmon_args_t *pArgs, size_t nMaxIPLen, xnet_iface_t *pIface, size_t nLength)
+XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xtop_ctx_t *pCtx, size_t nMaxIPLen, xnet_iface_t *pIface, size_t nLength)
 {
     char sLine[XLINE_MAX], sName[XSTR_TINY], sRound[XSTR_TINY], sData[XSTR_TINY];
     xstrnlcpyf(sName, sizeof(sName), nLength + 1, XSTR_SPACE_CHAR, "%s", pIface->sName);
@@ -767,10 +783,32 @@ XSTATUS XTOPApp_AddInterface(xcli_win_t *pWin, xmon_args_t *pArgs, size_t nMaxIP
     return XCLIWin_AddLineFmt(pWin, "%s", sLine);
 }
 
-XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xmon_args_t *pArgs, xarray_t *pIfaces)
+XSTATUS XTOPApp_IsIfaceValidIP(xnet_iface_t *pIface)
 {
-    if (pArgs->nSort) XArray_Sort(pIfaces, XTOPApp_CompareIFaces, pArgs);
-    size_t nTrackLen = strlen(pArgs->sName);
+    if (!xstrused(pIface->sIPAddr) ||
+        xstrncmp(pIface->sIPAddr, "0.0.0.0", 7))
+    {
+        return XFALSE;
+    }
+
+    return XTRUE;
+}
+
+xbool_t XTOPApp_HasIfaceValidMac(xnet_iface_t *pIface)
+{
+    if (!xstrused(pIface->sHWAddr) ||
+        xstrncmp(pIface->sHWAddr, "00:00:00:00:00:00", 17))
+    {
+        return XFALSE;
+    }
+
+    return XTRUE;
+}
+
+XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xtop_ctx_t *pCtx, xarray_t *pIfaces)
+{
+    if (pCtx->nSort) XArray_Sort(pIfaces, XTOPApp_CompareIFaces, pCtx);
+    size_t nTrackLen = strlen(pCtx->sName);
     size_t i, nLength = 0;
     int nTrackID = -1;
 
@@ -786,7 +824,7 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xmon_args_t *pArgs, xarray_t *p
         nSumTX += pIface->nBytesSentPerSec;
 
         if (xstrused(pIface->sName) == XTRUE && nTrackLen > 0 && nTrackID < 0 &&
-            !strncmp(pArgs->sName, pIface->sName, nTrackLen)) nTrackID = (int)i;
+            !strncmp(pCtx->sName, pIface->sName, nTrackLen)) nTrackID = (int)i;
 
         size_t nIPAddrLen = strnlen(pIface->sIPAddr, sizeof(pIface->sIPAddr));
         if (nIPAddrLen > nMaxIPLen) nMaxIPLen = nIPAddrLen;
@@ -831,22 +869,73 @@ XSTATUS XTOPApp_AddNetworkInfo(xcli_win_t *pWin, xmon_args_t *pArgs, xarray_t *p
     xstrncat(sLine, sizeof(sLine), "%s", sRound);
 
     XCLIWin_AddAligned(pWin, sLine, XSTR_BACK_BLUE, XCLI_LEFT);
-    pArgs->nIfaceCount = 0;
+    pCtx->nIfaceCount = pCtx->nActiveIfaces = 0;
 
     if (nTrackID >= 0)
     {
         xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, nTrackID);
-        if (pIface != NULL) XTOPApp_AddInterface(pWin, pArgs, nMaxIPLen, pIface, nLength);
+        if (pIface != NULL) XTOPApp_AddInterface(pWin, pCtx, nMaxIPLen, pIface, nLength);
     }
+
+    int nAvailableLines = (int)pWin->frame.nRows - (int)pWin->lines.nUsed - 1;
+    int nPrintableIfaces = 0;
+
+    for (i = 0; i < pIfaces->nUsed; i++)
+    {
+        xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, i);
+        if (pIface != NULL)
+        {
+            if (XTOPApp_IsIfaceValidIP(pIface) || pCtx->bAllIfaces)
+            {
+                pCtx->nActiveIfaces++;
+                nAvailableLines--;
+            }
+            else if (XTOPApp_HasIfaceValidMac(pIface)) nPrintableIfaces++;
+        }
+    }
+
+    int nDummyIfaceSpace = nAvailableLines - nPrintableIfaces;
 
     for (i = 0; i < pIfaces->nUsed; i++)
     {
         if (nTrackID >= 0 && i == nTrackID) continue; 
+
         xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, i);
         if (pIface != NULL)
         {
-            XTOPApp_AddInterface(pWin, pArgs, nMaxIPLen, pIface, nLength);
-            pArgs->nIfaceCount++;
+            if (XTOPApp_IsIfaceValidIP(pIface) || pCtx->bAllIfaces)
+            {
+                XTOPApp_AddInterface(pWin, pCtx, nMaxIPLen, pIface, nLength);
+                pCtx->nIfaceCount++;
+                continue;
+            }
+
+            if (nAvailableLines > 0)
+            {
+                if (XTOPApp_HasIfaceValidMac(pIface)) 
+                {
+                    if (nPrintableIfaces > 0)
+                    {
+                        nPrintableIfaces--;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+                else if (nDummyIfaceSpace > 0)
+                {
+                    nDummyIfaceSpace--;
+                }
+                else
+                {
+                    continue;
+                }
+
+                XTOPApp_AddInterface(pWin, pCtx, nMaxIPLen, pIface, nLength);
+                pCtx->nIfaceCount++;
+                nAvailableLines--;
+            }
         }
     }
 
@@ -1053,15 +1142,15 @@ int XTOPApp_GetJSONStats(xmon_stats_t *pStats, xjson_t *pJson)
     return XSTDOK;
 }
 
-int XTOPApp_GetRemoteStats(xmon_args_t *pArgs, xmon_stats_t *pStats)
+int XTOPApp_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
 {
     const char *pVer = XUtils_VersionShort();
     xhttp_t handle;
     xlink_t link;
 
-    if (XLink_Parse(&link, pArgs->sLink) < 0)
+    if (XLink_Parse(&link, pCtx->sLink) < 0)
     {
-        xloge("Failed to parse link: %s", pArgs->sLink);
+        xloge("Failed to parse link: %s", pCtx->sLink);
         return XSTDERR;
     }
 
@@ -1079,8 +1168,8 @@ int XTOPApp_GetRemoteStats(xmon_args_t *pArgs, xmon_stats_t *pStats)
         return XSTDERR;
     }
 
-    if ((xstrused(pArgs->sKey) && XHTTP_AddHeader(&handle, "X-API-KEY", "%s", pArgs->sKey) < 0) ||
-        (xstrused(pArgs->sToken) && XHTTP_AddHeader(&handle, "Authorization", "Basic %s", pArgs->sToken) < 0))
+    if ((xstrused(pCtx->sKey) && XHTTP_AddHeader(&handle, "X-API-KEY", "%s", pCtx->sKey) < 0) ||
+        (xstrused(pCtx->sToken) && XHTTP_AddHeader(&handle, "Authorization", "Basic %s", pCtx->sToken) < 0))
     {
         xloge("Failed to setup authorization headers for request: %d", errno);
         XHTTP_Clear(&handle);
@@ -1147,8 +1236,8 @@ int XTOPApp_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
 int XTOPApp_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xmon_args_t *pArgs = (xmon_args_t*)pData->pApi->pUserCtx;
-    int nStatus = XAPI_AuthorizeHTTP(pData, pArgs->sToken, pArgs->sKey);
+    xtop_ctx_t *pAppCtx = (xtop_ctx_t*)pData->pApi->pUserCtx;
+    int nStatus = XAPI_AuthorizeHTTP(pData, pAppCtx->sToken, pAppCtx->sKey);
     if (nStatus <= 0) return nStatus;
 
     xmon_request_t *pRequest = (xmon_request_t*)pData->pSessionData;
@@ -1396,8 +1485,8 @@ int XTOPApp_AppendCPUJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
 
 int XTOPApp_AssembleBody(xapi_data_t *pData, xstring_t *pJsonStr)
 {
-    xmon_args_t *pArgs = (xmon_args_t*)pData->pApi->pUserCtx;
-    xmon_stats_t *pStats = (xmon_stats_t*)pArgs->pStats;
+    xtop_ctx_t *pCtx = (xtop_ctx_t*)pData->pApi->pUserCtx;
+    xmon_stats_t *pStats = (xmon_stats_t*)pCtx->pStats;
     xmon_request_t eRequest = *(xmon_request_t*)pData->pSessionData;
 
     if (XString_Append(pJsonStr, "{") < 0)
@@ -1556,19 +1645,19 @@ int XTOPApp_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XSTDOK;
 }
 
-int XTOPApp_ServerMode(xmon_args_t *pArgs, xmon_stats_t *pStats)
+int XTOPApp_ServerMode(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
 {
     xapi_t api;
-    XAPI_Init(&api, XTOPApp_ServiceCb, pArgs, XSTDNON);
+    XAPI_Init(&api, XTOPApp_ServiceCb, pCtx, XSTDNON);
 
-    pArgs->pStats = pStats;
+    pCtx->pStats = pStats;
     xevent_status_t status;
 
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
     endpt.eType = XAPI_HTTP;
-    endpt.pAddr = pArgs->sAddr;
-    endpt.nPort = pArgs->nPort;
+    endpt.pAddr = pCtx->sAddr;
+    endpt.nPort = pCtx->nPort;
 
     if (XAPI_AddEndpoint(&api, &endpt, XAPI_SERVER) < 0)
     {
@@ -1576,7 +1665,7 @@ int XTOPApp_ServerMode(xmon_args_t *pArgs, xmon_stats_t *pStats)
         return XSTDERR;
     }
 
-    xlogn("Socket started listen to port: %d", pArgs->nPort);
+    xlogn("Socket started listen to port: %d", pCtx->nPort);
 
     do status = XAPI_Service(&api, 100);
     while (status == XEVENT_STATUS_SUCCESS);
@@ -1585,19 +1674,45 @@ int XTOPApp_ServerMode(xmon_args_t *pArgs, xmon_stats_t *pStats)
     return XSTDNON;
 }
 
+static void XTOPApp_ProcessSTDIN(xtop_ctx_t *pCtx)
+{
+    char c;
+    while (XCLI_GetChar(&c, XTRUE) == XSTDOK)
+    {
+        if (c == 'a')
+        {
+            pCtx->bAllIfaces = !pCtx->bAllIfaces;
+            pCtx->nActiveIfaces = 0;
+            pCtx->nCoreCount = -1;
+        }
+        else if (c == 'x')
+        {
+            pCtx->bDisplayHeader = !pCtx->bDisplayHeader;
+        }
+        else if (c == '+')
+        {
+            pCtx->nCoreCount++;
+        }
+        else if (c == '-')
+        {
+            pCtx->nCoreCount--;
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
     xlog_init("xtop", XLOG_DEFAULT, XFALSE);
     xmon_stats_t stats;
-    xmon_args_t args;
+    xtop_ctx_t ctx;
 
-    if (!XTOPApp_ParseArgs(&args, argc, argv))
+    if (!XTOPApp_ParseArgs(&ctx, argc, argv))
     {
         XTOPApp_DisplayUsage(argv[0]);
         return XSTDERR;
     }
 
-    if (args.bDaemon && XUtils_Daemonize(XTRUE, XTRUE) < 0)
+    if (ctx.bDaemon && XUtils_Daemonize(XTRUE, XTRUE) < 0)
     {
         xlogn("Failed to run server as daemon: %d", errno);
         return XSTDERR;
@@ -1609,7 +1724,7 @@ int main(int argc, char *argv[])
         return XSTDERR;
     }
 
-    xlog_screen(!args.bDaemon);
+    xlog_screen(!ctx.bDaemon);
     xlog_timing(XLOG_TIME);
     xlog_indent(XTRUE);
 
@@ -1618,12 +1733,12 @@ int main(int argc, char *argv[])
     nSignals[1] = SIGINT;
     XSig_Register(nSignals, 2, XTOPApp_SignalCallback);
 
-    if (!args.bClient)
+    if (!ctx.bClient)
     {
-        int nStatus = XMon_StartMonitoring(&stats, args.nIntervalU, args.nPID);
+        int nStatus = XMon_StartMonitoring(&stats, ctx.nIntervalU, ctx.nPID);
         if (nStatus < 0)
         {
-            xloge("Process not found: %d", args.nPID);
+            xloge("Process not found: %d", ctx.nPID);
             XMon_DestroyStats(&stats);
             return XSTDERR;
         }
@@ -1637,9 +1752,9 @@ int main(int argc, char *argv[])
         XMon_WaitLoad(&stats, 1000);
     }
 
-    if (args.bServer)
+    if (ctx.bServer)
     {
-        int nStatus = XTOPApp_ServerMode(&args, &stats);
+        int nStatus = XTOPApp_ServerMode(&ctx, &stats);
         XMon_StopMonitoring(&stats, 1000);
         XMon_DestroyStats(&stats);
 
@@ -1648,7 +1763,7 @@ int main(int argc, char *argv[])
     }
 
     xcli_win_t win;
-    XCLIWin_Init(&win, !args.bClear);
+    XCLIWin_Init(&win, !ctx.bClear);
 
     xcli_bar_t bar;
     XProgBar_GetDefaults(&bar);
@@ -1658,11 +1773,23 @@ int main(int argc, char *argv[])
 
     xbool_t bFirst = XTRUE;
 
+    struct termios cliAttrs;
+    XCLI_SetInputMode(&cliAttrs);
+
     while (!g_nInterrupted)
     {
-        if (args.bClient && XTOPApp_GetRemoteStats(&args, &stats) < 0) break;
+        XTOPApp_ProcessSTDIN(&ctx);
+        
+        if (ctx.bClient)
+        {
+            if (XTOPApp_GetRemoteStats(&ctx, &stats) < 0)
+            {
+                xusleep(ctx.nIntervalU);
+                continue;
+            }
+        }
 
-        //XCLIWin_AddAligned(&win, "[XTOP]", XSTR_BACK_BLUE, XCLI_CENTER);
+        if (ctx.bDisplayHeader) XCLIWin_AddAligned(&win, "[XTOP]", XSTR_BACK_BLUE, XCLI_CENTER);
         XCLIWin_AddEmptyLine(&win);
 
         xcpu_stats_t cpuStats;
@@ -1674,10 +1801,10 @@ int main(int argc, char *argv[])
             XTOPApp_AddCPULoadBar(&win, &bar, &cpuStats);
             XTOPApp_AddOverallBar(&win, &bar, &memInfo, &cpuStats);
 
-            if (args.nCPUExtraMin > 0)
+            if (ctx.nCPUExtraMin > 0)
             {
                 XCLIWin_AddEmptyLine(&win);
-                XTOPApp_AddCPUExtra(&win, &args, &bar, &memInfo, &cpuStats);
+                XTOPApp_AddCPUExtra(&win, &ctx, &bar, &memInfo, &cpuStats);
             }
 
             XCLIWin_AddEmptyLine(&win);
@@ -1687,7 +1814,7 @@ int main(int argc, char *argv[])
         xarray_t netIfaces;
         if (XMon_GetNetworkStats(&stats, &netIfaces) > 0)
         {
-            XTOPApp_AddNetworkInfo(&win, &args, &netIfaces);
+            XTOPApp_AddNetworkInfo(&win, &ctx, &netIfaces);
             XArray_Destroy(&netIfaces);
         }
 
@@ -1698,12 +1825,13 @@ int main(int argc, char *argv[])
         }
 
         XCLIWin_Flush(&win);
-        xusleep(args.nIntervalU);
+        xusleep(ctx.nIntervalU);
     }
 
-    if (!args.bClient)
+    if (!ctx.bClient)
         XMon_StopMonitoring(&stats, 1000);
 
+    XCLI_RestoreAttributes(&cliAttrs);
     XMon_DestroyStats(&stats);
     XCLIWin_Destroy(&win);
 

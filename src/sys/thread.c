@@ -127,7 +127,7 @@ void *XTask_WorkerThread(void *pContext)
                 bIsPaused = XTRUE;
             }
 
-            xusleep((uint32_t)nInterval);
+            if (nInterval) xusleep((uint32_t)nInterval);
             continue;
         }
 
