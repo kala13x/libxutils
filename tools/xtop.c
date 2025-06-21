@@ -66,6 +66,7 @@ typedef enum {
 typedef struct xmon_ctx_ {
     xmon_stats_t *pStats;
     xbool_t bDisplayHeader;
+    xbool_t bLineByLine;
     xbool_t bAllIfaces;
     xbool_t bDaemon;
     xbool_t bServer;
@@ -93,6 +94,7 @@ typedef struct xmon_ctx_ {
 void XTOPApp_InitContext(xtop_ctx_t *pCtx)
 {
     pCtx->bDisplayHeader = XFALSE;
+    pCtx->bLineByLine = XFALSE;
     pCtx->bAllIfaces = XFALSE;
     pCtx->bDaemon = XFALSE;
     pCtx->bServer = XFALSE;
@@ -1674,6 +1676,7 @@ int XTOPApp_ServerMode(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
     return XSTDNON;
 }
 
+#ifdef __linux__
 static void XTOPApp_ProcessSTDIN(xtop_ctx_t *pCtx)
 {
     char c;
@@ -1682,6 +1685,12 @@ static void XTOPApp_ProcessSTDIN(xtop_ctx_t *pCtx)
         if (c == 'a')
         {
             pCtx->bAllIfaces = !pCtx->bAllIfaces;
+            pCtx->nActiveIfaces = 0;
+            pCtx->nCoreCount = -1;
+        }
+        else if (c == 'l')
+        {
+            pCtx->bLineByLine = !pCtx->bLineByLine;
             pCtx->nActiveIfaces = 0;
             pCtx->nCoreCount = -1;
         }
@@ -1699,6 +1708,7 @@ static void XTOPApp_ProcessSTDIN(xtop_ctx_t *pCtx)
         }
     }
 }
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -1783,6 +1793,9 @@ int main(int argc, char *argv[])
 #ifdef __linux__
         XTOPApp_ProcessSTDIN(&ctx);
 #endif
+
+        if (ctx.bLineByLine) win.eType = XCLI_LINE_BY_LINE;
+        else win.eType = XCLI_RENDER_FRAME;
 
         if (ctx.bClient)
         {
