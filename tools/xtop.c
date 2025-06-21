@@ -1771,15 +1771,19 @@ int main(int argc, char *argv[])
     bar.bInSuffix = XTRUE;
     bar.cLoader = '|';
 
-    xbool_t bFirst = XTRUE;
-
+#ifdef __linux__
     struct termios cliAttrs;
     XCLI_SetInputMode(&cliAttrs);
+#endif
+
+    xbool_t bFirst = XTRUE;
 
     while (!g_nInterrupted)
     {
+#ifdef __linux__
         XTOPApp_ProcessSTDIN(&ctx);
-        
+#endif
+
         if (ctx.bClient)
         {
             if (XTOPApp_GetRemoteStats(&ctx, &stats) < 0)
@@ -1831,7 +1835,10 @@ int main(int argc, char *argv[])
     if (!ctx.bClient)
         XMon_StopMonitoring(&stats, 1000);
 
+#ifdef __linux__
     XCLI_RestoreAttributes(&cliAttrs);
+#endif
+
     XMon_DestroyStats(&stats);
     XCLIWin_Destroy(&win);
 
