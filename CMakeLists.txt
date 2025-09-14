@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.16)
 project(libxutils LANGUAGES C)
 
 if (WIN32)

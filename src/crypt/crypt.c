@@ -306,6 +306,40 @@ static xbool_t XCrypt_NeedsKey(xcrypt_chipher_t eCipher)
     return XFALSE;
 }
 
+static xbool_t XCrypt_NeedsIV(xcrypt_chipher_t eCipher)
+{
+    switch (eCipher)
+    {
+        case XC_AES:
+            return XTRUE;
+        case XC_XOR:
+        case XC_CASEAR:
+        case XC_HS256:
+        case XC_MD5_HMAC:
+#ifdef XCRYPT_USE_SSL
+        case XC_RS256:
+        case XC_RSAPR:
+        case XC_RSA:
+#endif
+        case XC_HEX:
+        case XC_CRC32:
+        case XC_BASE64:
+        case XC_B64URL:
+        case XC_MD5:
+        case XC_SHA1:
+        case XC_SHA256:
+        case XC_REVERSE:
+        case XC_MD5_SUM:
+        case XC_SHA1_SUM:
+        case XC_SHA256_SUM:
+            return XFALSE;
+        default:
+            break;
+    }
+
+    return XFALSE;
+}
+
 void XCrypt_ErrorCallback(xcrypt_ctx_t *pCtx, const char *pStr, ...)
 {
     if (pCtx->callback == NULL) return;
@@ -324,10 +358,11 @@ xbool_t XCrypt_KeyCallback(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, xcrypt_
     memset(pKey, 0, sizeof(xcrypt_key_t));
     pKey->eCipher = eCipher;
 
-    if (!XCrypt_NeedsKey(eCipher) ||
-        pCtx->callback == NULL) return XTRUE;
+    if (!XCrypt_NeedsKey(eCipher) || pCtx->callback == NULL) return XTRUE;
+    if (!pCtx->callback(XCB_KEY, pKey, pCtx->pUserPtr)) return XFALSE;
 
-    return pCtx->callback(XCB_KEY, pKey, pCtx->pUserPtr);
+    if (!XCrypt_NeedsIV(eCipher)) return XTRUE;
+    return pCtx->callback(XCB_IV, pKey->sIV, pCtx->pUserPtr);
 }
 
 void XCrypt_Init(xcrypt_ctx_t *pCtx, xbool_t bDecrypt, char *pCiphers, xcrypt_cb_t callback, void *pUser)
@@ -345,6 +380,7 @@ uint8_t* XCrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uint8
     if (!XCrypt_KeyCallback(pCtx, eCipher, &encKey)) return XFALSE;
 
     const uint8_t *pKey = (const uint8_t*)encKey.sKey;
+    const uint8_t *pIV = (const uint8_t*)encKey.sIV;
     size_t nKeyLength = encKey.nLength;
 
     uint8_t *pCrypted = NULL;
@@ -354,7 +390,7 @@ uint8_t* XCrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uint8
     {
         case XC_CRC32: nCRC32 = XCRC32_Compute(pInput, *pLength); break;
         case XC_CRC32B: nCRC32 = XCRC32_ComputeB(pInput, *pLength); break;
-        case XC_AES: pCrypted = XCrypt_AES(pInput, pLength, pKey, nKeyLength, NULL); break;
+        case XC_AES: pCrypted = XCrypt_AES(pInput, pLength, pKey, nKeyLength, pIV); break;
         case XC_HEX: pCrypted = XCrypt_HEX(pInput, pLength, XSTR_SPACE, pCtx->nColumns, XFALSE); break;
         case XC_XOR: pCrypted = XCrypt_XOR(pInput, *pLength, pKey, nKeyLength); break;
         case XC_MD5: pCrypted = XMD5_Encrypt(pInput, *pLength); *pLength = XMD5_DIGEST_SIZE; break;
@@ -407,13 +443,14 @@ uint8_t* XDecrypt_Single(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, const uin
     if (!XCrypt_KeyCallback(pCtx, eCipher, &decKey)) return XFALSE;
 
     const uint8_t *pKey = (const uint8_t*)decKey.sKey;
+    const uint8_t *pIV = (const uint8_t*)decKey.sIV;
     size_t nKeyLength = decKey.nLength;
     uint8_t *pDecrypted = NULL;
 
     switch (eCipher)
     {
         case XC_HEX: pDecrypted = XDecrypt_HEX(pInput, pLength, XFALSE); break;
-        case XC_AES: pDecrypted = XDecrypt_AES(pInput, pLength, pKey, nKeyLength, NULL); break;
+        case XC_AES: pDecrypted = XDecrypt_AES(pInput, pLength, pKey, nKeyLength, pIV); break;
         case XC_XOR: pDecrypted = XCrypt_XOR(pInput, *pLength, pKey, nKeyLength); break;
         case XC_CASEAR: pDecrypted = (uint8_t*)XDecrypt_Casear((const char*)pInput, *pLength, atoi(decKey.sKey)); break;
         case XC_BASE64: pDecrypted = (uint8_t*)XBase64_Decrypt(pInput, pLength); break;

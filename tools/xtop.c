@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        10
+#define XTOP_VERSION_MIN        11
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -791,10 +791,18 @@ XSTATUS XTOP_AddCPUExtra(xtop_ctx_t *pCtx, xcli_win_t *pWin, xcli_bar_t *pBar, x
         // + 3 for space, iface header and total CPU line
         size_t nOccupiedLines = pWin->lines.nUsed + pCtx->nActiveIfaces + 3;
 
+        // If we have no space, show less cpus
         while ((nOccupiedLines + pCtx->nCoreCount) > pWin->frame.nRows)
         {
             if (pCtx->nCoreCount <= (int)pCtx->nCPUExtraMin) break;
             pCtx->nCoreCount--;
+        }
+
+        // If we have a space, show more cpus
+        while ((nOccupiedLines + pCtx->nCoreCount + 1) <= pWin->frame.nRows)
+        {
+            if (pCtx->nCoreCount >= (int)pCPU->nCoreCount) break;
+            pCtx->nCoreCount++;
         }
 
         if ((pCtx->nSort && pCPU->nCoreCount &&

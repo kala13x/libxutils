@@ -45,7 +45,6 @@
 - [Implementation of advanced file search](https://github.com/kala13x/libxutils/blob/main/src/sys/srch.h)
 - [System time manipulation library](https://github.com/kala13x/libxutils/blob/main/src/sys/xtime.h)
 - [Performance monitoring library](https://github.com/kala13x/libxutils/blob/main/src/sys/mon.h)
-- [File and directory operations](https://github.com/kala13x/libxutils/blob/main/src/sys/xfs.h)
 - [Simple and fast memory pool](https://github.com/kala13x/libxutils/blob/main/src/sys/pool.h)
 - [Advanced logging library](https://github.com/kala13x/libxutils/blob/main/src/sys/log.h)
 

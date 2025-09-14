@@ -23,7 +23,7 @@
 
 #define XPASS_VER_MAX       0
 #define XPASS_VER_MIN       2
-#define XPASS_BUILD_NUM     6
+#define XPASS_BUILD_NUM     7
 
 #define XPASS_AES_LEN       128
 #define XPASS_NAME_LEN      6
@@ -71,6 +71,7 @@ typedef struct
     char sFile[XPATH_MAX];
     char sConf[XPATH_MAX];
     char sKey[XSTR_TINY];
+    char sIV[XSTR_MICRO];
 
     size_t nAESKeyLength;
     size_t nFrameLength;
@@ -128,8 +129,8 @@ static void XPass_DisplayUsage(const char *pName)
 
     xlog("Usage: %s [-c <path>] [-i <path>] [-k <size>] [-a <addr>]", pName);
     xlog(" %s [-d <desc>] [-n <name>] [-u <user>] [-p <pass>]", XPass_WhiteSpace(nLength));
-    xlog(" %s [-C <ciphers>] [-P <pass>] [-I] [-J] [-F] [-D]", XPass_WhiteSpace(nLength));
-    xlog(" %s [-R] [-W] [-U] [-h]\n", XPass_WhiteSpace(nLength));
+    xlog(" %s [-C <ciphers>] [-P <pass>] [-v <iv>] [-I] [-J]", XPass_WhiteSpace(nLength));
+    xlog(" %s [-F] [-D] [-R] [-W] [-U] [-h]\n", XPass_WhiteSpace(nLength));
 
     xlog("These arguments are optional:");
     xlog("   %s-a%s <addr>               %s# Address value of the entry%s", XPASS_ARG_FMT);
@@ -145,6 +146,7 @@ static void XPass_DisplayUsage(const char *pName)
     xlog("   %s-c%s <path>               %s# Configuration file path%s", XPASS_ARG_FMT);
     xlog("   %s-i%s <path>               %s# Input/Database file path%s", XPASS_ARG_FMT);
     xlog("   %s-k%s <size>               %s# AES encryt/decrypt key size%s", XPASS_ARG_FMT);
+    xlog("   %s-v%s <iv>                 %s# AES encryt/decrypt initialization vector%s", XPASS_ARG_FMT);
     xlog("   %s-f%s                      %s# Force overwrite db/cfg files%s", XPASS_ARG_FMT);
     xlog("   %s-h%s                      %s# Version and usage%s\n", XPASS_ARG_FMT);
 
@@ -188,6 +190,59 @@ static void XPass_DisplayUsage(const char *pName)
     xlog("%s[xutils@examples]$ %s -R -u kala -c \"hex:aes:xor:base64\"%s\n", XSTR_FMT_DIM, pName, XSTR_FMT_RESET);
 }
 
+static xbool_t XPass_GetIV(xpass_ctx_t *pCtx)
+{
+    if (xstrused(pCtx->sIV))
+    {
+        size_t nLength = strlen(pCtx->sIV);
+        if (nLength < 16)
+        {
+            xlogw("IV is too short, will be padded with empty spaces");
+            memset(pCtx->sIV + nLength, XSTR_SPACE_CHAR, 16 - nLength);
+        }
+
+        return XTRUE;
+    }
+
+    char sIV[XSTR_PICO];
+    sIV[0] = XSTR_NUL;
+
+    printf("Enter IV for the cipher 'AES': ");
+
+    if (!XCLI_GetPass(NULL, pCtx->sIV, sizeof(pCtx->sIV)))
+    {
+        xloge("Failed to read IV: %d", errno);
+        return XFALSE;
+    }
+
+    if (pCtx->bForce)
+    {
+        printf("Re-enter IV for the cipher 'AES': ");
+        sIV[0] = XSTR_NUL;
+
+        if (!XCLI_GetPass(NULL, sIV, sizeof(sIV)))
+        {
+            xloge("Failed to read IV: %d", errno);
+            return XFALSE;
+        }
+
+        if (strcmp(pCtx->sIV, sIV))
+        {
+            xloge("IV do not match");
+            return XFALSE;
+        }
+    }
+
+    size_t nLength = strlen(pCtx->sIV);
+    if (nLength < 16)
+    {
+        xlogw("IV is too short, will be padded with zero bytes");
+        memset(pCtx->sIV + nLength, 0, 16 - nLength);
+    }
+
+    return XTRUE;
+}
+
 static xbool_t XPass_GetPass(xpass_ctx_t *pCtx)
 {
     if (XCLI_GetPass("Enter password for entry: ", pCtx->sPass, sizeof(pCtx->sPass)) < 0)
@@ -209,7 +264,7 @@ static xbool_t XPass_GetPass(xpass_ctx_t *pCtx)
         return XFALSE;
     }
 
-    return XTRUE;
+    return XPass_GetIV(pCtx);
 }
 
 static xbool_t XPass_GetKey(xpass_ctx_t *pCtx)
@@ -263,13 +318,13 @@ static xbool_t XPass_GetKey(xpass_ctx_t *pCtx)
     xstrncpy(pCtx->sKey, sizeof(pCtx->sKey), pCrypted);
     free(pCrypted);
 
-    return XTRUE;
+    return XPass_GetIV(pCtx);
 }
 
 static xbool_t XPass_ParseArgs(xpass_ctx_t *pCtx, int argc, char *argv[])
 {
     int nChar = 0;
-    while ((nChar = getopt(argc, argv, "a:c:C:d:n:i:u:p:k:P:f1:D1:I1:J1:R1:W1:U1:h1")) != -1)
+    while ((nChar = getopt(argc, argv, "a:c:C:d:n:i:u:p:k:v:P:f1:D1:I1:J1:R1:W1:U1:h1")) != -1)
     {
         switch (nChar)
         {
@@ -299,6 +354,9 @@ static xbool_t XPass_ParseArgs(xpass_ctx_t *pCtx, int argc, char *argv[])
                 break;
             case 'P':
                 xstrncpy(pCtx->sMasterPass, sizeof(pCtx->sMasterPass), optarg);
+                break;
+            case 'v':
+                xstrncpy(pCtx->sIV, sizeof(pCtx->sIV), optarg);
                 break;
             case 'k':
                 pCtx->nAESKeyLength = (size_t)atoi(optarg);
@@ -574,6 +632,13 @@ xbool_t XPass_Callback(xcrypt_cb_type_t eType, void *pData, void *pCtx)
         if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nAESKeyLength;
         else pKey->nLength = strlen(pArgs->sKey);
 
+        return XTRUE;
+    }
+    else if (eType == XCB_IV)
+    {
+        xcrypt_key_t *pKey = (xcrypt_key_t*)pData;
+        xpass_ctx_t *pArgs = (xpass_ctx_t*)pCtx;
+        xstrncpyf(pKey->sIV, sizeof(pKey->sIV), pArgs->sIV);
         return XTRUE;
     }
 

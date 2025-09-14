@@ -64,6 +64,7 @@
 #define XSTR_MIN                    2048
 #define XSTR_TINY                   256
 #define XSTR_MICRO                  32
+#define XSTR_PICO                   16
 #define XSTR_NPOS                   UINT_MAX
 #define XSTR_STACK                  XSTR_MID
 

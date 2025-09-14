@@ -61,13 +61,15 @@ typedef enum
 {
     XCB_INVALID = (uint8_t)0,
     XCB_ERROR,
-    XCB_KEY
+    XCB_KEY,
+    XCB_IV
 } xcrypt_cb_type_t;
 
 typedef struct XCryptKey 
 {
     xcrypt_chipher_t eCipher;
     char sKey[XSTR_MIN];
+    char sIV[XSTR_MICRO];
     size_t nLength;
 } xcrypt_key_t;
 
