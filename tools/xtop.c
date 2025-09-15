@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        11
+#define XTOP_VERSION_MIN        12
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -72,6 +72,7 @@ typedef enum {
 
 typedef struct xmon_ctx_ {
     xmon_stats_t *pStats;
+    xbool_t bCoreCountManualSet;
     xbool_t bDisplayHelp;
     xbool_t bRedrawHelp;
     xbool_t bDisplayHeader;
@@ -107,6 +108,7 @@ typedef struct xmon_ctx_ {
 
 void XTOP_InitContext(xtop_ctx_t *pCtx)
 {
+    pCtx->bCoreCountManualSet = XFALSE;
     pCtx->bRedrawHelp = XFALSE;
     pCtx->bDisplayHelp = XFALSE;
     pCtx->bDisplayHeader = XFALSE;
@@ -217,6 +219,7 @@ void XTOP_DisplayHelp(xtop_ctx_t *pCtx)
     printf("  %s%ss%s %s         # Toggle - sort (none/busy/free/name/len)\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pSortType);
     printf("  %s%sl%s %s        # Toggle - screen rendering (lines/frame)\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pScreenRendering);
     printf("  %s%sh%s %s          # Toggle - show this help screen\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET, pShowHelpMessage);
+    printf("  %s%sr%s                # Reset interface to defaults\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET);
     printf("  %s%sq%s                # Quit/exit from XTOP\n\n", XSTR_FMT_BOLD, XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("Command-line options:\n");
@@ -791,18 +794,21 @@ XSTATUS XTOP_AddCPUExtra(xtop_ctx_t *pCtx, xcli_win_t *pWin, xcli_bar_t *pBar, x
         // + 3 for space, iface header and total CPU line
         size_t nOccupiedLines = pWin->lines.nUsed + pCtx->nActiveIfaces + 3;
 
-        // If we have no space, show less cpus
-        while ((nOccupiedLines + pCtx->nCoreCount) > pWin->frame.nRows)
+        if (!pCtx->bCoreCountManualSet)
         {
-            if (pCtx->nCoreCount <= (int)pCtx->nCPUExtraMin) break;
-            pCtx->nCoreCount--;
-        }
+            // If we have no space, show less cpus
+            while ((nOccupiedLines + pCtx->nCoreCount) > pWin->frame.nRows)
+            {
+                if (pCtx->nCoreCount <= (int)pCtx->nCPUExtraMin) break;
+                pCtx->nCoreCount--;
+            }
 
-        // If we have a space, show more cpus
-        while ((nOccupiedLines + pCtx->nCoreCount + 1) <= pWin->frame.nRows)
-        {
-            if (pCtx->nCoreCount >= (int)pCPU->nCoreCount) break;
-            pCtx->nCoreCount++;
+            // If we have a space, show more cpus
+            while ((nOccupiedLines + pCtx->nCoreCount + 1) <= pWin->frame.nRows)
+            {
+                if (pCtx->nCoreCount >= (int)pCPU->nCoreCount) break;
+                pCtx->nCoreCount++;
+            }
         }
 
         if ((pCtx->nSort && pCPU->nCoreCount &&
@@ -1821,6 +1827,7 @@ static void XTOP_ProcessSTDIN(xtop_ctx_t *pCtx)
         }
         else if (c == 'x')
         {
+            pCtx->bCoreCountManualSet = XFALSE;
             pCtx->bDisplayHeader = !pCtx->bDisplayHeader;
             pCtx->nCoreCount = XTOP_CORE_COUNT_RESET;
         }
@@ -1844,8 +1851,15 @@ static void XTOP_ProcessSTDIN(xtop_ctx_t *pCtx)
         {
             pCtx->bQuit = XTRUE;
         }
+        else if (c == 'r')
+        {
+            bReset = XTRUE;
+            pCtx->nSort = XTOP_SORT_LEN;
+            pCtx->nCPUExtraMin = XTOP_CPU_EXTRA_MIN;
+        }
         else if (c == '+')
         {
+            pCtx->bCoreCountManualSet = XTRUE;
             pCtx->nCoreCount++;
 
             if (pCtx->nRealCores > 0 &&
@@ -1854,6 +1868,7 @@ static void XTOP_ProcessSTDIN(xtop_ctx_t *pCtx)
         }
         else if (c == '-')
         {
+            pCtx->bCoreCountManualSet = XTRUE;
             pCtx->nCoreCount--;
 
             if (pCtx->nCoreCount < 0)
@@ -1872,6 +1887,7 @@ static void XTOP_ProcessSTDIN(xtop_ctx_t *pCtx)
 
     if (bReset)
     {
+        pCtx->bCoreCountManualSet = XFALSE;
         pCtx->nActiveIfaces = XTOP_ACTIVE_IFACES_RESET;
         pCtx->nCoreCount = XTOP_CORE_COUNT_RESET;
     }
