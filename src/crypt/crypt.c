@@ -362,7 +362,7 @@ xbool_t XCrypt_KeyCallback(xcrypt_ctx_t *pCtx, xcrypt_chipher_t eCipher, xcrypt_
     if (!pCtx->callback(XCB_KEY, pKey, pCtx->pUserPtr)) return XFALSE;
 
     if (!XCrypt_NeedsIV(eCipher)) return XTRUE;
-    return pCtx->callback(XCB_IV, pKey->sIV, pCtx->pUserPtr);
+    return pCtx->callback(XCB_IV, pKey, pCtx->pUserPtr);
 }
 
 void XCrypt_Init(xcrypt_ctx_t *pCtx, xbool_t bDecrypt, char *pCiphers, xcrypt_cb_t callback, void *pUser)

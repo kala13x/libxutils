@@ -24,7 +24,7 @@
 
 #define XCRYPT_VER_MAX      0
 #define XCRYPT_VER_MIN      1
-#define XCRYPT_BUILD_NUM    23
+#define XCRYPT_BUILD_NUM    24
 
 #define XAES_KEY_LENGTH     256
 #define XHEX_COLUMNS        16
@@ -113,9 +113,9 @@ static void XCrypt_DisplayUsage(const char *pName)
         XCRYPT_VER_MAX, XCRYPT_VER_MIN, XCRYPT_BUILD_NUM, __DATE__);
     xlog("============================================================");
 
-    xlog("Usage: %s [-c <ciphers>] [-i <input>] [-o <output>] [-v]", pName);
+    xlog("Usage: %s [-c <ciphers>] [-i <input>] [-o <output>] [-d]", pName);
     xlog(" %s [-K <keyfile>] [-k <key>]%s [-x]", XCrypt_WhiteSpace(nLength), pRSAOption);
-    xlog(" %s [-t <text>] [-I <iv>] [-d] [-f] [-p] [-s] [-h]\n", XCrypt_WhiteSpace(nLength));
+    xlog(" %s [-t <text>] [-v <iv>] [-f] [-p] [-s] [-H] [-h]\n", XCrypt_WhiteSpace(nLength));
 
     xlog("Options are:");
     xlog("   -c <ciphers>        # Encryption or decryption ciphers (%s*%s)", XSTR_CLR_RED, XSTR_FMT_RESET);
@@ -127,14 +127,14 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   -K <keyfile>        # File path containing the key");
     xlog("   -k <key>            # The key to pass as an argument");
     xlog("   -t <text>           # Input text to pass as an argument");
-    xlog("   -I <iv>             # Initialization vector for AES");
+    xlog("   -v <iv>             # Initialization vector for AES");
     xlog("   -d                  # Decryption mode");
     xlog("   -f                  # Force overwrite output");
     xlog("   -s                  # Key size for AES %s", pRSADesc);
-    xlog("   -h                  # Display output as a HEX");
+    xlog("   -x                  # Display output as a HEX");
     xlog("   -p                  # Print output to stdout");
-    xlog("   -x                  # Hybryd mode for AES");
-    xlog("   -v                  # Version and usage\n");
+    xlog("   -H                  # Hybryd mode for AES");
+    xlog("   -h                  # Print help and version\n");
 
     xlog("Supported ciphers:");
     xlog("   aes        (Advanced Encryption Standard)");
@@ -305,26 +305,27 @@ static xbool_t XCrypt_GetIV(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
         size_t nLength = xstrncpy(pKey->sIV, sizeof(pKey->sIV), pArgs->sIV);
         if (nLength < 16)
         {
-            xlogw("IV is too short, will be padded with zero bytes");
-            memset(pKey->sIV + nLength, 0, 16 - nLength);
+            xlogw("IV is too short, will be padded with empty spaces");
+            memset(pKey->sIV + nLength, XSTR_SPACE_CHAR, 16 - nLength);
         }
 
         return XTRUE;
     }
 
-    char sIV[XSTR_PICO];
+    char sIV[XSTR_MICRO];
     sIV[0] = XSTR_NUL;
 
     const char *pCipher = XCrypt_GetCipherStr(pKey->eCipher);
     printf("Enter IV for the cipher '%s': ", pCipher);
 
-    if (!XCLI_GetPass(NULL, pKey->sIV, sizeof(pKey->sIV)))
+    size_t nLength = XCLI_GetPass(NULL, pKey->sIV, sizeof(pKey->sIV));
+    if (!nLength)
     {
-        xloge("Failed to read IV: %d", errno);
-        return XFALSE;
+        xlogw("Empty IV will be set to zero bytes");
+        memset(pKey->sIV, 0, sizeof(pKey->sIV));
     }
 
-    if (!pArgs->bDecrypt || pArgs->bForce)
+    if (nLength > 0 && (!pArgs->bDecrypt || pArgs->bForce))
     {
         printf("Re-enter IV for the cipher '%s': ", pCipher);
         sIV[0] = XSTR_NUL;
@@ -342,11 +343,14 @@ static xbool_t XCrypt_GetIV(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
         }
     }
 
-    size_t nLength = strlen(pKey->sIV);
-    if (nLength < 16)
+    if (nLength > 0)
     {
-        xlogw("IV is too short, will be padded with zero bytes");
-        memset(pKey->sIV + nLength, 0, 16 - nLength);
+        nLength = strlen(pKey->sIV);
+        if (nLength < 16)
+        {
+            xlogw("IV is too short, will be padded with empty spaces");
+            memset(pKey->sIV + nLength, XSTR_SPACE_CHAR, 16 - nLength);
+        }
     }
 
     return XTRUE;
@@ -432,7 +436,7 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
     memset(pArgs, 0, sizeof(xcrypt_args_t));
     int nChar = 0;
 
-    while ((nChar = getopt(argc, argv, "c:i:o:g:k:K:I:t:s:d1:f1:h1:p1:s1:x1:v1")) != -1)
+    while ((nChar = getopt(argc, argv, "c:i:o:g:k:K:v:t:s:d1:f1:p1:s1:x1:h1:H1")) != -1)
     {
         switch (nChar)
         {
@@ -456,7 +460,7 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
             case 'K':
                 xstrncpy(pArgs->sKeyFile, sizeof(pArgs->sKeyFile), optarg);
                 break;
-            case 'I':
+            case 'v':
                 xstrncpy(pArgs->sIV, sizeof(pArgs->sIV), optarg);
                 break;
             case 't':
@@ -471,16 +475,16 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
             case 'f':
                 pArgs->bForce = XTRUE;
                 break;
-            case 'h':
+            case 'x':
                 pArgs->bHex = XTRUE;
                 break;
             case 'p':
                 pArgs->bPrint = XTRUE;
                 break;
-            case 'x':
+            case 'H':
                 pArgs->bHybrid = XTRUE;
                 break;
-            case 'v':
+            case 'h':
             default:
                 XCrypt_DisplayUsage(argv[0]);
                 return XFALSE;

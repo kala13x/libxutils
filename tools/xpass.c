@@ -23,7 +23,7 @@
 
 #define XPASS_VER_MAX       0
 #define XPASS_VER_MIN       2
-#define XPASS_BUILD_NUM     7
+#define XPASS_BUILD_NUM     8
 
 #define XPASS_AES_LEN       128
 #define XPASS_NAME_LEN      6
@@ -209,13 +209,14 @@ static xbool_t XPass_GetIV(xpass_ctx_t *pCtx)
 
     printf("Enter IV for the cipher 'AES': ");
 
-    if (!XCLI_GetPass(NULL, pCtx->sIV, sizeof(pCtx->sIV)))
+    size_t nLength = XCLI_GetPass(NULL, pCtx->sIV, sizeof(pCtx->sIV));
+    if (!nLength)
     {
-        xloge("Failed to read IV: %d", errno);
-        return XFALSE;
+        xlogw("Empty IV will be set to zero bytes");
+        memset(pCtx->sIV, 0, sizeof(pCtx->sIV));
     }
 
-    if (pCtx->bForce)
+    if (nLength > 0 && pCtx->bForce)
     {
         printf("Re-enter IV for the cipher 'AES': ");
         sIV[0] = XSTR_NUL;
@@ -233,11 +234,14 @@ static xbool_t XPass_GetIV(xpass_ctx_t *pCtx)
         }
     }
 
-    size_t nLength = strlen(pCtx->sIV);
-    if (nLength < 16)
+    if (nLength > 0)
     {
-        xlogw("IV is too short, will be padded with zero bytes");
-        memset(pCtx->sIV + nLength, 0, 16 - nLength);
+        nLength = strlen(pCtx->sIV);
+        if (nLength < 16)
+        {
+            xlogw("IV is too short, will be padded with empty spaces");
+            memset(pCtx->sIV + nLength, XSTR_SPACE_CHAR, 16 - nLength);
+        }
     }
 
     return XTRUE;

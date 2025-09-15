@@ -307,8 +307,8 @@ static uint8_t g_nKTInit = 0;
 
 void XAES_SetKey(xaes_context_t *pCtx, const uint8_t *pKey, size_t nSize, const uint8_t *pIV)
 {
-    if (pIV == NULL) memset((void*)pCtx->IV, 0, sizeof(pCtx->IV));
-    else memcpy((void*)pCtx->IV, (void*)pIV, sizeof(pCtx->IV));
+    memset((void*)pCtx->IV, 0, sizeof(pCtx->IV)); // By default, zero IV
+    if (pIV != NULL) memcpy((void*)pCtx->IV, (void*)pIV, sizeof(pCtx->IV));
 
     switch (nSize)
     {
@@ -609,7 +609,6 @@ void XAES_DecryptBlock(xaes_context_t *pCtx, uint8_t output[XAES_BLOCK_SIZE], co
 ////////////////////////////////////////////////////////////////////////////////////////
 // libxutils implementation to encode and decode input buffers of various sizes
 ////////////////////////////////////////////////////////////////////////////////////////
-
 uint8_t* XAES_Encrypt(xaes_context_t *pCtx, const uint8_t *pInput, size_t *pLength)
 {
     if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
@@ -617,9 +616,9 @@ uint8_t* XAES_Encrypt(xaes_context_t *pCtx, const uint8_t *pInput, size_t *pLeng
     size_t nOriginalLen = *pLength;
 
     uint8_t *pOutput = (uint8_t*)malloc(nPaddingLen + 1);
-    if (!pOutput) return NULL;
+    if (pOutput == NULL) return NULL;
 
-    uint8_t iv[XAES_BLOCK_SIZE];
+    uint8_t iv[XAES_BLOCK_SIZE] = { 0 };
     memcpy(iv, pCtx->IV, sizeof(iv));
 
     // Copy input data and add PKCS#7 padding
@@ -659,7 +658,7 @@ uint8_t* XAES_Decrypt(xaes_context_t *pCtx, const uint8_t *pInput, size_t *pLeng
     uint8_t *pOutput = (uint8_t*)malloc(nInputLength + 1);
     if (!pOutput) return NULL;
 
-    uint8_t iv[XAES_BLOCK_SIZE];
+    uint8_t iv[XAES_BLOCK_SIZE] = { 0 };
     memcpy(iv, pCtx->IV, sizeof(iv));
 
     const uint8_t *pData = pInput;
