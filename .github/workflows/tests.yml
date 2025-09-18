@@ -72,3 +72,15 @@ jobs:
 
       - name: Run Valgrind Check With examples/xlog
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/xlog
+
+      - name: Generate random file with 32byte lenght
+        run: head -c 32 /dev/urandom > ./random.key
+
+      - name: Run Valgrind Check ecryption with tools/xcrypt
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xcrypt -i ./tools/xutils.c -o ./crypted.bin -c aes256 -K ./random.key -v "1234567890abcdef"
+
+      - name: Run Valgrind Check decryption with tools/xcrypt
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 xcrypt -i ./crypted.bin -o ./decrypted.c -dc aes256 -K ./random.key -v "1234567890abcdef"
+
+      - name: Compare original and decrypted files and fail if different
+        run: diff ./tools/xutils.c ./decrypted.c || (echo "Files are different!" && exit 1)

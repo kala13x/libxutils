@@ -24,7 +24,7 @@
 
 #define XCRYPT_VER_MAX      0
 #define XCRYPT_VER_MIN      1
-#define XCRYPT_BUILD_NUM    24
+#define XCRYPT_BUILD_NUM    25
 
 #define XAES_KEY_LENGTH     256
 #define XHEX_COLUMNS        16
@@ -109,7 +109,7 @@ static void XCrypt_DisplayUsage(const char *pName)
     const char *pRSADesc = bRSA ? "and RSA" : XSTR_EMPTY;
 
     xlog("============================================================");
-    xlog(" Crypt/Decrypt file or text - v%d.%d build %d (%s)",
+    xlog(" Encrypt/Decrypt file or text - v%d.%d build %d (%s)",
         XCRYPT_VER_MAX, XCRYPT_VER_MIN, XCRYPT_BUILD_NUM, __DATE__);
     xlog("============================================================");
 
@@ -126,8 +126,8 @@ static void XCrypt_DisplayUsage(const char *pName)
 #endif
     xlog("   -K <keyfile>        # File path containing the key");
     xlog("   -k <key>            # The key to pass as an argument");
-    xlog("   -t <text>           # Input text to pass as an argument");
     xlog("   -v <iv>             # Initialization vector for AES");
+    xlog("   -t <text>           # Text to pass as input argument");
     xlog("   -d                  # Decryption mode");
     xlog("   -f                  # Force overwrite output");
     xlog("   -s                  # Key size for AES %s", pRSADesc);
@@ -249,6 +249,12 @@ static xbool_t XCrypt_GetKey(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
     {
         size_t nLength = xstrncpy(pKey->sKey, sizeof(pKey->sKey), pArgs->sKey);
         return XCrypt_SetKey(pArgs, pKey, nLength);
+    }
+    else if (xstrused(pArgs->sKeyFile) && pKey->eCipher == XC_AES)
+    {
+        pKey->nLength = XPath_Read(pArgs->sKeyFile, (uint8_t*)pKey->sKey, sizeof(pKey->sKey));
+        if (pKey->nLength) pKey->nLength = pArgs->nKeySize;
+        return pKey->nLength ? XTRUE : XFALSE;
     }
 
     char sKey[XSTR_MID];
