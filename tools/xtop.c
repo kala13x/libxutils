@@ -1476,10 +1476,10 @@ int XTOP_AppendNetworkJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
                     "\"packetsReceivedPerSec\": %" PRIu64 ","
                     "\"active\": %s"
                 "}",
-                pIface->sName ? pIface->sName : "",
+                pIface->sName,
                 pIface->nType,
-                pIface->sIPAddr ? pIface->sIPAddr : "",
-                pIface->sHWAddr ? pIface->sHWAddr : "",
+                pIface->sIPAddr,
+                pIface->sHWAddr,
                 pIface->nBandwidth,
                 pIface->nBytesSent,
                 pIface->nPacketsSent,
