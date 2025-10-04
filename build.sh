@@ -12,7 +12,7 @@ TOOLS_DONE=0
 CPU_COUNT=1
 
 # Check if its linux or cmake is not installed
-if [ $OSTYPE == linux-gnu ]; then
+if [ $OSTYPE == linux-gnu  ] || [ $OSTYPE == linux-gnueabihf ]; then
     if ! command -v cmake &> /dev/null; then
         MAKE_TOOL="make"
     fi
