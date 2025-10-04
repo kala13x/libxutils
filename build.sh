@@ -73,7 +73,7 @@ clean_project() {
 }
 
 update_cpu_count() {
-    if [ $OSTYPE == linux-gnu ]; then
+    if [ $OSTYPE == linux-gnu ] || [ $OSTYPE == linux-gnueabihf ]; then
         CPU_COUNT=$(nproc)
     fi
 }

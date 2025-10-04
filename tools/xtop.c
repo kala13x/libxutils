@@ -1412,20 +1412,21 @@ int XTOP_AppendMemoryJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
     xmem_info_t memInfo;
     XMon_GetMemoryInfo(pStats, &memInfo);
 
-    return XString_Append(pJsonStr,
+    char sJsonBlock[XSTR_MIN];
+    int nLen = snprintf(sJsonBlock, sizeof(sJsonBlock),
         "\"memory\": {"
-            "\"memReclaimable\": %lu,"
-            "\"memBuffered\": %lu,"
-            "\"memResident\": %lu,"
-            "\"memVirtual\": %lu,"
-            "\"memCached\": %lu,"
-            "\"memShared\": %lu,"
-            "\"memAvail\": %lu,"
-            "\"memTotal\": %lu,"
-            "\"memFree\": %lu,"
-            "\"swapCached\": %lu,"
-            "\"swapTotal\": %lu,"
-            "\"swapFree\": %lu"
+            "\"memReclaimable\": %" PRIu64 ","
+            "\"memBuffered\": %" PRIu64 ","
+            "\"memResident\": %" PRIu64 ","
+            "\"memVirtual\": %" PRIu64 ","
+            "\"memCached\": %" PRIu64 ","
+            "\"memShared\": %" PRIu64 ","
+            "\"memAvail\": %" PRIu64 ","
+            "\"memTotal\": %" PRIu64 ","
+            "\"memFree\": %" PRIu64 ","
+            "\"swapCached\": %" PRIu64 ","
+            "\"swapTotal\": %" PRIu64 ","
+            "\"swapFree\": %" PRIu64 ""
         "}",
         memInfo.nReclaimable,
         memInfo.nBuffers,
@@ -1439,6 +1440,8 @@ int XTOP_AppendMemoryJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
         memInfo.nSwapCached,
         memInfo.nSwapTotal,
         memInfo.nSwapFree);
+
+    return XString_Add(pJsonStr, sJsonBlock, nLen);
 }
 
 int XTOP_AppendNetworkJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
