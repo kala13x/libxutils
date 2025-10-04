@@ -92,8 +92,8 @@ int XRTP_ParsePacket(xrtp_packet_t *pPacket, uint8_t *pData, size_t nLength)
     }
 
     /* Unused bytes in the packet */
-    if (nLength - nOffset > 0)
-        pPacket->nUnusedBytes = (int)nLength - nOffset;
+    int nUnusedBytes = (int)nLength - nOffset;
+    pPacket->nUnusedBytes = (nUnusedBytes > 0) ? nUnusedBytes : 0;
 
     return nOffset;
 }

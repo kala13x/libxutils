@@ -1078,12 +1078,12 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
     char sDelimiter[XSTR_MIN];
     char sToken[XSTR_MAX];
 
-    size_t nDlmtLen = 0;
+    int nDlmtLen = 0;
     int nNext = 0;
 
     if (bIncludeDlmt)
     {
-        nDlmtLen = xstrncpy(sDelimiter, sizeof(sDelimiter), pDlmt);
+        nDlmtLen = (int)xstrncpy(sDelimiter, sizeof(sDelimiter), pDlmt);
         if (xstrncmp(pString, sDelimiter, nDlmtLen)) XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1);
     }
 
@@ -1099,9 +1099,10 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
         XArray_AddData(pTokens, sToken, nLength + 1);
         if (nNext <= 0) break;
 
-        if (bIncludeDlmt && nNext - nDlmtLen >= 0)
+        int nOffset = nNext - nDlmtLen;
+        if (bIncludeDlmt && nOffset >= 0)
         {
-            if (xstrncmp(&pString[nNext - nDlmtLen], sDelimiter, nDlmtLen))
+            if (xstrncmp(&pString[nOffset], sDelimiter, nDlmtLen))
                 XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1);
         }
     }
