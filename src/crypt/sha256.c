@@ -86,12 +86,12 @@ void XSHA256_Update(xsha256_t *pSha, const uint8_t *pData, size_t nLength)
 
 void XSHA256_Final(xsha256_t *pSha, uint8_t *pDigest)
 {
-    size_t nPaddingSize = (pSha->nSize < 56) ? (56 - pSha->nSize) : (120 - pSha->nSize);
-    size_t i, nTotalSize = pSha->nTotalSize * 8;
+    size_t i, nPaddingSize = (pSha->nSize < 56) ? (56 - pSha->nSize) : (120 - pSha->nSize);
+    uint64_t nTotalBits = (uint64_t)pSha->nTotalSize * 8;
 
     XSHA256_Update(pSha, XSHA256P, nPaddingSize);
-    pSha->uBlock.wBytes[14] = htobe32((uint32_t) (nTotalSize >> 32));
-    pSha->uBlock.wBytes[15] = htobe32((uint32_t) nTotalSize);
+    pSha->uBlock.wBytes[14] = htobe32((uint32_t) (nTotalBits >> 32));
+    pSha->uBlock.wBytes[15] = htobe32((uint32_t) nTotalBits);
     XSHA256_ProcessBlock(pSha);
 
     for (i = 0; i < 8; i++) pSha->uDigest.hBytes[i] = htobe32(pSha->uDigest.hBytes[i]);

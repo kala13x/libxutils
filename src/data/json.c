@@ -216,7 +216,7 @@ static int XJSON_GetNextToken(xjson_t *pJson)
     pToken->pData = &pJson->pData[pJson->nOffset-1];
     pToken->nLength = 1;
 
-    switch (nChar)
+    switch ((int)nChar)
     {
         case '\0': case EOF:
             pToken->nType = XJSON_TOKEN_EOF;

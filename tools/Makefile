@@ -4,7 +4,7 @@
 ####################################
 
 CFLAGS = -g -O2 -Wall
-LIBS = -lpthread
+LIBS = -lpthread -lm
 LD_LIBS = ../build/libxutils.a
 
 ifeq ($(XUTILS_USE_SSL),y)
