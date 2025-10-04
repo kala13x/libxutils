@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        12
+#define XTOP_VERSION_MIN        13
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -1458,27 +1458,28 @@ int XTOP_AppendNetworkJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
             xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(&netIfaces, i);
             if (pIface == NULL) continue;
 
-            XString_Append(pJsonStr,
+            char sJsonBlock[XSTR_MIN];
+            int nLen = snprintf(sJsonBlock, sizeof(sJsonBlock),
                 "{"
                     "\"name\": \"%s\","
                     "\"type\": %d,"
                     "\"ipAddr\": \"%s\","
                     "\"hwAddr\": \"%s\","
-                    "\"bandwidth\": %ld,"
-                    "\"bytesSent\": %ld,"
-                    "\"packetsSent\": %ld,"
-                    "\"bytesReceived\": %ld,"
-                    "\"packetsReceived\": %ld,"
-                    "\"bytesSentPerSec\": %lu,"
-                    "\"packetsSentPerSec\": %lu,"
-                    "\"bytesReceivedPerSec\": %lu,"
-                    "\"packetsReceivedPerSec\": %lu,"
+                    "\"bandwidth\": %" PRId64 ","
+                    "\"bytesSent\": %" PRId64 ","
+                    "\"packetsSent\": %" PRId64 ","
+                    "\"bytesReceived\": %" PRId64 ","
+                    "\"packetsReceived\": %" PRId64 ","
+                    "\"bytesSentPerSec\": %" PRIu64 ","
+                    "\"packetsSentPerSec\": %" PRIu64 ","
+                    "\"bytesReceivedPerSec\": %" PRIu64 ","
+                    "\"packetsReceivedPerSec\": %" PRIu64 ","
                     "\"active\": %s"
                 "}",
-                pIface->sName,
+                pIface->sName ? pIface->sName : "",
                 pIface->nType,
-                pIface->sIPAddr,
-                pIface->sHWAddr,
+                pIface->sIPAddr ? pIface->sIPAddr : "",
+                pIface->sHWAddr ? pIface->sHWAddr : "",
                 pIface->nBandwidth,
                 pIface->nBytesSent,
                 pIface->nPacketsSent,
@@ -1489,6 +1490,8 @@ int XTOP_AppendNetworkJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
                 pIface->nBytesReceivedPerSec,
                 pIface->nPacketsReceivedPerSec,
                 pIface->bActive ? "true" : "false");
+
+            XString_Add(pJsonStr, sJsonBlock, nLen);
 
             if (pJsonStr->nStatus < 0 ||
                 (i + 1 < nUsed &&
