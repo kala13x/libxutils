@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        13
+#define XTOP_VERSION_MIN        14
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -61,6 +61,9 @@ extern char *optarg;
 
 #define XTOP_OPT_ON  "["XSTR_CLR_GREEN"on"XSTR_FMT_RESET"] "
 #define XTOP_OPT_OFF "["XSTR_CLR_RED"off"XSTR_FMT_RESET"]"
+
+#define XTOP_PORT_DEFAULT   6969
+#define XTOP_ADDR_DEFAULT   "0.0.0.0"
 
 typedef enum {
     XTOP_NONE = (uint8_t)0,
@@ -124,7 +127,7 @@ void XTOP_InitContext(xtop_ctx_t *pCtx)
     pCtx->bQuit = XFALSE;
     pCtx->nSort = XTOP_SORT_LEN;
 
-    xstrnul(pCtx->sAddr);
+    xstrncpy(pCtx->sAddr, sizeof(pCtx->sAddr), XTOP_ADDR_DEFAULT);
     xstrnul(pCtx->sLogs);
     xstrnul(pCtx->sLink);
     xstrnul(pCtx->sName);
@@ -137,7 +140,7 @@ void XTOP_InitContext(xtop_ctx_t *pCtx)
     pCtx->nIntervalU = 0;
     pCtx->nCoreCount = -1;
     pCtx->nRealCores = -1;
-    pCtx->nPort = 0;
+    pCtx->nPort = XTOP_PORT_DEFAULT;
     pCtx->nPID = 0;
 }
 
