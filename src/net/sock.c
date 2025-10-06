@@ -512,7 +512,7 @@ XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
 void XSock_Close(xsock_t *pSock)
 {
  #ifdef XSOCK_USE_SSL
-    if (pSock->pPrivate != NULL)
+    if (pSock && pSock->pPrivate != NULL)
     {
         xsock_priv_t *pPriv = (xsock_priv_t*)pSock->pPrivate;
         SSL *pSSL = (SSL*)pPriv->pSSL;
@@ -533,7 +533,7 @@ void XSock_Close(xsock_t *pSock)
     }
 #endif
 
-    if (pSock->nFD != XSOCK_INVALID)
+    if (pSock && pSock->nFD != XSOCK_INVALID)
     {
         shutdown(pSock->nFD, XSHUT_RDWR);
         xclosesock(pSock->nFD);
