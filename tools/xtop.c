@@ -746,7 +746,10 @@ XSTATUS XTOP_AddOverallBar(xcli_win_t *pWin, xcli_bar_t *pBar, xmem_info_t *pMem
                 XSTR_CLR_LIGHT_BLUE, XU32ToFloat(pCPU->nLoadAvg[2]), XSTR_FMT_RESET);
 
     /* Create half-empry line for pretty print */
-    XProgBar_UpdateWindowSize(pBar); pBar->frame.nColumns /= 2;
+    XProgBar_UpdateWindowSize(pBar);
+    pBar->frame.nColumns /= 2;
+
+    if (pCPU->nCoreCount > 8) pBar->frame.nColumns -= 1;
     xstrnfill(sLine, sizeof(sLine), pBar->frame.nColumns, XSTR_SPACE_CHAR);
 
     /* Create and append process track info next to swap bar */
