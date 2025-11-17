@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        14
+#define XTOP_VERSION_MIN        15
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -501,73 +501,112 @@ int XTOP_FillCPUBar(xcli_bar_t *pBar, xcpu_info_t *pCore, char *pDst, size_t nSi
         XSTR_CLR_CYAN, sVirt, XSTR_FMT_RESET);
 }
 
+XSTATUS XTOP_CreareCPUBar(xcli_bar_t *pBar, xcpu_info_t *pCore, size_t nPrefixLen, char *pDst, size_t nDstSize)
+{
+    XCHAR(sUsed, XLINE_MAX);
+    XCHAR(sCore, XSTR_TINY);
+
+    xstrnlcpyf(sCore, sizeof(sCore), nPrefixLen, XSTR_SPACE_CHAR, "%d", pCore->nID);
+    xstrnclr(pBar->sPrefix, sizeof(pBar->sPrefix), XSTR_CLR_CYAN, "%s", sCore);
+
+    pBar->fPercent = XU32ToFloat(pCore->nUserSpace) + XU32ToFloat(pCore->nUserSpaceNiced);
+    pBar->fPercent += XU32ToFloat(pCore->nKernelSpace) + XU32ToFloat(pCore->nSoftInterrupts);
+    pBar->fPercent += XU32ToFloat(pCore->nHardInterrupts) + XU32ToFloat(pCore->nIOWait);
+    pBar->fPercent += XU32ToFloat(pCore->nStealTime);
+
+    xbool_t bHidePct = XProgBar_CalculateBounds(pBar);
+    XTOP_FillCPUBar(pBar, pCore, sUsed, sizeof(sUsed));
+    XProgBar_GetOutputAdv(pBar, pDst, nDstSize, sUsed, bHidePct);
+
+    return XSTDOK;
+}
+
 XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCPU)
 {
-    char sFirst[XLINE_MAX], sSecond[XLINE_MAX], sUsed[XLINE_MAX];
+    xbool_t bSplitBars = pCPU->nCoreCount > 8 ? XTRUE : XFALSE;
+    size_t nBarSpace = pCPU->nCoreCount < 100 ? 3 : 5;
     uint16_t i, nNext = pCPU->nCoreCount;
     uint16_t nEdge = 0, nUsedCount = 0;
 
     xstrnul(pBar->sSuffix);
-    xstrnul(sSecond);
-    xstrnul(sFirst);
-
     XProgBar_UpdateWindowSize(pBar);
-    pBar->frame.nColumns /= 2;
+
+    size_t nOutputColumns = pBar->frame.nColumns / 2;
+    if (pCPU->nCoreCount <= 8) pBar->frame.nColumns /= 2;
+    else if (pCPU->nCoreCount <= 12) pBar->frame.nColumns /= 3;
+    else
+    {
+        pBar->frame.nColumns /= 4;
+        nOutputColumns -= 1;
+    }
 
     for (i = 0; i < pCPU->nCoreCount; i++)
     {
+        XCHAR(sFirst, XLINE_MAX);
+        XCHAR(sSecond, XLINE_MAX);
+        XCHAR(sThird, XLINE_MAX);
+        XCHAR(sFourth, XLINE_MAX);
+
         xcpu_info_t *pCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, i);
         if (pCore != NULL)
         {
             if (nUsedCount >= pCPU->nCoreCount) break;
             else if (nEdge && i == nEdge) continue;
 
-            nNext = i + pCPU->nCoreCount / 2;
+            nNext = bSplitBars ? i + 4 : i + pCPU->nCoreCount / 2;
             if (!nEdge) nEdge = nNext;
+
+            XTOP_CreareCPUBar(pBar, pCore, 5, sFirst, sizeof(sFirst));
             nUsedCount++;
-
-            char sCore[XSTR_TINY];
-            xstrnlcpyf(sCore, sizeof(sCore), 5, XSTR_SPACE_CHAR, "%d", pCore->nID);
-            xstrnclr(pBar->sPrefix, sizeof(pBar->sPrefix), XSTR_CLR_CYAN, "%s", sCore);
-
-            pBar->fPercent = XU32ToFloat(pCore->nUserSpace) + XU32ToFloat(pCore->nUserSpaceNiced);
-            pBar->fPercent += XU32ToFloat(pCore->nKernelSpace) + XU32ToFloat(pCore->nSoftInterrupts);
-            pBar->fPercent += XU32ToFloat(pCore->nHardInterrupts) + XU32ToFloat(pCore->nIOWait);
-            pBar->fPercent += XU32ToFloat(pCore->nStealTime);
-
-            xstrnul(sUsed);
-            xbool_t bHidePct = XProgBar_CalculateBounds(pBar);
-            XTOP_FillCPUBar(pBar, pCore, sUsed, sizeof(sUsed));
-            XProgBar_GetOutputAdv(pBar, sFirst, sizeof(sFirst), sUsed, bHidePct);
 
             if (i == nNext || nNext >= pCPU->nCoreCount)
             {
                 xstrnfill(sSecond, sizeof(sSecond), pBar->frame.nColumns, XSTR_SPACE_CHAR);
-                return XCLIWin_AddLineFmt(pWin, "%s%s", sFirst, sSecond);
+                XSTATUS nStatus = XCLIWin_AddLineFmt(pWin, "%s%s%s%s", sFirst, sSecond, sThird, sFourth);
+
+                pBar->frame.nColumns = nOutputColumns;
+                return nStatus;
             }
 
             xcpu_info_t *pSecondCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nNext);
             if (pSecondCore != NULL)
             {
-                xstrnlcpyf(sCore, sizeof(sCore), 5, XSTR_SPACE_CHAR, "%d", pSecondCore->nID);
-                xstrnclr(pBar->sPrefix, sizeof(pBar->sPrefix), XSTR_CLR_CYAN, "%s", sCore);
-
-                pBar->fPercent = XU32ToFloat(pSecondCore->nUserSpace) + XU32ToFloat(pSecondCore->nUserSpaceNiced);
-                pBar->fPercent += XU32ToFloat(pSecondCore->nKernelSpace) + XU32ToFloat(pSecondCore->nSoftInterrupts);
-                pBar->fPercent += XU32ToFloat(pSecondCore->nHardInterrupts) + XU32ToFloat(pSecondCore->nIOWait);
-                pBar->fPercent += XU32ToFloat(pSecondCore->nStealTime);
-
-                xstrnul(sUsed);
-                xbool_t bHidePct = XProgBar_CalculateBounds(pBar);
-                XTOP_FillCPUBar(pBar, pSecondCore, sUsed, sizeof(sUsed));
-                XProgBar_GetOutputAdv(pBar, sSecond, sizeof(sSecond), sUsed, bHidePct);
-
-                XCLIWin_AddLineFmt(pWin, "%s%s", sFirst, sSecond);
+                size_t nFixedSpace = bSplitBars ? nBarSpace : 5;
+                XTOP_CreareCPUBar(pBar, pSecondCore, nFixedSpace, sSecond, sizeof(sSecond));
                 nUsedCount++;
             }
+
+            if (bSplitBars)
+            {
+                uint16_t nThird = nNext + 4;
+                uint16_t nFourth = nThird + 4;
+
+                if (nThird < pCPU->nCoreCount)
+                {
+                    xcpu_info_t *pThirdCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nThird);
+                    if (pThirdCore != NULL)
+                    {
+                        XTOP_CreareCPUBar(pBar, pThirdCore, nBarSpace, sThird, sizeof(sThird));
+                        nUsedCount++;
+                    }
+                }
+
+                if (nFourth < pCPU->nCoreCount)
+                {
+                    xcpu_info_t *pFourthCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nFourth);
+                    if (pFourthCore != NULL)
+                    {
+                        XTOP_CreareCPUBar(pBar, pFourthCore, nBarSpace, sFourth, sizeof(sFourth));
+                        nUsedCount++;
+                    }
+                }
+            }
+
+            XCLIWin_AddLineFmt(pWin, "%s%s%s%s", sFirst, sSecond, sThird, sFourth);
         }
     }
 
+    pBar->frame.nColumns = nOutputColumns;
     return XSTDOK;
 }
 
