@@ -105,12 +105,13 @@ int XMon_GetCPUStats(xmon_stats_t *pStats, xcpu_stats_t *pCpuStats)
         if (nStatus < 0) free(pDstInfo);
     }
 
-    pCpuStats->nCoreCount = pCpuStats->cores.nUsed;
     pCpuStats->nLoadAvg[0] = XSYNC_ATOMIC_GET(&pStats->cpuStats.nLoadAvg[0]);
     pCpuStats->nLoadAvg[1] = XSYNC_ATOMIC_GET(&pStats->cpuStats.nLoadAvg[1]);
     pCpuStats->nLoadAvg[2] = XSYNC_ATOMIC_GET(&pStats->cpuStats.nLoadAvg[2]);
 
+    pCpuStats->nCoreCount = pCpuStats->cores.nUsed;
     if (pCpuStats->nCoreCount) return pCpuStats->nCoreCount;
+
     XArray_Destroy(&pCpuStats->cores);
     return -2;
 }

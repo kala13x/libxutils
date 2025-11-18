@@ -525,20 +525,20 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
 {
     xbool_t bSplitBars = pCPU->nCoreCount > 8 ? XTRUE : XFALSE;
     size_t nBarSpace = pCPU->nCoreCount < 100 ? 3 : 5;
-    uint16_t i, nNext = pCPU->nCoreCount;
+    size_t nFirstLen = 0, nSecondLen = 0;
     uint16_t nEdge = 0, nUsedCount = 0;
+    uint16_t i, nNext = pCPU->nCoreCount;
 
     xstrnul(pBar->sSuffix);
     XProgBar_UpdateWindowSize(pBar);
 
+    size_t nDivideFactor = 2;
+    if (pCPU->nCoreCount <= 8) nDivideFactor = 2;
+    else if (pCPU->nCoreCount <= 12) nDivideFactor = 3;
+    else nDivideFactor = 4;
+
     size_t nOutputColumns = pBar->frame.nColumns / 2;
-    if (pCPU->nCoreCount <= 8) pBar->frame.nColumns /= 2;
-    else if (pCPU->nCoreCount <= 12) pBar->frame.nColumns /= 3;
-    else
-    {
-        pBar->frame.nColumns /= 4;
-        nOutputColumns -= 1;
-    }
+    pBar->frame.nColumns /= nDivideFactor;
 
     for (i = 0; i < pCPU->nCoreCount; i++)
     {
@@ -553,7 +553,7 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
             if (nUsedCount >= pCPU->nCoreCount) break;
             else if (nEdge && i == nEdge) continue;
 
-            nNext = bSplitBars ? i + 4 : i + pCPU->nCoreCount / 2;
+            nNext = i + pCPU->nCoreCount / nDivideFactor;
             if (!nEdge) nEdge = nNext;
 
             XTOP_CreareCPUBar(pBar, pCore, 5, sFirst, sizeof(sFirst));
@@ -563,6 +563,13 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
             {
                 xstrnfill(sSecond, sizeof(sSecond), pBar->frame.nColumns, XSTR_SPACE_CHAR);
                 XSTATUS nStatus = XCLIWin_AddLineFmt(pWin, "%s%s%s%s", sFirst, sSecond, sThird, sFourth);
+
+                if ((!nFirstLen || !nSecondLen) && nDivideFactor >= 4)
+                {
+                    xstrextra(sFirst, strlen(sFirst), sizeof(sFirst), &nFirstLen, NULL);
+                    xstrextra(sSecond, strlen(sSecond), sizeof(sSecond), &nSecondLen, NULL);
+                    nOutputColumns = nFirstLen + (bSplitBars ? nSecondLen : 0) + 1;
+                }
 
                 pBar->frame.nColumns = nOutputColumns;
                 return nStatus;
@@ -576,33 +583,37 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
                 nUsedCount++;
             }
 
-            if (bSplitBars)
+            uint16_t nThird = nNext + pCPU->nCoreCount / nDivideFactor;
+            uint16_t nFourth = nThird + pCPU->nCoreCount / nDivideFactor;
+
+            if (nDivideFactor >= 3 && nThird < pCPU->nCoreCount)
             {
-                uint16_t nThird = nNext + 4;
-                uint16_t nFourth = nThird + 4;
-
-                if (nThird < pCPU->nCoreCount)
+                xcpu_info_t *pThirdCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nThird);
+                if (pThirdCore != NULL)
                 {
-                    xcpu_info_t *pThirdCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nThird);
-                    if (pThirdCore != NULL)
-                    {
-                        XTOP_CreareCPUBar(pBar, pThirdCore, nBarSpace, sThird, sizeof(sThird));
-                        nUsedCount++;
-                    }
+                    XTOP_CreareCPUBar(pBar, pThirdCore, nBarSpace, sThird, sizeof(sThird));
+                    nUsedCount++;
                 }
+            }
 
-                if (nFourth < pCPU->nCoreCount)
+            if (nDivideFactor >= 4 && nFourth < pCPU->nCoreCount)
+            {
+                xcpu_info_t *pFourthCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nFourth);
+                if (pFourthCore != NULL)
                 {
-                    xcpu_info_t *pFourthCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nFourth);
-                    if (pFourthCore != NULL)
-                    {
-                        XTOP_CreareCPUBar(pBar, pFourthCore, nBarSpace, sFourth, sizeof(sFourth));
-                        nUsedCount++;
-                    }
+                    XTOP_CreareCPUBar(pBar, pFourthCore, nBarSpace, sFourth, sizeof(sFourth));
+                    nUsedCount++;
                 }
             }
 
             XCLIWin_AddLineFmt(pWin, "%s%s%s%s", sFirst, sSecond, sThird, sFourth);
+
+            if ((!nFirstLen || !nSecondLen) && nDivideFactor >= 4)
+            {
+                xstrextra(sFirst, strlen(sFirst), sizeof(sFirst), &nFirstLen, NULL);
+                xstrextra(sSecond, strlen(sSecond), sizeof(sSecond), &nSecondLen, NULL);
+                nOutputColumns = nFirstLen + (bSplitBars ? nSecondLen : 0) + 1;
+            }
         }
     }
 
@@ -749,7 +760,7 @@ XSTATUS XTOP_AddOverallBar(xcli_win_t *pWin, xcli_bar_t *pBar, xmem_info_t *pMem
     XProgBar_UpdateWindowSize(pBar);
     pBar->frame.nColumns /= 2;
 
-    if (pCPU->nCoreCount > 8) pBar->frame.nColumns -= 1;
+    if (pCPU->nCoreCount > 12) pBar->frame.nColumns -= 1;
     xstrnfill(sLine, sizeof(sLine), pBar->frame.nColumns, XSTR_SPACE_CHAR);
 
     /* Create and append process track info next to swap bar */
