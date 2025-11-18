@@ -540,6 +540,9 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
     size_t nOutputColumns = pBar->frame.nColumns / 2;
     pBar->frame.nColumns /= nDivideFactor;
 
+    float fDivideFactor = (float)pCPU->nCoreCount / (float)nDivideFactor;
+    if (fDivideFactor != (size_t)fDivideFactor) fDivideFactor += 1.;
+
     for (i = 0; i < pCPU->nCoreCount; i++)
     {
         XCHAR(sFirst, XLINE_MAX);
@@ -553,7 +556,7 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
             if (nUsedCount >= pCPU->nCoreCount) break;
             else if (nEdge && i == nEdge) continue;
 
-            nNext = i + pCPU->nCoreCount / nDivideFactor;
+            nNext = i + (size_t)fDivideFactor;
             if (!nEdge) nEdge = nNext;
 
             XTOP_CreareCPUBar(pBar, pCore, 5, sFirst, sizeof(sFirst));
@@ -583,8 +586,8 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
                 nUsedCount++;
             }
 
-            uint16_t nThird = nNext + pCPU->nCoreCount / nDivideFactor;
-            uint16_t nFourth = nThird + pCPU->nCoreCount / nDivideFactor;
+            uint16_t nThird = nNext + (size_t)fDivideFactor;
+            uint16_t nFourth = nThird + (size_t)fDivideFactor;
 
             if (nDivideFactor >= 3 && nThird < pCPU->nCoreCount)
             {
