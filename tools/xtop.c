@@ -503,6 +503,7 @@ int XTOP_FillCPUBar(xcli_bar_t *pBar, xcpu_info_t *pCore, char *pDst, size_t nSi
 
 XSTATUS XTOP_CreareCPUBar(xcli_bar_t *pBar, xcpu_info_t *pCore, size_t nPrefixLen, char *pDst, size_t nDstSize)
 {
+    if (pCore == NULL || !pCore->nActive) return XSTDNON;
     XCHAR(sUsed, XLINE_MAX);
     XCHAR(sCore, XSTR_TINY);
 
@@ -518,6 +519,7 @@ XSTATUS XTOP_CreareCPUBar(xcli_bar_t *pBar, xcpu_info_t *pCore, size_t nPrefixLe
     XTOP_FillCPUBar(pBar, pCore, sUsed, sizeof(sUsed));
     XProgBar_GetOutputAdv(pBar, pDst, nDstSize, sUsed, bHidePct);
 
+    pCore->nActive = 0;
     return XSTDOK;
 }
 
@@ -559,13 +561,13 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
             nNext = i + (size_t)fDivideFactor;
             if (!nEdge) nEdge = nNext;
 
-            XTOP_CreareCPUBar(pBar, pCore, 5, sFirst, sizeof(sFirst));
-            nUsedCount++;
+            XSTATUS nStatus = XTOP_CreareCPUBar(pBar, pCore, 5, sFirst, sizeof(sFirst));
+            if (nStatus == XSTDOK) nUsedCount++;
 
             if (i == nNext || nNext >= pCPU->nCoreCount)
             {
                 xstrnfill(sSecond, sizeof(sSecond), pBar->frame.nColumns, XSTR_SPACE_CHAR);
-                XSTATUS nStatus = XCLIWin_AddLineFmt(pWin, "%s%s%s%s", sFirst, sSecond, sThird, sFourth);
+                nStatus = XCLIWin_AddLineFmt(pWin, "%s%s%s%s", sFirst, sSecond, sThird, sFourth);
 
                 if ((!nFirstLen || !nSecondLen) && nDivideFactor >= 4)
                 {
@@ -582,8 +584,8 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
             if (pSecondCore != NULL)
             {
                 size_t nFixedSpace = bSplitBars ? nBarSpace : 5;
-                XTOP_CreareCPUBar(pBar, pSecondCore, nFixedSpace, sSecond, sizeof(sSecond));
-                nUsedCount++;
+                nStatus = XTOP_CreareCPUBar(pBar, pSecondCore, nFixedSpace, sSecond, sizeof(sSecond));
+                if (nStatus == XSTDOK) nUsedCount++;
             }
 
             uint16_t nThird = nNext + (size_t)fDivideFactor;
@@ -594,8 +596,8 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
                 xcpu_info_t *pThirdCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nThird);
                 if (pThirdCore != NULL)
                 {
-                    XTOP_CreareCPUBar(pBar, pThirdCore, nBarSpace, sThird, sizeof(sThird));
-                    nUsedCount++;
+                    nStatus = XTOP_CreareCPUBar(pBar, pThirdCore, nBarSpace, sThird, sizeof(sThird));
+                    if (nStatus == XSTDOK) nUsedCount++;
                 }
             }
 
@@ -604,8 +606,8 @@ XSTATUS XTOP_AddCPULoadBar(xcli_win_t *pWin, xcli_bar_t *pBar, xcpu_stats_t *pCP
                 xcpu_info_t *pFourthCore = (xcpu_info_t*)XArray_GetData(&pCPU->cores, nFourth);
                 if (pFourthCore != NULL)
                 {
-                    XTOP_CreareCPUBar(pBar, pFourthCore, nBarSpace, sFourth, sizeof(sFourth));
-                    nUsedCount++;
+                    nStatus = XTOP_CreareCPUBar(pBar, pFourthCore, nBarSpace, sFourth, sizeof(sFourth));
+                    if (nStatus == XSTDOK) nUsedCount++;
                 }
             }
 
@@ -1153,6 +1155,7 @@ void XTOP_ParseCoreObj(xjson_obj_t *pCoreObj, xcpu_info_t *pCore)
     pCore->nStealTime = XJSON_GetU32(XJSON_GetObject(pCoreObj, "stealTime"));
     pCore->nGuestTime = XJSON_GetU32(XJSON_GetObject(pCoreObj, "guestTime"));
     pCore->nGuestNiced = XJSON_GetU32(XJSON_GetObject(pCoreObj, "guestNiced"));
+    pCore->nActive = XJSON_GetU32(XJSON_GetObject(pCoreObj, "active"));
     pCore->nID = XJSON_GetU32(XJSON_GetObject(pCoreObj, "id"));
 }
 
@@ -1577,6 +1580,7 @@ int XTOP_AppendCoreJson(xcpu_info_t *pCpu, xstring_t *pJsonStr)
     return XString_Append(pJsonStr,
         "{"
             "\"id\": %d,"
+            "\"active\": %d,"
             "\"softInterrupts\": %u,"
             "\"hardInterrupts\": %u,"
             "\"userSpaceNiced\": %u,"
@@ -1589,6 +1593,7 @@ int XTOP_AppendCoreJson(xcpu_info_t *pCpu, xstring_t *pJsonStr)
             "\"guestNiced\": %u"
         "}",
         pCpu->nID,
+        pCpu->nActive,
         pCpu->nSoftInterrupts,
         pCpu->nHardInterrupts,
         pCpu->nUserSpaceNiced,

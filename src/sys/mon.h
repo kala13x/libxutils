@@ -72,6 +72,7 @@ typedef struct XMemInfo {
 
 typedef struct XCPUInfo {
     int nID;
+    int nActive;
 
     /* Calculated percents about CPU usage */
     uint32_t nSoftInterrupts;

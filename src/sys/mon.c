@@ -75,6 +75,7 @@ static void XMon_CopyCPUInfo(xcpu_info_t *pDstInfo, xcpu_info_t *pSrcInfo)
     pDstInfo->nIOWait = XSYNC_ATOMIC_GET(&pSrcInfo->nIOWait);
     pDstInfo->nStealTime = XSYNC_ATOMIC_GET(&pSrcInfo->nStealTime);
     pDstInfo->nGuestTime = XSYNC_ATOMIC_GET(&pSrcInfo->nGuestTime);
+    pDstInfo->nActive = XSYNC_ATOMIC_GET(&pSrcInfo->nActive);
     pDstInfo->nID = XSYNC_ATOMIC_GET(&pSrcInfo->nID);
 }
 
@@ -363,6 +364,8 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
         cpuInfo.nTotalRaw += cpuInfo.nIdleTimeRaw + cpuInfo.nIOWaitRaw;
 
         cpuInfo.nID = nCPUID++;
+        cpuInfo.nActive = 1;
+
         if (!nCoreCount && cpuInfo.nID >= 0)
         {
             xcpu_info_t *pInfo = (xcpu_info_t*)malloc(sizeof(xcpu_info_t));
@@ -416,6 +419,7 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
             XSYNC_ATOMIC_SET(&pGenCpuInfo->nGuestRaw, cpuInfo.nGuestRaw);
             XSYNC_ATOMIC_SET(&pGenCpuInfo->nGuestNicedRaw, cpuInfo.nGuestNicedRaw);
             XSYNC_ATOMIC_SET(&pGenCpuInfo->nTotalRaw, cpuInfo.nTotalRaw);
+            XSYNC_ATOMIC_SET(&pGenCpuInfo->nActive, cpuInfo.nActive);
             XSYNC_ATOMIC_SET(&pGenCpuInfo->nID, cpuInfo.nID);
         }
 
