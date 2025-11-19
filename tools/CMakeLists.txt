@@ -2,9 +2,13 @@ cmake_minimum_required(VERSION 3.16)
 project(xutils)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall -lm")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall")
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -lm")
+endif()
 
 set(XUTILS_INCLUDE_DIRS
   ../src/crypt 
