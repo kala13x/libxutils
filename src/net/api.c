@@ -1329,8 +1329,8 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
 {
     XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
-    XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
     XASSERT((pEndpt->nFD != XSOCK_INVALID), XSTDINV);
+    XASSERT((pEndpt->eType != XAPI_NONE), XSTDINV);
 
     xapi_data_t *pApiData = XAPI_NewData(pApi, pEndpt->eType);
     if (pApiData == NULL)

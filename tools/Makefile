@@ -4,12 +4,16 @@
 ####################################
 
 CFLAGS = -g -O2 -Wall
-LIBS = -lpthread -lm
+LIBS = -lpthread
 LD_LIBS = ../build/libxutils.a
 
 ifeq ($(XUTILS_USE_SSL),y)
 CFLAGS += -D_XUTILS_USE_SSL
 LIBS += -lssl -lcrypto
+endif
+
+ifeq ($(shell uname),Linux)
+LIBS += -lm
 endif
 
 CFLAGS += -I../src \
