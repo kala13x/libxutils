@@ -73,6 +73,9 @@ jobs:
       - name: Run Valgrind Check With examples/xlog
         run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/xlog
 
+      - name: Run Valgrind Check With examples/map
+        run: valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./examples/build/map
+
       - name: Generate random file with 32byte lenght
         run: head -c 32 /dev/urandom > ./random.key
 

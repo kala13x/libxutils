@@ -37,6 +37,12 @@ if(OpenSSL_FOUND)
     list(APPEND EXTRA_LIBS ${OPENSSL_LIBRARIES})
 endif()
 
+# Link math library
+find_library(MATH_LIB m)
+if(MATH_LIB)
+    list(APPEND EXTRA_LIBS ${MATH_LIB})
+endif()
+
 # replace with your actual source files
 set(SOURCE_FILES 
     array.c
@@ -54,6 +60,7 @@ set(SOURCE_FILES
     json.c
     xlog.c
     list.c
+    map.c
     ntp.c
     jwt.c
     rsa.c)

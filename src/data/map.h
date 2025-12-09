@@ -39,7 +39,18 @@ typedef struct XMapPair {
 typedef int(*xmap_iterator_t)(xmap_pair_t*, void*);
 typedef void(*xmap_clear_cb_t)(xmap_pair_t*);
 
+typedef enum XMapHashType {
+    XMAP_HASH_FNV = 0,
+#ifdef _XMAP_USE_CRYPT
+    XMAP_HASH_MIX,
+    XMAP_HASH_CRC32,
+    XMAP_HASH_SHA256,
+#endif
+    XMAP_HASH_MAX
+} xmap_hash_type_t;
+
 typedef struct XMap {
+    xmap_hash_type_t eHashType;
     xmap_clear_cb_t clearCb;
     xmap_pair_t *pPairs;
     xpool_t *pPool;
@@ -66,11 +77,12 @@ int XMap_Update(xmap_t *pMap, int nHash, char *pKey, void *pValue);
 
 #ifdef _XMAP_USE_CRYPT
 int XMap_HashMIX(xmap_t* pMap, const char* pStr);
-int XMap_HashFNV(xmap_t* pMap, const char* pStr);
-int XMap_HashSHA(xmap_t* pMap, const char* pStr);
+int XMap_HashCRC32(xmap_t* pMap, const char* pStr);
+int XMap_HashSHA256(xmap_t* pMap, const char* pStr);
 #endif
 
 int XMap_GetHash(xmap_t *pMap, const char* pKey);
+int XMap_HashFNV(xmap_t* pMap, const char* pStr);
 int XMap_Hash(xmap_t *pMap, const char *pStr);
 
 int XMap_Iterate(xmap_t *pMap, xmap_iterator_t itfunc, void *pCtx);

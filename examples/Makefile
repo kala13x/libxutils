@@ -4,7 +4,7 @@
 ####################################
 
 CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_ASSERT_TIMED
-LIBS = -lpthread
+LIBS = -lpthread -lm
 LD_LIBS = ../build/libxutils.a
 
 ifeq ($(XUTILS_USE_SSL),y)
@@ -34,6 +34,7 @@ EXECS = array \
 	xlog \
 	list \
 	ntp \
+	map \
 	jwt \
 	rsa
 

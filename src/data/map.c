@@ -18,14 +18,9 @@
 #define XFNV_OFFSET_32 2166136261
 #define XFNV_PRIME_32  16777619
 
-int XMap_Init(xmap_t *pMap, xpool_t *pPool, size_t nSize)
+static int XMap_Alloc(xmap_t *pMap, xpool_t *pPool, size_t nSize)
 {
-    pMap->nTableSize = nSize;
-    pMap->clearCb = NULL;
-    pMap->pPairs = NULL;
-    pMap->nAlloc = 0;
-    pMap->nUsed = 0;
-    pMap->pPool = pPool;
+    XASSERT_RET(pMap, XMAP_OINV);
     if (!nSize) return XMAP_OK;
 
     pMap->pPairs = (xmap_pair_t*)xalloc(pPool, nSize * sizeof(xmap_pair_t));
@@ -40,6 +35,21 @@ int XMap_Init(xmap_t *pMap, xpool_t *pPool, size_t nSize)
     }
 
     return XMAP_OK;
+}
+
+int XMap_Init(xmap_t *pMap, xpool_t *pPool, size_t nSize)
+{
+    XASSERT_RET(pMap, XMAP_OINV);
+
+    pMap->nTableSize = nSize;
+    pMap->clearCb = NULL;
+    pMap->pPairs = NULL;
+    pMap->nAlloc = 0;
+    pMap->nUsed = 0;
+    pMap->pPool = pPool;
+    pMap->eHashType = XMAP_HASH_FNV;
+
+    return XMap_Alloc(pMap, pPool, nSize);
 }
 
 xmap_t *XMap_New(xpool_t *pPool, size_t nSize)
@@ -143,7 +153,7 @@ int XMap_HashMIX(xmap_t *pMap, const char *pStr)
     return nHash % pMap->nTableSize;
 }
 
-int XMap_HashFNV(xmap_t *pMap, const char *pStr)
+int XMap_HashCRC32(xmap_t *pMap, const char *pStr)
 {
     if (!pMap->nTableSize) return XMAP_EINIT;
     uint32_t nHash = XCRC32_Compute((unsigned char*)(pStr), strlen(pStr));
@@ -154,7 +164,7 @@ int XMap_HashFNV(xmap_t *pMap, const char *pStr)
     return nHash % pMap->nTableSize;
 }
 
-int XMap_HashSHA(xmap_t *pMap, const char *pStr)
+int XMap_HashSHA256(xmap_t *pMap, const char *pStr)
 {
     if (!pMap->nTableSize) return XMAP_EINIT;
 
@@ -177,7 +187,7 @@ int XMap_HashSHA(xmap_t *pMap, const char *pStr)
 }
 #endif /* _XMAP_USE_CRYPT */
 
-int XMap_Hash(xmap_t *pMap, const char *pStr)
+int XMap_HashFNV(xmap_t *pMap, const char *pStr)
 {
     if (!pMap->nTableSize) return XMAP_EINIT;
     uint32_t nHash = XFNV_OFFSET_32;
@@ -189,6 +199,29 @@ int XMap_Hash(xmap_t *pMap, const char *pStr)
     }
 
     return nHash % pMap->nTableSize;
+}
+
+int XMap_Hash(xmap_t *pMap, const char *pStr)
+{
+    if (pMap == NULL || pStr == NULL) return XMAP_EINIT;
+
+    switch (pMap->eHashType)
+    {
+        case XMAP_HASH_FNV:
+            return XMap_HashFNV(pMap, pStr);
+#ifdef _XMAP_USE_CRYPT
+        case XMAP_HASH_MIX:
+            return XMap_HashMIX(pMap, pStr);
+        case XMAP_HASH_CRC32:
+            return XMap_HashCRC32(pMap, pStr);
+        case XMAP_HASH_SHA256:
+            return XMap_HashSHA256(pMap, pStr);
+#endif
+        default:
+            break;
+    }
+
+    return XMap_HashFNV(pMap, pStr);
 }
 
 int XMap_GetHash(xmap_t *pMap, const char* pKey)
