@@ -63,7 +63,7 @@ There are several ways to build and install the project.
 A relatively simple way to build and install the libary and tools is to use the included build script:
 
 ```bash
-git clone https://github.com/kala13x/libxutils.git && ./libxutils/build.sh --install
+git clone https://github.com/kala13x/libxutils && ./libxutils/build.sh --install
 ```
 
 List options that build script supports:
@@ -81,7 +81,7 @@ If the tool will not be specified the script will use `cmake` as default.
 If you have a `CMake` tool installed in your operating system, here is how project can be built and installed using `cmake`:
 
 ```bash
-git clone https://github.com/kala13x/libxutils.git
+git clone https://github.com/kala13x/libxutils
 cd libxutils
 cmake . && make
 sudo make install
@@ -91,7 +91,7 @@ sudo make install
 [SMake](https://github.com/kala13x/smake) is a simple Makefile generator tool for the Linux/Unix operating systems:
 
 ```bash
-git clone https://github.com/kala13x/libxutils.git
+git clone https://github.com/kala13x/libxutils
 cd libxutils
 smake && make
 sudo make install
@@ -102,7 +102,7 @@ The project can also be built with a pre-generated `Makefile` for the Linux.
 
 ```bash
 export XUTILS_USE_SSL=y # In case you want to use SSL features
-git clone https://github.com/kala13x/libxutils.git
+git clone https://github.com/kala13x/libxutils
 cd libxutils
 make
 sudo make install

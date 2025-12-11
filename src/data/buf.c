@@ -206,7 +206,6 @@ int XByteBuffer_Add(xbyte_buffer_t *pBuffer, const uint8_t *pData, size_t nSize)
     return (int)pBuffer->nUsed;
 }
 
-
 int XByteBuffer_ReadStdin(xbyte_buffer_t *pBuffer)
 {
     if (pBuffer == NULL) return XSTDERR;

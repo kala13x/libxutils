@@ -86,6 +86,7 @@ int xrmdir(const char* pPath);
 int xclose(int nFD);
 
 int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms);
+int XFile_Reopen(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms);
 xfile_t* XFile_Alloc(const char *pPath, const char *pFlags, const char *pPerms);
 
 xbool_t XFile_IsOpen(xfile_t *pFile);

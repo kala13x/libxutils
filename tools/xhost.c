@@ -17,7 +17,7 @@
 #define XHOST_FILE_PATH     "/etc/hosts"
 #define XHOST_VERSION_MAX   1
 #define XHOST_VERSION_MIN   0
-#define XHOST_BUILD_NUMBER  10
+#define XHOST_BUILD_NUMBER  11
 
 #define XHOST_ADDR_LEN_MAX  15
 
@@ -166,9 +166,92 @@ static void XHost_ClearContext(xhost_ctx_t *pCtx)
     XFile_Close(&pCtx->file);
 }
 
-static int XHost_Write(xstring_t *pString)
+static int XHost_RemoveHeader()
 {
+    xhost_ctx_t ctx;
+    uint8_t nHeaderSkipped = 0;
+
+    XASSERT((XHost_InitContext(&ctx, XTRUE) > 0),
+        xthrowe("Failed to init context"));
+
+    while (XFile_GetLine(&ctx.file, ctx.sLine, sizeof(ctx.sLine)) > 0)
+    {
+        if (ctx.sLine[0] == '#')
+        {
+            if (xstrncmp(ctx.sLine, "# Hosts file modified by XHost", 30) ||
+                xstrncmp(ctx.sLine, "# Version", 9) ||
+                xstrncmp(ctx.sLine, "# Tabs:", 7))
+            {
+                nHeaderSkipped++;
+                continue;
+            }
+        }
+
+        if (nHeaderSkipped == 3 && ctx.sLine[0] == '\n')
+        {
+            nHeaderSkipped = 0;
+            continue;
+        }
+
+        XASSERT((XString_Append(&ctx.hosts, "%s", ctx.sLine) >= 0),
+            xthrowe("Failed to add line to hosts buffer"));
+    }
+
+    XASSERT_CALL((XFile_Reopen(&ctx.file, XHOST_FILE_PATH, "cwt", NULL) >= 0),
+        XHost_ClearContext, &ctx, xthrowe("Failed to open hosts file for writing"));
+
+    XASSERT_CALL((XFile_Write(&ctx.file, ctx.hosts.pData, ctx.hosts.nLength) >= 0),
+        XHost_ClearContext, &ctx, xthrowe("Failed to write hosts file"));
+
+    XHost_ClearContext(&ctx);
+    return XSTDOK;
+}
+
+static int XHost_WriteHeader(xhost_ctx_t *pCtx)
+{
+    XHost_ClearContext(pCtx);
+    XHost_RemoveHeader();
+
+    xbyte_buffer_t buffer;
+    XByteBuffer_Init(&buffer, XSTDNON, XFALSE);
+
+    XASSERT((XPath_LoadBuffer(XHOST_FILE_PATH, &buffer) > 0),
+        xthrowe("Failed to load hosts file for header analysis"));
+
+    char sHeader[XSTR_MIN];
+    int nWritten = xstrncpyf(sHeader, sizeof(sHeader),
+        "# Hosts file modified by XHost\n"
+        "# Version %d.%d build %d on %s\n"
+        "# Tabs: %zu\n\n",
+        XHOST_VERSION_MAX,
+        XHOST_VERSION_MIN,
+        XHOST_BUILD_NUMBER,
+        __DATE__,
+        pCtx->nTabSize);
+
     xfile_t file;
+    XASSERT_CALL((XFile_Open(&file, XHOST_FILE_PATH, "cwt", NULL) >= 0),
+        XByteBuffer_Clear, &buffer, xthrowe("Failed to open hosts file for writing"));
+
+    XASSERT_CALL2((XFile_Write(&file, sHeader, nWritten) >= 0),
+        XFile_Close, &file, XByteBuffer_Clear, &buffer,
+        xthrowe("Failed to write hosts header"));
+
+    XASSERT_CALL2((XFile_Write(&file, buffer.pData, buffer.nUsed) >= 0),
+        XFile_Close, &file, XByteBuffer_Clear, &buffer,
+        xthrowe("Failed to write hosts data"));
+
+    XFile_Close(&file);
+    XByteBuffer_Clear(&buffer);
+
+    return XSTDOK;
+}
+
+static int XHost_Write(xhost_ctx_t *pCtx)
+{
+    xstring_t *pString = &pCtx->hosts;
+    xfile_t file;
+
     if (XFile_Open(&file, XHOST_FILE_PATH, "cwt", NULL) < 0)
     {
         xloge("Failed to open hosts file for writing: %s", XSTRERR);
@@ -337,11 +420,37 @@ static int XHost_InsertEntry(xhost_ctx_t *pCtx)
 
     if (bFound)
     {
-        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Inserted new entry: %s %s", pCtx->sAddr, pCtx->sHost);
     }
 
     return XSTDNON;
+}
+
+static int XHost_ParseHeader(xhost_ctx_t *pCtx)
+{
+    if (pCtx->nTabSize) return XSTDOK;
+    int nStatus = XSTDNON;
+
+    xhost_ctx_t ctx;
+    XASSERT((XHost_InitContext(&ctx, XFALSE) > 0),
+        xthrowe("Failed to init context"));
+
+    while (XFile_GetLine(&ctx.file, ctx.sLine, sizeof(ctx.sLine)) > 0)
+    {
+        if (xstrncmp(ctx.sLine, "# Tabs:", 7))
+        {
+            char *pPosit = ctx.sLine + 7;
+            while (*pPosit && isspace((unsigned char)*pPosit)) pPosit++;
+
+            pCtx->nTabSize = (size_t)atoi(pPosit);
+            nStatus = XSTDOK;
+            break;
+        }
+    }
+
+    XHost_ClearContext(&ctx);
+    return nStatus;
 }
 
 static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
@@ -380,7 +489,7 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
 
     if (bAddedLine)
     {
-        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Added newline at: %d", pCtx->nLineNumber);
         return XSTDNON;
     }
@@ -405,7 +514,7 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
             pCtx->sAddr, pCtx->sHost) >= 0),
             xthrowe("Failed to append new host entry"));
 
-        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Added new entry: %s %s", pCtx->sAddr, pCtx->sHost);
     }
 
@@ -453,7 +562,7 @@ static int XHost_RemoveEntry(xhost_ctx_t *pCtx, xbool_t bComment)
 
     if (nCount)
     {
-        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("%s entres: %d", bComment ? "Commented" : "Removed", nCount);
     }
 
@@ -506,7 +615,7 @@ static int XHost_UncommentEntry(xhost_ctx_t *pCtx)
 
     if (nCount)
     {
-        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Uncommented host entres: %d", nCount);
     }
 
@@ -568,7 +677,7 @@ static int XHost_LintEntries(xhost_ctx_t *pCtx)
 
     if (pCtx->hosts.nLength && pCtx->hosts.pData)
     {
-        XASSERT((XHost_Write(&pCtx->hosts) >= 0), XSTDERR);
+        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Linted host entries: %d", nCount);
     }
 
@@ -670,7 +779,9 @@ int main(int argc, char *argv[])
     xhost_ctx_t ctx;
     int nStatus = 0;
 
-    XASSERT((XHost_InitContext(&ctx, XTRUE) > 0), xthrowe("Failed to init context"));
+    XASSERT((XHost_InitContext(&ctx, XTRUE) > 0),
+        xthrowe("Failed to init context"));
+
     xstrncpy(ctx.sAddr, sizeof(ctx.sAddr), args.sAddress);
     xstrncpy(ctx.sHost, sizeof(ctx.sHost), args.sHost);
     ctx.nLineNumber = args.nLineNumber;
@@ -678,11 +789,15 @@ int main(int argc, char *argv[])
     ctx.nTabSize = args.nTabSize;
     ctx.bSearch = args.bSearch;
 
+    XHost_ParseHeader(&ctx);
+
     if (args.bAppend) nStatus = XHost_AddEntry(&ctx, args.bInsertLine);
     else if (args.bUncomment) nStatus = XHost_UncommentEntry(&ctx);
     else if (args.bComment) nStatus = XHost_RemoveEntry(&ctx, XTRUE);
     else if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
-    if (!nStatus && args.nTabSize) nStatus = XHost_LintEntries(&ctx);
+    if (!nStatus && ctx.nTabSize) nStatus = XHost_LintEntries(&ctx);
+
+    XASSERT((XHost_WriteHeader(&ctx) > 0), xthrowe("Failed to write hosts header"));
     if (!nStatus && args.bDisplay) XHost_DisplayHosts(&ctx, args.bHideLines);
 
     XHost_ClearContext(&ctx);

@@ -208,16 +208,39 @@ typedef uint8_t             xbool_t;
     }                                           \
     while (XSTDNON)
 
+#define XASSERT_CALL_RET2(cnd, func, var, func2, var2, val) \
+    do {                                                    \
+        if (!cnd) {                                         \
+            func(var);                                      \
+            func2(var2);                                    \
+            return val;                                     \
+        }                                                   \
+    }                                                       \
+    while (XSTDNON)
+
+#define XASSERT_CALL_LOG2(cnd, func, var, func2, var2, val) \
+    do {                                                    \
+        if (!cnd) {                                         \
+            XTROW_LOCATION;                                 \
+            func(var);                                      \
+            func2(var2);                                    \
+            return val;                                     \
+        }                                                   \
+    }                                                       \
+    while (XSTDNON)
+
 #ifdef _XUTILS_DEBUG
 # define XASSERT        XASSERT_LOG
 # define XASSERT_VOID   XASSERT_VOID_LOG
 # define XASSERT_FREE   XASSERT_FREE_LOG
 # define XASSERT_CALL   XASSERT_CALL_LOG
+# define XASSERT_CALL2  XASSERT_CALL_LOG2
 #else
 # define XASSERT        XASSERT_RET
 # define XASSERT_VOID   XASSERT_VOID_RET
 # define XASSERT_FREE   XASSERT_FREE_RET
 # define XASSERT_CALL   XASSERT_CALL_RET
+# define XASSERT_CALL2  XASSERT_CALL_RET2
 #endif
 
 #ifdef _XUTILS_BACKTRACE_SIZE

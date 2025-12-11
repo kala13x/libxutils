@@ -151,6 +151,14 @@ int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char
     return pFile->nFD;
 }
 
+int XFile_Reopen(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms)
+{
+    XASSERT(pFile, XSTDERR);
+    XFile_Close(pFile);
+
+    return XFile_Open(pFile, pPath, pFlags, pPerms);
+}
+
 xfile_t* XFile_Alloc(const char *pPath, const char *pFlags, const char *pPerms)
 {
     xfile_t *pFile = (xfile_t*)malloc(sizeof(xfile_t));
