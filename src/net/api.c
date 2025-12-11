@@ -466,9 +466,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     xhttp_t handle;
     XHTTP_InitResponse(&handle, 101, NULL);
 
-    const char *pLibVersion = XUtils_VersionShort();
     char *pSecKey = XAPI_GetWSKey(pApi, pApiData);
-
     if (pSecKey == NULL)
     {
         XHTTP_Clear(&handle);
@@ -528,7 +526,6 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
         return XEVENTS_DISCONNECT;
     }
 
-    const char *pLibVersion = XUtils_VersionShort();
     xstrncpy(pApiData->sKey, sizeof(pApiData->sKey), pSecKey);
     free(pSecKey);
 
