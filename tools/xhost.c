@@ -44,6 +44,7 @@ typedef struct {
     char sHost[XLINE_MAX];
     char sLine[XLINE_MAX];
     xbool_t bWholeWords;
+    xbool_t bWritten;
     xbool_t bSearch;
     size_t nLineNumber;
     size_t nTabSize;
@@ -244,7 +245,7 @@ static int XHost_WriteHeader(xhost_ctx_t *pCtx)
     XFile_Close(&file);
     XByteBuffer_Clear(&buffer);
 
-    return XSTDOK;
+    return XSTDNON;
 }
 
 static int XHost_Write(xhost_ctx_t *pCtx)
@@ -265,7 +266,9 @@ static int XHost_Write(xhost_ctx_t *pCtx)
         return XSTDERR;
     }
 
+    pCtx->bWritten = XTRUE;
     XFile_Close(&file);
+
     return XSTDNON;
 }
 
@@ -777,6 +780,7 @@ int main(int argc, char *argv[])
     }
 
     xhost_ctx_t ctx;
+    ctx.bWritten = XFALSE;
     int nStatus = 0;
 
     XASSERT((XHost_InitContext(&ctx, XTRUE) > 0),
@@ -795,9 +799,8 @@ int main(int argc, char *argv[])
     else if (args.bUncomment) nStatus = XHost_UncommentEntry(&ctx);
     else if (args.bComment) nStatus = XHost_RemoveEntry(&ctx, XTRUE);
     else if (args.bRemove) nStatus = XHost_RemoveEntry(&ctx, XFALSE);
-    if (!nStatus && ctx.nTabSize) nStatus = XHost_LintEntries(&ctx);
-
-    XASSERT((XHost_WriteHeader(&ctx) > 0), xthrowe("Failed to write hosts header"));
+    if (ctx.bWritten && ctx.nTabSize) nStatus = XHost_LintEntries(&ctx);
+    if (ctx.bWritten && !nStatus) nStatus = XHost_WriteHeader(&ctx);
     if (!nStatus && args.bDisplay) XHost_DisplayHosts(&ctx, args.bHideLines);
 
     XHost_ClearContext(&ctx);
