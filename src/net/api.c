@@ -90,6 +90,7 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     xapi_data_t *pData = (xapi_data_t*)malloc(sizeof(xapi_data_t));
     XASSERT((pData != NULL), NULL);
 
+    xstrncpyf(pData->sUserAgent, sizeof(pData->sUserAgent), "xutils/%s", XUtils_VersionShort());
     XSock_Init(&pData->sock, XSOCK_UNDEFINED, XSOCK_INVALID);
     XByteBuffer_Init(&pData->rxBuffer, XSTDNON, XFALSE);
     XByteBuffer_Init(&pData->txBuffer, XSTDNON, XFALSE);
@@ -303,7 +304,7 @@ XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus
 
     if ((eStatus == XAPI_MISSING_TOKEN &&
         XHTTP_AddHeader(&handle, "WWW-Authenticate", "Basic realm=\"XAPI\"") < 0) ||
-        XHTTP_AddHeader(&handle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
+        XHTTP_AddHeader(&handle, "Server", "%s", pApiData->sUserAgent) < 0 ||
         XHTTP_AddHeader(&handle, "Content-Type", "application/json") < 0 ||
         XHTTP_Assemble(&handle, (const uint8_t*)sContent, nLength) == NULL)
     {
@@ -477,7 +478,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     if (XHTTP_AddHeader(&handle, "Upgrade", "websocket") < 0 ||
         XHTTP_AddHeader(&handle, "Connection", "Upgrade") < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Accept", "%s", pSecKey) < 0 ||
-        XHTTP_AddHeader(&handle, "Server", "xutils/%s", pLibVersion) < 0 ||
+        XHTTP_AddHeader(&handle, "Server", "%s", pApiData->sUserAgent) < 0 ||
         XHTTP_Assemble(&handle, NULL, XSTDNON) == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_ASSEMBLE);
@@ -535,7 +536,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
         XHTTP_AddHeader(&handle, "Connection", "Upgrade") < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Version", "%d", XWS_SEC_WS_VERSION) < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Key", "%s", pApiData->sKey) < 0 ||
-        XHTTP_AddHeader(&handle, "Server", "xutils/%s", pLibVersion) < 0 ||
+        XHTTP_AddHeader(&handle, "Server", "%s", pApiData->sUserAgent) < 0 ||
         XHTTP_Assemble(&handle, NULL, XSTDNON) == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_ASSEMBLE);
