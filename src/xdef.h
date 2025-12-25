@@ -111,8 +111,8 @@ typedef uint8_t             xbool_t;
 #define XSTDUSR         2
 #endif
 
-#ifndef XSTDEXT
-#define XSTDEXT         3
+#ifndef XSTDACT
+#define XSTDACT         3
 #endif
 
 #define XCLR_RED        "\x1B[31m"

@@ -26,10 +26,11 @@ extern "C" {
 
 typedef struct xapi_ xapi_t;
 
-#define XAPI_DISCONNECT XSTDERR
 #define XAPI_CONTINUE   XSTDOK
-#define XAPI_USER_CB    XSTDUSR
+#define XAPI_DISCONNECT XSTDERR
 #define XAPI_NO_ACTION  XSTDNON
+#define XAPI_USER_CB    XSTDUSR
+#define XAPI_RELOOP     XSTDACT
 
 typedef enum {
     XAPI_CB_ERROR = 0,
@@ -86,10 +87,10 @@ typedef enum {
 
 typedef enum {
     XAPI_INACTIVE = (int)0,
-    XAPI_MANUAL = 100,
+    XAPI_CUSTOM = 100,
     XAPI_SERVER,
     XAPI_CLIENT,
-    XAPI_PEER,
+    XAPI_PEER
 } xapi_role_t;
 
 typedef struct xapi_endpoint_ {
@@ -171,7 +172,7 @@ XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer);
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
 void XAPI_Destroy(xapi_t *pApi);
 
-XSTATUS XAPI_StopTimer(xapi_data_t *pData);
+XSTATUS XAPI_DeleteTimer(xapi_data_t *pData);
 XSTATUS XAPI_AddTimer(xapi_data_t *pData, int nTimeoutMs);
 XSTATUS XAPI_ExtendTimer(xapi_data_t *pData, int nTimeoutMs);
 
