@@ -171,8 +171,9 @@ XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer);
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
 void XAPI_Destroy(xapi_t *pApi);
 
-XSTATUS XAPI_AddTimeout(xapi_data_t *pData, int nTimeoutMs);
-XSTATUS XAPI_ExtendTimeout(xapi_data_t *pData, int nTimeoutMs);
+XSTATUS XAPI_StopTimer(xapi_data_t *pData);
+XSTATUS XAPI_AddTimer(xapi_data_t *pData, int nTimeoutMs);
+XSTATUS XAPI_ExtendTimer(xapi_data_t *pData, int nTimeoutMs);
 
 XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent);
 XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent);

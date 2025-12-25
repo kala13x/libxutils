@@ -66,7 +66,7 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XByteBuffer_AddBuff(&pData->txBuffer, pBuffer);
 
     // Extend timeout for another 20 seconds
-    XAPI_ExtendTimeout(pData, 20000);
+    XAPI_ExtendTimer(pData, 20000);
 
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
@@ -74,7 +74,7 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
 int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xlogn("Accepted connection: fd(%d)", (int)pData->sock.nFD);
-    XAPI_AddTimeout(pData, 20000); // 20 seconds timeout
+    XAPI_AddTimer(pData, 20000); // 20 seconds timeout
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 

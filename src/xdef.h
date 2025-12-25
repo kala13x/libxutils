@@ -29,6 +29,7 @@ typedef struct sockaddr     xsockaddr_t;
 
 typedef int                 XSTATUS;
 typedef uint8_t             xbool_t;
+
 #define XTRUE               1
 #define XFALSE              0
 

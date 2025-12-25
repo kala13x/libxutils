@@ -210,7 +210,25 @@ size_t XAPI_GetEventCount(xapi_t *pApi)
     return pEvents->nEventCount;
 }
 
-XSTATUS XAPI_AddTimeout(xapi_data_t *pData, int nTimeoutMs)
+XSTATUS XAPI_StopTimer(xapi_data_t *pData)
+{
+    XASSERT((pData && pData->pApi), XSTDERR);
+    xapi_t *pApi = pData->pApi;
+    xevents_t *pEvents = &pApi->events;
+
+    if (pData->pEvData != NULL)
+    {
+        xevent_data_t *pEvData = pData->pEvData;
+        xevent_data_t *pTimer = pEvData->pTimerEvent;
+
+        XEvents_Delete(pEvents, pTimer);
+        pEvData->pTimerEvent = NULL;
+    }
+
+    return XSTDOK;
+}
+
+XSTATUS XAPI_AddTimer(xapi_data_t *pData, int nTimeoutMs)
 {
     XASSERT((pData && pData->pApi), XSTDERR);
     xapi_t *pApi = pData->pApi;
@@ -230,7 +248,7 @@ XSTATUS XAPI_AddTimeout(xapi_data_t *pData, int nTimeoutMs)
     return XSTDOK;
 }
 
-XSTATUS XAPI_ExtendTimeout(xapi_data_t *pData, int nTimeoutMs)
+XSTATUS XAPI_ExtendTimer(xapi_data_t *pData, int nTimeoutMs)
 {
     XASSERT((pData && pData->pApi), XSTDERR);
     XASSERT((pData->pEvData != NULL), XSTDERR);
