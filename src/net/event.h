@@ -14,17 +14,20 @@
 #define XEVENT_TYPE_USER        0
 #define XEVENT_TYPE_CLIENT      1
 #define XEVENT_TYPE_LISTENER    2
+#define XEVENT_TYPE_TIMER       3
 
-#define XEVENT_ERROR            3
-#define XEVENT_READ             4
-#define XEVENT_WRITE            5
-#define XEVENT_HUNGED           6
-#define XEVENT_CLOSED           7
-#define XEVENT_CLEAR            8
-#define XEVENT_DESTROY          9
-#define XEVENT_INTERRUPT        10
-#define XEVENT_EXCEPTION        11
-#define XEVENT_USER             12
+#define XEVENT_ERROR            4
+#define XEVENT_READ             5
+#define XEVENT_WRITE            6
+#define XEVENT_HUNGED           7
+#define XEVENT_CLOSED           8
+#define XEVENT_CLEAR            9
+#define XEVENT_DESTROY          10
+#define XEVENT_INTERRUPT        11
+#define XEVENT_EXCEPTION        12
+#define XEVENT_TIMEOUT          13
+#define XEVENT_TIMER            14
+#define XEVENT_USER             15
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +42,7 @@ extern "C" {
 #include "hash.h"
 
 #ifdef __linux__
+#include <sys/timerfd.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
 #elif !defined(_WIN32)
@@ -87,6 +91,8 @@ typedef enum {
     XEVENT_STATUS_EWAIT,
     XEVENT_STATUS_EINTR,
     XEVENT_STATUS_EALLOC,
+    XEVENT_STATUS_ETIMER,
+    XEVENT_STATUS_EEXTEND,
     XEVENT_STATUS_ECREATE,
     XEVENT_STATUS_EINSERT,
     XEVENT_STATUS_EINVALID,
@@ -96,7 +102,9 @@ typedef enum {
 
 typedef struct XEventData {
     void *pContext;
+    void *pTimerEvent;
     uint32_t nEvents;
+    xbool_t bIsTimer;
     xbool_t bIsOpen;
     XSOCKET nFD;
     int nIndex;
@@ -128,16 +136,21 @@ xevent_status_t XEvents_Create(xevents_t *pEv, uint32_t nMax, void *pUser, xeven
 void XEvents_Destroy(xevents_t *pEvents);
 
 int XEvent_Write(xevent_data_t *pData);
+int XEvent_Recv(xevent_data_t *pData);
 int XEvent_Read(xevent_data_t *pData);
 
 xevent_data_t *XEvents_NewData(void *pCtx, XSOCKET nFd, int nType);
 xevent_data_t* XEvents_GetData(xevents_t *pEv, XSOCKET nFd);
 
 #ifdef __linux__
-xevent_data_t* XEvents_CreateEvent(xevents_t *pEv, void *pCtx);
+xevent_data_t* XEvents_CreateEvent(xevents_t *pEvents, void *pCtx);
+xevent_data_t* XEvents_RegisterTimer(xevents_t *pEvents, void *pContext, int nTimeoutMs);
+xevent_data_t* XEvents_AddTimeout(xevents_t *pEvents, xevent_data_t *pData, int nTimeoutMs);
+xevent_status_t XEvent_ExtendTimer(xevent_data_t *pTimer, int nTimeoutMs);
+xevent_status_t XEvent_ExtendTimeout(xevent_data_t *pData, int nTimeoutMs);
 #endif
-xevent_data_t* XEvents_RegisterEvent(xevents_t *pEv, void *pCtx, XSOCKET nFd, int nEvents, int nType);
 
+xevent_data_t* XEvents_RegisterEvent(xevents_t *pEv, void *pCtx, XSOCKET nFd, int nEvents, int nType);
 xevent_status_t XEvents_Add(xevents_t *pEv, xevent_data_t *pData, int nEvents);
 xevent_status_t XEvents_Modify(xevents_t *pEv, xevent_data_t *pData, int nEvents);
 xevent_status_t XEvents_Delete(xevents_t *pEv, xevent_data_t *pData);

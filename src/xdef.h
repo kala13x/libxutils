@@ -27,6 +27,7 @@ typedef pid_t               xpid_t;
 
 typedef struct sockaddr     xsockaddr_t;
 
+typedef int                 XSTATUS;
 typedef uint8_t             xbool_t;
 #define XTRUE               1
 #define XFALSE              0
@@ -109,6 +110,10 @@ typedef uint8_t             xbool_t;
 #define XSTDUSR         2
 #endif
 
+#ifndef XSTDEXT
+#define XSTDEXT         3
+#endif
+
 #define XCLR_RED        "\x1B[31m"
 #define XCLR_RES        "\x1B[0m"
 
@@ -144,6 +149,88 @@ typedef uint8_t             xbool_t;
                 __FILE__,                       \
                 __FUNCTION__,                   \
                 __XLOCATION__)
+#endif
+
+#ifdef _ASSERT_XLOG
+#include "log.h"
+#define XASSERT_XLOG(condition, value)          \
+    do {                                        \
+        if (xlog_is_init() == XFALSE) {         \
+            xlog_defaults();                    \
+        }                                       \
+        if (!condition) {                       \
+            xlogt("Assert failed");             \
+            return value;                       \
+        }                                       \
+    }                                           \
+    while (XSTDNON)
+
+#define XASSERT_VOID_XLOG(condition)            \
+    do {                                        \
+        if (xlog_is_init() == XFALSE) {         \
+            xlog_defaults();                    \
+        }                                       \
+        if (!condition) {                       \
+            xlogt("Assert failed");             \
+            return;                             \
+        }                                       \
+    }                                           \
+    while (XSTDNON)
+
+#define XASSERT_FREE_XLOG(condition, var, value) \
+    do {                                        \
+        if (xlog_is_init() == XFALSE) {         \
+            xlog_defaults();                    \
+        }                                       \
+        if (!condition) {                       \
+            xlogt("Assert failed");             \
+            free(var);                          \
+            return value;                       \
+        }                                       \
+    }                                           \
+    while (XSTDNON)
+
+#define XASSERT_CALL_XLOG(cnd, func, var, val)   \
+    do {                                        \
+        if (xlog_is_init() == XFALSE) {         \
+            xlog_defaults();                    \
+        }                                       \
+        if (!cnd) {                             \
+            xlogt("Assert failed");             \
+            func(var);                          \
+            return val;                         \
+        }                                       \
+    }                                           \
+    while (XSTDNON)
+
+#define XASSERT_CALL_XLOG2(cnd, func, var, func2, var2, val) \
+    do {                                                    \
+        if (xlog_is_init() == XFALSE) {                     \
+            xlog_defaults();                                \
+        }                                                   \
+        if (!cnd) {                                         \
+            xlogt("Assert failed");                         \
+            func(var);                                      \
+            func2(var2);                                    \
+            return val;                                     \
+        }                                                   \
+    }                                                       \
+    while (XSTDNON)
+
+#define XASSERT_CALL_XLOG3(cnd, func, var, func2, var2, func3, var3, val) \
+    do {                                                                 \
+        if (xlog_is_init() == XFALSE) {                                  \
+            xlog_defaults();                                             \
+        }                                                                \
+        if (!cnd) {                                                      \
+            xlogt("Assert failed");                                      \
+            func(var);                                                   \
+            func2(var2);                                                 \
+            func3(var3);                                                 \
+            return val;                                                  \
+        }                                                                \
+    }                                                                    \
+    while (XSTDNON)
 #endif
 
 #define XASSERT_RET(condition, value)           \
@@ -229,18 +316,52 @@ typedef uint8_t             xbool_t;
     }                                                       \
     while (XSTDNON)
 
+#define XASSERT_CALL_RET3(cnd, func, var, func2, var2, func3, var3, val) \
+    do {                                                                 \
+        if (!cnd) {                                                      \
+            func(var);                                                   \
+            func2(var2);                                                 \
+            func3(var3);                                                 \
+            return val;                                                  \
+        }                                                                \
+    }                                                                    \
+    while (XSTDNON)
+
+#define XASSERT_CALL_LOG3(cnd, func, var, func2, var2, func3, var3, val) \
+    do {                                                                 \
+        if (!cnd) {                                                      \
+            XTROW_LOCATION;                                              \
+            func(var);                                                   \
+            func2(var2);                                                 \
+            func3(var3);                                                 \
+            return val;                                                  \
+        }                                                                \
+    }                                                                    \
+    while (XSTDNON)
+
 #ifdef _XUTILS_DEBUG
-# define XASSERT        XASSERT_LOG
-# define XASSERT_VOID   XASSERT_VOID_LOG
-# define XASSERT_FREE   XASSERT_FREE_LOG
-# define XASSERT_CALL   XASSERT_CALL_LOG
-# define XASSERT_CALL2  XASSERT_CALL_LOG2
+# ifdef _ASSERT_XLOG
+#  define XASSERT        XASSERT_XLOG
+#  define XASSERT_VOID   XASSERT_VOID_XLOG
+#  define XASSERT_FREE   XASSERT_FREE_XLOG
+#  define XASSERT_CALL   XASSERT_CALL_XLOG
+#  define XASSERT_CALL2  XASSERT_CALL_XLOG2
+#  define XASSERT_CALL3  XASSERT_CALL_XLOG3
+# else
+#  define XASSERT        XASSERT_LOG
+#  define XASSERT_VOID   XASSERT_VOID_LOG
+#  define XASSERT_FREE   XASSERT_FREE_LOG
+#  define XASSERT_CALL   XASSERT_CALL_LOG
+#  define XASSERT_CALL2  XASSERT_CALL_LOG2
+#  define XASSERT_CALL3  XASSERT_CALL_LOG3
+# endif
 #else
 # define XASSERT        XASSERT_RET
 # define XASSERT_VOID   XASSERT_VOID_RET
 # define XASSERT_FREE   XASSERT_FREE_RET
 # define XASSERT_CALL   XASSERT_CALL_RET
 # define XASSERT_CALL2  XASSERT_CALL_RET2
+# define XASSERT_CALL3  XASSERT_CALL_RET3
 #endif
 
 #ifdef _XUTILS_BACKTRACE_SIZE
@@ -280,7 +401,5 @@ static inline const char* XSTR_Error()
 #endif
 
 #define XSSL_MINIMAL_API 0x10000000L
-
-typedef int XSTATUS;
 
 #endif /* __XUTILS_STDDEF_H__ */

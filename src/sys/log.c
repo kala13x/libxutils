@@ -36,6 +36,11 @@ typedef struct XLogCtx {
 static xlog_t g_xlog;
 static XATOMIC g_bInit = XFALSE;
 
+xbool_t XLog_IsInit(void)
+{
+    return g_bInit;
+}
+
 static const char *XLog_GetIndent(xlog_flag_t eFlag)
 {
     xlog_cfg_t *pCfg = &g_xlog.config;

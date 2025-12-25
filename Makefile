@@ -3,7 +3,7 @@
 # https://github.com/kala13x/smake #
 ####################################
 
-CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU -D_ASSERT_TIMED
+CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_XUTILS_USE_GNU -D_ASSERT_TIMED -D_XUTILS_DEBUG
 CFLAGS += -I./src/crypt -I./src/data -I./src/net -I./src/sys -I./src
 NAME = libxutils.a
 LIBS = -lpthread

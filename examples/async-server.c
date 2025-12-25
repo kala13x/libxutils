@@ -65,12 +65,16 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
     // Echo response
     XByteBuffer_AddBuff(&pData->txBuffer, pBuffer);
 
+    // Extend timeout for another 20 seconds
+    XAPI_ExtendTimeout(pData, 20000);
+
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
 int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xlogn("Accepted connection: fd(%d)", (int)pData->sock.nFD);
+    XAPI_AddTimeout(pData, 20000); // 20 seconds timeout
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
@@ -94,6 +98,9 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_COMPLETE:
             xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
             break;
+        case XAPI_CB_TIMEOUT:
+            xlogn("Timeout event for the socket: fd(%d)", (int)pData->sock.nFD);
+            return XAPI_DISCONNECT;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XAPI_DISCONNECT;
             break;
@@ -209,12 +216,13 @@ int main(int argc, char* argv[])
     }
 
     xapi_t api;
-    XAPI_Init(&api, service_callback, &args, XSTDNON);
+    XAPI_Init(&api, service_callback, &args);
 
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
 
     endpt.eType = XAPI_SOCK;
+    endpt.eRole = XAPI_SERVER;
     endpt.pAddr = args.sAddr;
     endpt.nPort = args.nPort;
     endpt.bUnix = args.bUnix;
@@ -231,7 +239,7 @@ int main(int argc, char* argv[])
 #endif
     }
 
-    if (XAPI_AddEndpoint(&api, &endpt, XAPI_SERVER) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

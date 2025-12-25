@@ -109,6 +109,7 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pData->bAlloc = XTRUE;
 
     pData->pEvData = NULL;
+    pData->pTimer = NULL;
     pData->eType = eType;
     pData->pApi = pApi;
 
@@ -189,7 +190,7 @@ static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
     XASSERT_RET(pEvData, XEVENTS_CONTINUE);
     XSTATUS nStatus = XSTDNON;
 
-    if (pEvData->pContext != NULL)
+    if (pEvData->pContext != NULL && pEvData->nType != XEVENT_TYPE_TIMER)
     {
         xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
         nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_CLOSED);
@@ -207,6 +208,44 @@ size_t XAPI_GetEventCount(xapi_t *pApi)
     XASSERT_RET((pApi != NULL), XSTDNON);
     xevents_t *pEvents = &pApi->events;
     return pEvents->nEventCount;
+}
+
+XSTATUS XAPI_AddTimeout(xapi_data_t *pData, int nTimeoutMs)
+{
+    XASSERT((pData && pData->pApi), XSTDERR);
+    xapi_t *pApi = pData->pApi;
+    xevents_t *pEvents = &pApi->events;
+
+    XASSERT((pData->pEvData != NULL), XSTDERR);
+    xevent_data_t *pEvData = pData->pEvData;
+
+    xevent_data_t *pTimerData = XEvents_AddTimeout(pEvents, pEvData, nTimeoutMs);
+    if (pTimerData == NULL)
+    {
+        XAPI_ErrorCb(pApi, pData, XAPI_EVENT, XEVENT_STATUS_ETIMER);
+        return XSTDERR;
+    }
+
+    pData->pTimer = pTimerData;
+    return XSTDOK;
+}
+
+XSTATUS XAPI_ExtendTimeout(xapi_data_t *pData, int nTimeoutMs)
+{
+    XASSERT((pData && pData->pApi), XSTDERR);
+    XASSERT((pData->pEvData != NULL), XSTDERR);
+
+    xevent_data_t *pEvData = pData->pEvData;
+    xapi_t *pApi = pData->pApi;
+
+    xevent_status_t eStatus = XEvent_ExtendTimeout(pEvData, nTimeoutMs);
+    if (eStatus != XEVENT_STATUS_SUCCESS)
+    {
+        XAPI_ErrorCb(pApi, pData, XAPI_EVENT, eStatus);
+        return XSTDERR;
+    }
+
+    return XSTDOK;
 }
 
 XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
@@ -1053,6 +1092,14 @@ static int XAPI_ClosedEvent(xapi_t *pApi, xevent_data_t *pData)
     return XEVENTS_DISCONNECT;
 }
 
+static int XAPI_TimeoutEvent(xapi_t *pApi, xevent_data_t *pData)
+{
+    xapi_data_t *pApiData = NULL;
+    if (pData != NULL) pApiData = (xapi_data_t*)pData->pContext;
+    int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_TIMEOUT);
+    return XAPI_StatusToEvent(pApi, nStatus);
+}
+
 static int XAPI_InterruptEvent(xapi_t *pApi)
 {
     int nStatus = XAPI_ServiceCb(pApi, NULL, XAPI_CB_INTERRUPT);
@@ -1083,6 +1130,8 @@ static int XAPI_EventCallback(void *events, void* data, XSOCKET fd, int reason)
             return XAPI_HungedEvent(pApi, pData);
         case XEVENT_CLOSED:
             return XAPI_ClosedEvent(pApi, pData);
+        case XEVENT_TIMEOUT:
+            return XAPI_TimeoutEvent(pApi, pData);
         case XEVENT_READ:
             return XAPI_ReadEvent(pEvents, pData);
         case XEVENT_WRITE:
@@ -1117,7 +1166,7 @@ xevents_t* XAPI_GetOrCreateEvents(xapi_t *pApi)
     return pEvents;
 }
 
-XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx, size_t nRxSize)
+XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx)
 {
     XASSERT((pApi != NULL), XSTDINV);
     pApi->bAllowMissingKey = XFALSE;
@@ -1125,7 +1174,14 @@ XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx, size_t nRxSi
     pApi->bUseHashMap = XTRUE;
     pApi->callback = callback;
     pApi->pUserCtx = pUserCtx;
-    pApi->nRxSize = nRxSize ? nRxSize : XAPI_RX_MAX;
+    pApi->nRxSize = XAPI_RX_MAX;
+    return XSTDOK;
+}
+
+XSTATUS XAPI_SetRxSize(xapi_t *pApi, size_t nSize)
+{
+    XASSERT((pApi != NULL), XSTDINV);
+    pApi->nRxSize = nSize ? nSize : XAPI_RX_MAX;
     return XSTDOK;
 }
 
@@ -1150,6 +1206,7 @@ void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
     XSock_InitCert(&pEndpt->certs);
     pEndpt->pSessionData = NULL;
     pEndpt->nEvents = XSTDNON;
+    pEndpt->eRole = XAPI_INACTIVE;
     pEndpt->eType = XAPI_NONE;
     pEndpt->nPort = XSTDNON;
     pEndpt->pAddr = NULL;
@@ -1389,14 +1446,14 @@ XSTATUS XAPI_AddPeer(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     return XAPI_AddEvent(pApi, pEndpt, XAPI_PEER);
 }
 
-XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
+XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
-    switch (eRole)
+    switch (pEndpt->eRole)
     {
         case XAPI_PEER: return XAPI_AddPeer(pApi, pEndpt);
         case XAPI_SERVER: return XAPI_Listen(pApi, pEndpt);
         case XAPI_CLIENT: return XAPI_Connect(pApi, pEndpt);
-        case XAPI_MANUAL: return XAPI_AddEvent(pApi, pEndpt, eRole);
+        case XAPI_MANUAL: return XAPI_AddEvent(pApi, pEndpt, pEndpt->eRole);
         default: break;
     }
 

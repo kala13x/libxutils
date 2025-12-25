@@ -1428,22 +1428,22 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (nStatus <= 0) return nStatus;
 
     xmon_request_t *pRequest = (xmon_request_t*)pData->pSessionData;
-    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
+    xhttp_t *pHttp = (xhttp_t*)pData->pPacket;
     *pRequest = XTOP_NONE;
 
     xlogn("Received request: fd(%d), method(%s), uri(%s)",
-        (int)pData->sock.nFD, XHTTP_GetMethodStr(pHandle->eMethod), pHandle->sUri);
+        (int)pData->sock.nFD, XHTTP_GetMethodStr(pHttp->eMethod), pHttp->sUri);
 
-    if (pHandle->eMethod != XHTTP_GET)
+    if (pHttp->eMethod != XHTTP_GET)
     {
-        xlogw("Invalid or not supported HTTP method: %s", XHTTP_GetMethodStr(pHandle->eMethod));
+        xlogw("Invalid or not supported HTTP method: %s", XHTTP_GetMethodStr(pHttp->eMethod));
         return XAPI_RespondHTTP(pData, XTOP_NOTALLOWED, XAPI_NO_STATUS);
     }
 
-    xarray_t *pArr = xstrsplit(pHandle->sUri, "/");
+    xarray_t *pArr = xstrsplit(pHttp->sUri, "/");
     if (pArr == NULL)
     {
-        xlogw("Invalid request URL or API endpoint: %s", pHandle->sUri);
+        xlogw("Invalid request URL or API endpoint: %s", pHttp->sUri);
         return XAPI_RespondHTTP(pData, XTOP_INVALID, XAPI_NO_STATUS);
     }
 
@@ -1462,7 +1462,7 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     if (*pRequest == XTOP_NONE)
     {
-        xlogw("Requested API endpoint is not found: %s", pHandle->sUri);
+        xlogw("Requested API endpoint is not found: %s", pHttp->sUri);
         return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NO_STATUS);
     }
 
@@ -1827,6 +1827,9 @@ int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
             return XTOP_InitSessionData(pData);
         case XAPI_CB_CLOSED:
             return XTOP_ClearSessionData(pData);
+        case XAPI_CB_TIMEOUT:
+            xlogn("Timeout event for the socket: fd(%d)", (int)pData->sock.nFD);
+            return XSTDERR;
         case XAPI_CB_COMPLETE:
             xlogn("Successfully sent a response to the client: fd(%d)", (int)pData->sock.nFD);
             return XSTDERR;
@@ -1843,18 +1846,20 @@ int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
 int XTOP_ServerMode(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
 {
     xapi_t api;
-    XAPI_Init(&api, XTOP_ServiceCb, pCtx, XSTDNON);
+    XAPI_Init(&api, XTOP_ServiceCb, pCtx);
 
     pCtx->pStats = pStats;
     xevent_status_t status;
 
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
+
     endpt.eType = XAPI_HTTP;
+    endpt.eRole = XAPI_SERVER;
     endpt.pAddr = pCtx->sAddr;
     endpt.nPort = pCtx->nPort;
 
-    if (XAPI_AddEndpoint(&api, &endpt, XAPI_SERVER) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

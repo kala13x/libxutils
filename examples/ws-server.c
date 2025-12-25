@@ -334,12 +334,13 @@ int main(int argc, char* argv[])
     }
 
     xapi_t api;
-    XAPI_Init(&api, service_callback, &api, XSTDNON);
+    XAPI_Init(&api, service_callback, &api);
 
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
 
     endpt.eType = XAPI_WS;
+    endpt.eRole = XAPI_SERVER;
     endpt.pAddr = args.sAddr;
     endpt.nPort = args.nPort;
     endpt.bTLS = args.bSSL;
@@ -354,7 +355,7 @@ int main(int argc, char* argv[])
 #endif
     }
 
-    if (XAPI_AddEndpoint(&api, &endpt, XAPI_SERVER) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

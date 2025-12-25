@@ -43,6 +43,7 @@ typedef enum {
     XAPI_CB_INTERRUPT,
     XAPI_CB_COMPLETE,
     XAPI_CB_ACCEPTED,
+    XAPI_CB_TIMEOUT,
     XAPI_CB_CLOSED,
     XAPI_CB_WRITE,
     XAPI_CB_READ,
@@ -85,7 +86,7 @@ typedef enum {
 
 typedef enum {
     XAPI_INACTIVE = (int)0,
-    XAPI_MANUAL,
+    XAPI_MANUAL = 100,
     XAPI_SERVER,
     XAPI_CLIENT,
     XAPI_PEER,
@@ -93,16 +94,17 @@ typedef enum {
 
 typedef struct xapi_endpoint_ {
     xapi_type_t eType;
+    xapi_role_t eRole;
     xsock_cert_t certs;
     void *pSessionData;
     const char *pAddr;
     const char *pUri;
     uint32_t nEvents;
     uint16_t nPort;
-    XSOCKET nFD;
     xbool_t bForce;
     xbool_t bUnix;
     xbool_t bTLS;
+    XSOCKET nFD;
 } xapi_endpoint_t;
 
 typedef struct xapi_data_ {
@@ -129,6 +131,7 @@ typedef struct xapi_data_ {
     xbyte_buffer_t rxBuffer;
     xbyte_buffer_t txBuffer;
     xevent_data_t *pEvData;
+    xevent_data_t *pTimer;
 
     xapi_type_t eType;
     xapi_role_t eRole;
@@ -165,8 +168,11 @@ xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pApiData);
 xbyte_buffer_t* XAPI_GetRxBuff(xapi_data_t *pApiData);
 XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer);
 
-XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx, size_t nRxSize);
+XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
 void XAPI_Destroy(xapi_t *pApi);
+
+XSTATUS XAPI_AddTimeout(xapi_data_t *pData, int nTimeoutMs);
+XSTATUS XAPI_ExtendTimeout(xapi_data_t *pData, int nTimeoutMs);
 
 XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent);
 XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent);
@@ -177,11 +183,11 @@ XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus
 XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey);
 
 void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt);
-XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt);
-XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt);
-XSTATUS XAPI_AddPeer(xapi_t *pApi, xapi_endpoint_t *pEndpt);
+XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt);
 XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole);
-XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole);
+XSTATUS XAPI_AddPeer(xapi_t *pApi, xapi_endpoint_t *pEndpt);
+XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt);
+XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt);
 
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs);
 
