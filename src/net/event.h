@@ -145,9 +145,9 @@ const char *XEvents_GetStatusStr(xevent_status_t status);
 xevent_status_t XEvents_Create(xevents_t *pEv, uint32_t nMax, void *pUser, xevent_cb_t callBack, xbool_t bUseHash);
 void XEvents_Destroy(xevents_t *pEvents);
 
-int XEvent_Write(xevent_data_t *pData);
-int XEvent_Recv(xevent_data_t *pData);
-int XEvent_Read(xevent_data_t *pData);
+int XEvent_WriteByte(xevent_data_t *pData, const char cVal);
+int XEvent_ReadByte(xevent_data_t *pData, char *pVal);
+int XEvent_ReadU64(xevent_data_t *pData, uint64_t *pVal);
 
 xevent_data_t *XEvents_NewData(void *pCtx, XSOCKET nFd, int nType);
 xevent_data_t* XEvents_GetData(xevents_t *pEv, XSOCKET nFd);

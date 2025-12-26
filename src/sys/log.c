@@ -38,7 +38,7 @@ static XATOMIC g_bInit = XFALSE;
 
 xbool_t XLog_IsInit(void)
 {
-    return g_bInit;
+    return (xbool_t)g_bInit;
 }
 
 static const char *XLog_GetIndent(xlog_flag_t eFlag)
