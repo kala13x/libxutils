@@ -196,34 +196,34 @@ int write_event(xevents_t *pEvents, xevent_data_t *pEvData)
     return nDataLeft ? XEVENTS_CONTINUE : XEVENTS_DISCONNECT;
 }
 
-int event_callback(void *events, void* data, XSOCKET fd, int reason)
+int event_callback(void *events, void* data, XSOCKET fd, xevent_cb_type_t reason)
 {
     xevent_data_t *pData = (xevent_data_t*)data;
     xevents_t *pEvents = (xevents_t*)events;
 
     switch(reason)
     {
-        case XEVENT_INTERRUPT:
+        case XEVENT_CB_INTERRUPT:
             xlogi("Interrupted by signal");
             if (g_nInterrupted) return XEVENTS_BREAK;
             break;
-        case XEVENT_CLEAR:
+        case XEVENT_CB_CLEAR:
             xlogn("Closing connection: fd(%d)", (int)fd);
             clear_event(pData);
             break;
-        case XEVENT_READ:
+        case XEVENT_CB_READ:
             xlogd("RX callback: fd(%d)", (int)fd);
             return read_event(pEvents, pData);
-        case XEVENT_WRITE:
+        case XEVENT_CB_WRITE:
             xlogd("TX callback: fd(%d)", (int)fd);
             return write_event(pEvents, pData);
-        case XEVENT_HUNGED:
+        case XEVENT_CB_HUNGED:
             xlogw("Connection hunged: fd(%d)", (int)fd);
             return XEVENTS_DISCONNECT;
-        case XEVENT_CLOSED:
+        case XEVENT_CB_CLOSED:
             xlogn("Connection closed: fd(%d)", (int)fd);
             return XEVENTS_DISCONNECT;
-        case XEVENT_DESTROY:
+        case XEVENT_CB_DESTROY:
             xlogi("Service destroyed");
             break;
         default:

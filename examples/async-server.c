@@ -59,18 +59,22 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xbyte_buffer_t *pBuffer = XAPI_GetRxBuff(pData);
 
-    xlogn("Received data: fd(%d), buff(%zu)",
-        (int)pData->sock.nFD, pBuffer->nUsed);
+    xlogn("Received data: id(%u), fd(%d), buff(%zu)",
+        pData->nID, (int)pData->sock.nFD, pBuffer->nUsed);
 
     // Echo response
     XByteBuffer_AddBuff(&pData->txBuffer, pBuffer);
+
+    // Extend timeout for another 20 seconds
+    XAPI_ExtendTimer(pData, 20000);
 
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
 int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
-    xlogn("Accepted connection: fd(%d)", (int)pData->sock.nFD);
+    xlogn("Accepted connection: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
+    XAPI_AddTimer(pData, 20000); // 20 seconds timeout
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
@@ -86,14 +90,17 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_ACCEPTED:
             return init_data(pCtx, pData);
         case XAPI_CB_LISTENING:
-            xlogn("Server started listening: fd(%d)", (int)pData->sock.nFD);
+            xlogn("Server started listening: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
             break;
         case XAPI_CB_CLOSED:
-            xlogn("Connection closed: fd(%d)", (int)pData->sock.nFD);
+            xlogn("Connection closed: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
             break;
         case XAPI_CB_COMPLETE:
-            xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
+            xlogn("Response sent: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
             break;
+        case XAPI_CB_TIMEOUT:
+            xlogn("Timeout event for the socket: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
+            return XAPI_DISCONNECT;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XAPI_DISCONNECT;
             break;
@@ -209,12 +216,13 @@ int main(int argc, char* argv[])
     }
 
     xapi_t api;
-    XAPI_Init(&api, service_callback, &args, XSTDNON);
+    XAPI_Init(&api, service_callback, &args);
 
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
 
     endpt.eType = XAPI_SOCK;
+    endpt.eRole = XAPI_SERVER;
     endpt.pAddr = args.sAddr;
     endpt.nPort = args.nPort;
     endpt.bUnix = args.bUnix;
@@ -231,7 +239,7 @@ int main(int argc, char* argv[])
 #endif
     }
 
-    if (XAPI_AddEndpoint(&api, &endpt, XAPI_SERVER) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

@@ -247,7 +247,7 @@ int main(int argc, char* argv[])
     }
 
     xapi_t api;
-    XAPI_Init(&api, service_callback, &api, XSTDNON);
+    XAPI_Init(&api, service_callback, &api);
 
     xlink_t link;
     if (XLink_Parse(&link, argv[1]) < 0 || !link.nPort)
@@ -262,16 +262,17 @@ int main(int argc, char* argv[])
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
 
-    endpt.bTLS = xstrcmp(link.sProtocol, "wss");
     endpt.eType = XAPI_WS;
+    endpt.eRole = XAPI_CLIENT;
     endpt.pAddr = link.sAddr;
     endpt.nPort = link.nPort;
     endpt.pUri = link.sUri;
+    endpt.bTLS = xstrcmp(link.sProtocol, "wss");
 
     session_data_t sessData;
     endpt.pSessionData = &sessData;
 
-    if (XAPI_AddEndpoint(&api, &endpt, XAPI_CLIENT) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

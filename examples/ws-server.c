@@ -164,6 +164,9 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
         (int)pData->sock.nFD, XWS_FrameTypeStr(pFrame->eType), pFrame->bFin?"true":"false",
         pFrame->nHeaderSize, pFrame->nPayloadLength, pFrame->buffer.nUsed);
 
+    // Extend timeout for another 20 seconds
+    XAPI_ExtendTimer(pData, 20000);
+
     if (pFrame->eType == XWS_PING) return send_pong(pData);
     else if (pFrame->eType == XWS_CLOSE) return XAPI_DISCONNECT;
 
@@ -187,6 +190,8 @@ int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XASSERT_RET((pSession != NULL), XAPI_DISCONNECT);
 
     pData->pSessionData = pSession;
+    XAPI_AddTimer(pData, 20000); // 20 seconds timeout
+
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
@@ -227,6 +232,9 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_COMPLETE:
             xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
             break;
+        case XAPI_CB_TIMEOUT:
+            xlogn("Timeout event for the socket: fd(%d)", (int)pData->sock.nFD);
+            return XAPI_DISCONNECT;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XAPI_DISCONNECT;
             break;
@@ -334,12 +342,13 @@ int main(int argc, char* argv[])
     }
 
     xapi_t api;
-    XAPI_Init(&api, service_callback, &api, XSTDNON);
+    XAPI_Init(&api, service_callback, &api);
 
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
 
     endpt.eType = XAPI_WS;
+    endpt.eRole = XAPI_SERVER;
     endpt.pAddr = args.sAddr;
     endpt.nPort = args.nPort;
     endpt.bTLS = args.bSSL;
@@ -354,7 +363,7 @@ int main(int argc, char* argv[])
 #endif
     }
 
-    if (XAPI_AddEndpoint(&api, &endpt, XAPI_SERVER) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;

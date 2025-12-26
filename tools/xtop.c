@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        15
+#define XTOP_VERSION_MIN        16
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -56,6 +56,7 @@ extern char *optarg;
 #define XIFACE_NAME_NARROW_PADDING  12
 #define XIFACE_NAME_WIDE_PADDING    15
 
+#define XTOP_REQUEST_TIMEOUT_MS     30000
 #define XTOP_ACTIVE_IFACES_RESET    0
 #define XTOP_CORE_COUNT_RESET       -1
 
@@ -75,6 +76,8 @@ typedef enum {
 
 typedef struct xmon_ctx_ {
     xmon_stats_t *pStats;
+    xsock_t sock;
+
     xbool_t bCoreCountManualSet;
     xbool_t bDisplayHelp;
     xbool_t bRedrawHelp;
@@ -111,6 +114,8 @@ typedef struct xmon_ctx_ {
 
 void XTOP_InitContext(xtop_ctx_t *pCtx)
 {
+    XSock_Init(&pCtx->sock, XSOCK_TCP, XSOCK_INVALID);
+
     pCtx->bCoreCountManualSet = XFALSE;
     pCtx->bRedrawHelp = XFALSE;
     pCtx->bDisplayHelp = XFALSE;
@@ -1348,7 +1353,9 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
     }
 
     if (XHTTP_AddHeader(&handle, "Host", "%s", link.sAddr) < 0 ||
-        XHTTP_AddHeader(&handle, "User-Agent", "xutils/%s", pVer) < 0)
+        XHTTP_AddHeader(&handle, "User-Agent", "xutils/%s", pVer) < 0 ||
+        XHTTP_AddHeader(&handle, "Accept", "application/json") < 0 ||
+        XHTTP_AddHeader(&handle, "Connection", "keep-alive") < 0)
     {
         xloge("Failed to initialize HTTP request: %d", errno);
         XHTTP_Clear(&handle);
@@ -1363,10 +1370,24 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
         return XSTDERR;
     }
 
-    xhttp_status_t eStatus = XHTTP_LinkPerform(&handle, &link, NULL, 0);
+    xhttp_status_t eStatus;
+    if (XSock_Check(&pCtx->sock) != XSOCK_SUCCESS)
+    {
+        eStatus = XHTTP_Connect(&handle, &pCtx->sock, &link);
+        if (eStatus != XHTTP_CONNECTED)
+        {
+            xloge("%s", XHTTP_GetStatusStr(eStatus));
+            XSock_Close(&pCtx->sock);
+            XHTTP_Clear(&handle);
+            return XSTDERR;
+        }
+    }
+
+    eStatus = XHTTP_Perform(&handle, &pCtx->sock, NULL, 0);
     if (eStatus != XHTTP_COMPLETE)
     {
         xloge("%s", XHTTP_GetStatusStr(eStatus));
+        XSock_Close(&pCtx->sock);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -1375,7 +1396,8 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
     {
         xlogw("HTTP response: %d %s", handle.nStatusCode,
                     XHTTP_GetCodeStr(handle.nStatusCode));
-    
+
+        XSock_Close(&pCtx->sock);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -1384,6 +1406,7 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
     if (pBody == NULL)
     {
         xloge("HTTP response does not contain data");
+        XSock_Close(&pCtx->sock);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -1395,6 +1418,7 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
         XJSON_GetErrorStr(&json, sError, sizeof(sError));
         xloge("Failed to parse JSON: %s", sError);
 
+        XSock_Close(&pCtx->sock);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -1403,6 +1427,7 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
 
     XHTTP_Clear(&handle);
     XJSON_Destroy(&json);
+
     return nStatus;
 }
 
@@ -1410,13 +1435,14 @@ int XTOP_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
+    xuint_t nID = pData ? pData->nID : XSTDNON;
 
     if (pCtx->nStatus == XAPI_DESTROY)
         xlogn("%s", pStr);
     else if (pCtx->eCbType == XAPI_CB_STATUS)
-        xlogn("%s: fd(%d)", pStr, nFD);
+        xlogn("%s: id(%u), fd(%d)", pStr, nID, nFD);
     else if (pCtx->eCbType == XAPI_CB_ERROR)
-        xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
+        xloge("%s: id(%u), fd(%d), errno(%d)", pStr, nID, nFD, errno);
 
     return XSTDOK;
 }
@@ -1428,22 +1454,22 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (nStatus <= 0) return nStatus;
 
     xmon_request_t *pRequest = (xmon_request_t*)pData->pSessionData;
-    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
+    xhttp_t *pHttp = (xhttp_t*)pData->pPacket;
     *pRequest = XTOP_NONE;
 
-    xlogn("Received request: fd(%d), method(%s), uri(%s)",
-        (int)pData->sock.nFD, XHTTP_GetMethodStr(pHandle->eMethod), pHandle->sUri);
+    xlogn("Received request: id(%u), fd(%d), method(%s), uri(%s)",
+        pData->nID, (int)pData->sock.nFD, XHTTP_GetMethodStr(pHttp->eMethod), pHttp->sUri);
 
-    if (pHandle->eMethod != XHTTP_GET)
+    if (pHttp->eMethod != XHTTP_GET)
     {
-        xlogw("Invalid or not supported HTTP method: %s", XHTTP_GetMethodStr(pHandle->eMethod));
+        xlogw("Invalid or not supported HTTP method: id(%u), %s", pData->nID, XHTTP_GetMethodStr(pHttp->eMethod));
         return XAPI_RespondHTTP(pData, XTOP_NOTALLOWED, XAPI_NO_STATUS);
     }
 
-    xarray_t *pArr = xstrsplit(pHandle->sUri, "/");
+    xarray_t *pArr = xstrsplit(pHttp->sUri, "/");
     if (pArr == NULL)
     {
-        xlogw("Invalid request URL or API endpoint: %s", pHandle->sUri);
+        xlogw("Invalid request URL or API endpoint: id(%u), %s", pData->nID, pHttp->sUri);
         return XAPI_RespondHTTP(pData, XTOP_INVALID, XAPI_NO_STATUS);
     }
 
@@ -1462,9 +1488,12 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     if (*pRequest == XTOP_NONE)
     {
-        xlogw("Requested API endpoint is not found: %s", pHandle->sUri);
+        xlogw("Requested API endpoint is not found: id(%u), uri(%s)", pData->nID, pHttp->sUri);
         return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NO_STATUS);
     }
+
+    if (!pHttp->nKeepAlive) XAPI_DeleteTimer(pData);
+    else XAPI_AddTimer(pData, XTOP_REQUEST_TIMEOUT_MS);
 
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
@@ -1778,8 +1807,8 @@ int XTOP_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
         return XSTDERR;
     }
 
-    xlogn("Sending response: fd(%d), status(%d), length(%zu)",
-        (int)pData->sock.nFD, handle.nStatusCode, handle.rawData.nUsed);
+    xlogn("Sending response: id(%u), fd(%d), status(%d), length(%zu)",
+        pData->nID, (int)pData->sock.nFD, handle.nStatusCode, handle.rawData.nUsed);
 
     XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
     XString_Clear(&content);
@@ -1800,13 +1829,16 @@ int XTOP_InitSessionData(xapi_data_t *pData)
     *pRequest = XTOP_INVALID;
     pData->pSessionData = pRequest;
 
-    xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->sock.nFD, pData->sAddr);
+    // Add inactivity timeout for the session
+    XAPI_AddTimer(pData, XTOP_REQUEST_TIMEOUT_MS);
+
+    xlogn("Accepted connection: id(%u), fd(%d), ip(%s)", pData->nID, (int)pData->sock.nFD, pData->sAddr);
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
 int XTOP_ClearSessionData(xapi_data_t *pData)
 {
-    xlogn("Connection closed: fd(%d), ip(%s)", (int)pData->sock.nFD, pData->sAddr);
+    xlogn("Connection closed: id(%u), fd(%d), ip(%s)", pData->nID, (int)pData->sock.nFD, pData->sAddr);
     free(pData->pSessionData);
     pData->pSessionData = NULL;
     return XSTDERR;
@@ -1827,9 +1859,12 @@ int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
             return XTOP_InitSessionData(pData);
         case XAPI_CB_CLOSED:
             return XTOP_ClearSessionData(pData);
-        case XAPI_CB_COMPLETE:
-            xlogn("Successfully sent a response to the client: fd(%d)", (int)pData->sock.nFD);
+        case XAPI_CB_TIMEOUT:
+            xlogn("Timeout event for the session: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
             return XSTDERR;
+        case XAPI_CB_COMPLETE:
+            xlogn("Response sent to the client: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
+            return pData->pTimer ? XSTDOK : XSTDERR;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;
             break;
@@ -1843,18 +1878,20 @@ int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
 int XTOP_ServerMode(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
 {
     xapi_t api;
-    XAPI_Init(&api, XTOP_ServiceCb, pCtx, XSTDNON);
+    XAPI_Init(&api, XTOP_ServiceCb, pCtx);
 
     pCtx->pStats = pStats;
     xevent_status_t status;
 
     xapi_endpoint_t endpt;
     XAPI_InitEndpoint(&endpt);
+
     endpt.eType = XAPI_HTTP;
+    endpt.eRole = XAPI_SERVER;
     endpt.pAddr = pCtx->sAddr;
     endpt.nPort = pCtx->nPort;
 
-    if (XAPI_AddEndpoint(&api, &endpt, XAPI_SERVER) < 0)
+    if (XAPI_AddEndpoint(&api, &endpt) < 0)
     {
         XAPI_Destroy(&api);
         return XSTDERR;
@@ -2134,6 +2171,7 @@ int main(int argc, char *argv[])
 
     XMon_DestroyStats(&stats);
     XCLIWin_Destroy(&win);
+    XSock_Close(&ctx.sock);
 
     usleep(10000); // Make valgrind happy
     return 0;

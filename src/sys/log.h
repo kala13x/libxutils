@@ -127,6 +127,7 @@ typedef enum
 #define xthrowe(...) XLog_Throwe(XSTDERR, __VA_ARGS__)
 #define xthrow(...) XLog_Throw(XSTDERR, __VA_ARGS__)
 
+#define xlog_is_init()  XLog_IsInit()
 #define xlog_init(name,flags,safe) XLog_Init(name, flags, safe)
 #define xlog_defaults() xlog_init(NULL, XLOG_DEFAULT, 0)
 #define xlog_get(cfg) XLog_ConfigGet(cfg)
@@ -218,6 +219,7 @@ void XLog_UseHeap(xbool_t bEnable);
 void XLog_FlagsSet(uint16_t nFlags);
 uint16_t XLog_FlagsGet(void);
 
+xbool_t XLog_IsInit(void);
 void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe);
 void XLog_Destroy(void);
 

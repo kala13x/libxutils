@@ -27,7 +27,11 @@ typedef pid_t               xpid_t;
 
 typedef struct sockaddr     xsockaddr_t;
 
+typedef int                 XSTATUS;
 typedef uint8_t             xbool_t;
+typedef unsigned int        xuint_t;
+typedef unsigned long       xulong_t;
+
 #define XTRUE               1
 #define XFALSE              0
 
@@ -109,6 +113,14 @@ typedef uint8_t             xbool_t;
 #define XSTDUSR         2
 #endif
 
+#ifndef XSTDACT
+#define XSTDACT         3
+#endif
+
+#ifndef XSTDDEL
+#define XSTDDEL         4
+#endif
+
 #define XCLR_RED        "\x1B[31m"
 #define XCLR_RES        "\x1B[0m"
 
@@ -116,25 +128,41 @@ typedef uint8_t             xbool_t;
 #define XLOCATION_LVL2(line)    XLOCATION_LVL1(line)
 #define __XLOCATION__           XLOCATION_LVL2(__LINE__)
 
-#ifdef _ASSERT_TIMED
+#if defined(_ASSERT_TIMED)
 #include <time.h>
+#include <stdio.h>
 #define XTROW_LOCATION                          \
     do {                                        \
-        char timeStr[20];                       \
-        time_t now = time(NULL);                \
-        struct tm *tmInfo = localtime(&now);    \
-        strftime(timeStr, sizeof(timeStr),      \
-                "%H:%M:%S.%03d", tmInfo );      \
+        char timeStr[32];                       \
+        struct timespec ts;                     \
+        struct tm tmInfo;                       \
+                                                \
+        clock_gettime(CLOCK_REALTIME, &ts);     \
+        localtime_r(&ts.tv_sec, &tmInfo);       \
+                                                \
+        snprintf(timeStr, sizeof(timeStr),      \
+                 "%02d:%02d:%02d.%03ld",        \
+                 tmInfo.tm_hour,                \
+                 tmInfo.tm_min,                 \
+                 tmInfo.tm_sec,                 \
+                 ts.tv_nsec / 1000000);         \
+                                                \
         printf("%s %s<error>%s "                \
-            "Assert failed: "                   \
-            "%s:%s():%s\n",                     \
-            timeStr,                            \
-            XCLR_RED, XCLR_RES,                 \
-            __FILE__,                           \
-            __FUNCTION__,                       \
-            __XLOCATION__);                     \
-    }                                           \
-    while (XSTDNON)
+                "Assert failed: %s:%s():%s\n",  \
+                timeStr,                        \
+                XCLR_RED, XCLR_RES,             \
+                __FILE__,                       \
+                __FUNCTION__,                   \
+                __XLOCATION__);                 \
+    } while (XSTDNON)
+#elif defined(_ASSERT_XLOG)
+#include "log.h"
+#define XTROW_LOCATION                          \
+            xloge("Assert failed: "             \
+                "%s:%s():%s",                   \
+                __FILE__,                       \
+                __FUNCTION__,                   \
+                __XLOCATION__)
 #else
 #define XTROW_LOCATION                          \
             printf("%s<error>%s "               \
@@ -229,18 +257,43 @@ typedef uint8_t             xbool_t;
     }                                                       \
     while (XSTDNON)
 
+#define XASSERT_CALL_RET3(cnd, func, var, func2, var2, func3, var3, val) \
+    do {                                                                 \
+        if (!cnd) {                                                      \
+            func(var);                                                   \
+            func2(var2);                                                 \
+            func3(var3);                                                 \
+            return val;                                                  \
+        }                                                                \
+    }                                                                    \
+    while (XSTDNON)
+
+#define XASSERT_CALL_LOG3(cnd, func, var, func2, var2, func3, var3, val) \
+    do {                                                                 \
+        if (!cnd) {                                                      \
+            XTROW_LOCATION;                                              \
+            func(var);                                                   \
+            func2(var2);                                                 \
+            func3(var3);                                                 \
+            return val;                                                  \
+        }                                                                \
+    }                                                                    \
+    while (XSTDNON)
+
 #ifdef _XUTILS_DEBUG
 # define XASSERT        XASSERT_LOG
 # define XASSERT_VOID   XASSERT_VOID_LOG
 # define XASSERT_FREE   XASSERT_FREE_LOG
 # define XASSERT_CALL   XASSERT_CALL_LOG
 # define XASSERT_CALL2  XASSERT_CALL_LOG2
+# define XASSERT_CALL3  XASSERT_CALL_LOG3
 #else
 # define XASSERT        XASSERT_RET
 # define XASSERT_VOID   XASSERT_VOID_RET
 # define XASSERT_FREE   XASSERT_FREE_RET
 # define XASSERT_CALL   XASSERT_CALL_RET
 # define XASSERT_CALL2  XASSERT_CALL_RET2
+# define XASSERT_CALL3  XASSERT_CALL_RET3
 #endif
 
 #ifdef _XUTILS_BACKTRACE_SIZE
@@ -280,7 +333,5 @@ static inline const char* XSTR_Error()
 #endif
 
 #define XSSL_MINIMAL_API 0x10000000L
-
-typedef int XSTATUS;
 
 #endif /* __XUTILS_STDDEF_H__ */

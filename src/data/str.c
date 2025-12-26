@@ -177,6 +177,17 @@ xbool_t xstrncmpn(const char *pStr, size_t nStrLen, const char *pCmp, size_t nCm
     return nDiff ? XFALSE : XTRUE;
 }
 
+xbool_t xstrncasecmp(const char *pStr, const char *pCmp, size_t nCmpLen)
+{
+    XASSERT_RET((pStr && pCmp && nCmpLen), XFALSE);
+#ifdef _WIN32
+    int nDifferent = _strnicmp(pStr, pCmp, nCmpLen);
+#else
+    int nDifferent = strncasecmp(pStr, pCmp, nCmpLen);
+#endif
+    return nDifferent ? XFALSE : XTRUE;
+}
+
 xbool_t xstrcmp(const char *pStr, const char *pCmp)
 {
     XASSERT_RET(((pStr != NULL) && (pCmp != NULL)), XFALSE);

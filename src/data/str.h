@@ -136,6 +136,7 @@ xbool_t xstrnmatch(const char *pStr, size_t nLength, const char *pPattern, size_
 xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern);
 xbool_t xstrregex(const char *pStr, size_t nLength, const char *pPattern);
 
+xbool_t xstrncasecmp(const char *pStr, const char *pCmp, size_t nCmpLen);
 xbool_t xstrncmpn(const char *pStr, size_t nStrLen, const char *pCmp, size_t nCmpLen);
 xbool_t xstrncmp(const char *pStr, const char *pCmp, size_t nCmpLen);
 xbool_t xstrcmp(const char *pStr, const char *pCmp);
