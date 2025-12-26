@@ -112,6 +112,7 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pData->pTimer = NULL;
     pData->eType = eType;
     pData->pApi = pApi;
+    pData->nID = XSTDERR;
 
     pData->pSessionData = NULL;
     pData->pPacket = NULL;
@@ -902,6 +903,7 @@ static int XAPI_Accept(xapi_t *pApi, xapi_data_t *pApiData)
     XSock_IPAddr(pNewSock, pPeerData->sAddr, sizeof(pPeerData->sAddr));
     pPeerData->nPort = pApiData->nPort;
     pPeerData->eRole = XAPI_PEER;
+    pPeerData->nID = pNewSock->nFD;
 
     xevent_data_t *pEventData = XEvents_RegisterEvent(pEvents, pPeerData, pNewSock->nFD, XSTDNON, XAPI_PEER);
     if (pEventData == NULL)
@@ -1328,6 +1330,9 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
         return XSTDERR;
     }
 
+    pApiData->pEvData = NULL;
+    pApiData->nID = pSock->nFD;
+
     /* Create event instance */
     xevents_t *pEvents = XAPI_GetOrCreateEvents(pApi);
     if (pEvents == NULL)
@@ -1399,6 +1404,7 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pApiData->pSessionData = pEndpt->pSessionData;
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_CLIENT;
+    pApiData->nID = pSock->nFD;
 
     uint32_t nFlags = XSOCK_CLIENT | XSOCK_NB;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
@@ -1463,6 +1469,7 @@ XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
     pApiData->pSessionData = pEndpt->pSessionData;
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = eRole;
+    pApiData->nID = pEndpt->nFD;
 
     uint32_t nFlags = XSOCK_EVENT | XSOCK_NB;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;

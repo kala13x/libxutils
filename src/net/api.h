@@ -117,6 +117,7 @@ typedef struct xapi_data_ {
     uint16_t nPort;
     xsock_t sock;
     int nEvents;
+    int nID;
 
     xbool_t bCancel;
     xbool_t bAlloc;

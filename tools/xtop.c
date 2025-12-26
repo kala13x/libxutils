@@ -56,6 +56,7 @@ extern char *optarg;
 #define XIFACE_NAME_NARROW_PADDING  12
 #define XIFACE_NAME_WIDE_PADDING    15
 
+#define XTOP_REQUEST_TIMEOUT_MS     30000
 #define XTOP_ACTIVE_IFACES_RESET    0
 #define XTOP_CORE_COUNT_RESET       -1
 
@@ -1409,7 +1410,7 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
 int XTOP_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
-    int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
+    int nFD = pData ? (int)pData->nID : XSTDERR;
 
     if (pCtx->nStatus == XAPI_DESTROY)
         xlogn("%s", pStr);
@@ -1432,7 +1433,7 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     *pRequest = XTOP_NONE;
 
     xlogn("Received request: fd(%d), method(%s), uri(%s)",
-        (int)pData->sock.nFD, XHTTP_GetMethodStr(pHttp->eMethod), pHttp->sUri);
+        (int)pData->nID, XHTTP_GetMethodStr(pHttp->eMethod), pHttp->sUri);
 
     if (pHttp->eMethod != XHTTP_GET)
     {
@@ -1464,6 +1465,18 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     {
         xlogw("Requested API endpoint is not found: %s", pHttp->sUri);
         return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NO_STATUS);
+    }
+
+    const char *pConnectionHeader = XHTTP_GetHeader(pHttp, "Connection");
+    if (xstrncasecmp(pConnectionHeader, "keep-alive", sizeof("keep-alive") - 1))
+    {
+        // Extend timeout for long-running requests
+        XAPI_ExtendTimer(pData, XTOP_REQUEST_TIMEOUT_MS);
+    }
+    else
+    {
+        // Remove timeout event if any
+        XAPI_DeleteTimer(pData);
     }
 
     return XAPI_EnableEvent(pData, XPOLLOUT);
@@ -1779,7 +1792,7 @@ int XTOP_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     xlogn("Sending response: fd(%d), status(%d), length(%zu)",
-        (int)pData->sock.nFD, handle.nStatusCode, handle.rawData.nUsed);
+        (int)pData->nID, handle.nStatusCode, handle.rawData.nUsed);
 
     XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
     XString_Clear(&content);
@@ -1800,13 +1813,16 @@ int XTOP_InitSessionData(xapi_data_t *pData)
     *pRequest = XTOP_INVALID;
     pData->pSessionData = pRequest;
 
-    xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->sock.nFD, pData->sAddr);
+    // Add inactivity timeout for the session
+    XAPI_AddTimer(pData, XTOP_REQUEST_TIMEOUT_MS);
+
+    xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->nID, pData->sAddr);
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
 int XTOP_ClearSessionData(xapi_data_t *pData)
 {
-    xlogn("Connection closed: fd(%d), ip(%s)", (int)pData->sock.nFD, pData->sAddr);
+    xlogn("Connection closed: fd(%d), ip(%s)", (int)pData->nID, pData->sAddr);
     free(pData->pSessionData);
     pData->pSessionData = NULL;
     return XSTDERR;
@@ -1828,11 +1844,11 @@ int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_CLOSED:
             return XTOP_ClearSessionData(pData);
         case XAPI_CB_TIMEOUT:
-            xlogn("Timeout event for the socket: fd(%d)", (int)pData->sock.nFD);
+            xlogn("Timeout event for the socket: fd(%d)", (int)pData->nID);
             return XSTDERR;
         case XAPI_CB_COMPLETE:
-            xlogn("Successfully sent a response to the client: fd(%d)", (int)pData->sock.nFD);
-            return XSTDERR;
+            xlogn("Successfully sent a response to the client: fd(%d)", (int)pData->nID);
+            return pData->pTimer ? XSTDOK : XSTDERR;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;
             break;
