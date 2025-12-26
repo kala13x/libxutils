@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        15
+#define XTOP_VERSION_MIN        16
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -76,6 +76,8 @@ typedef enum {
 
 typedef struct xmon_ctx_ {
     xmon_stats_t *pStats;
+    xsock_t sock;
+
     xbool_t bCoreCountManualSet;
     xbool_t bDisplayHelp;
     xbool_t bRedrawHelp;
@@ -112,6 +114,8 @@ typedef struct xmon_ctx_ {
 
 void XTOP_InitContext(xtop_ctx_t *pCtx)
 {
+    XSock_Init(&pCtx->sock, XSOCK_TCP, XSOCK_INVALID);
+
     pCtx->bCoreCountManualSet = XFALSE;
     pCtx->bRedrawHelp = XFALSE;
     pCtx->bDisplayHelp = XFALSE;
@@ -1349,7 +1353,9 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
     }
 
     if (XHTTP_AddHeader(&handle, "Host", "%s", link.sAddr) < 0 ||
-        XHTTP_AddHeader(&handle, "User-Agent", "xutils/%s", pVer) < 0)
+        XHTTP_AddHeader(&handle, "User-Agent", "xutils/%s", pVer) < 0 ||
+        XHTTP_AddHeader(&handle, "Accept", "application/json") < 0 ||
+        XHTTP_AddHeader(&handle, "Connection", "keep-alive") < 0)
     {
         xloge("Failed to initialize HTTP request: %d", errno);
         XHTTP_Clear(&handle);
@@ -1364,10 +1370,24 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
         return XSTDERR;
     }
 
-    xhttp_status_t eStatus = XHTTP_LinkPerform(&handle, &link, NULL, 0);
+    xhttp_status_t eStatus;
+    if (XSock_Check(&pCtx->sock) != XSOCK_SUCCESS)
+    {
+        eStatus = XHTTP_Connect(&handle, &pCtx->sock, &link);
+        if (eStatus != XHTTP_CONNECTED)
+        {
+            xloge("%s", XHTTP_GetStatusStr(eStatus));
+            XSock_Close(&pCtx->sock);
+            XHTTP_Clear(&handle);
+            return XSTDERR;
+        }
+    }
+
+    eStatus = XHTTP_Perform(&handle, &pCtx->sock, NULL, 0);
     if (eStatus != XHTTP_COMPLETE)
     {
         xloge("%s", XHTTP_GetStatusStr(eStatus));
+        XSock_Close(&pCtx->sock);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -1376,7 +1396,8 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
     {
         xlogw("HTTP response: %d %s", handle.nStatusCode,
                     XHTTP_GetCodeStr(handle.nStatusCode));
-    
+
+        XSock_Close(&pCtx->sock);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -1385,6 +1406,7 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
     if (pBody == NULL)
     {
         xloge("HTTP response does not contain data");
+        XSock_Close(&pCtx->sock);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -1396,6 +1418,7 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
         XJSON_GetErrorStr(&json, sError, sizeof(sError));
         xloge("Failed to parse JSON: %s", sError);
 
+        XSock_Close(&pCtx->sock);
         XHTTP_Clear(&handle);
         return XSTDERR;
     }
@@ -1404,6 +1427,7 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
 
     XHTTP_Clear(&handle);
     XJSON_Destroy(&json);
+
     return nStatus;
 }
 
@@ -1411,7 +1435,7 @@ int XTOP_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
-    xuint_t nID = pData ? pData->nID : 0;
+    xuint_t nID = pData ? pData->nID : XSTDNON;
 
     if (pCtx->nStatus == XAPI_DESTROY)
         xlogn("%s", pStr);
@@ -1438,14 +1462,14 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     if (pHttp->eMethod != XHTTP_GET)
     {
-        xlogw("Invalid or not supported HTTP method: %s", XHTTP_GetMethodStr(pHttp->eMethod));
+        xlogw("Invalid or not supported HTTP method: id(%u), %s", pData->nID, XHTTP_GetMethodStr(pHttp->eMethod));
         return XAPI_RespondHTTP(pData, XTOP_NOTALLOWED, XAPI_NO_STATUS);
     }
 
     xarray_t *pArr = xstrsplit(pHttp->sUri, "/");
     if (pArr == NULL)
     {
-        xlogw("Invalid request URL or API endpoint: %s", pHttp->sUri);
+        xlogw("Invalid request URL or API endpoint: id(%u), %s", pData->nID, pHttp->sUri);
         return XAPI_RespondHTTP(pData, XTOP_INVALID, XAPI_NO_STATUS);
     }
 
@@ -1464,7 +1488,7 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
 
     if (*pRequest == XTOP_NONE)
     {
-        xlogw("Requested API endpoint is not found: %s", pHttp->sUri);
+        xlogw("Requested API endpoint is not found: id(%u), uri(%s)", pData->nID, pHttp->sUri);
         return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NO_STATUS);
     }
 
@@ -2147,6 +2171,7 @@ int main(int argc, char *argv[])
 
     XMon_DestroyStats(&stats);
     XCLIWin_Destroy(&win);
+    XSock_Close(&ctx.sock);
 
     usleep(10000); // Make valgrind happy
     return 0;

@@ -380,7 +380,7 @@ const char* XSock_GetStatusStr(xsock_status_t eStatus)
         case XSOCK_ERR_ADDR:
             return "Failed get IP address from hostname";
         case XSOCK_EOF:
-            return "Received final packet (FIN)";
+            return "Received FIN from the remote side";
         default:
             break;
     }

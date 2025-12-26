@@ -11,7 +11,8 @@
 #include "xstd.h"
 #include "event.h"
 
-#define XEVENTS_DEFAULT_FD_MAX 1024
+#define XEVENTS_DEFAULT_FD_MAX      1024
+#define XEVENTS_RETURN_VALUE(val)   ((val != XEVENTS_CONTINUE) ? val : XEVENTS_ACTION)
 
 const char *XEvents_GetStatusStr(xevent_status_t status)
 {
@@ -32,7 +33,7 @@ const char *XEvents_GetStatusStr(xevent_status_t status)
         case XEVENT_STATUS_ETIMER:
             return "Failed to create or register timer event";
         case XEVENT_STATUS_EEXTEND:
-            return "Failed to extend timer event";
+            return "Failed to extend existing timer event";
         case XEVENT_STATUS_EINTR:
             return "Event service loop interrupted by signal";
         case XEVENT_STATUS_BREAK:
@@ -134,9 +135,8 @@ static xevent_status_t XEvent_ExtendTimerLinux(xevent_data_t *pTimer, int nTimeo
 
 static int XEvents_TimerService(xevents_t *pEvents, xevent_data_t *pData, XSOCKET nFD, uint32_t nEvents)
 {
-    int nRetVal = XEVENTS_CONTINUE;
     XASSERT((pEvents && pData), XEVENT_STATUS_EINVALID);
-    XASSERT_RET((pData->nType == XEVENT_TYPE_TIMER), nRetVal);
+    XASSERT_RET((pData->nType == XEVENT_TYPE_TIMER), XEVENTS_CONTINUE);
 
     if ((nEvents & XPOLLIN) && XEvent_Read(pData) >= 0)
         return XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_TIMEOUT);
@@ -193,34 +193,36 @@ static int XEvents_ServiceCb(xevents_t *pEvents, xevent_data_t *pData, XSOCKET n
 
 #ifdef __linux__
     if (pData->nType == XEVENT_TYPE_TIMER)
-        return XEvents_TimerService(pEvents, pData, nFD, nEvents);
+    {
+        nRetVal = XEvents_TimerService(pEvents, pData, nFD, nEvents);
+        return XEVENTS_RETURN_VALUE(nRetVal);
+    }
 #endif
 
-    /* Check error condition */
 #ifdef XPOLLRDHUP
     if (nEvents & XPOLLRDHUP)
     {
         nRetVal = XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_CLOSED);
-        return nRetVal != XEVENTS_CONTINUE ? nRetVal : XEVENTS_ACTION;
+        return XEVENTS_RETURN_VALUE(nRetVal);
     }
 #endif
 
     if (nEvents & XPOLLHUP)
     {
         nRetVal = XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_HUNGED);
-        return nRetVal != XEVENTS_CONTINUE ? nRetVal : XEVENTS_ACTION;
+        return XEVENTS_RETURN_VALUE(nRetVal);
     }
 
     if (nEvents & XPOLLERR)
     {
         nRetVal = XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_ERROR);
-        return nRetVal != XEVENTS_CONTINUE ? nRetVal : XEVENTS_ACTION;
+        return XEVENTS_RETURN_VALUE(nRetVal);
     }
 
     if (nEvents & XPOLLPRI)
     {
         nRetVal = XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_EXCEPTION);
-        return nRetVal != XEVENTS_CONTINUE ? nRetVal : XEVENTS_ACTION;
+        return XEVENTS_RETURN_VALUE(nRetVal);
     }
 
     if (nEvents & XPOLLOUT)
