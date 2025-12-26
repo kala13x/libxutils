@@ -707,7 +707,7 @@ static size_t XHTTP_GetContentLength(xhttp_t *pHttp)
 static xbool_t XHTTP_GetKeepAlive(xhttp_t *pHttp)
 {
     const char *pConnHeader = XHTTP_GetHeader(pHttp, "Connection");
-    return xstrncasecmp(pConnHeader, "keep-alive", 10) ? XTRUE : XFALSE;
+    return xstrncasecmp(pConnHeader, "keep-alive", 10);
 }
 
 static size_t XHTTP_ParseUrl(xhttp_t *pHttp)
