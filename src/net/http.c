@@ -258,6 +258,7 @@ int XHTTP_Init(xhttp_t *pHttp, xhttp_method_t eMethod, size_t nSize)
     pHttp->callback = NULL;
     pHttp->pUserCtx = NULL;
     pHttp->nAllowUpdate = 0;
+    pHttp->nKeepAlive = 0;
     pHttp->nCbTypes = 0;
     pHttp->nTimeout = 0;
 
@@ -508,7 +509,6 @@ xbyte_buffer_t* XHTTP_Assemble(xhttp_t *pHttp, const uint8_t *pContent, size_t n
 {
     if (pHttp->nComplete) return &pHttp->rawData;
     nLength = (pContent != NULL) ? nLength : 0;
-    xbool_t nAllowUpdate = pHttp->nAllowUpdate;
 
     xbyte_buffer_t *pBuffer = &pHttp->rawData;
     xmap_t *pHdrMap = &pHttp->headerMap;
@@ -532,11 +532,21 @@ xbyte_buffer_t* XHTTP_Assemble(xhttp_t *pHttp, const uint8_t *pContent, size_t n
     }
 
     if (nStatus == XSTDERR) return NULL;
+    xbool_t nAllowUpdate = pHttp->nAllowUpdate;
 
     if (nLength > 0)
     {
         pHttp->nAllowUpdate = XTRUE;
         nStatus = XHTTP_AddHeader(pHttp, "Content-Length", "%zu", nLength);
+        pHttp->nAllowUpdate = nAllowUpdate;
+        if (nStatus <= 0) return NULL;
+    }
+
+    if (pHttp->nKeepAlive && XHTTP_GetHeader(pHttp, "Connection") == NULL)
+    {
+        pHttp->nAllowUpdate = XTRUE;
+        nStatus = XHTTP_AddHeader(pHttp, "Connection", "keep-alive");
+        pHttp->nAllowUpdate = nAllowUpdate;
         if (nStatus <= 0) return NULL;
     }
 
@@ -688,10 +698,16 @@ static size_t XHTTP_ParseHeaderLength(const char *pHdrStr)
     return (size_t)nPosit + 4;
 }
 
-static size_t XHTTP_ParseContentLength(xhttp_t *pHttp)
+static size_t XHTTP_GetContentLength(xhttp_t *pHttp)
 {
     const char *pHdr = XHTTP_GetHeader(pHttp, "Content-Length");
     return (pHdr != NULL) ? atol(pHdr) : XSTDNON;
+}
+
+static xbool_t XHTTP_GetKeepAlive(xhttp_t *pHttp)
+{
+    const char *pConnHeader = XHTTP_GetHeader(pHttp, "Connection");
+    return xstrncasecmp(pConnHeader, "keep-alive", 10) ? XTRUE : XFALSE;
 }
 
 static size_t XHTTP_ParseUrl(xhttp_t *pHttp)
@@ -805,7 +821,8 @@ xhttp_status_t XHTTP_Parse(xhttp_t *pHttp)
     if (XHTTP_ParseHeaders(pHttp) == XSTDERR)
         return XHTTP_StatusCb(pHttp, XHTTP_ERRALLOC);
 
-    pHttp->nContentLength = XHTTP_ParseContentLength(pHttp);
+    pHttp->nContentLength = XHTTP_GetContentLength(pHttp);
+    pHttp->nKeepAlive = XHTTP_GetKeepAlive(pHttp);
     pHttp->rawData.pData[nHeaderLength - 1] = '\n';
 
     xhttp_status_t nStatus = XHTTP_StatusCb(pHttp, XHTTP_PARSED);

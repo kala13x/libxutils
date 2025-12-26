@@ -1410,14 +1410,15 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
 int XTOP_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
-    int nFD = pData ? (int)pData->nID : XSTDERR;
+    int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
+    xuint_t nID = pData ? pData->nID : 0;
 
     if (pCtx->nStatus == XAPI_DESTROY)
         xlogn("%s", pStr);
     else if (pCtx->eCbType == XAPI_CB_STATUS)
-        xlogn("%s: fd(%d)", pStr, nFD);
+        xlogn("%s: id(%u), fd(%d)", pStr, nID, nFD);
     else if (pCtx->eCbType == XAPI_CB_ERROR)
-        xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
+        xloge("%s: id(%u), fd(%d), errno(%d)", pStr, nID, nFD, errno);
 
     return XSTDOK;
 }
@@ -1432,8 +1433,8 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xhttp_t *pHttp = (xhttp_t*)pData->pPacket;
     *pRequest = XTOP_NONE;
 
-    xlogn("Received request: fd(%d), method(%s), uri(%s)",
-        (int)pData->nID, XHTTP_GetMethodStr(pHttp->eMethod), pHttp->sUri);
+    xlogn("Received request: id(%u), fd(%d), method(%s), uri(%s)",
+        pData->nID, (int)pData->sock.nFD, XHTTP_GetMethodStr(pHttp->eMethod), pHttp->sUri);
 
     if (pHttp->eMethod != XHTTP_GET)
     {
@@ -1467,17 +1468,8 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
         return XAPI_RespondHTTP(pData, XTOP_NOTFOUND, XAPI_NO_STATUS);
     }
 
-    const char *pConnectionHeader = XHTTP_GetHeader(pHttp, "Connection");
-    if (xstrncasecmp(pConnectionHeader, "keep-alive", sizeof("keep-alive") - 1))
-    {
-        // Extend timeout for long-running requests
-        XAPI_ExtendTimer(pData, XTOP_REQUEST_TIMEOUT_MS);
-    }
-    else
-    {
-        // Remove timeout event if any
-        XAPI_DeleteTimer(pData);
-    }
+    if (!pHttp->nKeepAlive) XAPI_DeleteTimer(pData);
+    else XAPI_AddTimer(pData, XTOP_REQUEST_TIMEOUT_MS);
 
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
@@ -1791,8 +1783,8 @@ int XTOP_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
         return XSTDERR;
     }
 
-    xlogn("Sending response: fd(%d), status(%d), length(%zu)",
-        (int)pData->nID, handle.nStatusCode, handle.rawData.nUsed);
+    xlogn("Sending response: id(%u), fd(%d), status(%d), length(%zu)",
+        pData->nID, (int)pData->sock.nFD, handle.nStatusCode, handle.rawData.nUsed);
 
     XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
     XString_Clear(&content);
@@ -1816,13 +1808,13 @@ int XTOP_InitSessionData(xapi_data_t *pData)
     // Add inactivity timeout for the session
     XAPI_AddTimer(pData, XTOP_REQUEST_TIMEOUT_MS);
 
-    xlogn("Accepted connection: fd(%d), ip(%s)", (int)pData->nID, pData->sAddr);
+    xlogn("Accepted connection: id(%u), fd(%d), ip(%s)", pData->nID, (int)pData->sock.nFD, pData->sAddr);
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
 int XTOP_ClearSessionData(xapi_data_t *pData)
 {
-    xlogn("Connection closed: fd(%d), ip(%s)", (int)pData->nID, pData->sAddr);
+    xlogn("Connection closed: id(%u), fd(%d), ip(%s)", pData->nID, (int)pData->sock.nFD, pData->sAddr);
     free(pData->pSessionData);
     pData->pSessionData = NULL;
     return XSTDERR;
@@ -1844,10 +1836,10 @@ int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_CLOSED:
             return XTOP_ClearSessionData(pData);
         case XAPI_CB_TIMEOUT:
-            xlogn("Timeout event for the socket: fd(%d)", (int)pData->nID);
+            xlogn("Timeout event for the session: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
             return XSTDERR;
         case XAPI_CB_COMPLETE:
-            xlogn("Successfully sent a response to the client: fd(%d)", (int)pData->nID);
+            xlogn("Response sent to the client: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
             return pData->pTimer ? XSTDOK : XSTDERR;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;

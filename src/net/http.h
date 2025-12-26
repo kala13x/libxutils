@@ -121,6 +121,7 @@ struct xhttp_ {
     size_t nTimeout;
 
     xbool_t nAllowUpdate;
+    xbool_t nKeepAlive;
     xbool_t nAllocated;
     xbool_t nComplete;
 

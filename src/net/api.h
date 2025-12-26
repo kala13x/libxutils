@@ -31,6 +31,7 @@ typedef struct xapi_ xapi_t;
 #define XAPI_NO_ACTION  XSTDNON
 #define XAPI_USER_CB    XSTDUSR
 #define XAPI_RELOOP     XSTDACT
+#define XAPI_DELETE     XSTDDEL
 
 typedef enum {
     XAPI_CB_ERROR = 0,
@@ -116,8 +117,8 @@ typedef struct xapi_data_ {
 
     uint16_t nPort;
     xsock_t sock;
+    xuint_t nID;
     int nEvents;
-    int nID;
 
     xbool_t bCancel;
     xbool_t bAlloc;
@@ -158,6 +159,7 @@ struct xapi_ {
     size_t nRxSize;
     void *pUserCtx;
 
+    xuint_t nSessionCounter;
     xbool_t bAllowMissingKey;
     xbool_t bHaveEvents;
     xbool_t bUseHashMap;

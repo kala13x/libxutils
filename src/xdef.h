@@ -29,6 +29,8 @@ typedef struct sockaddr     xsockaddr_t;
 
 typedef int                 XSTATUS;
 typedef uint8_t             xbool_t;
+typedef unsigned int        xuint_t;
+typedef unsigned long       xulong_t;
 
 #define XTRUE               1
 #define XFALSE              0
@@ -113,6 +115,10 @@ typedef uint8_t             xbool_t;
 
 #ifndef XSTDACT
 #define XSTDACT         3
+#endif
+
+#ifndef XSTDDEL
+#define XSTDDEL         4
 #endif
 
 #define XCLR_RED        "\x1B[31m"
