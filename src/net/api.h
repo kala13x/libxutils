@@ -189,7 +189,7 @@ XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char
 
 void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt);
 XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt);
-XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole);
+XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt);
 XSTATUS XAPI_AddPeer(xapi_t *pApi, xapi_endpoint_t *pEndpt);
 XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt);
 XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt);

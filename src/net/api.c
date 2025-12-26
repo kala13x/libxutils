@@ -1445,7 +1445,7 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     return XSTDOK;
 }
 
-XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
+XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
     XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
     XASSERT((pEndpt->nFD != XSOCK_INVALID), XSTDINV);
@@ -1464,7 +1464,7 @@ XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
     xstrncpy(pApiData->sUri, sizeof(pApiData->sUri), pEndpointUri);
     pApiData->pSessionData = pEndpt->pSessionData;
     pApiData->nPort = pEndpt->nPort;
-    pApiData->eRole = eRole;
+    pApiData->eRole = pEndpt->eRole;
 
     uint32_t nFlags = XSOCK_EVENT | XSOCK_NB;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
@@ -1483,7 +1483,7 @@ XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
     }
 
     /* Add listener socket to the event instance */
-    xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pApiData, pSock->nFD, nEvents, (int)eRole);
+    xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pApiData, pSock->nFD, nEvents, (int)pEndpt->eRole);
     if (pEvData == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_REGISTER);
@@ -1506,18 +1506,23 @@ XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt, xapi_role_t eRole)
 
 XSTATUS XAPI_AddPeer(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
-    XASSERT((pApi != NULL && pEndpt != NULL), XSTDINV);
-    return XAPI_AddEvent(pApi, pEndpt, XAPI_PEER);
+    XASSERT((pApi != NULL), XSTDINV);
+    XASSERT((pEndpt != NULL), XSTDINV);
+    pEndpt->eRole = XAPI_PEER;
+    return XAPI_AddEvent(pApi, pEndpt);
 }
 
 XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
+    XASSERT((pApi != NULL), XSTDINV);
+    XASSERT((pEndpt != NULL), XSTDINV);
+
     switch (pEndpt->eRole)
     {
-        case XAPI_PEER: return XAPI_AddPeer(pApi, pEndpt);
+        case XAPI_PEER: return XAPI_AddEvent(pApi, pEndpt);
         case XAPI_SERVER: return XAPI_Listen(pApi, pEndpt);
         case XAPI_CLIENT: return XAPI_Connect(pApi, pEndpt);
-        case XAPI_CUSTOM: return XAPI_AddEvent(pApi, pEndpt, pEndpt->eRole);
+        case XAPI_CUSTOM: return XAPI_AddEvent(pApi, pEndpt);
         default: break;
     }
 
