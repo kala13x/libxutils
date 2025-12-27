@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        16
+#define XTOP_VERSION_MIN        17
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -1440,7 +1440,7 @@ int XTOP_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (pCtx->nStatus == XAPI_DESTROY)
         xlogn("%s", pStr);
     else if (pCtx->eCbType == XAPI_CB_STATUS)
-        xlogn("%s: id(%u), fd(%d)", pStr, nID, nFD);
+        xlogi("%s: id(%u), fd(%d)", pStr, nID, nFD);
     else if (pCtx->eCbType == XAPI_CB_ERROR)
         xloge("%s: id(%u), fd(%d), errno(%d)", pStr, nID, nFD, errno);
 
@@ -1457,7 +1457,7 @@ int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
     xhttp_t *pHttp = (xhttp_t*)pData->pPacket;
     *pRequest = XTOP_NONE;
 
-    xlogn("Received request: id(%u), fd(%d), method(%s), uri(%s)",
+    xlogi("Received request: id(%u), fd(%d), method(%s), uri(%s)",
         pData->nID, (int)pData->sock.nFD, XHTTP_GetMethodStr(pHttp->eMethod), pHttp->sUri);
 
     if (pHttp->eMethod != XHTTP_GET)
@@ -1807,7 +1807,7 @@ int XTOP_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
         return XSTDERR;
     }
 
-    xlogn("Sending response: id(%u), fd(%d), status(%d), length(%zu)",
+    xlogi("Sending response: id(%u), fd(%d), status(%d), length(%zu)",
         pData->nID, (int)pData->sock.nFD, handle.nStatusCode, handle.rawData.nUsed);
 
     XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
@@ -1860,10 +1860,10 @@ int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_CLOSED:
             return XTOP_ClearSessionData(pData);
         case XAPI_CB_TIMEOUT:
-            xlogn("Timeout event for the session: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
+            xlogi("Timeout event for the session: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
             return XSTDERR;
         case XAPI_CB_COMPLETE:
-            xlogn("Response sent to the client: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
+            xlogi("Response sent to the client: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
             return pData->pTimer ? XSTDOK : XSTDERR;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;
@@ -2006,7 +2006,9 @@ static void XTOP_ProcessSTDIN(xtop_ctx_t *pCtx)
 
 int main(int argc, char *argv[])
 {
-    xlog_init("xtop", XLOG_DEFAULT, XFALSE);
+    uint16_t nFlags = XLOG_NOTE | XLOG_WARN | XLOG_ERROR | XLOG_FATAL;
+    xlog_init("xtop", nFlags, XFALSE);
+
     xmon_stats_t stats;
     xtop_ctx_t ctx;
 
@@ -2018,7 +2020,7 @@ int main(int argc, char *argv[])
 
     if (ctx.bDaemon && XUtils_Daemonize(XTRUE, XTRUE) < 0)
     {
-        xlogn("Failed to run server as daemon: %d", errno);
+        xloge("Failed to run server as daemon: %d", errno);
         return XSTDERR;
     }
 
