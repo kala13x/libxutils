@@ -207,6 +207,7 @@ xevent_status_t XEvents_ExtendTimerCommon(xevents_t *pEvents, xevent_data_t *pTi
 
     if (pTimer->pTimerNode == NULL)
     {
+        pTimer->nTimerValue = XTime_GetMs() + nTimeoutMs;
         pTimer->pTimerNode = XEvents_AddTimerSorted(&pEvents->timerList, pTimer);
         return (pTimer->pTimerNode == NULL) ? XEVENT_STATUS_EEXTEND : XEVENT_STATUS_SUCCESS;
     }
