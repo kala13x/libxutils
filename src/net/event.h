@@ -31,7 +31,7 @@ extern "C" {
 #include <sys/poll.h>
 #endif
 
-#ifdef __linux__
+#ifndef __linux__
 # ifndef _USE_EVENT_LIST
 # define _USE_EVENT_LIST 1
 # endif
