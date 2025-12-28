@@ -58,3 +58,8 @@ tools/build/
 build/
 .vscode/
 *.log
+
+# Debug files
+*.dmp
+*.stackdump
+vgcore.*
