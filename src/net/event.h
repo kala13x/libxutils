@@ -31,6 +31,12 @@ extern "C" {
 #include <sys/poll.h>
 #endif
 
+#ifndef __linux__
+# ifndef _USE_EVENT_LIST
+# define _USE_EVENT_LIST 1
+# endif
+#endif
+
 // Event flags compatibility macros
 #ifdef __linux__
 #define XPOLLRDHUP  EPOLLRDHUP
@@ -113,9 +119,13 @@ typedef enum {
 
 // Event data structure
 typedef struct XEventData {
-    void *pContext;
+#ifdef _USE_EVENT_LIST
+    uint64_t nTimerValue;
+    xlist_t *pTimerNode;
+#endif
     uint32_t nEvents;
     xbool_t bIsOpen;
+    void *pContext;
     XSOCKET nFD;
     int nIndex;
     int nType;
@@ -137,30 +147,34 @@ typedef struct XEvents {
     uint32_t                nEventMax;          /* Max allowed file descriptors */
 
     xbool_t                 bUseHash;           /* Flag to enable/disable hash map usage*/
-    xhash_t                 hashMap;            /* Hash map for events and related data */
+    xhash_t                 eventsMap;          /* Hash map for events and related data */
+
+#ifdef _USE_EVENT_LIST
+    xlist_t                 timerList;          /* Linked list for timer events */
+#endif
 } xevents_t;
 
 const char *XEvents_GetStatusStr(xevent_status_t status);
 
-xevent_status_t XEvents_Create(xevents_t *pEv, uint32_t nMax, void *pUser, xevent_cb_t callBack, xbool_t bUseHash);
+xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, xevent_cb_t callBack, xbool_t bUseHash);
 void XEvents_Destroy(xevents_t *pEvents);
 
 int XEvent_WriteByte(xevent_data_t *pData, const char cVal);
 int XEvent_ReadByte(xevent_data_t *pData, char *pVal);
 int XEvent_ReadU64(xevent_data_t *pData, uint64_t *pVal);
 
-xevent_data_t *XEvents_NewData(void *pCtx, XSOCKET nFd, int nType);
-xevent_data_t* XEvents_GetData(xevents_t *pEv, XSOCKET nFd);
+xevent_data_t* XEvents_NewData(void *pCtx, XSOCKET nFd, int nType);
+xevent_data_t* XEvents_GetData(xevents_t *pEvents, XSOCKET nFd);
 
 xevent_data_t* XEvents_CreateEvent(xevents_t *pEvents, void *pCtx);
 xevent_data_t* XEvents_AddTimer(xevents_t *pEvents, void *pContext, int nTimeoutMs);
-xevent_status_t XEvent_ExtendTimer(xevent_data_t *pTimer, int nTimeoutMs);
+xevent_status_t XEvents_ExtendTimer(xevents_t *pEvents, xevent_data_t *pTimer, int nTimeoutMs);
 
-xevent_data_t* XEvents_RegisterEvent(xevents_t *pEv, void *pCtx, XSOCKET nFd, int nEvents, int nType);
-xevent_status_t XEvents_Add(xevents_t *pEv, xevent_data_t *pData, int nEvents);
-xevent_status_t XEvents_Modify(xevents_t *pEv, xevent_data_t *pData, int nEvents);
-xevent_status_t XEvents_Delete(xevents_t *pEv, xevent_data_t *pData);
-xevent_status_t XEvents_Service(xevents_t *pEv, int nTimeoutMs);
+xevent_data_t* XEvents_RegisterEvent(xevents_t *pEvents, void *pCtx, XSOCKET nFd, int nEvents, int nType);
+xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t *pData, int nEvents);
+xevent_status_t XEvents_Modify(xevents_t *pEvents, xevent_data_t *pData, int nEvents);
+xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData);
+xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs);
 
 #ifdef __cplusplus
 }

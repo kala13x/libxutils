@@ -42,6 +42,7 @@ xlist_t *XList_New(void *pData, size_t nSize, xlist_cb_t onClear, void *pCtx);
 void XList_Init(xlist_t *pList, void *pData, size_t nSize, xlist_cb_t onClear, void *pCtx);
 void XList_Clear(xlist_t *pList);
 void XList_Free(xlist_t *pList);
+void XList_Detach(xlist_t *pList);
 
 xlist_t* XList_Unlink(xlist_t *pList);
 xlist_t* XList_RemoveHead(xlist_t *pList);

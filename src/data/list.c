@@ -71,16 +71,28 @@ void XList_Free(xlist_t *pList)
     }
 }
 
-xlist_t* XList_Unlink(xlist_t *pList)
+void XList_Detach(xlist_t *pList)
 {
-    if (pList == NULL) return NULL;
+    if (pList == NULL) return;
     xlist_t *pPrev = pList->pPrev;
     xlist_t *pNext = pList->pNext;
 
     if (pPrev != NULL) pPrev->pNext = pNext;
     if (pNext != NULL) pNext->pPrev = pPrev;
 
+    pList->pPrev = NULL;
+    pList->pNext = NULL;
+}
+
+xlist_t* XList_Unlink(xlist_t *pList)
+{
+    if (pList == NULL) return NULL;
+    xlist_t *pPrev = pList->pPrev;
+    xlist_t *pNext = pList->pNext;
+
+    XList_Detach(pList);
     XList_Free(pList);
+
     return pNext ? pNext : pPrev;
 }
 

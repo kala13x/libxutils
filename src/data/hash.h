@@ -41,7 +41,7 @@ typedef struct XHash {
     xlist_t tables[XHASH_MODULES];
 } xhash_t;
 
-int XHash_Init(xhash_t *pHash, xhash_clearcb_t clearCb, void *pCtx);
+void XHash_Init(xhash_t *pHash, xhash_clearcb_t clearCb, void *pCtx);
 void XHash_Iterate(xhash_t *pHash, xhash_itfunc_t itfunc, void *pCtx);
 void XHash_Destroy(xhash_t *pHash);
 
