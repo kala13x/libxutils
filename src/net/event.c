@@ -149,7 +149,7 @@ static void XEvents_ListClearCb(void *pCtx, void *pData)
     XEvents_ClearCb(pEvents, pEvData, (int)nFD);
 }
 
-static int XEvents_NextTimerSearchCb(void *pUserPtr, xlist_t *pNode)
+static int XEvents_NodeSearchCb(void *pUserPtr, xlist_t *pNode)
 {
     xevent_data_t *pSearchData = (xevent_data_t*)pUserPtr;
     XASSERT_RET((pNode && pNode->data.pData), XFALSE);
@@ -169,14 +169,16 @@ static int XEvents_TimerSearchCb(void *pUserPtr, xlist_t *pNode)
 
 static xlist_t* XEvents_AddNodeSorted(xlist_t *pList, xlist_t *pNode)
 {
+    XASSERT_RET((pList != NULL && pNode != NULL), NULL);
     xevent_data_t *pData = (xevent_data_t*)pNode->data.pData;
-    xlist_t *pSearchNode = XList_Search(pList, pData, XEvents_NextTimerSearchCb);
+    xlist_t *pSearchNode = XList_Search(pList, pData, XEvents_NodeSearchCb);
     if (pSearchNode) return XList_InsertPrev(pSearchNode, pNode);
     return XList_InsertTail(pList, pNode);
 }
 
 static xlist_t* XEvents_AddTimerSorted(xlist_t *pList, void *pData)
 {
+    XASSERT_RET((pList != NULL && pData != NULL), NULL);
     xlist_t *pNode = XList_Search(pList, pData, XEvents_TimerSearchCb);
     if (pNode) return XList_PushPrev(pNode, pData, XSTDNON);
     return XList_PushBack(pList, pData, XSTDNON);
