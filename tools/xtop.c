@@ -1900,7 +1900,7 @@ int XTOP_ServerMode(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
     xlogn("Socket started listen to port: %d", pCtx->nPort);
 
     do status = XAPI_Service(&api, 100);
-    while (status == XEVENT_STATUS_SUCCESS);
+    while (status == XEVENTS_SUCCESS);
 
     XAPI_Destroy(&api);
     return XSTDNON;

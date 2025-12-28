@@ -371,7 +371,7 @@ int main(int argc, char* argv[])
 
     xevent_status_t status;
     do status = XAPI_Service(&api, 100);
-    while (status == XEVENT_STATUS_SUCCESS);
+    while (status == XEVENTS_SUCCESS);
 
     XAPI_Destroy(&api);
     return 0;

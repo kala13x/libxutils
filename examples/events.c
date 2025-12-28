@@ -136,7 +136,7 @@ int read_event(xevents_t *pEvents, xevent_data_t *pEvData)
             if (nStatus != XEVENTS_CONTINUE) return nStatus;
 
             xevent_status_t eStatus = XEvents_Modify(pEvents, pEvData, XPOLLOUT);
-            if (eStatus != XEVENT_STATUS_SUCCESS)
+            if (eStatus != XEVENTS_SUCCESS)
             {
                 xloge("%s: %s", XEvents_GetStatusStr(eStatus), XSTRERR);
                 return XEVENTS_DISCONNECT;
@@ -271,7 +271,7 @@ int main(int argc, char* argv[])
 
     /* Create event instance */
     status = XEvents_Create(&events, 0, &socket, event_callback, XTRUE);
-    if (status != XEVENT_STATUS_SUCCESS)
+    if (status != XEVENTS_SUCCESS)
     {
         xloge("%s", XEvents_GetStatusStr(status));
         XSock_Close(&socket);
@@ -288,7 +288,7 @@ int main(int argc, char* argv[])
     }
 
     /* Main service loop */
-    while (status == XEVENT_STATUS_SUCCESS)
+    while (status == XEVENTS_SUCCESS)
         status = XEvents_Service(&events, 100);
 
     XEvents_Destroy(&events);

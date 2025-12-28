@@ -19,35 +19,35 @@ const char *XEvents_GetStatusStr(xevent_status_t status)
 {
     switch(status)
     {
-        case XEVENT_STATUS_EMAX:
-            return "Maximum number of file descriptors reached";
-        case XEVENT_STATUS_ECTL:
+       case XEVENTS_ECTL:
             return "Failed to call poll()/epoll_ctl()";
-        case XEVENT_STATUS_EWAIT:
+        case XEVENTS_EWAIT:
             return "Failed to call poll()/epoll_wait()";
-        case XEVENT_STATUS_ENOCB:
+        case XEVENTS_ENOCB:
             return "Event service callback is not set up";
-        case XEVENT_STATUS_EOMAX:
+        case XEVENTS_EMAX:
+            return "Maximum number of file descriptors reached";
+        case XEVENTS_EOMAX:
             return "Unable to detect max file descriptors for events";
-        case XEVENT_STATUS_EALLOC:
+        case XEVENTS_EALLOC:
             return "Failed to allocate memory for event array";
-        case XEVENT_STATUS_ETIMER:
+        case XEVENTS_ETIMER:
             return "Failed to create or register timer event";
-        case XEVENT_STATUS_EEXTEND:
+        case XEVENTS_EXTEND:
             return "Failed to extend existing timer event";
-        case XEVENT_STATUS_EINTR:
+        case XEVENTS_EINTR:
             return "Event service loop interrupted by signal";
-        case XEVENT_STATUS_BREAK:
+        case XEVENTS_EBREAK:
             return "Requested break from event service loop";
-        case XEVENT_STATUS_ECREATE:
+        case XEVENTS_ECREATE:
             return "Failed to create event instance";
-        case XEVENT_STATUS_EINSERT:
+        case XEVENTS_EINSERT:
             return "Failed to insert event data to hash map";
-        case XEVENT_STATUS_EINVALID:
+        case XEVENTS_INVALID:
             return "Invalid argument for event operation";
-        case XEVENT_STATUS_SUCCESS:
+        case XEVENTS_SUCCESS:
             return "Last operation completed successfully";
-        case XEVENT_STATUS_NONE:
+        case XEVENTS_NONE:
         default: break;
     }
 
@@ -56,11 +56,11 @@ const char *XEvents_GetStatusStr(xevent_status_t status)
 
 static int XEvents_InterruptCb(void *pCtx)
 {
-    XASSERT(pCtx, XEVENT_STATUS_EINVALID);
+    XASSERT(pCtx, XEVENTS_INVALID);
     xevents_t *pEvents = (xevents_t*)pCtx;
 
     int nRetVal = pEvents->eventCallback(pEvents, NULL, XSOCK_INVALID, XEVENT_CB_INTERRUPT);
-    return (nRetVal == XEVENTS_CONTINUE) ? XEVENT_STATUS_SUCCESS : XEVENT_STATUS_EINTR;
+    return (nRetVal == XEVENTS_CONTINUE) ? XEVENTS_SUCCESS : XEVENTS_EINTR;
 }
 
 static void XEvents_ClearCb(void *pCtx, void *pData, int nKey)
@@ -115,7 +115,7 @@ static int XEvents_EventCb(xevents_t *pEvents, xevent_data_t *pData, XSOCKET nFD
 
 int XEvent_WriteByte(xevent_data_t *pData, const char cVal)
 {
-    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
+    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENTS_INVALID);
 
 #ifdef _WIN32
     int nRet = (int)send(pData->nFD, &cVal, sizeof(cVal), XMSG_NOSIGNAL);
@@ -128,7 +128,7 @@ int XEvent_WriteByte(xevent_data_t *pData, const char cVal)
 
 int XEvent_ReadByte(xevent_data_t *pData, char *pVal)
 {
-    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
+    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENTS_INVALID);
     char nVal = 0;
 
 #ifdef _WIN32
@@ -148,7 +148,7 @@ int XEvent_ReadByte(xevent_data_t *pData, char *pVal)
 */
 int XEvent_ReadU64(xevent_data_t *pData, uint64_t *pVal)
 {
-    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
+    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENTS_INVALID);
     uint64_t nVal = 0;
 
 #ifdef _WIN32
@@ -170,7 +170,7 @@ xevent_data_t* XEvents_RegisterEvent(xevents_t *pEvents, void *pCtx, XSOCKET nFd
     XASSERT((pData != NULL), NULL);
 
     xevent_status_t nStatus = XEvents_Add(pEvents, pData, nEvents);
-    XASSERT_CALL((nStatus == XEVENT_STATUS_SUCCESS), free, pData, NULL);
+    XASSERT_CALL((nStatus == XEVENTS_SUCCESS), free, pData, NULL);
 
     pData->nEvents = nEvents;
     return pData;
@@ -178,26 +178,18 @@ xevent_data_t* XEvents_RegisterEvent(xevents_t *pEvents, void *pCtx, XSOCKET nFd
 
 xevent_data_t* XEvents_CreateEvent(xevents_t *pEvents, void *pCtx)
 {
-#ifdef __linux__
     XASSERT((pEvents != NULL), NULL);
+
+#ifdef __linux__
     int nEventFD = eventfd(0, EFD_NONBLOCK);
     XASSERT((nEventFD >= 0), NULL);
 
-    xevent_data_t* pData = XEvents_NewData(pCtx, nEventFD, XEVENT_TYPE_EVENT);
+    xevent_data_t* pData = XEvents_RegisterEvent(pEvents, pCtx, nEventFD, XPOLLIN, XEVENT_TYPE_EVENT);
     XASSERT_CALL((pData != NULL), close, nEventFD, NULL);
-
-    int nStatus = XEvents_Add(pEvents, pData, XPOLLIN);
-    if (nStatus != XEVENT_STATUS_SUCCESS)
-    {
-        close(nEventFD);
-        free(pData);
-        return NULL;
-    }
 
     return pData;
 #else
     // No-op for non-linux systems
-    (void)pEvents;
     (void)pCtx;
     return NULL;
 #endif
@@ -264,22 +256,22 @@ xevent_data_t* XEvents_AddTimerCommon(xevents_t *pEvents, void *pCtx, int nTimeo
 
 xevent_status_t XEvents_ExtendTimerCommon(xevents_t *pEvents, xevent_data_t *pTimer, int nTimeoutMs)
 {
-    XASSERT((pTimer != NULL), XEVENT_STATUS_EINVALID);
-    XASSERT((nTimeoutMs > 0), XEVENT_STATUS_EINVALID);
-    XASSERT((pTimer->nType == XEVENT_TYPE_TIMER), XEVENT_STATUS_EINVALID);
+    XASSERT((pTimer != NULL), XEVENTS_INVALID);
+    XASSERT((nTimeoutMs > 0), XEVENTS_INVALID);
+    XASSERT((pTimer->nType == XEVENT_TYPE_TIMER), XEVENTS_INVALID);
 
     if (pTimer->pTimerNode == NULL)
     {
         pTimer->nTimerValue = XTime_GetMs() + nTimeoutMs;
         pTimer->pTimerNode = XEvents_AddTimerSorted(&pEvents->timerList, pTimer);
-        return (pTimer->pTimerNode == NULL) ? XEVENT_STATUS_EEXTEND : XEVENT_STATUS_SUCCESS;
+        return (pTimer->pTimerNode == NULL) ? XEVENTS_EXTEND : XEVENTS_SUCCESS;
     }
 
     pTimer->nTimerValue = XTime_GetMs() + nTimeoutMs;
     XList_Detach(pTimer->pTimerNode);
 
     xlist_t *pNode = XEvents_AddNodeSorted(&pEvents->timerList, pTimer->pTimerNode);
-    return pNode != NULL ? XEVENT_STATUS_SUCCESS : XEVENT_STATUS_EEXTEND;
+    return (pNode != NULL) ? XEVENTS_SUCCESS : XEVENTS_EXTEND;
 }
 
 int XEvents_TimerServiceCommon(xevents_t *pEvents, uint64_t nNowMs)
@@ -305,7 +297,7 @@ int XEvents_TimerServiceCommon(xevents_t *pEvents, uint64_t nNowMs)
         pTimerData = pNode ? (xevent_data_t*)pNode->data.pData : NULL;
     }
 
-    return pTimerData && pTimerData->nTimerValue ?
+    return pTimerData != NULL && pTimerData->nTimerValue ?
         (int)(pTimerData->nTimerValue - nNowMs) : XSTDNON;
 }
 #else
@@ -326,7 +318,7 @@ xevent_data_t* XEvents_AddTimerLinux(xevents_t *pEvents, void *pContext, int nTi
     XASSERT_CALL((pTimerData != NULL), close, nTimerFD, NULL);
 
     xevent_status_t nStatus = XEvents_Add(pEvents, pTimerData, XPOLLIN);
-    XASSERT_CALL2((nStatus == XEVENT_STATUS_SUCCESS), close, nTimerFD, free, pTimerData, NULL);
+    XASSERT_CALL2((nStatus == XEVENTS_SUCCESS), close, nTimerFD, free, pTimerData, NULL);
 
     pTimerData->nEvents = XPOLLIN;
     return pTimerData;
@@ -334,27 +326,27 @@ xevent_data_t* XEvents_AddTimerLinux(xevents_t *pEvents, void *pContext, int nTi
 
 xevent_status_t XEvents_ExtendTimerLinux(xevents_t *pEvents, xevent_data_t *pTimer, int nTimeoutMs)
 {
-    XASSERT((pTimer != NULL), XEVENT_STATUS_EINVALID);
-    XASSERT((nTimeoutMs > 0), XEVENT_STATUS_EINVALID);
-    XASSERT((pTimer->nType == XEVENT_TYPE_TIMER), XEVENT_STATUS_EINVALID);
+    XASSERT((pTimer != NULL), XEVENTS_INVALID);
+    XASSERT((nTimeoutMs > 0), XEVENTS_INVALID);
+    XASSERT((pTimer->nType == XEVENT_TYPE_TIMER), XEVENTS_INVALID);
 
     struct itimerspec its = {0};
     its.it_value.tv_sec  = nTimeoutMs / 1000;
     its.it_value.tv_nsec = (nTimeoutMs % 1000) * 1000000;
 
     int nRet = timerfd_settime(pTimer->nFD, 0, &its, NULL);
-    XASSERT((nRet == 0), XEVENT_STATUS_EEXTEND);
+    XASSERT((nRet == 0), XEVENTS_EXTEND);
 
     (void)pEvents;
-    return XEVENT_STATUS_SUCCESS;
+    return XEVENTS_SUCCESS;
 }
 
 int XEvents_TimerService(xevents_t *pEvents, xevent_data_t *pData, XSOCKET nFD, uint32_t nEvents)
 {
-    XASSERT((pEvents && pData), XEVENT_STATUS_EINVALID);
+    XASSERT((pEvents && pData), XEVENTS_INVALID);
     XASSERT_RET((pData->nType == XEVENT_TYPE_TIMER), XEVENTS_CONTINUE);
 
-    if ((nEvents & XPOLLIN) && XEvent_ReadU64(pData, NULL) >= 0)
+    if ((nEvents & XPOLLIN) && XEvent_ReadU64(pData, NULL) > 0)
         return XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_TIMEOUT);
 
     XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_ERROR);
@@ -384,7 +376,7 @@ xevent_status_t XEvents_ExtendTimer(xevents_t *pEvents, xevent_data_t *pTimer, i
 
 static int XEvents_ServiceCb(xevents_t *pEvents, xevent_data_t *pData, XSOCKET nFD, uint32_t nEvents)
 {
-    XASSERT((pEvents && pData), XEVENT_STATUS_EINVALID);
+    XASSERT((pEvents && pData), XEVENTS_INVALID);
     if (pData != NULL) pData->nEvents = nEvents;
     int nRetVal = XEVENTS_CONTINUE;
 
@@ -451,8 +443,8 @@ static void XEvents_DestroyMap(xevents_t *pEvents)
 
 xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, xevent_cb_t callBack, xbool_t bUseHash)
 {
-    XASSERT(pEvents, XEVENT_STATUS_EINVALID);
-    XASSERT(callBack, XEVENT_STATUS_ENOCB);
+    XASSERT(pEvents, XEVENTS_INVALID);
+    XASSERT(callBack, XEVENTS_ENOCB);
 
 #ifdef _WIN32
     uint32_t nSysMax = XEVENTS_DEFAULT_FD_MAX;
@@ -463,12 +455,13 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     if (nSysMax && nMax) pEvents->nEventMax = nMax > nSysMax ? nSysMax : nMax;
     else if (nSysMax) pEvents->nEventMax = nSysMax;
     else if (nMax) pEvents->nEventMax = nMax;
-    else return XEVENT_STATUS_EOMAX;
+    else return XEVENTS_EOMAX;
 
     pEvents->eventCallback = callBack;
     pEvents->pUserSpace = pUser;
     pEvents->bUseHash = bUseHash;
     pEvents->nEventCount = 0;
+    pEvents->pEventArray = NULL;
 
 #ifdef _USE_EVENT_LIST
     XList_Init(&pEvents->timerList, NULL, XSTDNON, XEvents_ListClearCb, pEvents);
@@ -477,28 +470,19 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     if (pEvents->bUseHash) XHash_Init(&pEvents->eventsMap, XEvents_ClearCb, pEvents);
 
 #ifdef __linux__
-    pEvents->pEventArray = calloc(pEvents->nEventMax, sizeof(struct epoll_event));
-    if (pEvents->pEventArray == NULL)
-    {
-        XEvents_DestroyMap(pEvents);
-        return XEVENT_STATUS_EALLOC;
-    }
+    struct epoll_event *pEventArray = calloc(pEvents->nEventMax, sizeof(struct epoll_event));
+    XASSERT_CALL((pEventArray != NULL), XEvents_DestroyMap, pEvents, XEVENTS_EALLOC);
 
     pEvents->nEventFd = epoll_create1(0);
-    if (pEvents->nEventFd < 0)
-    {
-        XEvents_DestroyMap(pEvents);
-        free(pEvents->pEventArray);
-        pEvents->pEventArray = NULL;
-        return XEVENT_STATUS_ECREATE;
-    }
+    XASSERT_CALL2((pEvents->nEventFd >= 0),
+        XEvents_DestroyMap, pEvents,
+        free, pEventArray,
+        XEVENTS_ECREATE);
+
+    pEvents->pEventArray = pEventArray;
 #else
     pEvents->pEventArray = calloc(pEvents->nEventMax, sizeof(struct pollfd));
-    if (pEvents->pEventArray == NULL)
-    {
-        XEvents_DestroyMap(pEvents);
-        return XEVENT_STATUS_EALLOC;
-    }
+    XASSERT_CALL((pEvents->pEventArray != NULL), XEvents_DestroyMap, pEvents, XEVENTS_EALLOC);
 
     uint32_t i = 0;
     for (i = 0; i < pEvents->nEventMax; i++)
@@ -509,7 +493,7 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     }
 #endif
 
-    return XEVENT_STATUS_SUCCESS;
+    return XEVENTS_SUCCESS;
 }
 
 void XEvents_Destroy(xevents_t *pEvents)
@@ -541,7 +525,7 @@ void XEvents_Destroy(xevents_t *pEvents)
 xevent_data_t *XEvents_NewData(void *pCtx, XSOCKET nFd, int nType)
 {
     xevent_data_t* pData = (xevent_data_t*)malloc(sizeof(xevent_data_t));
-    if (pData == NULL) return NULL;
+    XASSERT((pData != NULL), NULL);
 
 #ifdef _USE_EVENT_LIST
     pData->nTimerValue = XSTDNON;
@@ -559,22 +543,21 @@ xevent_data_t *XEvents_NewData(void *pCtx, XSOCKET nFd, int nType)
 
 xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvents)
 {
-    XASSERT((pEvents != NULL && pData != NULL), XEVENT_STATUS_EINVALID);
-    XASSERT((pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
+    XASSERT((pEvents != NULL && pData != NULL), XEVENTS_INVALID);
+    XASSERT((pData->nFD != XSOCK_INVALID), XEVENTS_INVALID);
 
 #ifdef __linux__
     struct epoll_event event;
     event.data.ptr = pData;
     event.events = nEvents;
-    if (epoll_ctl(pEvents->nEventFd, EPOLL_CTL_ADD, pData->nFD, &event) < 0) return XEVENT_STATUS_ECTL;
+    if (epoll_ctl(pEvents->nEventFd, EPOLL_CTL_ADD, pData->nFD, &event) < 0) return XEVENTS_ECTL;
 #else
-    if (pEvents->nEventCount >= pEvents->nEventMax) return XEVENT_STATUS_ECTL;
+    if (pEvents->nEventCount >= pEvents->nEventMax) return XEVENTS_ECTL;
     pData->nIndex = pEvents->nEventCount;
     pEvents->pEventArray[pData->nIndex].revents = 0;
     pEvents->pEventArray[pData->nIndex].events = (short)nEvents;
     pEvents->pEventArray[pData->nIndex].fd = pData->nFD;
 #endif
-    pEvents->nEventCount++;
 
     if (pEvents->bUseHash && XHash_Insert(&pEvents->eventsMap, pData, 0, (int)pData->nFD) < 0)
     {
@@ -586,42 +569,47 @@ xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvent
         pEvents->pEventArray[pData->nIndex].fd = XSOCK_INVALID;
         pData->nIndex = -1;
 #endif
-        pEvents->nEventCount--;
-        return XEVENT_STATUS_EINSERT;
+        return XEVENTS_EINSERT;
     }
 
     pData->nEvents = nEvents;
-    return XEVENT_STATUS_SUCCESS;
+    pEvents->nEventCount++;
+
+    return XEVENTS_SUCCESS;
 }
 
 xevent_status_t XEvents_Modify(xevents_t *pEvents, xevent_data_t *pData, int nEvents)
 {
-    XASSERT((pEvents && pData), XEVENT_STATUS_EINVALID);
+    XASSERT((pEvents != NULL), XEVENTS_INVALID);
+    XASSERT((pData != NULL), XEVENTS_INVALID);
+
 #ifdef __linux__
     struct epoll_event event;
     event.data.ptr = pData;
     event.events = nEvents;
-    if (epoll_ctl(pEvents->nEventFd, EPOLL_CTL_MOD, pData->nFD, &event) < 0) return XEVENT_STATUS_ECTL;
+    XASSERT((pData->nFD != XSOCK_INVALID), XEVENTS_ECTL);
+    if (epoll_ctl(pEvents->nEventFd, EPOLL_CTL_MOD, pData->nFD, &event) < 0) return XEVENTS_ECTL;
 #else
-    if (pData->nIndex < 0 && (uint32_t)pData->nIndex >= pEvents->nEventCount) return XEVENT_STATUS_ECTL;
+    XASSERT((pData->nIndex >= 0), XEVENTS_ECTL);
+    XASSERT(((uint32_t)pData->nIndex < pEvents->nEventCount), XEVENTS_ECTL);
     pEvents->pEventArray[pData->nIndex].events = (short)nEvents;
 #endif
 
     pData->nEvents = nEvents;
-    return XEVENT_STATUS_SUCCESS;
+    return XEVENTS_SUCCESS;
 }
 
 xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
 {
-    XASSERT((pEvents != NULL), XEVENT_STATUS_EINVALID);
-    XASSERT_RET((pData != NULL), XEVENT_STATUS_SUCCESS);
+    XASSERT((pEvents != NULL), XEVENTS_INVALID);
+    XASSERT_RET((pData != NULL), XEVENTS_SUCCESS);
     XSTATUS nStatus = XSTDERR;
 
 #ifdef _USE_EVENT_LIST
     if (pData->nType == XEVENT_TYPE_TIMER)
     {
         XList_Unlink(pData->pTimerNode);
-        return XEVENT_STATUS_SUCCESS;
+        return XEVENTS_SUCCESS;
     }
 #endif
 
@@ -647,22 +635,25 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
     }
 #endif
 
-    if (!pEvents->bUseHash || pData->nFD == XSOCK_INVALID ||
-        XHash_Delete(&pEvents->eventsMap, (int)pData->nFD) < 0)
+    if (!pEvents->bUseHash || pData->nFD == XSOCK_INVALID)
         XEvents_ClearCb(pEvents, pData, (int)pData->nFD);
 
-    return (nStatus < 0) ? XEVENT_STATUS_ECTL : XEVENT_STATUS_SUCCESS;
+    if (XHash_Delete(&pEvents->eventsMap, (int)pData->nFD) < 0)
+        XEvents_ClearCb(pEvents, pData, (int)pData->nFD);
+
+    return (nStatus < 0) ? XEVENTS_ECTL : XEVENTS_SUCCESS;
 }
 
 xevent_data_t* XEvents_GetData(xevents_t *pEvents, XSOCKET nFD)
 {
-    XASSERT_RET((pEvents && pEvents->bUseHash && nFD != XSOCK_INVALID), NULL);
+    XASSERT((pEvents != NULL), NULL);
+    XASSERT_RET((pEvents->bUseHash && nFD != XSOCK_INVALID), NULL);
     return (xevent_data_t*)XHash_GetData(&pEvents->eventsMap, (int)nFD);
 }
 
 xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
 {
-    XASSERT(pEvents, XEVENT_STATUS_EINVALID);
+    XASSERT(pEvents, XEVENTS_INVALID);
     int i = 0, nCount = 0, nRet = 0;
     int nTimeout = nTimeoutMs;
 
@@ -680,8 +671,10 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
 #endif
 
     if (errno == EINTR) return XEvents_InterruptCb(pEvents);
-    else if (nCount < 0) return XEVENT_STATUS_EWAIT;
-    else if (!nCount) return XEVENT_STATUS_SUCCESS;
+    if (!nCount) return XEVENTS_SUCCESS;
+
+    XASSERT((nCount > 0), XEVENTS_EWAIT);
+    XASSERT(((uint32_t)nCount <= pEvents->nEventMax), XEVENTS_EWAIT);
 
 #ifdef __linux__
     for (i = 0; i < nCount; i++)
@@ -700,17 +693,17 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
         if (pEvents->pEventArray[i].revents <= 0) continue;
         else if (pEvents->pEventArray[i].fd == XSOCK_INVALID) break;
 
-        int nEvents = pEvents->pEventArray[i].revents;
-        XSOCKET nFD = pEvents->pEventArray[i].fd;
         pEvents->pEventArray[i].revents = 0;
-
+        XSOCKET nFD = pEvents->pEventArray[i].fd;
+        int nEvents = pEvents->pEventArray[i].revents;
         xevent_data_t *pData = XEvents_GetData(pEvents, nFD);
+
         nRet = XEvents_ServiceCb(pEvents, pData, nFD, nEvents);
         if (nRet != XEVENTS_CONTINUE) break;
     }
 #endif
 
     return nRet == XEVENTS_BREAK ?
-            XEVENT_STATUS_BREAK :
-            XEVENT_STATUS_SUCCESS;
+            XEVENTS_EBREAK :
+            XEVENTS_SUCCESS;
 }

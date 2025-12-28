@@ -73,21 +73,21 @@ extern "C" {
 
 // Event status codes
 typedef enum {
-    XEVENT_STATUS_NONE = (int)0,
-    XEVENT_STATUS_ECTL,
-    XEVENT_STATUS_EMAX,
-    XEVENT_STATUS_ENOCB,
-    XEVENT_STATUS_EOMAX,
-    XEVENT_STATUS_EWAIT,
-    XEVENT_STATUS_EINTR,
-    XEVENT_STATUS_EALLOC,
-    XEVENT_STATUS_ETIMER,
-    XEVENT_STATUS_EEXTEND,
-    XEVENT_STATUS_ECREATE,
-    XEVENT_STATUS_EINSERT,
-    XEVENT_STATUS_EINVALID,
-    XEVENT_STATUS_SUCCESS,
-    XEVENT_STATUS_BREAK
+    XEVENTS_NONE = (int)0,
+    XEVENTS_ECTL,
+    XEVENTS_EMAX,
+    XEVENTS_ENOCB,
+    XEVENTS_EOMAX,
+    XEVENTS_EWAIT,
+    XEVENTS_EINTR,
+    XEVENTS_EALLOC,
+    XEVENTS_ETIMER,
+    XEVENTS_EXTEND,
+    XEVENTS_EBREAK,
+    XEVENTS_ECREATE,
+    XEVENTS_EINSERT,
+    XEVENTS_INVALID,
+    XEVENTS_SUCCESS
 } xevent_status_t;
 
 // Event callback types
@@ -141,6 +141,10 @@ typedef struct XEvents {
     struct pollfd*          pEventArray;        /* POLL event array */
 #endif
 
+#ifdef _USE_EVENT_LIST
+    xlist_t                 timerList;          /* Linked list for timer events */
+#endif
+
     xevent_cb_t             eventCallback;      /* Service callback */
     void*                   pUserSpace;         /* User space pointer */
     uint32_t                nEventCount;        /* Number of event fds in array */
@@ -148,10 +152,6 @@ typedef struct XEvents {
 
     xbool_t                 bUseHash;           /* Flag to enable/disable hash map usage*/
     xhash_t                 eventsMap;          /* Hash map for events and related data */
-
-#ifdef _USE_EVENT_LIST
-    xlist_t                 timerList;          /* Linked list for timer events */
-#endif
 } xevents_t;
 
 const char *XEvents_GetStatusStr(xevent_status_t status);

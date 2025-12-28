@@ -266,7 +266,7 @@ XSTATUS XAPI_ExtendTimer(xapi_data_t *pData, int nTimeoutMs)
     xapi_t *pApi = pData->pApi;
 
     xevent_status_t eStatus = XEvents_ExtendTimer(&pApi->events, pTimer, nTimeoutMs);
-    if (eStatus != XEVENT_STATUS_SUCCESS)
+    if (eStatus != XEVENTS_SUCCESS)
     {
         XAPI_ErrorCb(pApi, pData, XAPI_EVENT, eStatus);
         return XSTDERR;
@@ -289,7 +289,7 @@ XSTATUS XAPI_AddTimer(xapi_data_t *pData, int nTimeoutMs)
     xevent_data_t *pTimerData = XEvents_AddTimer(pEvents, pData, nTimeoutMs);
     if (pTimerData == NULL)
     {
-        XAPI_ErrorCb(pApi, pData, XAPI_EVENT, XEVENT_STATUS_ETIMER);
+        XAPI_ErrorCb(pApi, pData, XAPI_EVENT, XEVENTS_ETIMER);
         return XSTDERR;
     }
 
@@ -309,7 +309,7 @@ XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
     xevent_status_t eStatus;
     eStatus = XEvents_Modify(&pApi->events, pEvData, nEvents);
 
-    if (eStatus != XEVENT_STATUS_SUCCESS)
+    if (eStatus != XEVENTS_SUCCESS)
     {
         XAPI_ErrorCb(pApi, pData, XAPI_EVENT, eStatus);
         return XSTDERR;
@@ -1219,7 +1219,7 @@ xevents_t* XAPI_GetOrCreateEvents(xapi_t *pApi)
     status = XEvents_Create(pEvents, XSTDNON, pApi,
              XAPI_EventCallback, pApi->bUseHashMap);
 
-    if (status != XEVENT_STATUS_SUCCESS)
+    if (status != XEVENTS_SUCCESS)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_EVENT, status);
         return NULL;
@@ -1258,8 +1258,8 @@ void XAPI_Destroy(xapi_t *pApi)
 
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
 {
-    XASSERT((pApi != NULL), XEVENT_STATUS_EINVALID);
-    XASSERT(pApi->bHaveEvents, XEVENT_STATUS_EINVALID);
+    XASSERT((pApi != NULL), XEVENTS_INVALID);
+    XASSERT(pApi->bHaveEvents, XEVENTS_INVALID);
 
     xevents_t *pEvents = &pApi->events;
     return XEvents_Service(pEvents, nTimeoutMs);

@@ -204,7 +204,7 @@ int main(int argc, char* argv[])
     while (!g_nInterrupted)
     {
         xevent_status_t status = XAPI_Service(&api, 100);
-        if (status != XEVENT_STATUS_SUCCESS) break;
+        if (status != XEVENTS_SUCCESS) break;
 
         // Manualy break if no more events
         if (!XAPI_GetEventCount(&api)) break;
