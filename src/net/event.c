@@ -92,7 +92,6 @@ static void XEvents_ClearCb(void *pCtx, void *pData, int nKey)
     }
 }
 
-
 static int XEvents_EventCb(xevents_t *pEvents, xevent_data_t *pData, XSOCKET nFD, xevent_cb_type_t nReason)
 {
     int nRetVal = pEvents->eventCallback(pEvents, pData, nFD, nReason);
@@ -704,6 +703,6 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
 #endif
 
     return nRet == XEVENTS_BREAK ?
-            XEVENTS_EBREAK :
-            XEVENTS_SUCCESS;
+        XEVENTS_EBREAK :
+        XEVENTS_SUCCESS;
 }

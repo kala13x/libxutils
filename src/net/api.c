@@ -233,10 +233,9 @@ XSTATUS XAPI_DeleteTimer(xapi_data_t *pData)
 
     xapi_t *pApi = pData->pApi;
     xevents_t *pEvents = &pApi->events;
-
     xevent_data_t *pTimer = pData->pTimer;
-    pTimer->pContext = NULL;
 
+    pTimer->pContext = NULL;
     XEvents_Delete(pEvents, pTimer);
     pData->pTimer = NULL;
 
@@ -250,8 +249,9 @@ XSTATUS XAPI_Disconnect(xapi_data_t *pData)
 
     xapi_t *pApi = pData->pApi;
     xevents_t *pEvents = &pApi->events;
-
     xevent_data_t *pEvData = pData->pEvData;
+
+    XAPI_DeleteTimer(pData);
     XEvents_Delete(pEvents, pEvData);
 
     return XSTDOK;
