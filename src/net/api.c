@@ -265,7 +265,7 @@ XSTATUS XAPI_ExtendTimer(xapi_data_t *pData, int nTimeoutMs)
     xevent_data_t *pTimer = pData->pTimer;
     xapi_t *pApi = pData->pApi;
 
-    xevent_status_t eStatus = XEvent_ExtendTimer(pTimer, nTimeoutMs);
+    xevent_status_t eStatus = XEvents_ExtendTimer(&pApi->events, pTimer, nTimeoutMs);
     if (eStatus != XEVENT_STATUS_SUCCESS)
     {
         XAPI_ErrorCb(pApi, pData, XAPI_EVENT, eStatus);
@@ -729,7 +729,7 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_data_t *pApiData)
         const char *pUpgrade = XHTTP_GetHeader(&handle, "Upgrade");
         const char *pSecKey = XHTTP_GetHeader(&handle, "Sec-WebSocket-Accept");
 
-        if (!xstrused(pUpgrade) || strncmp(pUpgrade, "websocket", 9))
+        if (!xstrused(pUpgrade) || !xstrncmp(pUpgrade, "websocket", 9))
         {
             XAPI_ErrorCb(pApi, pApiData, XAPI_WS, XWS_INVALID_RESPONSE);
             XHTTP_Clear(&handle);
@@ -745,7 +745,7 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_data_t *pApiData)
                 return XEVENTS_DISCONNECT;
             }
 
-            if (strncmp(pLocalKey, pSecKey, strlen(pLocalKey)))
+            if (!xstrncmp(pLocalKey, pSecKey, strlen(pLocalKey)))
             {
                 XAPI_ErrorCb(pApi, pApiData, XAPI_WS, XWS_INVALID_SEC_KEY);
                 XHTTP_Clear(&handle);

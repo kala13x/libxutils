@@ -2034,9 +2034,7 @@ int main(int argc, char *argv[])
     xlog_timing(XLOG_TIME);
     xlog_indent(XTRUE);
 
-    int nSignals[2];
-    nSignals[0] = SIGTERM;
-    nSignals[1] = SIGINT;
+    int nSignals[2] = { SIGTERM, SIGINT };
     XSig_Register(nSignals, 2, XTOP_SignalCallback);
 
     if (!ctx.bClient)

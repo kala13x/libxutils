@@ -54,7 +54,7 @@ xhash_pair_t* XHash_NewPair(void *pData, size_t nSize, int nKey)
     return pPair;
 }
 
-int XHash_Init(xhash_t *pHash, xhash_clearcb_t clearCb, void *pCtx)
+void XHash_Init(xhash_t *pHash, xhash_clearcb_t clearCb, void *pCtx)
 {
     pHash->pUserContext = pCtx;
     pHash->clearCb = clearCb;
@@ -66,8 +66,6 @@ int XHash_Init(xhash_t *pHash, xhash_clearcb_t clearCb, void *pCtx)
         xlist_t *pTable = (xlist_t*)&pHash->tables[i];
         XList_Init(pTable, NULL, 0, XHash_ClearCb, pHash);
     }
-
-    return XSTDOK;
 }
 
 void XHash_Destroy(xhash_t *pHash)

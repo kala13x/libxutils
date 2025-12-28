@@ -375,6 +375,14 @@ uint64_t XTime_GetU64(void)
     return xtime.uTime;
 }
 
+uint64_t XTime_GetMs(void)
+{
+    xtime_spec_t now;
+    XTime_GetClock(&now);
+    uint64_t nTimeStamp = now.nNanoSec / 1000000;
+    return (uint64_t)now.nSec * 1000 + nTimeStamp;
+}
+
 uint64_t XTime_Serialized(void)
 {
     xtime_t xtime;
