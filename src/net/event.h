@@ -39,23 +39,23 @@ extern "C" {
 
 // Event flags compatibility macros
 #ifdef __linux__
-#define XPOLLRDHUP  EPOLLRDHUP
-#define XPOLLHUP    EPOLLHUP
-#define XPOLLERR    EPOLLERR
-#define XPOLLPRI    EPOLLPRI
-#define XPOLLOUT    EPOLLOUT
-#define XPOLLIN     EPOLLIN
+#define XPOLLRDHUP              EPOLLRDHUP
+#define XPOLLHUP                EPOLLHUP
+#define XPOLLERR                EPOLLERR
+#define XPOLLPRI                EPOLLPRI
+#define XPOLLOUT                EPOLLOUT
+#define XPOLLIN                 EPOLLIN
 #else
 #ifdef POLLRDHUP
-#define XPOLLRDHUP  POLLRDHUP
+#define XPOLLRDHUP              POLLRDHUP
 #endif
-#define XPOLLHUP    POLLHUP
-#define XPOLLERR    POLLERR
-#define XPOLLPRI    POLLPRI
-#define XPOLLOUT    POLLOUT
-#define XPOLLIN     POLLIN
+#define XPOLLHUP                POLLHUP
+#define XPOLLERR                POLLERR
+#define XPOLLPRI                POLLPRI
+#define XPOLLOUT                POLLOUT
+#define XPOLLIN                 POLLIN
 #endif
-#define XPOLLIO     (XPOLLIN | XPOLLOUT)
+#define XPOLLIO                 (XPOLLIN | XPOLLOUT)
 
 // Event service return codes
 #define XEVENTS_DISCONNECT      -1
@@ -123,9 +123,9 @@ typedef struct XEventData {
     uint64_t nTimerValue;
     xlist_t *pTimerNode;
 #endif
+    void *pContext;
     uint32_t nEvents;
     xbool_t bIsOpen;
-    void *pContext;
     XSOCKET nFD;
     int nIndex;
     int nType;
