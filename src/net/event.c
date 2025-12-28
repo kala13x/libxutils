@@ -113,6 +113,69 @@ static int XEvents_EventCb(xevents_t *pEvents, xevent_data_t *pData, XSOCKET nFD
     return nRetVal;
 }
 
+int XEvent_WriteByte(xevent_data_t *pData, const char cVal)
+{
+    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
+
+#ifdef _WIN32
+    int nRet = (int)send(pData->nFD, &cVal, sizeof(cVal), XMSG_NOSIGNAL);
+#else
+    int nRet = (int)write(pData->nFD, &cVal, sizeof(char));
+#endif
+
+    return nRet;
+}
+
+int XEvent_ReadByte(xevent_data_t *pData, char *pVal)
+{
+    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
+    char nVal = 0;
+
+#ifdef _WIN32
+    int nRet = (int)recv(pData->nFD, (char*)&nVal, sizeof(char), XMSG_NOSIGNAL);
+#else
+    int nRet = (int)read(pData->nFD, &nVal, sizeof(char));
+#endif
+
+    if (nRet > 0 && pVal != NULL) *pVal = nVal;
+    return nRet;
+}
+
+/*
+    Note: This function is primarily used for reading timerfd values on Linux.
+    On other platforms, it can be used for reading uint64_t values from any fd,
+    but note that reading uint64_t is atomic operation only on Linux timerfds.
+*/
+int XEvent_ReadU64(xevent_data_t *pData, uint64_t *pVal)
+{
+    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
+    uint64_t nVal = 0;
+
+#ifdef _WIN32
+    int nRet = (int)recv(pData->nFD, (char*)&nVal, sizeof(uint64_t), XMSG_NOSIGNAL);
+#else
+    int nRet = (int)read(pData->nFD, &nVal, sizeof(uint64_t));
+#endif
+
+    if (nRet > 0 && pVal != NULL) *pVal = nVal;
+    return nRet;
+}
+
+xevent_data_t* XEvents_RegisterEvent(xevents_t *pEvents, void *pCtx, XSOCKET nFd, int nEvents, int nType)
+{
+    XASSERT((pEvents != NULL), NULL);
+    XASSERT((nFd != XSOCK_INVALID), NULL);
+
+    xevent_data_t* pData = XEvents_NewData(pCtx, nFd, nType);
+    XASSERT((pData != NULL), NULL);
+
+    xevent_status_t nStatus = XEvents_Add(pEvents, pData, nEvents);
+    XASSERT_CALL((nStatus == XEVENT_STATUS_SUCCESS), free, pData, NULL);
+
+    pData->nEvents = nEvents;
+    return pData;
+}
+
 xevent_data_t* XEvents_CreateEvent(xevents_t *pEvents, void *pCtx)
 {
 #ifdef __linux__
@@ -529,69 +592,6 @@ xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvent
 
     pData->nEvents = nEvents;
     return XEVENT_STATUS_SUCCESS;
-}
-
-xevent_data_t* XEvents_RegisterEvent(xevents_t *pEvents, void *pCtx, XSOCKET nFd, int nEvents, int nType)
-{
-    XASSERT((pEvents != NULL), NULL);
-    XASSERT((nFd != XSOCK_INVALID), NULL);
-
-    xevent_data_t* pData = XEvents_NewData(pCtx, nFd, nType);
-    XASSERT((pData != NULL), NULL);
-
-    xevent_status_t nStatus = XEvents_Add(pEvents, pData, nEvents);
-    XASSERT_CALL((nStatus == XEVENT_STATUS_SUCCESS), free, pData, NULL);
-
-    pData->nEvents = nEvents;
-    return pData;
-}
-
-int XEvent_WriteByte(xevent_data_t *pData, const char cVal)
-{
-    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
-
-#ifdef _WIN32
-    int nRet = (int)send(pData->nFD, &cVal, sizeof(cVal), XMSG_NOSIGNAL);
-#else
-    int nRet = (int)write(pData->nFD, &cVal, sizeof(char));
-#endif
-
-    return nRet;
-}
-
-int XEvent_ReadByte(xevent_data_t *pData, char *pVal)
-{
-    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
-    char nVal = 0;
-
-#ifdef _WIN32
-    int nRet = (int)recv(pData->nFD, (char*)&nVal, sizeof(char), XMSG_NOSIGNAL);
-#else
-    int nRet = (int)read(pData->nFD, &nVal, sizeof(char));
-#endif
-
-    if (nRet > 0 && pVal != NULL) *pVal = nVal;
-    return nRet;
-}
-
-/*
-    Note: This function is primarily used for reading timerfd values on Linux.
-    On other platforms, it can be used for reading uint64_t values from any fd,
-    but note that reading uint64_t is atomic operation only on Linux timerfds.
-*/
-int XEvent_ReadU64(xevent_data_t *pData, uint64_t *pVal)
-{
-    XASSERT((pData && pData->nFD != XSOCK_INVALID), XEVENT_STATUS_EINVALID);
-    uint64_t nVal = 0;
-
-#ifdef _WIN32
-    int nRet = (int)recv(pData->nFD, (char*)&nVal, sizeof(uint64_t), XMSG_NOSIGNAL);
-#else
-    int nRet = (int)read(pData->nFD, &nVal, sizeof(uint64_t));
-#endif
-
-    if (nRet > 0 && pVal != NULL) *pVal = nVal;
-    return nRet;
 }
 
 xevent_status_t XEvents_Modify(xevents_t *pEvents, xevent_data_t *pData, int nEvents)
