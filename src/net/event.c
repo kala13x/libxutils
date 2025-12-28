@@ -640,10 +640,8 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
     }
 #endif
 
-    if (!pEvents->bUseHash || pData->nFD == XSOCK_INVALID)
-        XEvents_ClearCb(pEvents, pData, (int)pData->nFD);
-
-    if (XHash_Delete(&pEvents->eventsMap, (int)pData->nFD) < 0)
+    if (!pEvents->bUseHash || pData->nFD == XSOCK_INVALID ||
+        XHash_Delete(&pEvents->eventsMap, (int)pData->nFD) < 0)
         XEvents_ClearCb(pEvents, pData, (int)pData->nFD);
 
     return (nStatus < 0) ? XEVENTS_ECTL : XEVENTS_SUCCESS;
