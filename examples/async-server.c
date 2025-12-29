@@ -39,11 +39,12 @@ int handle_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
+    int nID = pData ? (int)pData->nID : XSTDERR;
 
     if (pCtx->eCbType == XAPI_CB_STATUS)
-        xlogn("%s: fd(%d)", pStr, nFD);
+        xlogn("%s: id(%d), fd(%d)", pStr, nID, nFD);
     else if (pCtx->eCbType == XAPI_CB_ERROR)
-        xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
+        xloge("%s: id(%d), fd(%d), errno(%d)", pStr, nID, nFD, errno);
 
     if (pCtx->nStatus == XAPI_DESTROY)
     {
@@ -66,7 +67,7 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XByteBuffer_AddBuff(&pData->txBuffer, pBuffer);
 
     // Extend timeout for another 20 seconds
-    XAPI_ExtendTimer(pData, 20000);
+    XAPI_AddTimer(pData, 20000);
 
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
@@ -74,7 +75,7 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
 int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     xlogn("Accepted connection: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
-    XAPI_AddTimer(pData, 20000); // 20 seconds timeout
+    XAPI_AddTimer(pData, 20000); // Set 20 seconds timeout
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 

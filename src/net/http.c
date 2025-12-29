@@ -80,33 +80,33 @@ const char* XHTTP_GetStatusStr(xhttp_status_t eStatus)
 {
     switch (eStatus)
     {
-        case XHTTP_ERRINIT:
+        case XHTTP_EINIT:
             return "Failed to init HTTP request";
-        case XHTTP_ERRASSEMBLE:
+        case XHTTP_EASSEMBLE:
             return "Failed to assemble HTTP request";
-        case XHTTP_ERRCONNECT:
+        case XHTTP_ECONNECT:
             return "Failed to connect remote server";
-        case XHTTP_ERRRESOLVE:
+        case XHTTP_ERESOLVE:
             return "Failed to resolve remote address";
-        case XHTTP_ERRAUTH:
+        case XHTTP_EAUTH:
             return "Failed to setup auth basic header";
-        case XHTTP_ERRLINK:
+        case XHTTP_ELINK:
             return "Invalid or unsupported address (link)";
-        case XHTTP_ERRPROTO:
+        case XHTTP_EPROTO:
             return "Invalid or unsupported protocol in link";
-        case XHTTP_ERRWRITE:
+        case XHTTP_EWRITE:
             return "Failed to send request to remote server";
-        case XHTTP_ERRREAD:
+        case XHTTP_EREAD:
             return "Failed to read HTTP packet from the network";
-        case XHTTP_ERRTIMEO:
+        case XHTTP_ETIMEO:
             return "Failed to set receive timeout on the socket";
-        case XHTTP_ERRSETHDR:
+        case XHTTP_ESETHDR:
             return "Failed to append header field to the request";
-        case XHTTP_ERREXISTS:
+        case XHTTP_EEXISTS:
             return "Header already exists in the HTTP header table";
-        case XHTTP_ERRALLOC:
+        case XHTTP_EALLOC:
             return "Failed to allocate memory for HTTP packet buffer";
-        case XHTTP_ERRFDMODE:
+        case XHTTP_EFDMODE:
             return "Non-blocking file descriptor is not allowed for this operation";
         case XHTTP_BIGHDR:
             return "HTTP header is not detected in the bytes of active limit";
@@ -819,7 +819,7 @@ xhttp_status_t XHTTP_Parse(xhttp_t *pHttp)
         return XHTTP_StatusCb(pHttp, XHTTP_INVALID);
 
     if (XHTTP_ParseHeaders(pHttp) == XSTDERR)
-        return XHTTP_StatusCb(pHttp, XHTTP_ERRALLOC);
+        return XHTTP_StatusCb(pHttp, XHTTP_EALLOC);
 
     pHttp->nContentLength = XHTTP_GetContentLength(pHttp);
     pHttp->nKeepAlive = XHTTP_GetKeepAlive(pHttp);
@@ -835,7 +835,7 @@ xhttp_status_t XHTTP_Parse(xhttp_t *pHttp)
 xhttp_status_t XHTTP_ParseData(xhttp_t *pHttp, uint8_t* pData, size_t nSize)
 {
     int nStatus = XHTTP_InitParser(pHttp, pData, nSize);
-    return nStatus > 0 ? XHTTP_Parse(pHttp) : XHTTP_ERRALLOC;
+    return nStatus > 0 ? XHTTP_Parse(pHttp) : XHTTP_EALLOC;
 }
 
 xhttp_status_t XHTTP_ParseBuff(xhttp_t *pHttp, xbyte_buffer_t *pBuffer)
@@ -854,10 +854,10 @@ xhttp_status_t XHTTP_ReadHeader(xhttp_t *pHttp, xsock_t *pSock)
     while (eStatus == XHTTP_INCOMPLETE)
     {
         int nBytes = XSock_Read(pSock, sBuffer, sizeof(sBuffer));
-        if (nBytes <= 0) return XHTTP_StatusCb(pHttp, XHTTP_ERRREAD);
+        if (nBytes <= 0) return XHTTP_StatusCb(pHttp, XHTTP_EREAD);
 
         if (XByteBuffer_Add(pBuffer, sBuffer, nBytes) <= 0)
-            return XHTTP_StatusCb(pHttp, XHTTP_ERRALLOC);
+            return XHTTP_StatusCb(pHttp, XHTTP_EALLOC);
 
         eStatus = XHTTP_Parse(pHttp);
         if (eStatus < XHTTP_TERMINATED) return eStatus;
@@ -910,7 +910,7 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
         while (nBodySize < pHttp->nContentLength)
         {
             nBytes = XSock_Read(pSock, sBuffer, sizeof(sBuffer));
-            if (nBytes <= 0) return XHTTP_StatusCb(pHttp, XHTTP_ERRREAD);
+            if (nBytes <= 0) return XHTTP_StatusCb(pHttp, XHTTP_EREAD);
 
             nRetVal = XHTTP_Callback(pHttp, XHTTP_READ_CNT, sBuffer, nBytes);
             if (nRetVal == XSTDERR) return XHTTP_TERMINATED;
@@ -927,7 +927,7 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
             }
 
             if (XByteBuffer_Add(pBuffer, sBuffer, (size_t)nBytes) <= 0)
-                return XHTTP_StatusCb(pHttp, XHTTP_ERRALLOC);
+                return XHTTP_StatusCb(pHttp, XHTTP_EALLOC);
 
             nBodySize = XHTTP_GetBodySize(pHttp);
             if (pSock->eStatus != XSOCK_ERR_NONE || XSock_IsNB(pSock)) break;
@@ -956,7 +956,7 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
                 (pHttp->nContentLength == XHTTP_GetBodySize(pHttp)) ||
                 XSock_Status(pSock) == XSOCK_EOF) return XHTTP_COMPLETE;
 
-            return XHTTP_StatusCb(pHttp, XHTTP_ERRREAD);
+            return XHTTP_StatusCb(pHttp, XHTTP_EREAD);
         }
 
         nRetVal = XHTTP_Callback(pHttp, XHTTP_READ_CNT, sBuffer, nBytes);
@@ -973,7 +973,7 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
         }
 
         if (XByteBuffer_Add(pBuffer, sBuffer, (size_t)nBytes) <= 0)
-            return XHTTP_StatusCb(pHttp, XHTTP_ERRALLOC);
+            return XHTTP_StatusCb(pHttp, XHTTP_EALLOC);
 
         if (pSock->eStatus != XSOCK_ERR_NONE || XSock_IsNB(pSock)) break;
         else if (pHttp->nContentMax && pBuffer->nUsed >= pHttp->nContentMax) 
@@ -998,12 +998,12 @@ xhttp_status_t XHTTP_Receive(xhttp_t *pHttp, xsock_t *pSock)
 
 xhttp_status_t XHTTP_Exchange(xhttp_t *pRequest, xhttp_t *pResponse, xsock_t *pSock)
 {
-    if (XSock_IsNB(pSock)) return XHTTP_StatusCb(pRequest, XHTTP_ERRFDMODE);
+    if (XSock_IsNB(pSock)) return XHTTP_StatusCb(pRequest, XHTTP_EFDMODE);
     XHTTP_Init(pResponse, XHTTP_DUMMY, XSTDNON);
     xbyte_buffer_t *pBuff = &pRequest->rawData;
 
     int nStatus = XSock_WriteBuff(pSock, pBuff);
-    if (nStatus <= 0) return XHTTP_StatusCb(pRequest, XHTTP_ERRWRITE);
+    if (nStatus <= 0) return XHTTP_StatusCb(pRequest, XHTTP_EWRITE);
 
     nStatus = XHTTP_Callback(
         pRequest,
@@ -1030,7 +1030,7 @@ xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink)
     XSock_Init(pSock, XSTDNON, XSOCK_INVALID);
 
     if (!xstrused(pLink->sProtocol)) xstrncpy(pLink->sProtocol, sizeof(pLink->sProtocol), "http");
-    if (strncmp(pLink->sProtocol, "http", 4)) return XHTTP_StatusCb(pHttp, XHTTP_ERRPROTO);
+    if (strncmp(pLink->sProtocol, "http", 4)) return XHTTP_StatusCb(pHttp, XHTTP_EPROTO);
 
     uint32_t nFlags = XSOCK_CLIENT;
     if (!strncmp(pLink->sProtocol, "https", 5))
@@ -1051,7 +1051,7 @@ xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink)
         }
 
         if (XSock_GetAddrInfo(&addrInfo, pLink->sHost) < 0)
-            return XHTTP_StatusCb(pHttp, XHTTP_ERRRESOLVE);
+            return XHTTP_StatusCb(pHttp, XHTTP_ERESOLVE);
 
         if (!addrInfo.nPort) addrInfo.nPort = pLink->nPort;
         nFlags |= XSOCK_TCP;
@@ -1063,7 +1063,7 @@ xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink)
     }
 
     int nStatus = XHTTP_SetAuthBasic(pHttp, pLink->sUser, pLink->sPass);
-    if (nStatus < 0) return XHTTP_StatusCb(pHttp, XHTTP_ERRAUTH);
+    if (nStatus < 0) return XHTTP_StatusCb(pHttp, XHTTP_EAUTH);
 
     if (XHTTP_CHECK_FLAG(pHttp->nCbTypes, XHTTP_STATUS) && pHttp->callback != NULL)
     {
@@ -1090,12 +1090,12 @@ xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink)
     }
 
     if (XSock_Open(pSock, nFlags, &addrInfo) == XSOCK_INVALID)
-        return XHTTP_StatusCb(pHttp, XHTTP_ERRCONNECT);
+        return XHTTP_StatusCb(pHttp, XHTTP_ECONNECT);
 
     if (pHttp->nTimeout)
     {
         XSOCKET nFD = XSock_TimeOutR(pSock, (int)pHttp->nTimeout, 0);
-        if (nFD == XSOCK_INVALID) return XHTTP_StatusCb(pHttp, XHTTP_ERRTIMEO);
+        if (nFD == XSOCK_INVALID) return XHTTP_StatusCb(pHttp, XHTTP_ETIMEO);
     }
 
     return XHTTP_CONNECTED;
@@ -1121,18 +1121,18 @@ xhttp_status_t XHTTP_EasyExchange(xhttp_t *pRequest, xhttp_t *pResponse, const c
 {
     xlink_t link;
     int nStatus = XLink_Parse(&link, pLink);
-    if (nStatus < 0) return XHTTP_StatusCb(pRequest, XHTTP_ERRLINK);
+    if (nStatus < 0) return XHTTP_StatusCb(pRequest, XHTTP_ELINK);
     return XHTTP_LinkExchange(pRequest, pResponse, &link);
 }
 
 xhttp_status_t XHTTP_Perform(xhttp_t *pHttp, xsock_t *pSock, const uint8_t *pBody, size_t nLength)
 {
-    if (XSock_IsNB(pSock)) return XHTTP_StatusCb(pHttp, XHTTP_ERRFDMODE);
+    if (XSock_IsNB(pSock)) return XHTTP_StatusCb(pHttp, XHTTP_EFDMODE);
     xbyte_buffer_t *pBuff = XHTTP_Assemble(pHttp, pBody, nLength);
-    if (pBuff == NULL) return XHTTP_StatusCb(pHttp, XHTTP_ERRASSEMBLE);
+    if (pBuff == NULL) return XHTTP_StatusCb(pHttp, XHTTP_EASSEMBLE);
 
     int nStatus = XSock_WriteBuff(pSock, pBuff);
-    if (nStatus <= 0) return XHTTP_StatusCb(pHttp, XHTTP_ERRWRITE);
+    if (nStatus <= 0) return XHTTP_StatusCb(pHttp, XHTTP_EWRITE);
 
     nStatus = XHTTP_Callback(
         pHttp,
@@ -1167,7 +1167,7 @@ xhttp_status_t XHTTP_LinkPerform(xhttp_t *pHttp, xlink_t *pLink, const uint8_t *
 xhttp_status_t XHTTP_EasyPerform(xhttp_t *pHttp, const char *pLink, const uint8_t *pBody, size_t nLength)
 {
     xlink_t link;
-    if (XLink_Parse(&link, pLink) < 0) return XHTTP_ERRLINK;
+    if (XLink_Parse(&link, pLink) < 0) return XHTTP_ELINK;
     return XHTTP_LinkPerform(pHttp, &link, pBody, nLength);
 }
 
@@ -1176,16 +1176,16 @@ xhttp_status_t XHTTP_SoloPerform(xhttp_t *pHttp, xhttp_method_t eMethod, const c
     xlink_t link;
     const char *pVer = XUtils_VersionShort();
 
-    if (XLink_Parse(&link, pLink) < 0) return XHTTP_ERRLINK;
-    if (XHTTP_InitRequest(pHttp, eMethod, link.sUri, NULL) < 0) return XHTTP_ERRINIT;
+    if (XLink_Parse(&link, pLink) < 0) return XHTTP_ELINK;
+    if (XHTTP_InitRequest(pHttp, eMethod, link.sUri, NULL) < 0) return XHTTP_EINIT;
 
     int nStatus = XHTTP_AddHeader(pHttp, "Host", "%s", link.sAddr);
-    if (nStatus == XSTDERR) return XHTTP_ERRSETHDR;
-    else if (nStatus == XSTDNON) return XHTTP_ERREXISTS;
+    if (nStatus == XSTDERR) return XHTTP_ESETHDR;
+    else if (nStatus == XSTDNON) return XHTTP_EEXISTS;
 
     nStatus = XHTTP_AddHeader(pHttp, "User-Agent", "xutils/%s", pVer);
-    if (nStatus == XSTDERR) return XHTTP_ERRSETHDR;
-    else if (nStatus == XSTDNON) return XHTTP_ERREXISTS;
+    if (nStatus == XSTDERR) return XHTTP_ESETHDR;
+    else if (nStatus == XSTDNON) return XHTTP_EEXISTS;
 
     return XHTTP_LinkPerform(pHttp, &link, pBody, nLength);
 }

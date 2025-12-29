@@ -126,7 +126,7 @@ void XPacket_ParseHeader(xpacket_header_t *pHeader, xjson_obj_t *pHeaderObj)
         if (xstrused(pPayloadType)) xstrncpy(pHeader->sPayloadType, sizeof(pHeader->sPayloadType), pPayloadType);
 
         pHeader->nPayloadSize = XJSON_GetU32(XJSON_GetObject(pPayloadObj, "payloadSize"));
-        pHeader->nCrypted = XJSON_GetBool(XJSON_GetObject(pPayloadObj, "crypted"));
+        pHeader->bCrypted = XJSON_GetBool(XJSON_GetObject(pPayloadObj, "crypted"));
         pHeader->nSSRCHash = XJSON_GetU32(XJSON_GetObject(pPayloadObj, "ssrcHash"));
     }
 
@@ -200,7 +200,7 @@ xpacket_status_t XPacket_UpdateHeader(xpacket_t *pPacket)
         }
 
         if ((nHaveDataType && XJSON_AddString(pPayloadObj, "payloadType", pHeader->sPayloadType) != XJSON_ERR_NONE) ||
-            (pHeader->nCrypted && XJSON_AddBool(pPayloadObj, "crypted", pHeader->nCrypted) != XJSON_ERR_NONE) ||
+            (pHeader->bCrypted && XJSON_AddBool(pPayloadObj, "crypted", pHeader->bCrypted) != XJSON_ERR_NONE) ||
             XJSON_AddU32(pPayloadObj, "payloadSize", pHeader->nPayloadSize) != XJSON_ERR_NONE)
         {
             pHeader->eType = XPACKET_TYPE_ERROR;

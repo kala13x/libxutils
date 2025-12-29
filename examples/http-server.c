@@ -15,6 +15,8 @@
 #include "xfs.h"
 #include "api.h"
 
+#define XHTTP_TIMEOUT_MS    30000  // 30 seconds
+
 static int g_nInterrupted = 0;
 extern char *optarg;
 
@@ -29,21 +31,30 @@ typedef struct {
     xbool_t bSSL;
 } xhttps_args_t;
 
-void signal_callback(int sig)
+static void signal_callback(int sig)
 {
     if (sig == SIGINT) printf("\n");
     g_nInterrupted = 1;
 }
 
-int handle_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
+static int handle_error(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
+    int nID = pData ? (int)pData->nID : XSTDERR;
 
-    if (pCtx->eCbType == XAPI_CB_STATUS)
-        xlogn("%s: fd(%d)", pStr, nFD);
-    else if (pCtx->eCbType == XAPI_CB_ERROR)
-        xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
+    xloge("%s: id(%d), fd(%d), errno(%d)",
+        pStr, nID, nFD, errno);
+
+    return XAPI_CONTINUE;
+}
+
+static int handle_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
+{
+    const char *pStr = XAPI_GetStatus(pCtx);
+    int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
+    int nID = pData ? (int)pData->nID : XSTDERR;
+    xlogn("%s: id(%d), fd(%d)", pStr, nID, nFD);
 
     if (pCtx->nStatus == XAPI_DESTROY)
     {
@@ -55,12 +66,12 @@ int handle_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_CONTINUE;
 }
 
-int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
+static int handle_request(xapi_data_t *pData)
 {
     xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
 
-    xlogn("Received request: fd(%d), buff(%zu)",
-        (int)pData->sock.nFD, pHandle->rawData.nUsed);
+    xlogn("Received request: id(%u), fd(%d), buff(%zu)",
+        pData->nID, (int)pData->sock.nFD, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
     if (pHeader != NULL)
@@ -69,10 +80,27 @@ int handle_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
         free(pHeader);
     }
 
+    if (pData->bKeepAlive)
+        XAPI_AddTimer(pData, XHTTP_TIMEOUT_MS);
+
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
-int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
+static int handle_complete(xapi_data_t *pData)
+{
+    xlogi("Response sent to the client: id(%u), fd(%d)",
+        pData->nID, (int)pData->sock.nFD);
+
+    if (pData->pTimer || pData->bKeepAlive)
+    {
+        XAPI_AddTimer(pData, XHTTP_TIMEOUT_MS);
+        return XAPI_EnableEvent(pData, XPOLLIN);
+    }
+
+    return XAPI_DISCONNECT;
+}
+
+static int write_data(xapi_data_t *pData)
 {
     xhttp_t handle;
     if (XHTTP_InitResponse(&handle, 200, NULL) <= 0)
@@ -99,8 +127,8 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
         return XAPI_DISCONNECT;
     }
 
-    xlogn("Sending response: fd(%d), buff(%zu)",
-            (int)pData->sock.nFD, handle.rawData.nUsed);
+    xlogn("Sending response: id(%u), fd(%d), buff(%zu)",
+            pData->nID, (int)pData->sock.nFD, handle.rawData.nUsed);
 
     XByteBuffer_AddBuff(&pData->txBuffer, &handle.rawData);
     XHTTP_Clear(&handle);
@@ -108,34 +136,38 @@ int write_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
-int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
+static int init_data(xapi_data_t *pData)
 {
-    xlogn("Accepted connection: fd(%d)", (int)pData->sock.nFD);
+    xlogn("Accepted connection: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
+    XAPI_AddTimer(pData, XHTTP_TIMEOUT_MS);
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
-int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
+static int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     switch (pCtx->eCbType)
     {
-        case XAPI_CB_ERROR:
         case XAPI_CB_STATUS:
             return handle_status(pCtx, pData);
+        case XAPI_CB_ERROR:
+            return handle_error(pCtx, pData);
         case XAPI_CB_READ:
-            return handle_request(pCtx, pData);
+            return handle_request(pData);
         case XAPI_CB_WRITE:
-            return write_data(pCtx, pData);
+            return write_data(pData);
         case XAPI_CB_ACCEPTED:
-            return init_data(pCtx, pData);
-        case XAPI_CB_LISTENING:
-            xlogn("Server started listening: fd(%d)", (int)pData->sock.nFD);
-            break;
-        case XAPI_CB_CLOSED:
-            xlogn("Connection closed: fd(%d)", (int)pData->sock.nFD);
-            break;
+            return init_data(pData);
         case XAPI_CB_COMPLETE:
-            xlogn("Response sent: fd(%d)", (int)pData->sock.nFD);
-            break;
+            return handle_complete(pData);
+        case XAPI_CB_LISTENING:
+            xlogn("Server started listening: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
+            return XAPI_CONTINUE;
+        case XAPI_CB_CLOSED:
+            xlogn("Connection closed: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
+            return XAPI_CONTINUE;
+        case XAPI_CB_TIMEOUT:
+            xlogn("Timeout event for the socket: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
+            return XAPI_DISCONNECT;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XAPI_DISCONNECT;
             break;
@@ -146,7 +178,7 @@ int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_CONTINUE;
 }
 
-void display_usage(const char *pName)
+static void display_usage(const char *pName)
 {
     printf("============================================================\n");
     printf(" HTTP/S server example - xUtils: %s\n", XUtils_Version());
@@ -164,7 +196,7 @@ void display_usage(const char *pName)
     printf("  -h                   # Version and usage\n\n");
 }
 
-xbool_t parse_args(xhttps_args_t *pArgs, int argc, char *argv[])
+static xbool_t parse_args(xhttps_args_t *pArgs, int argc, char *argv[])
 {
     pArgs->sCertPath[0] = XSTR_NUL;
     pArgs->sKeyPath[0] = XSTR_NUL;
