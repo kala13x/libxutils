@@ -95,7 +95,7 @@ jobs:
           LOG_DIR=$(mktemp -d)
           VG_ARGS="--leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
 
-          valgrind $VG_ARGS --log-file="$LOG_DIR/server.log" xtop -sa 127.0.0.1 -p 6969 &
+          valgrind $VG_ARGS --log-file="$LOG_DIR/server.log" xtop -sva 127.0.0.1 -p 6969 &
           server_pid=$!
 
           sleep 1
