@@ -93,7 +93,7 @@ jobs:
           set -euo pipefail
 
           LOG_DIR=$(mktemp -d)
-          VG_ARGS="--leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=101"
+          VG_ARGS="--leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
 
           valgrind $VG_ARGS --log-file="$LOG_DIR/server.log" xtop -sa 127.0.0.1 -p 6969 &
           server_pid=$!
@@ -114,7 +114,7 @@ jobs:
           wait "$server_pid" || server_status=$?
 
           for status in "$client_status" "$server_status"; do
-            if [ "$status" -eq 101 ]; then
+            if [ "$status" -eq 1 ]; then
               echo "Valgrind reported errors (exit code $status)"
               exit 1
             fi
@@ -129,7 +129,7 @@ jobs:
           for log in "$LOG_DIR"/client.log "$LOG_DIR"/server.log; do
             if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
               echo "Valgrind errors detected in $log"
-              cat "$log"
               exit 1
             fi
+            cat "$log"
           done
