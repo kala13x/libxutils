@@ -95,15 +95,15 @@ jobs:
           LOG_DIR=$(mktemp -d)
           VG_ARGS="--leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
 
-          valgrind $VG_ARGS --log-file="$LOG_DIR/server.log" xtop -sva 127.0.0.1 -p 6969 &
+          valgrind $VG_ARGS --log-file="$LOG_DIR/xtop-server.log" xtop -sva 127.0.0.1 -p 6969 &
           server_pid=$!
 
-          sleep 1
+          sleep 2
 
-          valgrind $VG_ARGS --log-file="$LOG_DIR/client.log" xtop -ca 127.0.0.1 -p 6969 &
+          valgrind $VG_ARGS --log-file="$LOG_DIR/xtop-client.log" xtop -ca 127.0.0.1 -p 6969 &
           client_pid=$!
 
-          sleep 5
+          sleep 10
 
           kill -INT "$client_pid" "$server_pid" || true
 
@@ -113,9 +113,8 @@ jobs:
           server_status=0
           wait "$server_pid" || server_status=$?
 
-          for log in "$LOG_DIR"/client.log "$LOG_DIR"/server.log; do
-            cat "$log"
-          done
+          cat "$LOG_DIR/xtop-server.log"
+          cat "$LOG_DIR/xtop-client.log"
 
           for status in "$client_status" "$server_status"; do
             if [ "$status" -eq 1 ]; then
@@ -130,7 +129,54 @@ jobs:
           done
 
           echo "Checking valgrind logs for errors"
-          for log in "$LOG_DIR"/client.log "$LOG_DIR"/server.log; do
+          for log in "$LOG_DIR"/xtop-client.log "$LOG_DIR"/xtop-server.log; do
+            if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
+              echo "Valgrind errors detected in $log"
+              cat "$log"
+              exit 1
+            fi
+          done
+
+      - name: Run Valgrind Check With tools/xtop client/server
+        run: |
+          set -euo pipefail
+
+          LOG_DIR=$(mktemp -d)
+          VG_ARGS="--leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
+
+          valgrind $VG_ARGS --log-file="$LOG_DIR/server.log" ./examples/build/http-server -a 127.0.0.1 -p 6161 &
+          server_pid=$!
+
+          sleep 2
+
+          valgrind $VG_ARGS --log-file="$LOG_DIR/http-client.log" xhttp -v 127.0.0.1:6161/get &
+          client_pid=$!
+
+          client_status=0
+          wait "$client_pid" || client_status=$?
+
+          kill -INT "$server_pid" || true
+
+          server_status=0
+          wait "$server_pid" || server_status=$?
+
+          cat "$LOG_DIR/http-server.log"
+          cat "$LOG_DIR/http-client.log"
+
+          for status in "$client_status" "$server_status"; do
+            if [ "$status" -eq 1 ]; then
+              echo "Valgrind reported errors (exit code $status)"
+              exit 1
+            fi
+
+            if [ "$status" -ne 0 ] && [ "$status" -ne 130 ]; then
+              echo "Unexpected exit code $status"
+              exit 1
+            fi
+          done
+
+          echo "Checking valgrind logs for errors"
+          for log in "$LOG_DIR"/http-client.log "$LOG_DIR"/http-server.log; do
             if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
               echo "Valgrind errors detected in $log"
               cat "$log"
