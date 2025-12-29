@@ -2090,8 +2090,12 @@ int main(int argc, char *argv[])
 
 #ifdef __linux__
     struct termios cliAttrs;
+    int nHaveAttributes = XSTDNON;
     if (!ctx.bServer && !ctx.bDaemon)
-        XCLI_SetInputMode(&cliAttrs);
+    {
+        if (XCLI_SetInputMode(&cliAttrs) == XSTDOK)
+            nHaveAttributes = XSTDOK;
+    }
 #endif
 
     xbool_t bFirst = XTRUE;
@@ -2178,7 +2182,7 @@ int main(int argc, char *argv[])
         XMon_StopMonitoring(&stats, 1000);
 
 #ifdef __linux__
-    if (!ctx.bServer && !ctx.bDaemon)
+    if (nHaveAttributes == XSTDOK)
         XCLI_RestoreAttributes(&cliAttrs);
 #endif
 
