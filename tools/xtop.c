@@ -1435,16 +1435,30 @@ int XTOP_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
-    xuint_t nID = pData ? pData->nID : XSTDNON;
+    int nID = pData ? (int)pData->nID : XSTDERR;
 
     if (pCtx->nStatus == XAPI_DESTROY)
         xlogn("%s", pStr);
     else if (pCtx->eCbType == XAPI_CB_STATUS)
-        xlogi("%s: id(%u), fd(%d)", pStr, nID, nFD);
+        xlogi("%s: id(%d), fd(%d)", pStr, nID, nFD);
     else if (pCtx->eCbType == XAPI_CB_ERROR)
-        xloge("%s: id(%u), fd(%d), errno(%d)", pStr, nID, nFD, errno);
+        xloge("%s: id(%d), fd(%d), errno(%d)", pStr, nID, nFD, errno);
 
     return XSTDOK;
+}
+
+int XTOP_HandleComplete(xapi_data_t *pData)
+{
+    xlogi("Response sent to the client: id(%u), fd(%d)",
+        pData->nID, (int)pData->sock.nFD);
+
+    if (pData->pTimer || pData->bKeepAlive)
+    {
+        XAPI_AddTimer(pData, XTOP_REQUEST_TIMEOUT_MS);
+        return XAPI_EnableEvent(pData, XPOLLIN);
+    }
+
+    return XAPI_DISCONNECT;
 }
 
 int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
@@ -1851,6 +1865,8 @@ int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_ERROR:
         case XAPI_CB_STATUS:
             return XTOP_PrintStatus(pCtx, pData);
+        case XAPI_CB_COMPLETE:
+            return XTOP_HandleComplete(pData);
         case XAPI_CB_READ:
             return XTOP_HandleRequest(pCtx, pData);
         case XAPI_CB_WRITE:
@@ -1862,9 +1878,6 @@ int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
         case XAPI_CB_TIMEOUT:
             xlogi("Timeout event for the session: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
             return XSTDERR;
-        case XAPI_CB_COMPLETE:
-            xlogi("Response sent to the client: id(%u), fd(%d)", pData->nID, (int)pData->sock.nFD);
-            return pData->pTimer ? XSTDOK : XSTDERR;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XSTDERR;
             break;

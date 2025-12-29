@@ -121,6 +121,7 @@ typedef struct xapi_data_ {
     xuint_t nID;
     int nEvents;
 
+    xbool_t bKeepAlive;
     xbool_t bCancel;
     xbool_t bAlloc;
 

@@ -24,6 +24,8 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
 {
     switch (eStatus)
     {
+        case XAPI_TIMER_DESTROY:
+            return "Timer event destroyed";
         case XAPI_AUTH_FAILURE:
             return "Authorization failure";
         case XAPI_MISSING_TOKEN:
@@ -87,6 +89,8 @@ const char* XAPI_GetStatus(xapi_ctx_t *pCtx)
 
 static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
 {
+    XASSERT((pApi != NULL), NULL);
+
     xapi_data_t *pData = (xapi_data_t*)malloc(sizeof(xapi_data_t));
     XASSERT((pData != NULL), NULL);
 
@@ -105,6 +109,7 @@ static xapi_data_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pData->bHandshakeDone = XFALSE;
     pData->bReadOnWrite = XFALSE;
     pData->bWriteOnRead = XFALSE;
+    pData->bKeepAlive = XFALSE;
     pData->bCancel = XFALSE;
     pData->bAlloc = XTRUE;
 
@@ -144,7 +149,7 @@ static void XAPI_FreeData(xapi_data_t **pData)
 
 static int XAPI_Callback(xapi_t *pApi, xapi_data_t *pApiData, xapi_cb_type_t eCbType, xapi_type_t eType, uint8_t nStat)
 {
-    XASSERT((pApi != NULL), XSTDERR);
+    XASSERT((pApi != NULL), XSTDINV);
     XASSERT_RET(pApi->callback, XSTDOK);
 
     xapi_ctx_t ctx;
@@ -496,6 +501,7 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_data_t *pApiData)
     if (eStatus == XHTTP_COMPLETE)
     {
         pApiData->pPacket = &handle;
+        pApiData->bKeepAlive = handle.nKeepAlive;
 
         int nStatus = XAPI_ServiceCb(pApi, pApiData, XAPI_CB_READ);
         nRetVal = XAPI_StatusToEvent(pApi, nStatus);

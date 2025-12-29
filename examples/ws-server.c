@@ -165,7 +165,7 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
         pFrame->nHeaderSize, pFrame->nPayloadLength, pFrame->buffer.nUsed);
 
     // Extend timeout for another 20 seconds
-    XAPI_ExtendTimer(pData, 20000);
+    XAPI_AddTimer(pData, 20000);
 
     if (pFrame->eType == XWS_PING) return send_pong(pData);
     else if (pFrame->eType == XWS_CLOSE) return XAPI_DISCONNECT;
@@ -190,7 +190,7 @@ int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
     XASSERT_RET((pSession != NULL), XAPI_DISCONNECT);
 
     pData->pSessionData = pSession;
-    XAPI_AddTimer(pData, 20000); // 20 seconds timeout
+    XAPI_AddTimer(pData, 20000); // Set 20 seconds timeout
 
     return XAPI_SetEvents(pData, XPOLLIN);
 }
