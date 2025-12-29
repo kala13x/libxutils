@@ -88,29 +88,28 @@ jobs:
       - name: Compare original and decrypted files and fail if different
         run: diff ./tools/xutils.c ./decrypted.c || (echo "Files are different!" && exit 1)
 
-      - name: Run Valgrind Check With tools/xtop client/server
+      - name: Run Valgrind Check With XTOP client/server
         run: |
           set -euo pipefail
 
           LOG_DIR=$(mktemp -d)
-          VG_ARGS="--leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
+          EXEC_CMD="valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
 
-          valgrind $VG_ARGS --log-file="$LOG_DIR/xtop-server.log" xtop -sva 127.0.0.1 -p 6969 &
+          $EXEC_CMD --log-file="$LOG_DIR/xtop-server.log" xtop -sva 127.0.0.1 -p 6969 &
           server_pid=$!
 
           sleep 2
 
-          valgrind $VG_ARGS --log-file="$LOG_DIR/xtop-client.log" xtop -ca 127.0.0.1 -p 6969 &
+          $EXEC_CMD --log-file="$LOG_DIR/xtop-client.log" xtop -ca 127.0.0.1 -p 6969 &
           client_pid=$!
 
           sleep 10
 
-          kill -INT "$client_pid" "$server_pid" || true
-
           client_status=0
-          wait "$client_pid" || client_status=$?
-
           server_status=0
+
+          kill -INT "$client_pid" "$server_pid" || true
+          wait "$client_pid" || client_status=$?
           wait "$server_pid" || server_status=$?
 
           cat "$LOG_DIR/xtop-server.log"
@@ -137,27 +136,26 @@ jobs:
             fi
           done
 
-      - name: Run Valgrind Check for HTTP client/server
+      - name: Run Valgrind Check for XAPI based HTTP client/server
         run: |
           set -euo pipefail
 
           LOG_DIR=$(mktemp -d)
-          VG_ARGS="--leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
+          EXEC_CMD="valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
 
-          valgrind $VG_ARGS --log-file="$LOG_DIR/server.log" ./examples/build/http-server -a 127.0.0.1 -p 6161 &
+          $EXEC_CMD --log-file="$LOG_DIR/http-server.log" ./examples/build/http-server -a 127.0.0.1 -p 6161 &
           server_pid=$!
 
           sleep 2
 
-          valgrind $VG_ARGS --log-file="$LOG_DIR/http-client.log" xhttp -l 127.0.0.1:6161/get &
+          $EXEC_CMD --log-file="$LOG_DIR/http-client.log" xhttp -l 127.0.0.1:6161/get &
           client_pid=$!
 
           client_status=0
-          wait "$client_pid" || client_status=$?
-
-          kill -INT "$server_pid" || true
-
           server_status=0
+
+          wait "$client_pid" || client_status=$?
+          kill -INT "$server_pid" || true
           wait "$server_pid" || server_status=$?
 
           cat "$LOG_DIR/http-server.log"
@@ -177,6 +175,98 @@ jobs:
 
           echo "Checking valgrind logs for errors"
           for log in "$LOG_DIR"/http-client.log "$LOG_DIR"/http-server.log; do
+            if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
+              echo "Valgrind errors detected in $log"
+              cat "$log"
+              exit 1
+            fi
+          done
+
+      - name: Run Valgrind Check for XEvent based HTTP client/server
+        run: |
+          set -euo pipefail
+
+          LOG_DIR=$(mktemp -d)
+          EXEC_CMD="valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
+
+          $EXEC_CMD --log-file="$LOG_DIR/event-server.log" ./examples/build/events 127.0.0.1 6262 &
+          server_pid=$!
+
+          sleep 2
+
+          $EXEC_CMD --log-file="$LOG_DIR/event-client.log" xhttp -l 127.0.0.1:6262/get &
+          client_pid=$!
+
+          client_status=0
+          server_status=0
+
+          wait "$client_pid" || client_status=$?
+          kill -INT "$server_pid" || true
+          wait "$server_pid" || server_status=$?
+
+          cat "$LOG_DIR/event-server.log"
+          cat "$LOG_DIR/event-client.log"
+
+          for status in "$client_status" "$server_status"; do
+            if [ "$status" -eq 1 ]; then
+              echo "Valgrind reported errors (exit code $status)"
+              exit 1
+            fi
+
+            if [ "$status" -ne 0 ] && [ "$status" -ne 130 ]; then
+              echo "Unexpected exit code $status"
+              exit 1
+            fi
+          done
+
+          echo "Checking valgrind logs for errors"
+          for log in "$LOG_DIR"/event-client.log "$LOG_DIR"/event-server.log; do
+            if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
+              echo "Valgrind errors detected in $log"
+              cat "$log"
+              exit 1
+            fi
+          done
+
+      - name: Run Valgrind Check for non-blocking TCP client/server
+        run: |
+          set -euo pipefail
+
+          LOG_DIR=$(mktemp -d)
+          EXEC_CMD="valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
+
+          $EXEC_CMD --log-file="$LOG_DIR/async-server.log" ./examples/build/async-server -a 127.0.0.1 -p 6363 &
+          server_pid=$!
+
+          sleep 2
+
+          $EXEC_CMD --log-file="$LOG_DIR/async-client.log" ./examples/build/async-client -a 127.0.0.1 -p 6363 &
+          client_pid=$!
+
+          client_status=0
+          server_status=0
+
+          wait "$client_pid" || client_status=$?
+          kill -INT "$server_pid" || true
+          wait "$server_pid" || server_status=$?
+
+          cat "$LOG_DIR/async-server.log"
+          cat "$LOG_DIR/async-client.log"
+
+          for status in "$client_status" "$server_status"; do
+            if [ "$status" -eq 1 ]; then
+              echo "Valgrind reported errors (exit code $status)"
+              exit 1
+            fi
+
+            if [ "$status" -ne 0 ] && [ "$status" -ne 130 ]; then
+              echo "Unexpected exit code $status"
+              exit 1
+            fi
+          done
+
+          echo "Checking valgrind logs for errors"
+          for log in "$LOG_DIR"/async-client.log "$LOG_DIR"/async-server.log; do
             if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
               echo "Valgrind errors detected in $log"
               cat "$log"

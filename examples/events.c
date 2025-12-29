@@ -144,7 +144,7 @@ int read_event(xevents_t *pEvents, xevent_data_t *pEvData)
 
             return XEVENTS_CONTINUE;
         }
-        else if (eStatus == XHTTP_ERRREAD)
+        else if (eStatus == XHTTP_EREAD)
         {
             const char *pError = XSock_ErrStr(&clientSock);
 
