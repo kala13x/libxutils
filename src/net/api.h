@@ -58,6 +58,7 @@ typedef enum {
 typedef enum {
     XAPI_UNKNOWN = (uint8_t)0,
     XAPI_NO_STATUS = XAPI_UNKNOWN,
+    XAPI_TIMER_DESTROY,
     XAPI_MISSING_KEY,
     XAPI_INVALID_KEY,
     XAPI_INVALID_ARGS,
@@ -175,6 +176,7 @@ XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer);
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
 void XAPI_Destroy(xapi_t *pApi);
 
+XSTATUS XAPI_Disconnect(xapi_data_t *pData);
 XSTATUS XAPI_DeleteTimer(xapi_data_t *pData);
 XSTATUS XAPI_AddTimer(xapi_data_t *pData, int nTimeoutMs);
 XSTATUS XAPI_ExtendTimer(xapi_data_t *pData, int nTimeoutMs);

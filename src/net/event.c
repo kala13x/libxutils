@@ -97,7 +97,7 @@ static int XEvents_EventCb(xevents_t *pEvents, xevent_data_t *pData, XSOCKET nFD
     int nRetVal = pEvents->eventCallback(pEvents, pData, nFD, nReason);
     if (nRetVal == XEVENTS_ACCEPT) return XEVENTS_ACTION;
 
-    if (nRetVal == XEVENTS_DISCONNECT)
+    if (nRetVal <= XEVENTS_DISCONNECT)
     {
         XEvents_Delete(pEvents, pData);
         return XEVENTS_DISCONNECT;

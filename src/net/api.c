@@ -202,7 +202,9 @@ static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
         if (pEvData->nType == XEVENT_TYPE_TIMER)
         {
             xapi_data_t *pApiData = (xapi_data_t*)pEvData->pContext;
-            if (pApiData != NULL) pApiData->pTimer = NULL;
+            XAPI_StatusCb(pApi, pApiData, XAPI_NONE, XAPI_TIMER_DESTROY);
+
+            pApiData->pTimer = NULL;
             pEvData->pContext = NULL;
         }
         else
@@ -228,38 +230,31 @@ size_t XAPI_GetEventCount(xapi_t *pApi)
 
 XSTATUS XAPI_DeleteTimer(xapi_data_t *pData)
 {
-    XASSERT((pData && pData->pApi), XSTDERR);
+    XASSERT((pData && pData->pApi), XSTDINV);
     XASSERT_RET(pData->pTimer, XSTDOK);
 
     xapi_t *pApi = pData->pApi;
-    xevents_t *pEvents = &pApi->events;
-    xevent_data_t *pTimer = pData->pTimer;
+    xevent_status_t nStatus;
 
-    pTimer->pContext = NULL;
-    XEvents_Delete(pEvents, pTimer);
-    pData->pTimer = NULL;
-
-    return XSTDOK;
+    nStatus = XEvents_Delete(&pApi->events, pData->pTimer);
+    return (nStatus == XEVENTS_SUCCESS) ? XSTDOK : XSTDERR;
 }
 
 XSTATUS XAPI_Disconnect(xapi_data_t *pData)
 {
-    XASSERT((pData && pData->pApi), XSTDERR);
+    XASSERT((pData && pData->pApi), XSTDINV);
     XASSERT_RET(pData->pEvData, XSTDOK);
 
     xapi_t *pApi = pData->pApi;
-    xevents_t *pEvents = &pApi->events;
-    xevent_data_t *pEvData = pData->pEvData;
+    xevent_status_t nStatus;
 
-    XAPI_DeleteTimer(pData);
-    XEvents_Delete(pEvents, pEvData);
-
-    return XSTDOK;
+    nStatus = XEvents_Delete(&pApi->events, pData->pEvData);
+    return (nStatus == XEVENTS_SUCCESS) ? XSTDOK : XSTDERR;
 }
 
 XSTATUS XAPI_ExtendTimer(xapi_data_t *pData, int nTimeoutMs)
 {
-    XASSERT((pData && pData->pApi && pData->pTimer), XSTDERR);
+    XASSERT((pData && pData->pApi && pData->pTimer), XSTDINV);
     XASSERT_RET((nTimeoutMs > 0), XSTDNON);
 
     xevent_data_t *pTimer = pData->pTimer;
@@ -277,7 +272,7 @@ XSTATUS XAPI_ExtendTimer(xapi_data_t *pData, int nTimeoutMs)
 
 XSTATUS XAPI_AddTimer(xapi_data_t *pData, int nTimeoutMs)
 {
-    XASSERT((pData && pData->pApi), XSTDERR);
+    XASSERT((pData && pData->pApi), XSTDINV);
     XASSERT_RET((nTimeoutMs > 0), XSTDNON);
 
     if (pData->pTimer != NULL)
@@ -299,11 +294,11 @@ XSTATUS XAPI_AddTimer(xapi_data_t *pData, int nTimeoutMs)
 
 XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
 {
-    XASSERT((pData && pData->pEvData), XSTDERR);
+    XASSERT((pData && pData->pEvData), XSTDINV);
     xevent_data_t *pEvData = pData->pEvData;
     xapi_t *pApi = pData->pApi;
 
-    XASSERT((pApi != NULL), XSTDERR);
+    XASSERT((pApi != NULL), XSTDINV);
     XASSERT(pApi->bHaveEvents, XSTDERR);
 
     xevent_status_t eStatus;
@@ -321,7 +316,7 @@ XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents)
 
 XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent)
 {
-    XASSERT((pData != NULL), XSTDERR);
+    XASSERT((pData != NULL), XSTDINV);
 
     if (!XFLAGS_CHECK(pData->nEvents, nEvent))
     {
@@ -334,7 +329,7 @@ XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent)
 
 XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent)
 {
-    XASSERT((pData != NULL), XSTDERR);
+    XASSERT((pData != NULL), XSTDINV);
 
     if (XFLAGS_CHECK(pData->nEvents, nEvent))
     {
@@ -347,7 +342,7 @@ XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent)
 
 static XSTATUS XAPI_RollbackEvents(xapi_data_t *pData)
 {
-    XASSERT((pData != NULL), XSTDERR);
+    XASSERT((pData != NULL), XSTDINV);
     return XAPI_SetEvents(pData, pData->nEvents);
 }
 
@@ -380,7 +375,7 @@ XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer)
 
 XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus)
 {
-    XASSERT((pApiData && pApiData->pApi), XSTDERR);
+    XASSERT((pApiData && pApiData->pApi), XSTDINV);
     xapi_t *pApi = pApiData->pApi;
 
     xhttp_t handle;
@@ -418,7 +413,7 @@ XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus
 
 XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey)
 {
-    XASSERT((pApiData && pApiData->pPacket), XSTDERR);
+    XASSERT((pApiData && pApiData->pPacket), XSTDINV);
     xhttp_t *pHandle = (xhttp_t*)pApiData->pPacket;
 
     size_t nTokenLength = xstrused(pToken) ? strlen(pToken) : XSTDNON;
@@ -1152,9 +1147,8 @@ static int XAPI_TimeoutEvent(xapi_t *pApi, xevent_data_t *pData)
     if (nStatus == XAPI_CONTINUE) return XEVENTS_CONTINUE;
 
     int nEvent = XAPI_StatusToEvent(pApi, nStatus);
-    if (nEvent == XEVENTS_DISCONNECT)
+    if (nEvent <= XEVENTS_DISCONNECT)
     {
-        XAPI_DeleteTimer(pApiData);
         XAPI_Disconnect(pApiData);
         return XEVENTS_RELOOP;
     }
