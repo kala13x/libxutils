@@ -33,7 +33,7 @@ const char *XEvents_GetStatusStr(xevent_status_t status)
             return "Failed to allocate memory for event array";
         case XEVENTS_ETIMER:
             return "Failed to create or register timer event";
-        case XEVENTS_EXTEND:
+        case XEVENTS_EEXTEND:
             return "Failed to extend existing timer event";
         case XEVENTS_EINTR:
             return "Event service loop interrupted by signal";
@@ -217,7 +217,7 @@ static int XEvents_TimerSearchCb(void *pUserPtr, xlist_t *pNode)
     xevent_data_t *pSearchData = (xevent_data_t*)pUserPtr;
     XASSERT_RET((pNode && pNode->data.pData), XFALSE);
     xevent_data_t *pNodeData = (xevent_data_t*)pNode->data.pData;
-    return (pNodeData->nTimerValue == pSearchData->nTimerValue && 
+    return (pNodeData->nTimerValue == pSearchData->nTimerValue &&
             pNodeData->pContext == pSearchData->pContext) ? XTRUE : XFALSE;
 }
 
@@ -226,7 +226,7 @@ static xlist_t* XEvents_AddNodeSorted(xlist_t *pList, xlist_t *pNode)
     XASSERT_RET((pList != NULL && pNode != NULL), NULL);
     xevent_data_t *pData = (xevent_data_t*)pNode->data.pData;
     xlist_t *pSearchNode = XList_Search(pList, pData, XEvents_NodeSearchCb);
-    if (pSearchNode) return XList_InsertPrev(pSearchNode, pNode);
+    if (pSearchNode != NULL) return XList_InsertPrev(pSearchNode, pNode);
     return XList_InsertTail(pList, pNode);
 }
 
@@ -234,7 +234,7 @@ static xlist_t* XEvents_AddTimerSorted(xlist_t *pList, void *pData)
 {
     XASSERT_RET((pList != NULL && pData != NULL), NULL);
     xlist_t *pNode = XList_Search(pList, pData, XEvents_TimerSearchCb);
-    if (pNode) return XList_PushPrev(pNode, pData, XSTDNON);
+    if (pNode != NULL) return XList_PushPrev(pNode, pData, XSTDNON);
     return XList_PushBack(pList, pData, XSTDNON);
 }
 
@@ -263,14 +263,14 @@ static xevent_status_t XEvents_ExtendTimerCommon(xevents_t *pEvents, xevent_data
     {
         pTimer->nTimerValue = XTime_GetMs() + nTimeoutMs;
         pTimer->pTimerNode = XEvents_AddTimerSorted(&pEvents->timerList, pTimer);
-        return (pTimer->pTimerNode == NULL) ? XEVENTS_EXTEND : XEVENTS_SUCCESS;
+        return (pTimer->pTimerNode == NULL) ? XEVENTS_EEXTEND : XEVENTS_SUCCESS;
     }
 
     pTimer->nTimerValue = XTime_GetMs() + nTimeoutMs;
     XList_Detach(pTimer->pTimerNode);
 
     xlist_t *pNode = XEvents_AddNodeSorted(&pEvents->timerList, pTimer->pTimerNode);
-    return (pNode != NULL) ? XEVENTS_SUCCESS : XEVENTS_EXTEND;
+    return (pNode != NULL) ? XEVENTS_SUCCESS : XEVENTS_EEXTEND;
 }
 
 static int XEvents_TimerServiceCommon(xevents_t *pEvents, uint64_t nNowMs, xbool_t *pBreak)
@@ -340,7 +340,7 @@ static xevent_status_t XEvents_ExtendTimerLinux(xevents_t *pEvents, xevent_data_
     its.it_value.tv_nsec = (nTimeoutMs % 1000) * 1000000;
 
     int nRet = timerfd_settime(pTimer->nFD, 0, &its, NULL);
-    XASSERT((nRet == 0), XEVENTS_EXTEND);
+    XASSERT((nRet == 0), XEVENTS_EEXTEND);
 
     (void)pEvents;
     return XEVENTS_SUCCESS;

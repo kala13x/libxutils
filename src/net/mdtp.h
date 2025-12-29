@@ -67,7 +67,7 @@ typedef struct XPacketHeader {
     uint32_t nTimeStamp;
     uint32_t nPayloadSize;
     uint32_t nSSRCHash;
-    uint8_t nCrypted;
+    xbool_t bCrypted;
 
     char sPayloadType[XPACKET_TYPE_MAX];
     char sVersion[XPACKET_VER_MAX];
