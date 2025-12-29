@@ -137,7 +137,7 @@ jobs:
             fi
           done
 
-      - name: Run Valgrind Check With tools/xtop client/server
+      - name: Run Valgrind Check for HTTP client/server
         run: |
           set -euo pipefail
 
@@ -149,7 +149,7 @@ jobs:
 
           sleep 2
 
-          valgrind $VG_ARGS --log-file="$LOG_DIR/http-client.log" xhttp -v 127.0.0.1:6161/get &
+          valgrind $VG_ARGS --log-file="$LOG_DIR/http-client.log" xhttp -l 127.0.0.1:6161/get &
           client_pid=$!
 
           client_status=0
