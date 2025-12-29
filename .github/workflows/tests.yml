@@ -113,6 +113,10 @@ jobs:
           server_status=0
           wait "$server_pid" || server_status=$?
 
+          for log in "$LOG_DIR"/client.log "$LOG_DIR"/server.log; do
+            cat "$log"
+          done
+
           for status in "$client_status" "$server_status"; do
             if [ "$status" -eq 1 ]; then
               echo "Valgrind reported errors (exit code $status)"
@@ -129,7 +133,7 @@ jobs:
           for log in "$LOG_DIR"/client.log "$LOG_DIR"/server.log; do
             if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
               echo "Valgrind errors detected in $log"
+              cat "$log"
               exit 1
             fi
-            cat "$log"
           done
