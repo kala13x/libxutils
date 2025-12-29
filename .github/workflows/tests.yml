@@ -87,3 +87,49 @@ jobs:
 
       - name: Compare original and decrypted files and fail if different
         run: diff ./tools/xutils.c ./decrypted.c || (echo "Files are different!" && exit 1)
+
+      - name: Run Valgrind Check With tools/xtop client/server
+        run: |
+          set -euo pipefail
+
+          LOG_DIR=$(mktemp -d)
+          VG_ARGS="--leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=101"
+
+          valgrind $VG_ARGS --log-file="$LOG_DIR/server.log" xtop -sa 127.0.0.1 -p 6969 &
+          server_pid=$!
+
+          sleep 1
+
+          valgrind $VG_ARGS --log-file="$LOG_DIR/client.log" xtop -ca 127.0.0.1 -p 6969 &
+          client_pid=$!
+
+          sleep 5
+
+          kill -INT "$client_pid" "$server_pid" || true
+
+          client_status=0
+          wait "$client_pid" || client_status=$?
+
+          server_status=0
+          wait "$server_pid" || server_status=$?
+
+          for status in "$client_status" "$server_status"; do
+            if [ "$status" -eq 101 ]; then
+              echo "Valgrind reported errors (exit code $status)"
+              exit 1
+            fi
+
+            if [ "$status" -ne 0 ] && [ "$status" -ne 130 ]; then
+              echo "Unexpected exit code $status"
+              exit 1
+            fi
+          done
+
+          echo "Checking valgrind logs for errors"
+          for log in "$LOG_DIR"/client.log "$LOG_DIR"/server.log; do
+            if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
+              echo "Valgrind errors detected in $log"
+              cat "$log"
+              exit 1
+            fi
+          done

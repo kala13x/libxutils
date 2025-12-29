@@ -1258,8 +1258,8 @@ void XAPI_Destroy(xapi_t *pApi)
 
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
 {
-    XASSERT((pApi != NULL), XEVENTS_INVALID);
-    XASSERT(pApi->bHaveEvents, XEVENTS_INVALID);
+    XASSERT((pApi != NULL), XEVENTS_EINVALID);
+    XASSERT(pApi->bHaveEvents, XEVENTS_EINVALID);
 
     xevents_t *pEvents = &pApi->events;
     return XEvents_Service(pEvents, nTimeoutMs);

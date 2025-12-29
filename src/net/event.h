@@ -86,7 +86,7 @@ typedef enum {
     XEVENTS_EBREAK,
     XEVENTS_ECREATE,
     XEVENTS_EINSERT,
-    XEVENTS_INVALID,
+    XEVENTS_EINVALID,
     XEVENTS_SUCCESS
 } xevent_status_t;
 
