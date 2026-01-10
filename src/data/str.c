@@ -13,25 +13,6 @@
 
 #include "str.h"
 
-#define XSTR_KEYMAP_SIZE 33
-
-static const char *g_keyMapGe[XSTR_KEYMAP_SIZE] =
-    {
-        "ა", "ბ", "გ", "დ", "ე", "ვ", "ზ", "თ", "ი", 
-        "კ", "ლ", "მ", "ნ", "ო", "პ", "ჟ", "რ", 
-        "ს", "ტ", "უ", "ფ", "ქ", "ღ", "ყ", "შ", 
-        "ჩ", "ც", "ძ", "წ", "ჭ", "ხ", "ჯ", "ჰ"
-    };
-
-
-static const char *g_keyMapEn[XSTR_KEYMAP_SIZE] =
-    {
-        "a", "b", "g", "d", "e", "v", "z", "T", "i",
-        "k", "l", "m", "n", "o", "p", "J", "r",
-        "s", "t", "u", "f", "q", "R", "y", "S",
-        "C", "c", "Z", "w", "W", "x", "j", "h"
-    };
-
 /////////////////////////////////////////////////////////////////////////
 // C string functions
 /////////////////////////////////////////////////////////////////////////
@@ -1161,42 +1142,6 @@ xarray_t* xstrsplite(const char *pString, const char *pDlmt)
 
     XArray_Destroy(pArray);
     return NULL;
-}
-
-char* xstrtoge(char *pBuffer, size_t nSize, const char *pStr)
-{
-    if (pStr == NULL) return NULL;
-    char sInputLine[XSTR_MAX];
-    xbool_t bStarted = XFALSE;
-    size_t i;
-
-    for (i = 0; i < XSTR_KEYMAP_SIZE; i++) 
-    {
-        const char *pInput = bStarted ? sInputLine : pStr;
-        xstrnrep(pBuffer, nSize, pInput, g_keyMapEn[i], g_keyMapGe[i]);
-        xstrncpy(sInputLine, sizeof(sInputLine), pBuffer);
-        bStarted = XTRUE;
-    }
-
-    return pBuffer;
-}
-
-char* xstrtoen(char *pBuffer, size_t nSize, const char *pStr)
-{
-    if (pStr == NULL) return NULL;
-    char sInputLine[XSTR_MAX];
-    xbool_t bStarted = XFALSE;
-    size_t i;
-
-    for (i = 0; i < XSTR_KEYMAP_SIZE; i++) 
-    {
-        const char *pInput = bStarted ? sInputLine : pStr;
-        xstrnrep(pBuffer, nSize, pInput, g_keyMapGe[i], g_keyMapEn[i]);
-        xstrncpy(sInputLine, sizeof(sInputLine), pBuffer);
-        bStarted = XTRUE;
-    }
-
-    return pBuffer;
 }
 
 /////////////////////////////////////////////////////////////////////////

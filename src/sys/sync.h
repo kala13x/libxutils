@@ -38,8 +38,8 @@ typedef struct XSyncRW {
 } xsync_rw_t;
 
 typedef struct XSyncBar {
-    xatomic_t nBar;
-    xatomic_t nAck;
+    xvolatile_t nBar;
+    xvolatile_t nAck;
 } xsync_bar_t;
 
 #ifdef _WIN32

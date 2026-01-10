@@ -73,8 +73,8 @@ struct XSearchCtx {
     size_t nMinSize;                // Min file size to search
     xbool_t bMulty;                 // Multy file name search
 
-    xatomic_t *pInterrupted;        // Interrupt flag pointer
-    xatomic_t nInterrupted;         // Interrupt flag
+    xvolatile_t *pInterrupted;      // Interrupt flag pointer
+    xvolatile_t nInterrupted;       // Interrupt flag value
 };
 
 void XSearch_Init(xsearch_t *pSrcCtx, const char *pFileName);
@@ -84,6 +84,5 @@ int XSearch(xsearch_t *pSearch, const char *pDirectory);
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif /* __XUTILS_SEARCH_H__ */

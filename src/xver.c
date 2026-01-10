@@ -7,39 +7,19 @@
  * @brief Get additional information about library
  */
 
-#include "xstd.h"
-#include "xver.h"
 #include "str.h"
-#include "sync.h"
+#include "xver.h"
 
-static XATOMIC g_nHaveVerShort = 0;
-static XATOMIC g_nHaveVerLong = 0;
-static char g_versionShort[128];
-static char g_versionLong[256];
+static const char g_VersionShort[] =
+    XSTRFY(XUTILS_VERSION_MAX) "."
+    XSTRFY(XUTILS_VERSION_MIN) "."
+    XSTRFY(XUTILS_BUILD_NUMBER);
 
-const char* XUtils_Version(void)
-{
-    if (!XSYNC_ATOMIC_GET(&g_nHaveVerLong))
-    {
-        xstrncpyf(g_versionLong, sizeof(g_versionLong), "%d.%d build %d (%s)", 
-            XUTILS_VERSION_MAX, XUTILS_VERSION_MIN,
-            XUTILS_BUILD_NUMBER, XUTILS_BUILD_DATE);
+static const char g_VersionLong[] =
+    XSTRFY(XUTILS_VERSION_MAX) "."
+    XSTRFY(XUTILS_VERSION_MIN) " build "
+    XSTRFY(XUTILS_BUILD_NUMBER)
+    " (" XUTILS_RELEASE_DATE ")";
 
-        XSYNC_ATOMIC_SET(&g_nHaveVerLong, 1);
-    }
-
-    return g_versionLong;
-}
-
-const char* XUtils_VersionShort(void)
-{
-    if (!XSYNC_ATOMIC_GET(&g_nHaveVerShort))
-    {
-        xstrncpyf(g_versionShort, sizeof(g_versionShort), "%d.%d.%d", 
-            XUTILS_VERSION_MAX, XUTILS_VERSION_MIN, XUTILS_BUILD_NUMBER);
-
-        XSYNC_ATOMIC_SET(&g_nHaveVerShort, 1);
-    }
-
-    return g_versionShort;
-}
+const char* XUtils_Version(void) { return g_VersionLong; }
+const char* XUtils_VersionShort(void) { return g_VersionShort; }

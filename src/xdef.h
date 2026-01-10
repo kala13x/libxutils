@@ -31,11 +31,10 @@ typedef int                 XSTATUS;
 typedef uint8_t             xbool_t;
 typedef unsigned int        xuint_t;
 typedef unsigned long       xulong_t;
+typedef volatile xatomic_t  xvolatile_t;
 
 #define XTRUE               1
 #define XFALSE              0
-
-#define XATOMIC             volatile xatomic_t
 
 #define XCHAR(var,size) char var[size] = {'\0'}
 #define XARR_SIZE(arr)  (sizeof(arr) / sizeof(arr[0]))
@@ -47,16 +46,16 @@ typedef unsigned long       xulong_t;
 #define XFLAGS_ENABLE(c, f) ((c) |= (f))
 #define XFLAGS_DISABLE(c, f) ((c) &= ~(f))
 
-#ifndef XMSG_MIN
-#define XMSG_MIN        2048
+#ifndef XMSG_MAX
+#define XMSG_MAX        8196
 #endif
 
 #ifndef XMSG_MID
 #define XMSG_MID        4098
 #endif
 
-#ifndef XMSG_MAX
-#define XMSG_MAX        8196
+#ifndef XMSG_MIN
+#define XMSG_MIN        2048
 #endif
 
 #ifndef XPATH_MAX

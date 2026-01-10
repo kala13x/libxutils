@@ -78,6 +78,9 @@
 #define XSTR_AVAIL(arr)((int)sizeof(arr)-(int)strlen(arr))
 #define XSTR_NAVAIL(arr,n)((int)n-(int)strlen(arr))
 
+#define XSTRFY_RAW(x)               #x
+#define XSTRFY(x)                   XSTRFY_RAW(x)
+
 #define XSTRCPYFMT(dst, fmt, len)                   \
     do {                                            \
         va_list args;                               \
@@ -179,9 +182,6 @@ size_t xstrnrm(char *pStr, size_t nPosit, size_t nSize);
 void xstrnull(char *pString, size_t nLength);
 void xstrnul(char *pString);
 xbool_t xstrused(const char *pStr);
-
-char* xstrtoen(char *pBuffer, size_t nSize, const char *pStr);
-char* xstrtoge(char *pBuffer, size_t nSize, const char *pStr);
 
 size_t xstrnrgb(char *pStr, size_t nSize, int nR, int nG, int nB);
 size_t xstrnyuv(char *pStr, size_t nSize, int nY, int nU, int nV);

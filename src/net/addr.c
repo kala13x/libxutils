@@ -288,4 +288,3 @@ int XAddr_GetMAC(char *pAddr, int nSize)
 #endif
     return (int)xstrncpyf(pAddr, nSize, "0:0:0:0:0:0");
 }
-

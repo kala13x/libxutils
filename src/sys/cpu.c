@@ -19,7 +19,7 @@
 #define XCPU_INFO_FILE      "/proc/cpuinfo"
 #define XCPU_KEYWORD        "processor"
 
-static XATOMIC g_nCPUCount = 0;
+static xatomic_t g_nCPUCount = 0;
 
 int XCPU_GetCount(void)
 {

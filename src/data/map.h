@@ -92,5 +92,4 @@ int XMap_UsedSize(xmap_t *pMap);
 }
 #endif
 
-
 #endif /* __XUTILS_XMAP_H__ */

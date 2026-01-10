@@ -34,7 +34,7 @@ typedef struct XLogCtx {
 } xlog_ctx_t;
 
 static xlog_t g_xlog;
-static XATOMIC g_bInit = XFALSE;
+static xatomic_t g_bInit = XFALSE;
 
 xbool_t XLog_IsInit(void)
 {

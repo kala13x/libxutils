@@ -7,13 +7,13 @@
  * @brief Get additional information about library
  */
 
-#ifndef __XUTILS_XLIBVER_H__
-#define __XUTILS_XLIBVER_H__
+#ifndef __XUTILS_VER_H__
+#define __XUTILS_VER_H__
 
 #define XUTILS_VERSION_MAX      2
 #define XUTILS_VERSION_MIN      7
-#define XUTILS_BUILD_NUMBER     18
-#define XUTILS_BUILD_DATE       "29Dec2025"
+#define XUTILS_BUILD_NUMBER     19
+#define XUTILS_RELEASE_DATE     "11Jan2025"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,4 +26,4 @@ const char* XUtils_VersionShort(void);
 }
 #endif
 
-#endif /* __XUTILS_XLIBVER_H__ */
+#endif /* __XUTILS_VER_H__ */

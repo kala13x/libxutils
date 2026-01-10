@@ -76,7 +76,7 @@ static uint32_t XFlags_Adjust(uint32_t nFlags)
 }
 
 #ifdef XSOCK_USE_SSL
-static XATOMIC g_nSSLInit = 0; 
+static xatomic_t g_nSSLInit = 0; 
 
 typedef struct XSocketPriv {
     xbool_t bConnected;

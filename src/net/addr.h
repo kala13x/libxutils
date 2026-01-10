@@ -106,5 +106,4 @@ int XAddr_GetIP(const char *pDNS, char *pAddr, int nSize);
 }
 #endif
 
-
 #endif /* __XUTILS_XADDR_H__ */
