@@ -90,8 +90,6 @@ build_tools() {
     make -j $CPU_COUNT || exit 1
     cd $PROJ_PATH
     TOOLS_DONE=1
-
-    echo "Run 'sudo make install' to complete libxutils installation"
 }
 
 build_examples() {
@@ -130,6 +128,7 @@ build_library() {
 }
 
 install_tools() {
+    echo "Running 'sudo make install' to complete xutils installation"
     build_tools
     cd $TOOL_PATH
     sudo make install
@@ -137,6 +136,7 @@ install_tools() {
 }
 
 install_library() {
+    echo "Running 'sudo make install' to complete libxutils installation"
     cd $LIB_PATH
     sudo make install
     cd $PROJ_PATH
