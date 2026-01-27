@@ -131,14 +131,15 @@ install_tools() {
     echo "Running 'sudo make install' to complete xutils installation"
     build_tools
     cd $TOOL_PATH
-    sudo make install
+    sudo make install || exit 1
     cd $PROJ_PATH
+    echo "Run each of these tools with '-h' to see the available options"
 }
 
 install_library() {
     echo "Running 'sudo make install' to complete libxutils installation"
     cd $LIB_PATH
-    sudo make install
+    sudo make install || exit 1
     cd $PROJ_PATH
 }
 
