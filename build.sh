@@ -134,6 +134,7 @@ install_tools() {
     sudo make install || exit 1
     cd $PROJ_PATH
     echo "Run each of these tools with '-h' to see the available options"
+    echo "Visit 'https://github.com/kala13x/libxutils' for full library capabilities"
 }
 
 install_library() {
