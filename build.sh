@@ -2,7 +2,7 @@
 # This source is part of "libxutils" project
 # 2015-2023  Sun Dro (s.kalatoz@gmail.com)
 
-PROJ_PATH=$(pwd -P)/$(dirname "$0")
+PROJ_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOL_PATH=$PROJ_PATH/tools
 LIB_PATH=$PROJ_PATH
 MAKE_TOOL="cmake"
@@ -87,9 +87,11 @@ build_tools() {
         TOOL_PATH=$PROJ_PATH/tools/build
     fi
 
-    make -j $CPU_COUNT
+    make -j $CPU_COUNT || exit 1
     cd $PROJ_PATH
     TOOLS_DONE=1
+
+    echo "Run 'sudo make install' to complete libxutils installation"
 }
 
 build_examples() {
@@ -100,7 +102,7 @@ build_examples() {
         mkdir -p build && cd build && cmake ..
     fi
 
-    make -j $CPU_COUNT
+    make -j $CPU_COUNT || exit 1
     cd $PROJ_PATH
     EXAMPLES_DONE=1
 }
