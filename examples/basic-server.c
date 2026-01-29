@@ -1,6 +1,6 @@
 /*
  *  examples/basic-server.c
- * 
+ *
  *  Copyleft (C) 2015  Sun Dro (a.k.a. kala13x)
  *
  * Simplest echo server based on XSocket.
@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
     xlog_defaults();
     char buf[1024];
 
-    if (argc <= 2) 
+    if (argc <= 2)
     {
         xlog("Usage: %s [address] [port]\n", argv[0]);
         xlog("Example: %s 127.0.0.1 6969\n", argv[0]);
@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
             int nStatus = XSock_Send(&sock2, buf, nRead);
             if (nStatus >= 0) xlogi("Sent: %s", buf);
         }
- 
+
         XSock_Close(&sock2);
     }
 

@@ -1,6 +1,6 @@
 /*!
  *  @file libxutils/tools/xhttp.c
- * 
+ *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
  *
@@ -324,7 +324,7 @@ int XHTTPApp_DisplayResponseHdr(xhttp_t *pHandle)
     xlogd("Received response header: %s", pStatus);
     printf("%s\n", (char*)pHandle->rawData.pData);
     pHandle->rawData.pData[pHandle->nHeaderLength - 1] = cSave;
-  
+
     xbool_t bFollowing = (pHandle->nStatusCode >= 300 && pHandle->nStatusCode < 400 &&
         pArgs->nAutoFollow && XHTTP_GetHeader(pHandle, "Location") != NULL) ? XTRUE : XFALSE;
 
@@ -344,7 +344,7 @@ int XHTTPApp_Callback(xhttp_t *pHttp, xhttp_ctx_t *pCbCtx)
     switch (pCbCtx->eCbType)
     {
         case XHTTP_STATUS:
-            if (pCbCtx->eStatus == XHTTP_PARSED) 
+            if (pCbCtx->eStatus == XHTTP_PARSED)
                 return XHTTPApp_DisplayResponseHdr(pHttp);
             xlogd("%s", (const char*)pCbCtx->pData);
             return XSTDOK;

@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief MD5 algorithm implementation for C/C++
  */
 

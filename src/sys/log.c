@@ -14,7 +14,7 @@
 #define XLOG_FILE_PATH_MAX XLOG_PATH_MAX + XLOG_NAME_MAX + XLOG_TIME_MAX
 
 typedef struct XLogFile {
-    char sFilePath[XLOG_FILE_PATH_MAX];    
+    char sFilePath[XLOG_FILE_PATH_MAX];
     uint8_t nCurrDay;
     FILE *pHandle;
 } xlog_file_t;
@@ -450,8 +450,8 @@ void XLog_SeparatorSet(const char *pSeparator)
 
     xlog_cfg_t *pCfg = &g_xlog.config;
 
-    if (snprintf(pCfg->sSeparator, 
-        sizeof(pCfg->sSeparator), 
+    if (snprintf(pCfg->sSeparator,
+        sizeof(pCfg->sSeparator),
         " %s ", pSeparator) <= 0)
     {
         pCfg->sSeparator[0] = ' ';

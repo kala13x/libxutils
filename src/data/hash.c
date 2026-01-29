@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Implementation of hash tables
  */
 
@@ -139,7 +139,7 @@ int XHash_Delete(xhash_t *pHash, int nKey)
 void XHash_Iterate(xhash_t *pHash, xhash_itfunc_t itfunc, void *pCtx)
 {
     xhash_iterator_t iter;
-    iter.pUserCtx = pCtx; 
+    iter.pUserCtx = pCtx;
     iter.itfunc = itfunc;
     unsigned int i;
 

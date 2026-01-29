@@ -3,10 +3,10 @@
  *
  *  This source is part of "libxutils" project
  *  2018-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief This source includes implementation of 
+ *
+ * @brief This source includes implementation of
  * the HTTP request/response parser and assembler.
- * 
+ *
  */
 
 #ifndef __XUTILS_HTTP_H__

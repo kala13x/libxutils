@@ -3,9 +3,9 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Implementation of the various cross-platform 
- * sync functionality with the POSIX mutex and SynchAPI 
+ *
+ * @brief Implementation of the various cross-platform
+ * sync functionality with the POSIX mutex and SynchAPI
  * critical section, atomic builtins, rwlocks, and etc.
  */
 
@@ -36,7 +36,7 @@ void XSync_Init(xsync_mutex_t *pSync)
         pthread_mutex_init(&pSync->mutex, &mutexAttr) ||
         pthread_mutexattr_destroy(&mutexAttr))
     {
-        fprintf(stderr, "<%s:%d> %s: Can not initialize mutex: %d\n", 
+        fprintf(stderr, "<%s:%d> %s: Can not initialize mutex: %d\n",
             __FILE__, __LINE__, __FUNCTION__, errno);
 
         exit(EXIT_FAILURE);
@@ -55,7 +55,7 @@ void XSync_Destroy(xsync_mutex_t *pSync)
 #ifndef _WIN32
         if(pthread_mutex_destroy(&pSync->mutex))
         {
-            fprintf(stderr, "<%s:%d> %s: Can not deinitialize mutex: %d\n", 
+            fprintf(stderr, "<%s:%d> %s: Can not deinitialize mutex: %d\n",
                 __FILE__, __LINE__, __FUNCTION__, errno);
 
             exit(EXIT_FAILURE);
@@ -75,7 +75,7 @@ void XSync_Lock(xsync_mutex_t *pSync)
 #ifndef _WIN32
         if (pthread_mutex_lock(&pSync->mutex))
         {
-            fprintf(stderr, "<%s:%d> %s: Can not lock mutex: %d\n", 
+            fprintf(stderr, "<%s:%d> %s: Can not lock mutex: %d\n",
                 __FILE__, __LINE__, __FUNCTION__, errno);
 
             exit(EXIT_FAILURE);
@@ -93,9 +93,9 @@ void XSync_Unlock(xsync_mutex_t *pSync)
 #ifndef _WIN32
         if (pthread_mutex_unlock(&pSync->mutex))
         {
-            fprintf(stderr, "<%s:%d> %s: Can not unlock mutex: %d\n", 
+            fprintf(stderr, "<%s:%d> %s: Can not unlock mutex: %d\n",
                 __FILE__, __LINE__, __FUNCTION__, errno);
-                    
+
             exit(EXIT_FAILURE);
         }
 #else
@@ -109,7 +109,7 @@ void XRWSync_Init(xsync_rw_t *pSync)
 #ifndef _WIN32
     if (pthread_rwlock_init(&pSync->rwLock, NULL))
     {
-        fprintf(stderr, "<%s:%d> %s: Can not init rwlock: %d\n", 
+        fprintf(stderr, "<%s:%d> %s: Can not init rwlock: %d\n",
             __FILE__, __LINE__, __FUNCTION__, errno);
 
         exit(EXIT_FAILURE);
@@ -123,13 +123,13 @@ void XRWSync_Init(xsync_rw_t *pSync)
 }
 
 void XRWSync_ReadLock(xsync_rw_t *pSync)
-{  
+{
     if (pSync->bEnabled)
     {
 #ifndef _WIN32
         if (pthread_rwlock_rdlock(&pSync->rwLock))
         {
-            fprintf(stderr, "<%s:%d> %s: Can not read lock rwlock: %d\n", 
+            fprintf(stderr, "<%s:%d> %s: Can not read lock rwlock: %d\n",
                 __FILE__, __LINE__, __FUNCTION__, errno);
 
             exit(EXIT_FAILURE);
@@ -147,7 +147,7 @@ void XRWSync_WriteLock(xsync_rw_t *pSync)
 #ifndef _WIN32
         if (pthread_rwlock_wrlock(&pSync->rwLock))
         {
-            fprintf(stderr, "<%s:%d> %s: Can not write lock rwlock: %d\n", 
+            fprintf(stderr, "<%s:%d> %s: Can not write lock rwlock: %d\n",
                 __FILE__, __LINE__, __FUNCTION__, errno);
 
             exit(EXIT_FAILURE);
@@ -166,9 +166,9 @@ void XRWSync_Unlock(xsync_rw_t *pSync)
 #ifndef _WIN32
         if (pthread_rwlock_unlock(&pSync->rwLock))
         {
-            fprintf(stderr, "<%s:%d> %s: Can not unlock rwlock: %d\n", 
+            fprintf(stderr, "<%s:%d> %s: Can not unlock rwlock: %d\n",
                 __FILE__, __LINE__, __FUNCTION__, errno);
-                    
+
             exit(EXIT_FAILURE);
         }
 #else
@@ -191,7 +191,7 @@ void XRWSync_Destroy(xsync_rw_t *pSync)
         {
             fprintf(stderr, "<%s:%d> %s: Can not destroy rwlock: %d\n",
                 __FILE__, __LINE__, __FUNCTION__, errno);
-                    
+
             exit(EXIT_FAILURE);
         }
 #else

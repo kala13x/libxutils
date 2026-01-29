@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2019-2023  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Implementation of JSON Web Tokens
  */
 

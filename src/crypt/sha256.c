@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief SHA-256 computing implementation for C/C++ based
  * on pseudocode for the SHA-256 algorithm from Wikipedia.
  */

@@ -276,7 +276,7 @@ xws_frame_t* XWebFrame_Alloc(xws_frame_type_t eType, size_t nBuffSize)
 {
     xws_frame_t *pFrame = (xws_frame_t*)malloc(sizeof(xws_frame_t));
     XASSERT((pFrame != NULL), NULL);
-    
+
     XWebFrame_Init(pFrame);
     pFrame->bAlloc = XTRUE;
     pFrame->eType = eType;

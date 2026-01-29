@@ -4,7 +4,7 @@
  *  This source is part of "libxutils" project
  *  2019-2020  Sun Dro (s.kalatoz@gmail.com)
  *
- * @brief Implementation of the cross-platform 
+ * @brief Implementation of the cross-platform
  * async event engine based on POLL and EPOLL.
  */
 

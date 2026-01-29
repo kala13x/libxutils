@@ -1,6 +1,6 @@
 /*
  *  examples/files.c
- * 
+ *
  *  Copyleft (C) 2015  Sun Dro (a.k.a. kala13x)
  *
  * File and folder operations.
@@ -10,12 +10,12 @@
 #include "log.h"
 #include "xfs.h"
 
-int main(int argc, char *argv[]) 
+int main(int argc, char *argv[])
 {
     XLog_Init("test", XLOG_ALL, 0);
 
     /* Check args */
-    if (argc < 3) 
+    if (argc < 3)
     {
         printf("Usage: %s [source] [destination]\n", argv[0]);
         printf("Example: %s src.txt dest.txt\n", argv[0]);
@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
     char sLine[2048];
     int nLineNo = 2;
 
-    if (XFile_ReadLine(&srcFile, sLine, sizeof(sLine), nLineNo) > 0) 
+    if (XFile_ReadLine(&srcFile, sLine, sizeof(sLine), nLineNo) > 0)
         XLog_Debug("Line (%d): %s", nLineNo, sLine);
 
     XFile_Close(&srcFile);
@@ -55,5 +55,5 @@ int main(int argc, char *argv[])
     }
 
     XDir_Close(&dir);
-    return 0; 
+    return 0;
 }

@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief SHA-1 algorithm implementation based on the pseudocode 
+ *
+ * @brief SHA-1 algorithm implementation based on the pseudocode
  * and description provided in the SHA-1 standard (FIPS PUB 180-1)
  */
 

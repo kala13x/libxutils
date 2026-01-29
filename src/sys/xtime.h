@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Get system date, convert between formats,
  * get month days, calculate leap year, and e.t.c.
  */
@@ -54,7 +54,7 @@ typedef struct XTimeSpec {
 
 typedef struct XTime {
     uint16_t nYear;
-    uint8_t nMonth; 
+    uint8_t nMonth;
     uint8_t nDay;
     uint8_t nHour;
     uint8_t nMin;

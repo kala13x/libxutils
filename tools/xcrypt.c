@@ -1,6 +1,6 @@
 /*!
  *  @file libxutils/examples/xcrpt.c
- * 
+ *
  *  This source is part of "libxutils" project
  *  2015-2022  Sun Dro (s.kalatoz@gmail.com)
  *
@@ -378,7 +378,7 @@ static XSTATUS XCrypt_ValidateArgs(xcrypt_args_t *pArgs)
 
     if ((!pArgs->bPrint &&
         !xstrused(pArgs->sOutput)) ||
-        (!xstrused(pArgs->sText) && 
+        (!xstrused(pArgs->sText) &&
          !xstrused(pArgs->sInput))) return XSTDNON;
 
     if (XPath_Exists(pArgs->sOutput) && pArgs->bForce == XFALSE)
@@ -402,7 +402,7 @@ static XSTATUS XCrypt_ValidateArgs(xcrypt_args_t *pArgs)
         {
             const char *pCipher = XArray_GetData(pCiphers, i);
             if (pCipher == NULL) continue;
-    
+
             xcrypt_chipher_t eCipher = XCrypt_GetCipher(pCipher);
             if (eCipher == XC_INVALID)
             {

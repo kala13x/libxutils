@@ -665,7 +665,7 @@ size_t xstrncatsf(char *pDst, size_t nSize, size_t nAvail, const char *pFmt, ...
     return nAvail - nLength;
 }
 
-size_t xstrnclr(char *pDst, size_t nSize, const char* pClr, const char* pStr, ...) 
+size_t xstrnclr(char *pDst, size_t nSize, const char* pClr, const char* pStr, ...)
 {
     if (pDst == NULL || !nSize) return 0;
     char sBuffer[XSTR_STACK];
@@ -686,7 +686,7 @@ size_t xstrnclr(char *pDst, size_t nSize, const char* pClr, const char* pStr, ..
     xstrncpyarg(pBuffer, nSize, pStr, args);
     va_end(args);
 
-    size_t nLength = xstrncpyf(pDst, nSize, "%s%s%s", 
+    size_t nLength = xstrncpyf(pDst, nSize, "%s%s%s",
         pClr, pBuffer, XSTR_FMT_RESET);
 
     if (nAlloc) free(pBuffer);
@@ -992,7 +992,7 @@ int xstrnrep(char *pDst, size_t nSize, const char *pOrig, const char *pRep, cons
     size_t nWithLen = strlen(pWith);
     size_t nRepLen = strlen(pRep);
 
-    int nAvail = (int)nSize;   
+    int nAvail = (int)nSize;
     int nNext = 0, nCount = 0;
 
     while ((nNext = xstrntokn(NULL, 0, pOrig, nOrigLen, nNext, pRep)) > 0) nCount++;
@@ -1059,7 +1059,7 @@ void xstrnull(char *pString, size_t nLength)
 
 void xstrnul(char *pString)
 {
-    if (pString == NULL) return; 
+    if (pString == NULL) return;
     pString[0] = XSTR_NUL;
 }
 
@@ -1246,7 +1246,7 @@ void XString_Clear(xstring_t *pString)
 {
     if (pString == NULL) return;
 
-    if (pString->nSize > 0 && 
+    if (pString->nSize > 0 &&
         pString->pData != NULL)
         free(pString->pData);
 
@@ -1357,7 +1357,7 @@ int XString_InsertFmt(xstring_t *pString, size_t nPosit, const char *pFmt, ...)
 int XString_Remove(xstring_t *pString, size_t nPosit, size_t nSize)
 {
     if (!nSize || nPosit >= pString->nLength) return 0;
-    nSize = ((nPosit + nSize) > pString->nLength) ? 
+    nSize = ((nPosit + nSize) > pString->nLength) ?
             pString->nLength - nPosit : nSize;
 
     size_t nTailOffset = nPosit + nSize;

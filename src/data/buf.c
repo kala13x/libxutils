@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Dynamically allocated byte and data buffers 
+ *
+ * @brief Dynamically allocated byte and data buffers
  */
 
 #include "xstd.h"
@@ -376,7 +376,7 @@ int XDataBuffer_Realloc(xdata_buffer_t *pBuffer)
         pBuffer->nSize = nSize;
 
         size_t i;
-        for (i = pBuffer->nUsed; i < nSize; i++) 
+        for (i = pBuffer->nUsed; i < nSize; i++)
             pBuffer->pData[i] = NULL;
 
         return (int)pBuffer->nSize;
@@ -506,8 +506,8 @@ void XRingBuffer_Update(xring_buffer_t *pBuffer, int nAdd)
     if ((size_t)pBuffer->nFront >= pBuffer->nSize) pBuffer->nFront = 0;
     if ((size_t)pBuffer->nBack >= pBuffer->nSize) pBuffer->nBack = 0;
 
-    pBuffer->nUsed = (pBuffer->nBack > pBuffer->nFront) ? 
-        (pBuffer->nBack - pBuffer->nFront) : 
+    pBuffer->nUsed = (pBuffer->nBack > pBuffer->nFront) ?
+        (pBuffer->nBack - pBuffer->nFront) :
         (pBuffer->nSize - (pBuffer->nFront - pBuffer->nBack));
 }
 

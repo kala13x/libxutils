@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2019-2021  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Implementation of the lexical analyzer 
+ *
+ * @brief Implementation of the lexical analyzer
  * and recursive descent parser with JSON grammar
  */
 

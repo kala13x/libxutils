@@ -13,19 +13,19 @@
 
 #define NTP_SERVER "europe.pool.ntp.org"
 
-int main() 
+int main()
 {
     xlog_defaults();
     xtime_t time;
 
     if (XNTP_GetDate(NTP_SERVER, 0, &time) > 0)
     {
-        char sTime[32]; 
+        char sTime[32];
         XTime_ToHstr(&time, sTime, sizeof(sTime));
         xlog("Received NTP Date: %s", sTime);
         return 0;
     }
 
-    xloge("Can not get time from NTP server: %s", NTP_SERVER);    
+    xloge("Can not get time from NTP server: %s", NTP_SERVER);
     return 1;
 }

@@ -1,6 +1,6 @@
 /*!
  *  @file libxutils/examples/jwt.c
- * 
+ *
  *  This source is part of "libxutils" project
  *  2015-2023  Sun Dro (s.kalatoz@gmail.com)
  *

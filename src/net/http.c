@@ -3,10 +3,10 @@
  *
  *  This source is part of "libxutils" project
  *  2018-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief This source includes implementation of 
+ *
+ * @brief This source includes implementation of
  * the HTTP request/response parser and assembler.
- * 
+ *
  */
 
 #include "xstd.h"
@@ -714,7 +714,7 @@ static size_t XHTTP_ParseUrl(xhttp_t *pHttp)
 {
     if (pHttp->eType == XHTTP_RESPONSE) return XSTDOK;
     const char *pHeader = (const char *)pHttp->rawData.pData;
-    const char *pMethod = XHTTP_GetMethodStr(pHttp->eMethod); 
+    const char *pMethod = XHTTP_GetMethodStr(pHttp->eMethod);
 
     char sTmpUrl[XHTTP_URL_MAX];
     sTmpUrl[0] = XSTR_NUL;
@@ -931,7 +931,7 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
 
             nBodySize = XHTTP_GetBodySize(pHttp);
             if (pSock->eStatus != XSOCK_ERR_NONE || XSock_IsNB(pSock)) break;
-            else if (pHttp->nContentMax && pBuffer->nUsed >= pHttp->nContentMax) 
+            else if (pHttp->nContentMax && pBuffer->nUsed >= pHttp->nContentMax)
                 return XHTTP_StatusCb(pHttp, XHTTP_BIGCNT);
         }
 
@@ -976,7 +976,7 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
             return XHTTP_StatusCb(pHttp, XHTTP_EALLOC);
 
         if (pSock->eStatus != XSOCK_ERR_NONE || XSock_IsNB(pSock)) break;
-        else if (pHttp->nContentMax && pBuffer->nUsed >= pHttp->nContentMax) 
+        else if (pHttp->nContentMax && pBuffer->nUsed >= pHttp->nContentMax)
             return XHTTP_StatusCb(pHttp, XHTTP_BIGCNT);
     }
 
@@ -1016,9 +1016,9 @@ xhttp_status_t XHTTP_Exchange(xhttp_t *pRequest, xhttp_t *pResponse, xsock_t *pS
         return XHTTP_TERMINATED;
 
     XHTTP_SetCallback(
-        pResponse, 
-        pRequest->callback, 
-        pRequest->pUserCtx, 
+        pResponse,
+        pRequest->callback,
+        pRequest->pUserCtx,
         pRequest->nCbTypes
     );
 

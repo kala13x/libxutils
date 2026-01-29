@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief This source includes functions for detect 
+ *
+ * @brief This source includes functions for detect
  * IP and Mac address of the host operating system
  */
 
@@ -164,7 +164,7 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
 }
 
 int XAddr_GetIP(const char *pDNS, char *pAddr, int nSize)
-{   
+{
     int nPort = 53;
     struct sockaddr_in serv;
 
@@ -239,7 +239,7 @@ int XAddr_GetIFCMac(const char *pIFace, char *pAddr, int nSize)
     unsigned char *hwaddr = (unsigned char*) ifbuf.ifr_hwaddr.sa_data;
     close(nFD);
 
-    return xstrncpyf(pAddr, nSize, "%02x:%02x:%02x:%02x:%02x:%02x", 
+    return xstrncpyf(pAddr, nSize, "%02x:%02x:%02x:%02x:%02x:%02x",
         hwaddr[0],hwaddr[1],hwaddr[2],hwaddr[3],hwaddr[4],hwaddr[5]);
 #endif
     return (int)xstrncpyf(pAddr, nSize, "0:0:0:0:0:0");
@@ -255,7 +255,7 @@ int XAddr_GetMAC(char *pAddr, int nSize)
     ifc.ifc_len = sizeof(buf);
     ifc.ifc_buf = buf;
 
-    if (ioctl(sock, SIOCGIFCONF, &ifc) == -1) 
+    if (ioctl(sock, SIOCGIFCONF, &ifc) == -1)
     {
         close(sock);
         return XSTDERR;
@@ -266,17 +266,17 @@ int XAddr_GetMAC(char *pAddr, int nSize)
     struct ifreq ifr;
     int nLength = 0;
 
-    for (;it != end; ++it) 
+    for (;it != end; ++it)
     {
         strcpy(ifr.ifr_name, it->ifr_name);
         if (ioctl(sock, SIOCGIFFLAGS, &ifr)) break;
 
-        if (!(ifr.ifr_flags & IFF_LOOPBACK) && 
-            !ioctl(sock, SIOCGIFHWADDR, &ifr)) 
+        if (!(ifr.ifr_flags & IFF_LOOPBACK) &&
+            !ioctl(sock, SIOCGIFHWADDR, &ifr))
         {
-            nLength = xstrncpyf(pAddr, nSize, "%02x:%02x:%02x:%02x:%02x:%02x", 
-                ifr.ifr_hwaddr.sa_data[0], ifr.ifr_hwaddr.sa_data[1], 
-                ifr.ifr_hwaddr.sa_data[2], ifr.ifr_hwaddr.sa_data[3], 
+            nLength = xstrncpyf(pAddr, nSize, "%02x:%02x:%02x:%02x:%02x:%02x",
+                ifr.ifr_hwaddr.sa_data[0], ifr.ifr_hwaddr.sa_data[1],
+                ifr.ifr_hwaddr.sa_data[2], ifr.ifr_hwaddr.sa_data[3],
                 ifr.ifr_hwaddr.sa_data[4], ifr.ifr_hwaddr.sa_data[5]);
 
             break;

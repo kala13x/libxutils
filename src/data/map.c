@@ -389,7 +389,7 @@ int XMap_Remove(xmap_t *pMap, const char* pKey)
                 xmap_pair_t *pPair = &pMap->pPairs[nIndex];
                 if (pMap->nUsed) pMap->nUsed--;
 
-                if (pMap->clearCb != NULL) 
+                if (pMap->clearCb != NULL)
                     pMap->clearCb(pPair);
 
                 pPair->nUsed = 0;

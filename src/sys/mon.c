@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief xutils resource monitor implementation. 
+ *
+ * @brief xutils resource monitor implementation.
  * CPU usage, network usage, memory usage, etc...
  */
 
@@ -121,7 +121,7 @@ int XMon_GetNetworkStats(xmon_stats_t *pStats, xarray_t *pIfaces)
 {
     XSync_Lock(&pStats->netLock);
 
-    if (!pStats->netIfaces.nUsed || 
+    if (!pStats->netIfaces.nUsed ||
         !XArray_InitPool(pIfaces, 0, 1, 0))
     {
         XSync_Unlock(&pStats->netLock);
@@ -140,7 +140,7 @@ int XMon_GetNetworkStats(xmon_stats_t *pStats, xarray_t *pIfaces)
         if (pDstIface == NULL) continue;
 
         memcpy(pDstIface, pSrcIface, sizeof(xnet_iface_t));
-        if (XArray_AddData(pIfaces, pDstIface, 0) < 0) free(pDstIface); 
+        if (XArray_AddData(pIfaces, pDstIface, 0) < 0) free(pDstIface);
     }
 
     XSync_Unlock(&pStats->netLock);
@@ -173,10 +173,10 @@ static void XMon_UpdateNetworkStats(xmon_stats_t *pStats)
     }
 
     struct dirent *pEntry = readdir(pDir);
-    while(pEntry != NULL) 
+    while(pEntry != NULL)
     {
         /* Found an entry, but ignore . and .. */
-        if (!strcmp(".", pEntry->d_name) || 
+        if (!strcmp(".", pEntry->d_name) ||
             !strcmp("..", pEntry->d_name))
         {
             pEntry = readdir(pDir);
@@ -231,7 +231,7 @@ static void XMon_UpdateNetworkStats(xmon_stats_t *pStats)
             while(pIfaceEntry != NULL)
             {
                 /* Found an entry, but ignore . and .. */
-                if (!strcmp(".", pIfaceEntry->d_name) || 
+                if (!strcmp(".", pIfaceEntry->d_name) ||
                     !strcmp("..", pIfaceEntry->d_name))
                     {
                         pIfaceEntry = readdir(pIfaceDir);
@@ -257,13 +257,13 @@ static void XMon_UpdateNetworkStats(xmon_stats_t *pStats)
                 {
                     if (netIface.nBytesReceived > pIface->nBytesReceived && pIface->nBytesReceived > 0)
                         netIface.nBytesReceivedPerSec = (netIface.nBytesReceived - pIface->nBytesReceived) / nIntervalSecs;
-            
+
                     if (netIface.nPacketsReceived > pIface->nPacketsReceived && pIface->nPacketsReceived > 0)
                         netIface.nPacketsReceivedPerSec = (netIface.nPacketsReceived - pIface->nPacketsReceived) / nIntervalSecs;
-            
+
                     if (netIface.nBytesSent > pIface->nBytesSent && pIface->nBytesSent > 0)
                         netIface.nBytesSentPerSec = (netIface.nBytesSent - pIface->nBytesSent) / nIntervalSecs;
-            
+
                     if (netIface.nPacketsSent > pIface->nPacketsSent && pIface->nPacketsSent > 0)
                         netIface.nPacketsSentPerSec = (netIface.nPacketsSent - pIface->nPacketsSent) / nIntervalSecs;
 
@@ -353,8 +353,8 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
         xcpu_info_t cpuInfo;
         memset(&cpuInfo, 0, sizeof(xcpu_info_t));
 
-        sscanf(ptr, "%*s %u %u %u %u %u %u %u %u %u %u", &cpuInfo.nUserSpaceRaw, 
-            &cpuInfo.nUserSpaceNicedRaw, &cpuInfo.nKernelSpaceRaw, &cpuInfo.nIdleTimeRaw, 
+        sscanf(ptr, "%*s %u %u %u %u %u %u %u %u %u %u", &cpuInfo.nUserSpaceRaw,
+            &cpuInfo.nUserSpaceNicedRaw, &cpuInfo.nKernelSpaceRaw, &cpuInfo.nIdleTimeRaw,
             &cpuInfo.nIOWaitRaw, &cpuInfo.nHardInterruptsRaw, &cpuInfo.nSoftInterruptsRaw,
             &cpuInfo.nStealRaw, &cpuInfo.nGuestRaw, &cpuInfo.nGuestNicedRaw);
 
@@ -435,16 +435,16 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
 
     xproc_info_t currCpuUsage;
     sscanf(sBuffer, "%*u %*s %*c %*u %*u %*u %*u %*u %*u %*u %*u %*u %*u %lu %lu %ld %ld",
-        (unsigned long*)&currCpuUsage.nUserSpace, (unsigned long*)&currCpuUsage.nKernelSpace, 
+        (unsigned long*)&currCpuUsage.nUserSpace, (unsigned long*)&currCpuUsage.nKernelSpace,
         (unsigned long*)&currCpuUsage.nUserSpaceChilds, (unsigned long*)&currCpuUsage.nKernelSpaceChilds);
 
     currCpuUsage.nTotalTime = XSYNC_ATOMIC_GET(&pCpuStats->sum.nTotalRaw);
     uint64_t nTotalDiff = currCpuUsage.nTotalTime - lastCpuUsage.nTotalTime;
 
-    float nUserCPU = 100 * (((currCpuUsage.nUserSpace + currCpuUsage.nUserSpaceChilds) - 
+    float nUserCPU = 100 * (((currCpuUsage.nUserSpace + currCpuUsage.nUserSpaceChilds) -
         (lastCpuUsage.nUserSpace + lastCpuUsage.nUserSpaceChilds)) / (float)nTotalDiff);
 
-    float nSystemCPU = 100 * (((currCpuUsage.nKernelSpace + currCpuUsage.nKernelSpaceChilds) - 
+    float nSystemCPU = 100 * (((currCpuUsage.nKernelSpace + currCpuUsage.nKernelSpaceChilds) -
         (lastCpuUsage.nKernelSpace + lastCpuUsage.nKernelSpaceChilds)) / (float)nTotalDiff);
 
     XSYNC_ATOMIC_SET(&pCpuStats->usage.nUserSpaceChilds, currCpuUsage.nUserSpaceChilds);
@@ -454,7 +454,7 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
     XSYNC_ATOMIC_SET(&pCpuStats->usage.nTotalTime, currCpuUsage.nTotalTime);
     XSYNC_ATOMIC_SET(&pCpuStats->usage.nUserSpaceUsage, XFloatToU32(nUserCPU));
     XSYNC_ATOMIC_SET(&pCpuStats->usage.nKernelSpaceUsage, XFloatToU32(nSystemCPU));
-    
+
     if (XPath_Read(XPROC_FILE_LOADAVG, (uint8_t*)sBuffer, sizeof(sBuffer)) <= 0) return 0;
     float fOneMinInterval, fFiveMinInterval, fTenMinInterval;
 

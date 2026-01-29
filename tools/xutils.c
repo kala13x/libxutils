@@ -1,6 +1,6 @@
 /*!
  *  @file libxutils/examples/xcrpt.c
- * 
+ *
  *  This source is part of "libxutils" project
  *  2015-2024  Sun Dro (s.kalatoz@gmail.com)
  *
@@ -11,7 +11,7 @@
 #include "xver.h"
 #include "log.h"
 
-int main() 
+int main()
 {
     xlog_defaults();
 

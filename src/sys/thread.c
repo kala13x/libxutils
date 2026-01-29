@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Implementation of the POSIX thread functionality
  */
 
@@ -20,7 +20,7 @@ static DWORD WINAPI XThread_WinThread(void* pArg)
 }
 #endif
 
-void XThread_Init(xthread_t *pThread) 
+void XThread_Init(xthread_t *pThread)
 {
     pThread->nStackSize = XTHREAD_STACK_SIZE;
     pThread->functionCb = NULL;
@@ -52,7 +52,7 @@ int XThread_Run(xthread_t *pThread)
 
     if (pThread->nDetached)
     {
-        if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) 
+        if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED))
         {
             fprintf(stderr, "<%s:%d> %s Can not set detache state to the pthread attribute: %d\n",
                 __FILE__, __LINE__, __FUNCTION__, errno);

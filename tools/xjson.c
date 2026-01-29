@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2019-2021  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Parse, lint and minify json using xjson library.
  */
 

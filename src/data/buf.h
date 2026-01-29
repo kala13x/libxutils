@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Dynamically allocated byte and data buffers 
+ *
+ * @brief Dynamically allocated byte and data buffers
  */
 
 #ifndef __XUTILS_BUFFER_H__

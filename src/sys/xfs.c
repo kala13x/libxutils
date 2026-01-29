@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Implementation of the NIX/POSIX 
+ *
+ * @brief Implementation of the NIX/POSIX
  * standart file and directory operations.
  */
 
@@ -415,7 +415,7 @@ char XPath_GetType(xmode_t nMode)
 #ifdef S_IFMT
     switch (nMode & S_IFMT)
     {
-#ifdef S_IFREG        
+#ifdef S_IFREG
         case S_IFREG: return '-';
 #endif
 #ifdef S_IFBLK
@@ -613,7 +613,7 @@ int XPath_ModeToPerm(char *pOutput, size_t nSize, xmode_t nMode)
 {
     pOutput[0] = '\0';
     if (nSize < XPERM_LEN + 1) return 0;
- 
+
 #ifndef _WIN32
     pOutput[0] = (nMode & S_IRUSR) ? 'r' : '-';
     pOutput[1] = (nMode & S_IWUSR) ? 'w' : '-';
@@ -632,7 +632,7 @@ int XPath_ModeToPerm(char *pOutput, size_t nSize, xmode_t nMode)
 #endif
 
     pOutput[XPERM_LEN] = 0;
-    return XPERM_LEN;   
+    return XPERM_LEN;
 }
 
 int XPath_SetPerm(const char *pPath, const char *pPerm)
@@ -865,7 +865,7 @@ int XDir_Read(xdir_t *pDir, char *pFile, size_t nSize)
         return XSTDOK;
     }
 #else
-    while((pDir->pEntry = readdir(pDir->pDirectory)) != NULL) 
+    while((pDir->pEntry = readdir(pDir->pDirectory)) != NULL)
     {
         /* Found an entry, but ignore . and .. */
         if (strcmp(".", pDir->pEntry->d_name) == 0 ||
@@ -934,7 +934,7 @@ int XPath_Remove(const char *pPath)
     xstat_t statbuf;
     if (!stat(pPath, &statbuf))
     {
-        return (S_ISDIR(statbuf.st_mode)) ? 
+        return (S_ISDIR(statbuf.st_mode)) ?
             XDir_Remove(pPath) : xunlink(pPath);
     }
 

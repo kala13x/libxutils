@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2019-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Implementation of RTP packet parser functionality
  */
 
@@ -69,7 +69,7 @@ int XRTP_ParsePacket(xrtp_packet_t *pPacket, uint8_t *pData, size_t nLength)
     pPacket->nDataType = (pData[nOffset] & 0x30) >> 4;
     pPacket->nPackets = (pData[nOffset] & 0x0F);
     pPacket->nPayloadSize = (int)nLength - 4 * ((int)pPacket->rtpHeader.nSCRCCount + 3);
- 
+
     nOffset++;
     int i;
 

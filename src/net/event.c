@@ -4,7 +4,7 @@
  *  This source is part of "libxutils" project
  *  2019-2020  Sun Dro (s.kalatoz@gmail.com)
  *
- * @brief Implementation of the cross-platform 
+ * @brief Implementation of the cross-platform
  * async event engine based on POLL and EPOLL.
  */
 
@@ -373,7 +373,7 @@ xevent_data_t* XEvents_AddTimer(xevents_t *pEvents, void *pContext, int nTimeout
 xevent_status_t XEvents_ExtendTimer(xevents_t *pEvents, xevent_data_t *pTimer, int nTimeoutMs)
 {
 #ifdef _USE_EVENT_LIST
-    return XEvents_ExtendTimerCommon(pEvents, pTimer, nTimeoutMs);    
+    return XEvents_ExtendTimerCommon(pEvents, pTimer, nTimeoutMs);
 #else
     return XEvents_ExtendTimerLinux(pEvents, pTimer, nTimeoutMs);
 #endif

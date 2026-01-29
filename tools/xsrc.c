@@ -1,6 +1,6 @@
 /*!
  *  @file libxutils/examples/xsrc.c
- * 
+ *
  *  This source is part of "libxutils" project
  *  2015-2022  Sun Dro (s.kalatoz@gmail.com)
  *
@@ -10,13 +10,14 @@
 #include "xstd.h"
 #include "type.h"
 #include "srch.h"
+#include "buf.h"
 #include "str.h"
 #include "log.h"
 #include "xfs.h"
 
 #define XSEARCH_VERSION_MAX     1
 #define XSEARCH_VERSION_MIN     0
-#define XSEARCH_BUILD_NUMBER    16
+#define XSEARCH_BUILD_NUMBER    17
 
 #define XSEARCH_MAX_READ_SIZE   1024 * 1024 * 1024
 #define XSEARCH_INFO_LEN        128
@@ -38,6 +39,7 @@ typedef struct {
     char sText[XSTR_MID];
     xbool_t bInsensitive;
     xbool_t bSearchLines;
+    xbool_t bStripSpaces;
     xbool_t bJumpSpace;
     xbool_t bReadStdin;
     xbool_t bMatchOnly;
@@ -131,6 +133,7 @@ void XSearch_Usage(const char *pName)
     printf("  %s-m%s <max_size>       %s# Max size of the file to search%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-z%s <min_size>       %s# Min size of the file to search%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-t%s <types>          %s# Target file types (*)%s\n", XSEARCH_ARG_COLORING);
+    printf("  %s-c%s                  %s# Clear empty spaces in found file(s)%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-i%s                  %s# Case insensitive search%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-n%s                  %s# Line by line search text in file%s\n", XSEARCH_ARG_COLORING);
     printf("  %s-j%s                  %s# Jump empty spaces while printing the line%s\n", XSEARCH_ARG_COLORING);
@@ -154,7 +157,9 @@ void XSearch_Usage(const char *pName)
     printf("   1) <file_name> option is supporting wildcard character: '%s*%s'\n", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     printf("   2) <file_types> option is supporting one and more file types: %s-t ldb%s\n", XSTR_FMT_BOLD, XSTR_FMT_RESET);
     printf("   3) One or more <file_name> argument can be specified by using delimiter: '%s;%s'\n", XSTR_FMT_BOLD, XSTR_FMT_RESET);
-    printf("   4) Max sizes (-m and -z) can be human readable numbers, examples: 1G, 10m, 3k, 11M\n\n");
+    printf("   4) Max sizes (-m and -z) can be human readable numbers, examples: 1G, 10m, 3k, 11M\n");
+    printf("   5) With -c argument every file that match search criteria will be cleared from empty spaces\n\n");
+
 
     printf("Examples:\n");
     printf("%sRecursive search of every symlink or a regular file in the root file%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
@@ -164,6 +169,10 @@ void XSearch_Usage(const char *pName)
     printf("%sRecursive search of every .cpp and .java file in the \"/opt\" directory%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
     printf("%sthat contains the case insensitive text \"test\" and verbose output:%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
     printf("%s[xutils@examples]$ %s -rvd /opt -f \"*.cpp;*.java\" -ig test%s\n\n", XSTR_FMT_BOLD, pName, XSTR_FMT_RESET);
+
+    printf("%sThe tool will search whitespace after last non-empty character in the line and remove it%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("%sIf line contains only whitespace, it will be replaced with the new line character '\\n'%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("%s[xutils@examples]$ %s -rd ./MyProject/ -tf -f *.c -c%s\n\n", XSTR_FMT_BOLD, pName, XSTR_FMT_RESET);
 }
 
 static int XSearch_GetSize(char *pSize, size_t *pMaxRead)
@@ -199,7 +208,7 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     pArgs->nFileSize = -1;
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "b:d:f:g:l:m:p:s:t:z:i1:j1:n1:o1:r1:x1:v1:h1")) != -1)
+    while ((opt = getopt(argc, argv, "b:d:f:g:l:m:p:s:t:z:c1:i1:j1:n1:o1:r1:x1:v1:h1")) != -1)
     {
         switch (opt)
         {
@@ -232,6 +241,9 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
                 break;
             case 's':
                 pArgs->nFileSize = atol(optarg);
+                break;
+            case 'c':
+                pArgs->bStripSpaces = XTRUE;
                 break;
             case 'n':
                 pArgs->bSearchLines = XTRUE;
@@ -295,8 +307,8 @@ static int XSearch_ParseArgs(xsearch_args_t *pArgs, int argc, char *argv[])
     else pArgs->nMaxRead = XSEARCH_MAX_READ_SIZE;
 
     /* Validate opts */
-    if (pArgs->nPermissions < 0 || 
-        pArgs->nFileTypes < 0) 
+    if (pArgs->nPermissions < 0 ||
+        pArgs->nFileTypes < 0)
             return 0;
 
     return 1;
@@ -499,10 +511,93 @@ static void XSearch_DisplayEntry(xsearch_t *pSearch, xsearch_entry_t *pEntry)
     }
 }
 
+int XSearch_StripEmptySpaces(xsearch_entry_t *pEntry)
+{
+    if (pEntry->eType != XF_REGULAR) return XSTDNON;
+    if (!xstrused(pEntry->sName)) return XSTDERR;
+    if (!xstrused(pEntry->sPath)) return XSTDERR;
+
+    char sEntry[XPATH_MAX];
+    xstrncpyf(sEntry, sizeof(sEntry), "%s%s", pEntry->sPath, pEntry->sName);
+
+    xfile_t file;
+    xbool_t bDirty = XFALSE;
+    char sLine[XLINE_MAX];
+
+    xbyte_buffer_t buffer;
+    XByteBuffer_Init(&buffer, XLINE_MAX, XSTDNON);
+    XASSERT((buffer.nSize > 0), XSTDERR);
+
+    XASSERT_CALL((XFile_Open(&file, sEntry, "r", NULL) > 0),
+        XByteBuffer_Clear, &buffer, XSTDERR);
+
+    int nLength = XFile_GetLine(&file, sLine, sizeof(sLine));
+    while (nLength > 0)
+    {
+        int nFirstSpace = -1;
+        int nPosit = 0;
+
+        while (nPosit < nLength)
+        {
+            if (sLine[nPosit] == '\n') break;
+            if (!isspace((unsigned char)sLine[nPosit])) nFirstSpace = -1;
+            else if (nFirstSpace < 0) nFirstSpace = nPosit;
+            nPosit++;
+        }
+
+        if (nFirstSpace >= 0 && nFirstSpace < nLength)
+        {
+            sLine[nFirstSpace++] = '\n';
+            sLine[nFirstSpace] = '\0';
+            nLength = nFirstSpace;
+            bDirty = XTRUE;
+        }
+
+        XASSERT_CALL2((XByteBuffer_Add(&buffer, (const uint8_t*)sLine, nLength) > 0),
+            XByteBuffer_Clear, &buffer, XFile_Close, &file, XSTDERR);
+
+        nLength = XFile_GetLine(&file, sLine, sizeof(sLine));
+    }
+
+    XFile_Close(&file);
+
+    if (!bDirty)
+    {
+        XByteBuffer_Clear(&buffer);
+        return XSTDNON;
+    }
+
+    XASSERT_CALL((XFile_Open(&file, sEntry, "cwt", NULL) > 0),
+        XByteBuffer_Clear, &buffer, XSTDERR);
+
+    XASSERT_CALL2((XFile_Write(&file, buffer.pData, buffer.nUsed) > 0),
+        XByteBuffer_Clear, &buffer, XFile_Close, &file, XSTDERR);
+
+    XByteBuffer_Clear(&buffer);
+    XFile_Close(&file);
+
+    return XSTDOK;
+}
+
 int XSearch_Callback(xsearch_t *pSearch, xsearch_entry_t *pEntry, const char *pMsg)
 {
     if (XSYNC_ATOMIC_GET(&g_interrupted)) return XSTDERR;
-    if (pEntry != NULL) XSearch_DisplayEntry(pSearch, pEntry);
+    xsearch_args_t *pArgs = (xsearch_args_t*)pSearch->pUserCtx;
+
+    if (pEntry != NULL)
+    {
+        if (pArgs->bStripSpaces)
+        {
+            XSTATUS nStatus = XSearch_StripEmptySpaces(pEntry);
+            if (nStatus > 0) XSearch_DisplayEntry(pSearch, pEntry);
+            else if (nStatus < 0) xloge("Failed to strip spaces in file: %s (%s)", pEntry->sPath, XSTRERR);
+        }
+        else
+        {
+            XSearch_DisplayEntry(pSearch, pEntry);
+        }
+    }
+
     if (pMsg != NULL) xloge("%s (%s)", pMsg, XSTRERR);
     return XSTDNON;
 }

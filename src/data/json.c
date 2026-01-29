@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2019-2021  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Implementation of the lexical analyzer 
+ *
+ * @brief Implementation of the lexical analyzer
  * and recursive descent parser with JSON grammar
  */
 
@@ -34,7 +34,7 @@ size_t XJSON_GetErrorStr(xjson_t *pJson, char *pOutput, size_t nSize)
 {
     switch (pJson->nError)
     {
-        case XJSON_ERR_INVALID: 
+        case XJSON_ERR_INVALID:
             return xstrncpyf(pOutput, nSize, "Invalid item at posit(%zu)", pJson->nOffset);
         case XJSON_ERR_EXITS:
             return xstrncpyf(pOutput, nSize, "Duplicate Key at posit(%zu)", pJson->nOffset);
@@ -90,8 +90,8 @@ static int XJSON_NextChar(xjson_t *pJson, char *pChar)
     char nCharacter = pJson->pData[pJson->nOffset++];
 
     /* Skip space and new line characters */
-    while (nCharacter == ' ' || 
-           nCharacter == '\n' || 
+    while (nCharacter == ' ' ||
+           nCharacter == '\n' ||
            nCharacter == '\t')
     {
         XASSERT(XJSON_CheckBounds(pJson), XJSON_FAILURE);
@@ -201,7 +201,7 @@ static int XJSON_GetNextToken(xjson_t *pJson)
     pToken->nType = XJSON_TOKEN_INVALID;
     pToken->pData = NULL;
     pToken->nLength = 0;
-    char nChar = 0; 
+    char nChar = 0;
 
     if (!XJSON_NextChar(pJson, &nChar))
     {
@@ -262,7 +262,7 @@ static int XJSON_Expect(xjson_t *pJson, xjson_token_type_t nType)
 
 static xjson_type_t XJSON_GetItemType(xjson_token_type_t eToken)
 {
-    switch(eToken) 
+    switch(eToken)
     {
         case XJSON_TOKEN_INTEGER: return XJSON_TYPE_NUMBER;
         case XJSON_TOKEN_QUOTE: return XJSON_TYPE_STRING;
@@ -670,8 +670,8 @@ static int XJSON_CheckObject(xjson_obj_t *pObj, xjson_type_t nType)
 {
     return (pObj != NULL &&
             pObj->pData != NULL &&
-            pObj->nType == nType) ? 
-                XJSON_SUCCESS : XJSON_FAILURE; 
+            pObj->nType == nType) ?
+                XJSON_SUCCESS : XJSON_FAILURE;
 }
 
 static int XJSON_TokenIsItem(xjson_token_t *pToken)
@@ -1072,7 +1072,7 @@ static int XJSON_Realloc(xjson_writer_t *pWriter, size_t nSize)
     pWriter->pData = pNewData;
 
     return XJSON_SUCCESS;
-} 
+}
 
 static int XJSON_AppedSpaces(xjson_writer_t *pWriter)
 {
@@ -1145,12 +1145,12 @@ static int XJSON_WriteName(xjson_obj_t *pObj, xjson_writer_t *pWriter)
             pWriter->nTabSize ? XSTR_SPACE : XSTR_EMPTY);
     }
 
-    return XJSON_WriteString(pWriter, 1, "\"%s\":%s", 
+    return XJSON_WriteString(pWriter, 1, "\"%s\":%s",
         pObj->pName, pWriter->nTabSize ? XSTR_SPACE : XSTR_EMPTY);
 }
 
 static int XJSON_WriteItem(xjson_obj_t *pObj, xjson_writer_t *pWriter)
-{  
+{
     if (pObj->nType == XJSON_TYPE_INVALID ||
         pObj->nType == XJSON_TYPE_OBJECT ||
         pObj->nType == XJSON_TYPE_ARRAY)
@@ -1196,7 +1196,7 @@ static int XJSON_WriteItem(xjson_obj_t *pObj, xjson_writer_t *pWriter)
         }
     }
 
-    return (pObj->nType == XJSON_TYPE_STRING) ? 
+    return (pObj->nType == XJSON_TYPE_STRING) ?
         XJSON_WriteString(pWriter, nIndent, "\"%s\"", (const char*)pObj->pData):
         XJSON_WriteString(pWriter, nIndent, "%s", (const char*)pObj->pData);
 }
@@ -1407,8 +1407,8 @@ void XJSON_DestroyWriter(xjson_writer_t *pWriter)
 
 int XJSON_Write(xjson_t *pJson, char *pOutput, size_t nSize)
 {
-    if (pJson == NULL || 
-        pOutput == NULL || 
+    if (pJson == NULL ||
+        pOutput == NULL ||
         !nSize) return XJSON_FAILURE;
 
     xpool_t *pPool = pJson->pPool;

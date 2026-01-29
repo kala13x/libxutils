@@ -1,6 +1,6 @@
 /*
  *  examples/strings.c
- * 
+ *
  *  Copyleft (C) 2015  Sun Dro (a.k.a. kala13x)
  *
  * Example file for working with strings.
@@ -47,7 +47,7 @@ xbool_t va_string_test2(const char *pOriginalString, size_t nOriginalLength, con
     return xstrcmp(pOriginalString, sDest);
 }
 
-int main() 
+int main()
 {
     xlog_defaults();
 

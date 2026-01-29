@@ -1,6 +1,6 @@
 /*
  *  examples/json.c
- * 
+ *
  *  Copyleft (C) 2018  Sun Dro (a.k.a. kala13x)
  *
  * Example file for working with json.
@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
     char *pBuffer = (char*)XPath_Load(argv[1],  &nSize);
     if (pBuffer == NULL)
     {
-        xloge("Can't read file: %s (%s)", 
+        xloge("Can't read file: %s (%s)",
             argv[1], XSTRERR);
         return 1;
     }
@@ -240,7 +240,7 @@ int main(int argc, char *argv[])
 // MINIFY JSON FILE
 ////////////////////////////////////////////////////////
 
-    /* Dump json from xjson_t object */    
+    /* Dump json from xjson_t object */
     if (XJSON_Write(&json, pBuffer, nSize))
         xlog("\nMinify:\n%s\n", pBuffer);
 

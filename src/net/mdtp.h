@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2019-2021  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Implementation of Modern Data Transmit Protocol 
+ *
+ * @brief Implementation of Modern Data Transmit Protocol
  * (MDTP) packet parser and assembler functionality
  */
 

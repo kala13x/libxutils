@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Implementation of the NIX/POSIX 
+ *
+ * @brief Implementation of the NIX/POSIX
  * standart file and directory operations.
  */
 

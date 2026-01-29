@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Implementation of the various crypt algorithms
  */
 
@@ -22,10 +22,10 @@
 #define XCHAR_MAP_SIZE  52
 
 static const char g_charMap[XCHAR_MAP_SIZE] =
-    { 
-        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 
+    {
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
         'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
         'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
     };
 
@@ -518,8 +518,8 @@ uint8_t* XCrypt_Multy(xcrypt_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength
         xcrypt_chipher_t eCipher = XCrypt_GetCipher(pCipher);
         if (eCipher == XC_INVALID)
         {
-            XCrypt_ErrorCallback(pCtx, 
-                "Invalid or unsupported cipher: %s", 
+            XCrypt_ErrorCallback(pCtx,
+                "Invalid or unsupported cipher: %s",
                 XCrypt_GetCipherStr(eCipher));
 
             XArray_Destroy(pCiphersArr);

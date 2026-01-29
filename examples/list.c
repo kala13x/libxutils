@@ -1,6 +1,6 @@
 /*
  *  examples/list.c
- * 
+ *
  *  Copyleft (C) 2020  Sun Dro (a.k.a. kala13x)
  *
  * Example file for working with linked list.

@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Implementation of sched_setaffinity.
  */
 
@@ -72,7 +72,7 @@ int XCPU_SetAffinity(int *pCPUs, size_t nCount, xpid_t nPID)
 
     for (i = 0; i < nCount; i++)
     {
-        if (pCPUs[i] >= 0 && 
+        if (pCPUs[i] >= 0 &&
             pCPUs[i] < nCPUCount)
             CPU_SET(pCPUs[i], &mask);
     }

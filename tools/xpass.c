@@ -1,6 +1,6 @@
 /*!
  *  @file libxutils/examples/xpass.c
- * 
+ *
  *  This source is part of "libxutils" project
  *  2015-2022  Sun Dro (s.kalatoz@gmail.com)
  *
@@ -316,7 +316,7 @@ static xbool_t XPass_GetKey(xpass_ctx_t *pCtx)
     if (pCrypted == NULL)
     {
         xloge("Failed to crypt master password: %d", errno);
-        return XFALSE; 
+        return XFALSE;
     }
 
     xstrncpy(pCtx->sKey, sizeof(pCtx->sKey), pCrypted);
@@ -409,7 +409,7 @@ static xbool_t XPass_ParseArgs(xpass_ctx_t *pCtx, int argc, char *argv[])
     {
         xloge("Invalid or missing config file argument.");
         XPass_DisplayUsage(argv[0]);
-        return XFALSE;  
+        return XFALSE;
     }
 
     return XTRUE;

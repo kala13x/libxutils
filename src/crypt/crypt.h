@@ -65,7 +65,7 @@ typedef enum
     XCB_IV
 } xcrypt_cb_type_t;
 
-typedef struct XCryptKey 
+typedef struct XCryptKey
 {
     xcrypt_chipher_t eCipher;
     char sKey[XSTR_MIN];

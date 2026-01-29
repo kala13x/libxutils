@@ -708,7 +708,7 @@ XSTATUS XTOP_AddOverallBar(xcli_win_t *pWin, xcli_bar_t *pBar, xmem_info_t *pMem
 {
     if (pMemInfo->nMemoryTotal < pMemInfo->nMemoryAvail) return XSTDNON;
     char sLine[XLINE_MAX], sBuff[XSTR_TINY];
-    char sUsed[XSTR_TINY], sCache[XSTR_TINY];    
+    char sUsed[XSTR_TINY], sCache[XSTR_TINY];
 
     /* Calculate memory usage percentage */
     size_t nTotalUsed = pMemInfo->nMemoryTotal - pMemInfo->nMemoryFree;
@@ -1089,7 +1089,7 @@ XSTATUS XTOP_AddNetworkInfo(xtop_ctx_t *pCtx, xcli_win_t *pWin, xarray_t *pIface
 
     for (i = 0; i < pIfaces->nUsed; i++)
     {
-        if (nTrackID >= 0 && i == nTrackID) continue; 
+        if (nTrackID >= 0 && i == nTrackID) continue;
 
         xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, i);
         if (pIface != NULL)

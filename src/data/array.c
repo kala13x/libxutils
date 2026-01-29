@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Dynamically allocated data holder 
+ *
+ * @brief Dynamically allocated data holder
  * with some sorting and search algorithms.
  */
 
@@ -16,7 +16,7 @@ xarray_data_t *XArray_NewData(xarray_t *pArr, void *pData, size_t nSize, uint32_
     xarray_data_t *pNewData = (xarray_data_t *)xalloc(pArr->pPool, sizeof(xarray_data_t));
     if (pNewData == NULL) return NULL;
 
-    if (pData != NULL && nSize > 0) 
+    if (pData != NULL && nSize > 0)
     {
         pNewData->pData = xalloc(pArr->pPool, nSize);
         if (pNewData->pData == NULL)
@@ -52,9 +52,9 @@ void XArray_FreeData(xarray_data_t *pArrData)
 
 void XArray_ClearData(xarray_t *pArr, xarray_data_t *pArrData)
 {
-    if (pArr != NULL && 
-        pArrData != NULL && 
-        pArr->clearCb != NULL) 
+    if (pArr != NULL &&
+        pArrData != NULL &&
+        pArr->clearCb != NULL)
     {
         pArr->clearCb(pArrData);
         pArrData->pData = NULL;
@@ -141,7 +141,7 @@ void XArray_Clear(xarray_t *pArr)
     if (pArr->pData != NULL)
     {
         size_t i;
-        for (i = 0; i < pArr->nSize; i++) 
+        for (i = 0; i < pArr->nSize; i++)
         {
             XArray_ClearData(pArr, pArr->pData[i]);
             pArr->pData[i] = NULL;
@@ -220,7 +220,7 @@ size_t XArray_Realloc(xarray_t *pArr)
         pArr->nSize = nSize;
 
         size_t i;
-        for (i = nUsed; i < nSize; i++) 
+        for (i = nUsed; i < nSize; i++)
             pArr->pData[i] = NULL;
     }
 
@@ -267,7 +267,7 @@ int XArray_AddData(xarray_t *pArr, void *pData, size_t nSize)
     if (pArr == NULL) return XARRAY_FAILURE;
     xarray_data_t *pNewData = XArray_NewData(pArr, pData, nSize, 0);
 
-    if (pNewData == NULL) 
+    if (pNewData == NULL)
     {
         pArr->eStatus = XARRAY_STATUS_NO_MEMORY;
         return XARRAY_FAILURE;
@@ -279,7 +279,7 @@ int XArray_AddData(xarray_t *pArr, void *pData, size_t nSize)
 int XArray_PushData(xarray_t *pArr, void *pData, size_t nSize)
 {
     xarray_data_t *pNewData = XArray_NewData(pArr, pData, 0, 0);
-    if (pNewData == NULL) 
+    if (pNewData == NULL)
     {
         pArr->eStatus = XARRAY_STATUS_NO_MEMORY;
         return XARRAY_FAILURE;
@@ -405,7 +405,7 @@ xarray_data_t* XArray_Insert(xarray_t *pArr, size_t nIndex, xarray_data_t *pData
 
     for (i = nNextIndex; i < pArr->nUsed; i++)
         pOldData = XArray_Set(pArr, i, pOldData);
-    
+
     XArray_Add(pArr, pOldData);
     return pArr->pData[nNextIndex];
 }
@@ -483,7 +483,7 @@ void XArray_Sort(xarray_t *pArr, xarray_comparator_t compare, void *pCtx)
 
 void XArray_SortBy(xarray_t *pArr, int nSortBy)
 {
-    if (nSortBy == XARRAY_SORTBY_SIZE) 
+    if (nSortBy == XARRAY_SORTBY_SIZE)
         XArray_Sort(pArr, XArray_CompareSize, NULL);
     else if (nSortBy == XARRAY_SORTBY_KEY)
         XArray_Sort(pArr, XArray_CompareKey, NULL);
@@ -494,9 +494,9 @@ void XArray_BubbleSort(xarray_t *pArr, xarray_comparator_t compare, void *pCtx)
     if (pArr == NULL || !pArr->nUsed) return;
     size_t i, j;
 
-    for (i = 0; i < pArr->nUsed-1; i++) 
+    for (i = 0; i < pArr->nUsed-1; i++)
     {
-        for (j = 0 ; j < pArr->nUsed-i-1; j++) 
+        for (j = 0 ; j < pArr->nUsed-i-1; j++)
         {
             if (compare((void*)pArr->pData[j], (void*)pArr->pData[j+1], pCtx))
             {
@@ -559,7 +559,7 @@ int XArray_DoubleSearch(xarray_t *pArr, uint32_t nKey)
 
         pData = pArr->pData[nBack];
         if (nKey == pData->nKey) return nBack;
-    
+
         nFront++;
         nBack--;
     }

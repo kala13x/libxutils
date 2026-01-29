@@ -3,8 +3,8 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief xutils resource monitor implementation. 
+ *
+ * @brief xutils resource monitor implementation.
  * CPU usage, network usage, memory usage, etc...
  */
 

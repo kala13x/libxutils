@@ -1,6 +1,6 @@
 /*
  *  examples/log.c
- * 
+ *
  *  Copyleft (C) 2015  Sun Dro (a.k.a. kala13x)
  *
  * Example file of useing XLog library.

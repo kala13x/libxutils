@@ -3,12 +3,12 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Advanced file search implementation.
  */
 
 #include "srch.h"
- 
+
 typedef struct {
     const char *pBuffer;
     const char *pPath;
@@ -543,8 +543,8 @@ int XSearch(xsearch_t *pSearch, const char *pDirectory)
         }
 
         /* Recursive search */
-        if (pSearch->bRecursive && 
-            S_ISDIR(statbuf.st_mode) && 
+        if (pSearch->bRecursive &&
+            S_ISDIR(statbuf.st_mode) &&
             XSearch(pSearch, sFullPath) < 0)
         {
             XDir_Close(&dirHandle);

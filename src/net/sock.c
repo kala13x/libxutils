@@ -76,7 +76,7 @@ static uint32_t XFlags_Adjust(uint32_t nFlags)
 }
 
 #ifdef XSOCK_USE_SSL
-static xatomic_t g_nSSLInit = 0; 
+static xatomic_t g_nSSLInit = 0;
 
 typedef struct XSocketPriv {
     xbool_t bConnected;
@@ -680,7 +680,7 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
 #endif
 }
 
-int XSock_RecvChunk(xsock_t *pSock, void* pData, size_t nSize) 
+int XSock_RecvChunk(xsock_t *pSock, void* pData, size_t nSize)
 {
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSL))
         return XSock_SSLRead(pSock, pData, nSize, XTRUE);
@@ -716,7 +716,7 @@ int XSock_RecvChunk(xsock_t *pSock, void* pData, size_t nSize)
     return nReceived;
 }
 
-int XSock_Recv(xsock_t *pSock, void* pData, size_t nSize) 
+int XSock_Recv(xsock_t *pSock, void* pData, size_t nSize)
 {
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSL))
         return XSock_SSLRead(pSock, pData, nSize, XFALSE);
@@ -951,7 +951,7 @@ size_t XSock_IPStr(const uint32_t nAddr, char *pStr, size_t nSize)
 }
 
 size_t XSock_SinAddr(const struct in_addr inAddr, char *pAddr, size_t nSize)
-{ 
+{
     return XSock_IPStr(inAddr.s_addr, pAddr, nSize);
 }
 
@@ -1075,14 +1075,14 @@ XSOCKET XSock_NonBlock(xsock_t *pSock, xbool_t nNonBlock)
 #else
     /* Get flags */
     int fl = fcntl(pSock->nFD, F_GETFL);
-    if (fl < 0) 
+    if (fl < 0)
     {
         pSock->eStatus = XSOCK_ERR_GETFL;
         XSock_Close(pSock);
         return XSOCK_INVALID;
     }
 
-    if (nNonBlock) 
+    if (nNonBlock)
     {
         /* Set flag */
         fl = fcntl(pSock->nFD, F_SETFL, fl | O_NONBLOCK);
@@ -1093,7 +1093,7 @@ XSOCKET XSock_NonBlock(xsock_t *pSock, xbool_t nNonBlock)
             return XSOCK_INVALID;
         }
     }
-    else 
+    else
     {
         fl = fcntl(pSock->nFD, F_SETFL, fl & (~O_NONBLOCK));
         if (fl < 0)
@@ -1115,7 +1115,7 @@ XSOCKET XSock_TimeOutR(xsock_t *pSock, int nSec, int nUsec)
 {
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
     struct timeval tmout;
-    tmout.tv_sec = nSec; 
+    tmout.tv_sec = nSec;
     tmout.tv_usec = nUsec;
 
 #ifdef _WIN32
@@ -1135,7 +1135,7 @@ XSOCKET XSock_TimeOutS(xsock_t *pSock, int nSec, int nUsec)
 {
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
     struct timeval tmout;
-    tmout.tv_sec = nSec; 
+    tmout.tv_sec = nSec;
     tmout.tv_usec = nUsec;
 
 #ifdef _WIN32
@@ -1190,7 +1190,7 @@ XSOCKET XSock_Oobinline(xsock_t *pSock, xbool_t nEnabled)
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
     unsigned int nOpt = (unsigned int)nEnabled;
 
-    if (setsockopt(pSock->nFD, SOL_SOCKET, SO_OOBINLINE, (char*)&nOpt, sizeof nOpt) < 0) 
+    if (setsockopt(pSock->nFD, SOL_SOCKET, SO_OOBINLINE, (char*)&nOpt, sizeof nOpt) < 0)
     {
         pSock->eStatus = XSOCK_ERR_SETOPT;
         XSock_Close(pSock);

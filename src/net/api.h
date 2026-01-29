@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2019-2021  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Implementation of high performance, event based,
  * non-blocking client/server API for the HTTP, WebSocket
  * and raw TCP connections. The library will use epoll(),

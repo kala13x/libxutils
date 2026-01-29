@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Implementation of CLI window operarions.
  */
 
@@ -188,7 +188,7 @@ XSTATUS XCLIWin_AddLine(xcli_win_t *pWin, char *pLine, size_t nLength)
         XArray_Clear(pLines);
         return XSTDERR;
     }
-    
+
     return XSTDOK;
 }
 
@@ -548,11 +548,11 @@ xbool_t XProgBar_CalculateBounds(xcli_bar_t *pCtx)
     if (pCtx->fPercent > 100.) pCtx->fPercent = 100.;
     else if (pCtx->fPercent < 0.) pCtx->fPercent = 0.;
 
-    if (pCtx->bInPercent) 
-        xstrncpyf(pCtx->sPercent, sizeof(pCtx->sPercent), "%s%.1f%%%s", 
+    if (pCtx->bInPercent)
+        xstrncpyf(pCtx->sPercent, sizeof(pCtx->sPercent), "%s%.1f%%%s",
             XSTR_FMT_DIM, pCtx->fPercent, XSTR_FMT_RESET);
     else
-        xstrncpyfl(pCtx->sPercent, sizeof(pCtx->sPercent), 
+        xstrncpyfl(pCtx->sPercent, sizeof(pCtx->sPercent),
             XCLI_PERCENT_MAX, XSTR_SPACE_CHAR, "%.1f%%", pCtx->fPercent);
 
     size_t nColumns = pCtx->frame.nColumns;

@@ -7,7 +7,7 @@
  */
 
 #include "xstd.h"
-#include "array.h" 
+#include "array.h"
 #include "pool.h"
 
 typedef struct {
@@ -63,7 +63,7 @@ int ComparatorCostum(const void *pData1, const void *pData2, void *pCtx)
     return strcmp((char*)pSt1->str, (char*)pSt2->str);
 }
 
-int main() 
+int main()
 {
     xpool_t pool;
     XPool_Init(&pool, 1024 * 2);

@@ -1,6 +1,6 @@
 /*
  *  examples/thread.c
- * 
+ *
  *  Copyleft (C) 2015  Sun Dro (a.k.a. kala13x)
  *
  * Example file of useing threads.
@@ -23,7 +23,7 @@ int myTask(void *pCtx)
     return 0;
 }
 
-int main() 
+int main()
 {
     xtask_t task;
     XTask_Start(&task, myTask, NULL, 10000);
@@ -38,7 +38,7 @@ int main()
     thread[0].functionCb = my_thread;
     XThread_Run(&thread[0]);
     XThread_Join(&thread[0]);
-    
+
     /* Second way */
     XThread_Create(&thread[1], my_thread, &arg1, 1);
 

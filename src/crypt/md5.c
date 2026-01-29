@@ -3,14 +3,14 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief MD5 algorithm implementation for C/C++
  */
 
 #include "md5.h"
 #include "str.h"
 
-static const uint32_t g_intRadians[64] = 
+static const uint32_t g_intRadians[64] =
     {
         0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
         0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
@@ -30,7 +30,7 @@ static const uint32_t g_intRadians[64] =
         0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
     };
 
-static const uint32_t g_radians[] = 
+static const uint32_t g_radians[] =
     {
         7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
         5,  9, 14, 20, 5,  9, 14, 20, 5,  9, 14, 20, 5,  9, 14, 20,
@@ -75,24 +75,24 @@ XSTATUS XMD5_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size
         uint32_t c = hash2;
         uint32_t d = hash3;
 
-        for(i = 0; i < 64; i++) 
+        for(i = 0; i < 64; i++)
         {
-            if (i < 16) 
+            if (i < 16)
             {
                 f = (b & c) | ((~b) & d);
                 g = i;
-            } 
-            else if (i < 32) 
+            }
+            else if (i < 32)
             {
                 f = (d & b) | ((~d) & c);
                 g = (5 * i + 1) % 16;
-            } 
-            else if (i < 48) 
+            }
+            else if (i < 48)
             {
                 f = b ^ c ^ d;
-                g = (3 * i + 5) % 16;          
-            } 
-            else 
+                g = (3 * i + 5) % 16;
+            }
+            else
             {
                 f = c ^ (b | (~d));
                 g = (7 * i) % 16;

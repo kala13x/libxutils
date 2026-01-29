@@ -3,7 +3,7 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
+ *
  * @brief Get system date, convert between formats,
  * get month days, calculate leap year, and e.t.c.
  */
@@ -23,7 +23,7 @@ void XTime_Init(xtime_t *pTime)
     pTime->nFraq = 0;
 }
 
-void XTime_FromTm(xtime_t *pTime, const struct tm *pTm) 
+void XTime_FromTm(xtime_t *pTime, const struct tm *pTm)
 {
     pTime->nYear = (uint16_t)pTm->tm_year+1900;
     pTime->nMonth = (uint8_t)pTm->tm_mon+1;
@@ -34,13 +34,13 @@ void XTime_FromTm(xtime_t *pTime, const struct tm *pTm)
     pTime->nFraq = 0;
 }
 
-int XTime_FromStr(xtime_t *pTime, const char *pStr) 
+int XTime_FromStr(xtime_t *pTime, const char *pStr)
 {
     XTime_Init(pTime);
 #ifdef _WIN32
     return sscanf_s(pStr, "%04d%02d%02d%02d%02d%02d%02d",
-        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay, 
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec, 
+        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
+        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
         (int*)&pTime->nFraq);
 #else
     return sscanf(pStr, "%04d%02d%02d%02d%02d%02d%02d",
@@ -135,7 +135,7 @@ void XTime_ToTm(const xtime_t *pTime, struct tm *pTm)
     pTm->tm_hour = pTime->nHour;
     pTm->tm_min = pTime->nMin;
     pTm->tm_sec = pTime->nSec;
-    pTm->tm_isdst = -1;  
+    pTm->tm_isdst = -1;
 }
 
 time_t XTime_ToEpoch(const xtime_t *pTime)
@@ -212,7 +212,7 @@ uint64_t XTime_Serialize(const xtime_t *pTime)
     return nTime;
 }
 
-int XTime_GetLeapYear(int nYear) 
+int XTime_GetLeapYear(int nYear)
 {
     int nRetVal = 0;
     if (nYear % 4 == 0)
@@ -233,10 +233,10 @@ int XTime_GetMonthDays(int nYear, int nMonth)
     int nLeap = XTime_GetLeapYear(nYear);
     if (nMonth == 2) return nLeap ? 28 : 29;
 
-    if (nMonth == 4 || 
-        nMonth == 6 || 
-        nMonth == 9 || 
-        nMonth == 11) 
+    if (nMonth == 4 ||
+        nMonth == 6 ||
+        nMonth == 9 ||
+        nMonth == 11)
         return 30;
 
     return 31;
@@ -279,7 +279,7 @@ double XTime_Diff(const xtime_t *pSrc1, const xtime_t *pSrc2, xtime_diff_t eDiff
     return fSeconds;
 }
 
-void XTime_Copy(xtime_t *pDst, const xtime_t *pSrc) 
+void XTime_Copy(xtime_t *pDst, const xtime_t *pSrc)
 {
     XASSERT_VOID_RET((pDst && pSrc));
     *pDst = *pSrc;

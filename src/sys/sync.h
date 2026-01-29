@@ -3,9 +3,9 @@
  *
  *  This source is part of "libxutils" project
  *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
- * 
- * @brief Implementation of the various cross-platform 
- * sync functionality with the POSIX mutex and SynchAPI 
+ *
+ * @brief Implementation of the various cross-platform
+ * sync functionality with the POSIX mutex and SynchAPI
  * critical section, rwlocks, atomic built-ins, and etc.
  */
 
@@ -22,7 +22,7 @@ typedef struct XSyncMutex {
 #ifdef _WIN32
     CRITICAL_SECTION mutex;
 #else
-    pthread_mutex_t mutex;  
+    pthread_mutex_t mutex;
 #endif
     xbool_t bEnabled;
 } xsync_mutex_t;
