@@ -636,6 +636,7 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
 
         XFile_Close(&file);
         unlink(sEntryBackup);
+        chmod(sEntry, pEntry->nMode);
     }
 
     XByteBuffer_Clear(&buffer);
