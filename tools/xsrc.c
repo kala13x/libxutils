@@ -633,6 +633,7 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
     {
         xloge("Failed to write file: %s (%s)", sEntry, XSTRERR);
 
+        unlink(sEntry);
         if (rename(sEntryBackup, sEntry) != 0)
             xloge("Failed to restore backup: %s -> %s (%s)", sEntryBackup, sEntry, XSTRERR);
 
@@ -659,7 +660,8 @@ int XSearch_Callback(xsearch_t *pSearch, xsearch_entry_t *pEntry, const char *pM
         {
             XSTATUS nStatus = XSearch_StripEmptySpaces(pArgs, pEntry);
             if (nStatus > 0) XSearch_DisplayEntry(pSearch, pEntry);
-            else if (nStatus < 0) xloge("Failed to strip spaces in file: %s (%d)", pEntry->sPath, errno);
+            else if (nStatus < 0) xloge("Failed to strip spaces in file: %s%s (%d)",
+                                                pEntry->sPath, pEntry->sName, errno);
         }
         else
         {
