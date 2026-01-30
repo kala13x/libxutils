@@ -11,7 +11,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 set(XUTILS_INCLUDE_DIRS
-  ../src/crypt 
+  ../src/crypt
   ../src/data
   ../src/net
   ../src/sys
@@ -43,7 +43,7 @@ if(OpenSSL_FOUND)
 endif()
 
 # replace with your actual source files
-set(SOURCE_FILES 
+set(SOURCE_FILES
     xutils.c
     xcrypt.c
     xpass.c

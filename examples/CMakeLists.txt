@@ -7,7 +7,7 @@ set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 
 set(XUTILS_INCLUDE_DIRS
-  ../src/crypt 
+  ../src/crypt
   ../src/data
   ../src/net
   ../src/sys
@@ -44,7 +44,7 @@ if(MATH_LIB)
 endif()
 
 # replace with your actual source files
-set(SOURCE_FILES 
+set(SOURCE_FILES
     array.c
     async-server.c
     async-client.c
