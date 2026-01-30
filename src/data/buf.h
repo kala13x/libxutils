@@ -32,6 +32,7 @@ typedef struct XByteBuffer {
 uint8_t *XByteData_Dup(const uint8_t *pBuff, size_t nSize);
 xbool_t XByteBuffer_HasData(xbyte_buffer_t *pBuffer);
 xbyte_buffer_t* XByteBuffer_New(size_t nSize, int nFastAlloc);
+uint8_t XByteBuffer_GetByte(xbyte_buffer_t *pBuffer, size_t nIndex);
 void XByteBuffer_Free(xbyte_buffer_t **pBuffer);
 void XByteBuffer_Clear(xbyte_buffer_t *pBuffer);
 void XByteBuffer_Reset(xbyte_buffer_t *pBuffer);

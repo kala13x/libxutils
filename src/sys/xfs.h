@@ -85,6 +85,7 @@ int xunlink(const char* pPath);
 int xrmdir(const char* pPath);
 int xclose(int nFD);
 
+int XFile_OpenM(xfile_t *pFile, const char *pPath, const char *pFlags, xmode_t nMode);
 int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms);
 int XFile_Reopen(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms);
 xfile_t* XFile_Alloc(const char *pPath, const char *pFlags, const char *pPerms);

@@ -75,6 +75,8 @@ int xstat(const char *pPath, xstat_t *pStat)
 
 int XFile_ParseFlags(const char *pFlags)
 {
+    if (pFlags == NULL) return 0;
+
     size_t i, nLen = strnlen(pFlags, XFILE_FLAGS_LEN);
     int nFlags = 0;
 
@@ -129,10 +131,30 @@ int XFile_ParseFlags(const char *pFlags)
     return nFlags;
 }
 
+int XFile_OpenM(xfile_t *pFile, const char *pPath, const char *pFlags, xmode_t nMode)
+{
+    if (pFile == NULL || pPath == NULL) return XSTDERR;
+    pFile->nFlags = XFile_ParseFlags(pFlags);
+    pFile->nBlockSize = XFILE_BUF_SIZE;
+    pFile->nMode = nMode;
+    pFile->bEOF = XFALSE;
+    pFile->nSize = 0;
+    pFile->nFD = -1;
+
+#ifdef _WIN32
+    _sopen_s(&pFile->nFD, pPath, pFile->nFlags, _SH_DENYNO, pFile->nMode);
+#else
+    pFile->nFD = open(pPath, pFile->nFlags, pFile->nMode);
+#endif
+
+    pFile->nPosit = pFile->nAlloc = 0;
+    return pFile->nFD;
+}
+
 int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms)
 {
     if (pFile == NULL || pPath == NULL) return XSTDERR;
-    pFile->nFlags = (pFlags != NULL) ? XFile_ParseFlags(pFlags) : 0;
+    pFile->nFlags = XFile_ParseFlags(pFlags);
     pFile->nBlockSize = XFILE_BUF_SIZE;
     pFile->bEOF = XFALSE;
     pFile->nSize = 0;

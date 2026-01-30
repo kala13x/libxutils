@@ -527,7 +527,9 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
 
     xfile_t file;
     xbool_t bDirty = XFALSE;
+
     char sLine[XLINE_MAX];
+    size_t nLinesProcessed = 0;
 
     xbyte_buffer_t buffer;
     XByteBuffer_Init(&buffer, XLINE_MAX, XSTDNON);
@@ -541,7 +543,7 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
     {
         xbool_t bDropLine = XFALSE;
         xbool_t bModified = XFALSE;
-        int nFirstSpace = XSTDERR;
+        int nFirstSpace = -1;
         int nPosit = 0;
 
         while (nPosit < nLength)
@@ -559,7 +561,8 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
         if (nFirstSpace >= 0 && nFirstSpace < nLength)
         {
             nNextLength = XFile_GetLine(&file, sNextLine, sizeof(sNextLine));
-            bDropLine = !nFirstSpace && nNextLength <= 0 ? XTRUE : XFALSE;
+            bDropLine = !nFirstSpace && nNextLength <= 0 && nLinesProcessed &&
+                        sLine[nLength - 1] != '\n' ? XTRUE : XFALSE;
 
             if (nFirstSpace == 0 ||
                 nNextLength <= 0 ||
@@ -579,31 +582,33 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
                 XByteBuffer_Clear, &buffer, XFile_Close, &file, XSTDERR);
         }
 
-        if (pArgs->bFinalNewline && nNextLength <= 0 &&
-            nLength > 0 && sLine[nLength - 1] != '\n')
-        {
-            XASSERT_CALL2((XByteBuffer_Add(&buffer, (const uint8_t*)"\n", 1) > 0),
-                XByteBuffer_Clear, &buffer, XFile_Close, &file, XSTDERR);
-
-            bDirty = XTRUE;
-        }
-
         if (bModified)
         {
-            xstrncpy(sLine, sizeof(sLine), sNextLine);
+            if (nNextLength > 0)
+                xstrncpy(sLine, sizeof(sLine), sNextLine);
+
             nLength = nNextLength;
+            nLinesProcessed++;
             continue;
         }
 
         nLength = XFile_GetLine(&file, sLine, sizeof(sLine));
+        nLinesProcessed++;
     }
 
     // Finished reading
     XFile_Close(&file);
 
-    if (!bDirty)
+    if (pArgs->bFinalNewline && (!buffer.nUsed || buffer.pData[buffer.nUsed - 1] != '\n'))
     {
-        // No need to change anything
+        XASSERT_CALL((XByteBuffer_Add(&buffer, (const uint8_t*)"\n", 1) > 0),
+            XByteBuffer_Clear, &buffer, XSTDERR);
+
+        bDirty = XTRUE;
+    }
+
+    if (!bDirty || !buffer.nUsed)
+    {
         XByteBuffer_Clear(&buffer);
         return XSTDNON;
     }
@@ -616,7 +621,7 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
 
     if (XPath_Exists(sEntryBackup))
     {
-        if (XFile_Open(&file, sEntry, "cwt", NULL) < 0)
+        if (XFile_OpenM(&file, sEntry, "cwt", pEntry->nMode) < 0)
         {
             xloge("Failed to open file: %s (%s)", sEntry, XSTRERR);
             rename(sEntryBackup, sEntry);
@@ -636,7 +641,6 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
 
         XFile_Close(&file);
         unlink(sEntryBackup);
-        chmod(sEntry, pEntry->nMode);
     }
 
     XByteBuffer_Clear(&buffer);

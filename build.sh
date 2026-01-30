@@ -55,7 +55,7 @@ find_lib() {
 }
 
 clean_dir() {
-    cd "$@" 
+    cd "$@"
     [ -f ./Makefile ] && make clean
     [ -d ./obj ] && rm -rf ./obj
     [ -d ./build ] && rm -rf ./build

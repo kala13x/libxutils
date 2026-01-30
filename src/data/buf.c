@@ -256,6 +256,12 @@ int XByteBuffer_AddByte(xbyte_buffer_t *pBuffer, uint8_t nByte)
     return (int)pBuffer->nUsed;
 }
 
+uint8_t XByteBuffer_GetByte(xbyte_buffer_t *pBuffer, size_t nIndex)
+{
+    if (nIndex >= pBuffer->nUsed) return 0;
+    return pBuffer->pData[nIndex];
+}
+
 int XByteBuffer_NullTerm(xbyte_buffer_t *pBuffer)
 {
     if (XByteBuffer_Reserve(pBuffer, 1) <= 0) return XSTDERR;
