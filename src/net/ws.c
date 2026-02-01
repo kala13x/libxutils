@@ -327,7 +327,7 @@ size_t XWebFrame_GetExtraLength(xws_frame_t *pFrame)
 {
     size_t nFrameSize = XWebFrame_GetFrameLength(pFrame);
     XASSERT_RET((nFrameSize && pFrame->bComplete), XSTDNON);
-    XASSERT_RET((nFrameSize > pFrame->buffer.nUsed), XSTDNON);
+    XASSERT_RET((pFrame->buffer.nUsed > nFrameSize), XSTDNON);
     return pFrame->buffer.nUsed - nFrameSize;
 }
 
