@@ -31,7 +31,7 @@
 #### Cryptography:
 - [Implementation of various encrypt/decrypt algorithms](https://github.com/kala13x/libxutils/blob/main/src/crypt/crypt.h)
 - [Base64 and Base64Url encrypt/decrypt functions](https://github.com/kala13x/libxutils/blob/main/src/crypt/base64.h)
-- [AES based on FIPS-197 implementation by Christophe Devine](https://github.com/kala13x/libxutils/blob/main/src/crypt/aes.h)
+- [AES based on tiny-AES-c, added CBC mode with PKCS7 padding](https://github.com/kala13x/libxutils/blob/main/src/crypt/aes.h)
 - [Implementation of HMAC algorithm with SHA256 and MD5](https://github.com/kala13x/libxutils/blob/main/src/crypt/hmac.h)
 - [RSA implementation based on OpenSSL library](https://github.com/kala13x/libxutils/blob/main/src/crypt/rsa.h)
 - [Implementation of SHA256 calculations](https://github.com/kala13x/libxutils/blob/main/src/crypt/sha256.h)
