@@ -3,7 +3,6 @@
 [![MacOS](https://github.com/kala13x/libxutils/actions/workflows/macos.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/macos.yml)
 [![Windows](https://github.com/kala13x/libxutils/actions/workflows/windows.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/windows.yml)
 [![CodeQL](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml)
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/25173/badge.svg?)](https://scan.coverity.com/projects/libxutils)
 
 ## libxutils - Cross-platform C library release 2.x
 
