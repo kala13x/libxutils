@@ -180,7 +180,7 @@ int XAES_SetKey(xaes_ctx_t* pCtx, const uint8_t* pKey, size_t nKeySize, const ui
 
     if (pIV) memcpy(pCtx->IV, pIV, XAES_BLOCK_SIZE);
     else memset(pCtx->IV, 0, XAES_BLOCK_SIZE);
-    
+
     return 1;
 }
 
@@ -212,14 +212,14 @@ static void XAES_SubBytes(xaes_state_t* pState)
 
 static void XAES_ShiftRows(xaes_state_t* pState)
 {
-    // Rotate first row 1 columns to left  
+    // Rotate first row 1 columns to left
     uint8_t nTemp = (*pState)[0][1];
     (*pState)[0][1] = (*pState)[1][1];
     (*pState)[1][1] = (*pState)[2][1];
     (*pState)[2][1] = (*pState)[3][1];
     (*pState)[3][1] = nTemp;
 
-    // Rotate second row 2 columns to left  
+    // Rotate second row 2 columns to left
     nTemp = (*pState)[0][2];
     (*pState)[0][2] = (*pState)[2][2];
     (*pState)[2][2] = nTemp;
@@ -242,7 +242,7 @@ static void XAES_MixColumns(xaes_state_t* pState)
     uint8_t nTmp, nTM, nT;
 
     for (i = 0; i < 4; ++i)
-    {  
+    {
         nT = (*pState)[i][0];
         nTmp = (*pState)[i][0] ^ (*pState)[i][1] ^ (*pState)[i][2] ^ (*pState)[i][3] ;
         nTM = (*pState)[i][0] ^ (*pState)[i][1] ; nTM = XAES_Time(nTM); (*pState)[i][0] ^= nTM ^ nTmp ;
@@ -258,7 +258,7 @@ static void XAES_InvMixColumns(xaes_state_t* pState)
     uint8_t a, b, c, d;
 
     for (i = 0; i < 4; ++i)
-    { 
+    {
         a = (*pState)[i][0];
         b = (*pState)[i][1];
         c = (*pState)[i][2];
@@ -286,14 +286,14 @@ static void XAES_InvSubBytes(xaes_state_t* pState)
 
 static void XAES_InvShiftRows(xaes_state_t* pState)
 {
-    // Rotate first row 1 columns to right  
+    // Rotate first row 1 columns to right
     uint8_t nTemp = (*pState)[3][1];
     (*pState)[3][1] = (*pState)[2][1];
     (*pState)[2][1] = (*pState)[1][1];
     (*pState)[1][1] = (*pState)[0][1];
     (*pState)[0][1] = nTemp;
 
-    // Rotate second row 2 columns to right 
+    // Rotate second row 2 columns to right
     nTemp = (*pState)[0][2];
     (*pState)[0][2] = (*pState)[2][2];
     (*pState)[2][2] = nTemp;
