@@ -2,10 +2,12 @@
  *  @file libxutils/src/crypt/aes.h
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
+ *  2015-2025  Sun Dro (s.kalatoz@gmail.com)
  *
- * @brief Implementation of Advanced Encryption Standard
- * based on FIPS-197 implementation by Christophe Devine.
+ * @brief Implementation of AES encryption based on tiny-AES-c project,
+ * which was released under The Unlicense (public domain dedication).
+ *
+ * Modified: Refactored code, adjusted API, and added CBC mode with PKCS#7 padding.
  */
 
 #ifndef __XUTILS_AES_H__
@@ -19,22 +21,25 @@
 extern "C" {
 #endif
 
+#define XAES_RKEY_SIZE      240
 #define XAES_BLOCK_SIZE     16
-#define XAES_RKEY_SIZE      64
 
 typedef struct AESContext {
-    uint32_t encKeys[XAES_RKEY_SIZE];   /* Dncryption round keys */
-    uint32_t decKeys[XAES_RKEY_SIZE];   /* Decryption round keys */
+    uint8_t roundKey[XAES_RKEY_SIZE];   /* Encrypt/Decrypt round key */
     uint8_t IV[XAES_BLOCK_SIZE];        /* Initialization vector */
-    size_t nRounds;                     /* Number of rounds */
-} xaes_context_t;
+    uint8_t nSelfContainedIV;           /* Flag to indicate if IV is self-contained in data */
+    size_t nKeySize;                    /* Key size in bits */
+    uint8_t nNB;                        /* Number of columns (32-bit words) comprising the State */
+    uint8_t nNK;                        /* Number of 32-bit words comprising the Cipher Key */
+    uint8_t nNR;                        /* Number of rounds */
+} xaes_ctx_t;
 
-void XAES_SetKey(xaes_context_t *pCtx, const uint8_t *pKey, size_t nSize, const uint8_t *pIV);
-void XAES_EncryptBlock(xaes_context_t *pCtx, uint8_t output[XAES_BLOCK_SIZE], const uint8_t input[XAES_BLOCK_SIZE]);
-void XAES_DecryptBlock(xaes_context_t *pCtx, uint8_t output[XAES_BLOCK_SIZE], const uint8_t input[XAES_BLOCK_SIZE]);
+int XAES_SetKey(xaes_ctx_t *pCtx, const uint8_t *pKey, size_t nSize, const uint8_t *pIV, uint8_t nSelfContainedIV);
+void XAES_EncryptBlock(const xaes_ctx_t* pCtx, uint8_t* pBuffer);
+void XAES_DecryptBlock(const xaes_ctx_t* pCtx, uint8_t* pBuffer);
 
-uint8_t* XAES_Encrypt(xaes_context_t *pCtx, const uint8_t *pInput, size_t *pLength);
-uint8_t* XAES_Decrypt(xaes_context_t *pCtx, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_Encrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_Decrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
 
 #ifdef __cplusplus
 }

@@ -196,8 +196,8 @@ uint8_t* XCrypt_AES(const uint8_t *pInput, size_t *pLength, const uint8_t *pKey,
     if (pInput == NULL || pKey == NULL || !nKeyLen ||
         pLength == NULL || !(*pLength)) return NULL;
 
-    xaes_context_t ctx;
-    XAES_SetKey(&ctx, pKey, nKeyLen, pIV);
+    xaes_ctx_t ctx;
+    XAES_SetKey(&ctx, pKey, nKeyLen, pIV, XFALSE);
     return XAES_Encrypt(&ctx, pInput, pLength);
 }
 
@@ -206,8 +206,8 @@ uint8_t* XDecrypt_AES(const uint8_t *pInput, size_t *pLength, const uint8_t *pKe
     if (pInput == NULL || pKey == NULL || !nKeyLen ||
         pLength == NULL || !(*pLength)) return NULL;
 
-    xaes_context_t ctx;
-    XAES_SetKey(&ctx, pKey, nKeyLen, pIV);
+    xaes_ctx_t ctx;
+    XAES_SetKey(&ctx, pKey, nKeyLen, pIV, XFALSE);
     return XAES_Decrypt(&ctx, pInput, pLength);
 }
 

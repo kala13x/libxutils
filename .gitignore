@@ -56,10 +56,15 @@ examples/files.copy
 examples/build/
 tools/build/
 build/
-.vscode/
 *.log
 
 # Debug files
 *.dmp
 *.stackdump
 vgcore.*
+
+# Editors and agents
+.claude/
+.cursor/
+.vscode/
+.idea/

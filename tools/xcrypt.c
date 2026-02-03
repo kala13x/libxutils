@@ -26,7 +26,7 @@
 #define XCRYPT_VER_MIN      1
 #define XCRYPT_BUILD_NUM    25
 
-#define XAES_KEY_LENGTH     256
+#define XAES_KEY_SIZE       256
 #define XHEX_COLUMNS        16
 extern char *optarg;
 
@@ -501,9 +501,9 @@ static xbool_t XCrypt_ParseArgs(xcrypt_args_t *pArgs, int argc, char *argv[])
     {
 #ifdef _XUTILS_USE_SSL
         pArgs->nKeySize = xstrused(pArgs->sPair) ?
-            XRSA_KEY_SIZE : XAES_KEY_LENGTH;
+            XRSA_KEY_SIZE : XAES_KEY_SIZE;
 #else
-        pArgs->nKeySize = XAES_KEY_LENGTH;
+        pArgs->nKeySize = XAES_KEY_SIZE;
 #endif
     }
 
