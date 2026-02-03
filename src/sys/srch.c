@@ -405,6 +405,7 @@ void XSearch_ClearCb(xarray_data_t *pArrData)
 
 void XSearch_Init(xsearch_t *pSrcCtx, const char *pFileName)
 {
+    pSrcCtx->nInterrupted = XFALSE;
     pSrcCtx->pInterrupted = &pSrcCtx->nInterrupted;
     pSrcCtx->bInsensitive = XFALSE;
     pSrcCtx->bSearchLines = XFALSE;

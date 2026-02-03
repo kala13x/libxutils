@@ -9,7 +9,7 @@
 
         "find": {
             "libssl.so:libcrypto.so": {
-                "path": "/usr/lib:/usr/local/ssl/lib:/usr/local/ssl/lib64",
+                "path": "/usr/local/ssl/lib:/usr/local/ssl/lib64",
 
                 "found": {
                     "append": {
