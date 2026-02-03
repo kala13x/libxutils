@@ -698,9 +698,9 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
         if (pEvents->pEventArray[i].revents <= 0) continue;
         else if (pEvents->pEventArray[i].fd == XSOCK_INVALID) break;
 
-        pEvents->pEventArray[i].revents = 0;
         XSOCKET nFD = pEvents->pEventArray[i].fd;
         int nEvents = pEvents->pEventArray[i].revents;
+        pEvents->pEventArray[i].revents = 0;
         xevent_data_t *pData = XEvents_GetData(pEvents, nFD);
 
         nRet = XEvents_ServiceCb(pEvents, pData, nFD, nEvents);
