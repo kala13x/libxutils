@@ -1654,6 +1654,9 @@ static void XSock_SetupAddr(xsock_t *pSock, const char *pAddr, uint16_t nPort)
         pSock->sockAddr.inAddr.sin_port = htons(pSock->nPort);
         pSock->sockAddr.inAddr.sin_family = AF_INET;
     }
+
+    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_REUSEADDR))
+        XSock_ReuseAddr(pSock, XTRUE);
 }
 
 XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const char *pAddr, uint16_t nPort)

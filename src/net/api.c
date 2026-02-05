@@ -1311,7 +1311,7 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pApiData->nPort = pEndpt->nPort;
     pApiData->eRole = XAPI_SERVER;
 
-    uint32_t nFlags = XSOCK_SERVER;
+    uint32_t nFlags = XSOCK_SERVER | XSOCK_REUSEADDR | XSOCK_NB;
     if (pEndpt->bForce) nFlags |= XSOCK_FORCE;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
     if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
@@ -1319,9 +1319,6 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 
     XSock_Create(pSock, nFlags, pEndpt->pAddr, pEndpt->nPort);
     if (pEndpt->bTLS) XSock_SetSSLCert(pSock, &pEndpt->certs);
-
-    XSock_ReuseAddr(pSock, XTRUE);
-    XSock_NonBlock(pSock, XTRUE);
 
     if (pSock->nFD == XSOCK_INVALID)
     {

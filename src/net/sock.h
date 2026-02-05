@@ -129,6 +129,8 @@ typedef enum {
 
     XSOCK_NB = (1 << 14),
     XSOCK_FORCE = (1 << 15),
+    XSOCK_REUSEADDR = (1 << 16),
+
     XSOCK_UNDEFINED = 0
 } xsock_flags_t;
 
