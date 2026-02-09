@@ -39,15 +39,15 @@ typedef enum {
 } xaes_mode_t;
 
 typedef struct XAESKey {
-    uint8_t aesKey[XAES_KEY_LENGTH];            /* AES key or CMAC key for SIV mode (RFC 5297) */
-    uint8_t ctrKey[XAES_KEY_LENGTH];            /* CTR key for SIV mode (RFC 5297)) */
+    uint8_t aesKey[XAES_KEY_LENGTH];            /* AES key or CMAC key for SIV mode (RFC 4493) */
+    uint8_t ctrKey[XAES_KEY_LENGTH];            /* CTR key for SIV mode (RFC 5297) */
     uint8_t IV[XAES_BLOCK_SIZE];                /* Initialization vector */
     uint8_t nContainIV;                         /* Flag to indicate if IV is self-contained in data */
     size_t nKeySize;                            /* Key size in bits */
 } xaes_key_t;
 
 typedef struct AESContext {
-    xaes_mode_t eMode;                      /* Encryption mode: CBC or SIV */
+    xaes_mode_t eMode;                      /* Encryption mode */
     xaes_key_t key;                         /* AES key context */
     uint8_t CMACRoundKey[XAES_RKEY_SIZE];   /* CMAC round key for SIV mode */
     uint8_t roundKey[XAES_RKEY_SIZE];       /* Encrypt/Decrypt round key (CTR key for SIV) */

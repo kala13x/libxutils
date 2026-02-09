@@ -226,7 +226,7 @@ int XAES_Init(xaes_ctx_t *pCtx, const xaes_key_t *pKey, xaes_mode_t eMode)
     else
     {
         // Invalid key size
-        return XSTDERR;
+        return XSTDINV;
     }
 
     pCtx->eMode = eMode;
@@ -435,126 +435,6 @@ static void XAES_ApplyXOR(uint8_t* pBuffer, const uint8_t* pIV)
     {
         pBuffer[i] ^= pIV[i];
     }
-}
-
-uint8_t* XAES_CBC_Crypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength)
-{
-    XASSERT((pCtx != NULL), NULL);
-    XASSERT((pInput != NULL), NULL);
-    XASSERT((pLength != NULL && *pLength > 0), NULL);
-
-    size_t nOriginalLen = *pLength;
-    size_t nNewLength = ((nOriginalLen / XAES_BLOCK_SIZE) + 1) * XAES_BLOCK_SIZE;
-    size_t nPrefix = pCtx->key.nContainIV ? XAES_BLOCK_SIZE : 0;
-    size_t nOutLen = nPrefix + nNewLength;
-
-    uint8_t *pOutput = (uint8_t*)malloc(nOutLen + 1);
-    XASSERT((pOutput != NULL), NULL);
-
-    uint8_t iv[XAES_BLOCK_SIZE];
-    memcpy(iv, pCtx->key.IV, sizeof(iv));
-
-    if (pCtx->key.nContainIV)
-        memcpy(pOutput, iv, XAES_BLOCK_SIZE);
-
-    /* Copy input and add PKCS#7 padding */
-    uint8_t *pOffset = pOutput + nPrefix;
-    memcpy(pOffset, pInput, nOriginalLen);
-
-    uint8_t nPadding = (uint8_t)(nNewLength - nOriginalLen);
-    memset(pOffset + nOriginalLen, nPadding, nPadding);
-
-    while (nNewLength > 0)
-    {
-        XAES_ApplyXOR(pOffset, iv);
-        XAES_ECB_Crypt(pCtx, pOffset);
-        memcpy(iv, pOffset, XAES_BLOCK_SIZE);
-
-        nNewLength -= XAES_BLOCK_SIZE;
-        pOffset += XAES_BLOCK_SIZE;
-    }
-
-    if (!pCtx->key.nContainIV)
-        memcpy(pCtx->key.IV, iv, XAES_BLOCK_SIZE);
-
-    *pLength = nOutLen;
-    pOutput[nOutLen] = '\0';
-
-    return pOutput;
-}
-
-
-uint8_t* XAES_CBC_Decrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength)
-{
-    XASSERT((pCtx != NULL), NULL);
-    XASSERT((pInput != NULL), NULL);
-    XASSERT((pLength != NULL && *pLength > 0), NULL);
-
-    size_t nInputLength = *pLength;
-    uint8_t iv[XAES_BLOCK_SIZE] = { 0 };
-
-    if (pCtx->key.nContainIV)
-    {
-        if (nInputLength <= XAES_BLOCK_SIZE) return NULL;
-        size_t nCipherLen = nInputLength - XAES_BLOCK_SIZE;
-        if ((nCipherLen % XAES_BLOCK_SIZE) != 0) return NULL;
-
-        memcpy(iv, pInput, XAES_BLOCK_SIZE);
-        pInput += XAES_BLOCK_SIZE;
-        nInputLength = nCipherLen;
-    }
-    else
-    {
-        if (nInputLength < XAES_BLOCK_SIZE) return NULL;
-        if (nInputLength % XAES_BLOCK_SIZE != 0) return NULL;
-        memcpy(iv, pCtx->key.IV, sizeof(iv));
-    }
-
-    uint8_t *pOutput = (uint8_t*)malloc(nInputLength + 1);
-    XASSERT((pOutput != NULL), NULL);
-
-    memcpy(pOutput, pInput, nInputLength);
-    uint8_t *pOffset = pOutput;
-    size_t nDataLeft = nInputLength;
-
-    while (nDataLeft > 0)
-    {
-        uint8_t ivTmp[XAES_BLOCK_SIZE];
-        memcpy(ivTmp, pOffset, XAES_BLOCK_SIZE);
-        XAES_ECB_Decrypt(pCtx, pOffset);
-
-        XAES_ApplyXOR(pOffset, iv);
-        memcpy(iv, ivTmp, XAES_BLOCK_SIZE);
-
-        nDataLeft -= XAES_BLOCK_SIZE;
-        pOffset += XAES_BLOCK_SIZE;
-    }
-
-    // Remove PKCS#7 padding
-    uint8_t nPadding = pOutput[nInputLength - 1];
-    if (!nPadding || nPadding > XAES_BLOCK_SIZE)
-    {
-        free(pOutput);
-        return NULL;
-    }
-
-    size_t i;
-    for (i = 0; i < nPadding; i++)
-    {
-        if (pOutput[nInputLength - 1 - i] != nPadding)
-        {
-            free(pOutput);
-            return NULL;
-        }
-    }
-
-    if (!pCtx->key.nContainIV)
-        memcpy(pCtx->key.IV, iv, XAES_BLOCK_SIZE);
-
-    *pLength = nInputLength - nPadding;
-    pOutput[*pLength] = '\0';
-
-    return pOutput;
 }
 
 /* Constant-time comparison to prevent timing side-channel attacks */
@@ -805,6 +685,125 @@ uint8_t* XAES_SIV_Decrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLeng
 
     *pLength = nCipherLen;
     pOutput[nCipherLen] = '\0';
+
+    return pOutput;
+}
+
+uint8_t* XAES_CBC_Crypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength)
+{
+    XASSERT((pCtx != NULL), NULL);
+    XASSERT((pInput != NULL), NULL);
+    XASSERT((pLength != NULL && *pLength > 0), NULL);
+
+    size_t nOriginalLen = *pLength;
+    size_t nNewLength = ((nOriginalLen / XAES_BLOCK_SIZE) + 1) * XAES_BLOCK_SIZE;
+    size_t nPrefix = pCtx->key.nContainIV ? XAES_BLOCK_SIZE : 0;
+    size_t nOutLen = nPrefix + nNewLength;
+
+    uint8_t *pOutput = (uint8_t*)malloc(nOutLen + 1);
+    XASSERT((pOutput != NULL), NULL);
+
+    uint8_t iv[XAES_BLOCK_SIZE];
+    memcpy(iv, pCtx->key.IV, sizeof(iv));
+
+    if (pCtx->key.nContainIV)
+        memcpy(pOutput, iv, XAES_BLOCK_SIZE);
+
+    /* Copy input and add PKCS#7 padding */
+    uint8_t *pOffset = pOutput + nPrefix;
+    memcpy(pOffset, pInput, nOriginalLen);
+
+    uint8_t nPadding = (uint8_t)(nNewLength - nOriginalLen);
+    memset(pOffset + nOriginalLen, nPadding, nPadding);
+
+    while (nNewLength > 0)
+    {
+        XAES_ApplyXOR(pOffset, iv);
+        XAES_ECB_Crypt(pCtx, pOffset);
+        memcpy(iv, pOffset, XAES_BLOCK_SIZE);
+
+        nNewLength -= XAES_BLOCK_SIZE;
+        pOffset += XAES_BLOCK_SIZE;
+    }
+
+    if (!pCtx->key.nContainIV)
+        memcpy(pCtx->key.IV, iv, XAES_BLOCK_SIZE);
+
+    *pLength = nOutLen;
+    pOutput[nOutLen] = '\0';
+
+    return pOutput;
+}
+
+uint8_t* XAES_CBC_Decrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength)
+{
+    XASSERT((pCtx != NULL), NULL);
+    XASSERT((pInput != NULL), NULL);
+    XASSERT((pLength != NULL && *pLength > 0), NULL);
+
+    size_t nInputLength = *pLength;
+    uint8_t iv[XAES_BLOCK_SIZE] = { 0 };
+
+    if (pCtx->key.nContainIV)
+    {
+        if (nInputLength <= XAES_BLOCK_SIZE) return NULL;
+        size_t nCipherLen = nInputLength - XAES_BLOCK_SIZE;
+        if ((nCipherLen % XAES_BLOCK_SIZE) != 0) return NULL;
+
+        memcpy(iv, pInput, XAES_BLOCK_SIZE);
+        pInput += XAES_BLOCK_SIZE;
+        nInputLength = nCipherLen;
+    }
+    else
+    {
+        if (nInputLength < XAES_BLOCK_SIZE) return NULL;
+        if (nInputLength % XAES_BLOCK_SIZE != 0) return NULL;
+        memcpy(iv, pCtx->key.IV, sizeof(iv));
+    }
+
+    uint8_t *pOutput = (uint8_t*)malloc(nInputLength + 1);
+    XASSERT((pOutput != NULL), NULL);
+
+    memcpy(pOutput, pInput, nInputLength);
+    uint8_t *pOffset = pOutput;
+    size_t nDataLeft = nInputLength;
+
+    while (nDataLeft > 0)
+    {
+        uint8_t ivTmp[XAES_BLOCK_SIZE];
+        memcpy(ivTmp, pOffset, XAES_BLOCK_SIZE);
+        XAES_ECB_Decrypt(pCtx, pOffset);
+
+        XAES_ApplyXOR(pOffset, iv);
+        memcpy(iv, ivTmp, XAES_BLOCK_SIZE);
+
+        nDataLeft -= XAES_BLOCK_SIZE;
+        pOffset += XAES_BLOCK_SIZE;
+    }
+
+    // Remove PKCS#7 padding
+    uint8_t nPadding = pOutput[nInputLength - 1];
+    if (!nPadding || nPadding > XAES_BLOCK_SIZE)
+    {
+        free(pOutput);
+        return NULL;
+    }
+
+    size_t i;
+    for (i = 0; i < nPadding; i++)
+    {
+        if (pOutput[nInputLength - 1 - i] != nPadding)
+        {
+            free(pOutput);
+            return NULL;
+        }
+    }
+
+    if (!pCtx->key.nContainIV)
+        memcpy(pCtx->key.IV, iv, XAES_BLOCK_SIZE);
+
+    *pLength = nInputLength - nPadding;
+    pOutput[*pLength] = '\0';
 
     return pOutput;
 }
