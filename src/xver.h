@@ -2,7 +2,7 @@
  *  @file libxutils/src/xver.h
  *
  *  This source is part of "libxutils" project
- *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
+ *  2015-2026  Sun Dro (s.kalatoz@gmail.com)
  *
  * @brief Get additional information about library
  */
@@ -12,8 +12,8 @@
 
 #define XUTILS_VERSION_MAX      2
 #define XUTILS_VERSION_MIN      7
-#define XUTILS_BUILD_NUMBER     24
-#define XUTILS_RELEASE_DATE     "06Feb2026"
+#define XUTILS_BUILD_NUMBER     25
+#define XUTILS_RELEASE_DATE     "09Feb2026"
 
 #ifdef __cplusplus
 extern "C" {

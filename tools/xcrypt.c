@@ -106,7 +106,7 @@ static void XCrypt_DisplayUsage(const char *pName)
 #endif
 
     const char *pRSAOption = bRSA ? " [-g <pub:priv>]" : XSTR_EMPTY;
-    const char *pRSADesc = bRSA ? "and RSA" : XSTR_EMPTY;
+    const char *pRSADesc = bRSA ? " and RSA" : XSTR_EMPTY;
 
     xlog("============================================================");
     xlog(" Encrypt/Decrypt file or text - v%d.%d build %d (%s)",
@@ -128,9 +128,9 @@ static void XCrypt_DisplayUsage(const char *pName)
     xlog("   -k <key>            # The key to pass as an argument");
     xlog("   -v <iv>             # Initialization vector for AES");
     xlog("   -t <text>           # Text to pass as input argument");
+    xlog("   -s <size>           # Key size for AES%s", pRSADesc);
     xlog("   -d                  # Decryption mode");
     xlog("   -f                  # Force overwrite output");
-    xlog("   -s                  # Key size for AES %s", pRSADesc);
     xlog("   -x                  # Display output as a HEX");
     xlog("   -p                  # Print output to stdout");
     xlog("   -H                  # Hybryd mode for AES");
@@ -327,7 +327,7 @@ static xbool_t XCrypt_GetIV(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
     size_t nLength = XCLI_GetPass(NULL, pKey->sIV, sizeof(pKey->sIV));
     if (!nLength)
     {
-        xlogw("Empty IV will be set to zero bytes");
+        xlogw("Random IV will be used for cipher '%s'", pCipher);
         memset(pKey->sIV, 0, sizeof(pKey->sIV));
     }
 

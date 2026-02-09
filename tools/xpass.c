@@ -25,7 +25,7 @@
 #define XPASS_VER_MIN       2
 #define XPASS_BUILD_NUM     8
 
-#define XPASS_AES_LEN       128
+#define XPASS_AES_SIZE      256
 #define XPASS_NAME_LEN      6
 #define XPASS_HEX_COLUMNS   16
 #define XPASS_CIPHERS       "base64:aes:xor:hex"
@@ -73,7 +73,7 @@ typedef struct
     char sKey[XSTR_TINY];
     char sIV[XSTR_MICRO];
 
-    size_t nAESKeyLength;
+    size_t nAESKeySize;
     size_t nFrameLength;
     size_t nNameLength;
     xjson_t dataBase;
@@ -212,7 +212,7 @@ static xbool_t XPass_GetIV(xpass_ctx_t *pCtx)
     size_t nLength = XCLI_GetPass(NULL, pCtx->sIV, sizeof(pCtx->sIV));
     if (!nLength)
     {
-        xlogw("Empty IV will be set to zero bytes");
+        xlogw("Random IV will be used for cipher 'AES'");
         memset(pCtx->sIV, 0, sizeof(pCtx->sIV));
     }
 
@@ -363,7 +363,7 @@ static xbool_t XPass_ParseArgs(xpass_ctx_t *pCtx, int argc, char *argv[])
                 xstrncpy(pCtx->sIV, sizeof(pCtx->sIV), optarg);
                 break;
             case 'k':
-                pCtx->nAESKeyLength = (size_t)atoi(optarg);
+                pCtx->nAESKeySize = (size_t)atoi(optarg);
                 break;
             case 'f':
                 pCtx->bForce = XTRUE;
@@ -490,17 +490,17 @@ static xbool_t XPass_ParseConfig(xpass_ctx_t *pCtx)
         return XFALSE;
     }
 
-    if (!pCtx->nAESKeyLength)
+    if (!pCtx->nAESKeySize)
     {
-        xjson_obj_t *pAesLenObj = XJSON_GetObject(pCfgObj, "aesKeyLength");
+        xjson_obj_t *pAesLenObj = XJSON_GetObject(pCfgObj, "aesKeySize");
         if (pAesLenObj == NULL)
         {
-            xloge("Missing \"aesKeyLength\" entry in the config file: %s", pCtx->sConf);
+            xloge("Missing \"aesKeySize\" entry in the config file: %s", pCtx->sConf);
             XJSON_Destroy(&json);
             return XFALSE;
         }
 
-        pCtx->nAESKeyLength = XJSON_GetU32(pAesLenObj);
+        pCtx->nAESKeySize = XJSON_GetU32(pAesLenObj);
     }
 
     if (!xstrused(pCtx->sFile))
@@ -632,8 +632,8 @@ xbool_t XPass_Callback(xcrypt_cb_type_t eType, void *pData, void *pCtx)
         xcrypt_key_t *pKey = (xcrypt_key_t*)pData;
         xpass_ctx_t *pArgs = (xpass_ctx_t*)pCtx;
 
-        xstrncpyf(pKey->sKey, sizeof(pKey->sKey), pArgs->sKey);
-        if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nAESKeyLength;
+        xstrncpyf(pKey->sKey, sizeof(pKey->sKey), "%s", pArgs->sKey);
+        if (pKey->eCipher == XC_AES) pKey->nLength = pArgs->nAESKeySize;
         else pKey->nLength = strlen(pArgs->sKey);
 
         return XTRUE;
@@ -642,7 +642,9 @@ xbool_t XPass_Callback(xcrypt_cb_type_t eType, void *pData, void *pCtx)
     {
         xcrypt_key_t *pKey = (xcrypt_key_t*)pData;
         xpass_ctx_t *pArgs = (xpass_ctx_t*)pCtx;
-        xstrncpyf(pKey->sIV, sizeof(pKey->sIV), pArgs->sIV);
+
+        if (!xstrused(pArgs->sIV)) memset(pKey->sIV, 0, sizeof(pKey->sIV));
+        else xstrncpyf(pKey->sIV, sizeof(pKey->sIV), "%s", pArgs->sIV);
         return XTRUE;
     }
 
@@ -723,7 +725,6 @@ static xbool_t XPass_LoadDatabase(xpass_ctx_t *pCtx)
     if (pCrcObj == NULL)
     {
         xloge("Invalid database file.");
-        XJSON_Destroy(pJson);
         return XFALSE;
     }
 
@@ -735,8 +736,7 @@ static xbool_t XPass_LoadDatabase(xpass_ctx_t *pCtx)
 
     if (nDecryptedCRC != nCurrentCRC)
     {
-        xloge("CRC32 missmatch in database file.");
-        XJSON_Destroy(pJson);
+        xloge("CRC32 missmatch in database file");
         return XFALSE;
     }
 
@@ -901,10 +901,10 @@ static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
 
     if (!xstrused(pCtx->sCiphers)) xstrncpy(pCtx->sCiphers, sizeof(pCtx->sCiphers), XPASS_CIPHERS);
     if (!xstrused(pCtx->sFile)) xstrncpy(pCtx->sFile, sizeof(pCtx->sFile), XPASS_DATABASE);
-    pCtx->nAESKeyLength = pCtx->nAESKeyLength ? pCtx->nAESKeyLength : XPASS_AES_LEN;
+    pCtx->nAESKeySize = pCtx->nAESKeySize ? pCtx->nAESKeySize : XPASS_AES_SIZE;
     pCtx->nNameLength = pCtx->nNameLength ? pCtx->nNameLength : XPASS_NAME_LEN;
 
-    if (XJSON_AddU32(pCfgObj, "aesKeyLength", pCtx->nAESKeyLength) != XJSON_ERR_NONE ||
+    if (XJSON_AddU32(pCfgObj, "aesKeySize", pCtx->nAESKeySize) != XJSON_ERR_NONE ||
         XJSON_AddU32(pCfgObj, "nameLength", pCtx->nNameLength) != XJSON_ERR_NONE ||
         XJSON_AddString(pCfgObj, "databasePath", pCtx->sFile) != XJSON_ERR_NONE ||
         XJSON_AddString(pCfgObj, "ciphers", pCtx->sCiphers) != XJSON_ERR_NONE ||

@@ -913,6 +913,7 @@ void XJSON_Destroy(xjson_t *pJson)
 {
     if (pJson == NULL) return;
     XJSON_FreeObject(pJson->pRootObj);
+    pJson->pRootObj = NULL;
     pJson->nDataSize = 0;
     pJson->nOffset = 0;
     pJson->pData = NULL;
