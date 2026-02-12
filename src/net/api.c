@@ -647,9 +647,10 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
 
     if (XHTTP_AddHeader(&handle, "Upgrade", "websocket") < 0 ||
         XHTTP_AddHeader(&handle, "Connection", "Upgrade") < 0 ||
+        XHTTP_AddHeader(&handle, "Host", "%s:%u", pApiData->sAddr, (unsigned)pApiData->nPort) < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Version", "%d", XWS_SEC_WS_VERSION) < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Key", "%s", pApiData->sKey) < 0 ||
-        XHTTP_AddHeader(&handle, "Server", "%s", pApiData->sUserAgent) < 0 ||
+        XHTTP_AddHeader(&handle, "User-Agent", "%s", pApiData->sUserAgent) < 0 ||
         XHTTP_Assemble(&handle, NULL, XSTDNON) == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_ASSEMBLE);
