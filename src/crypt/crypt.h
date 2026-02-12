@@ -34,11 +34,6 @@ typedef enum
     XC_AES = (uint8_t)0,
     XC_HEX,
     XC_XOR,
-#ifdef _XUTILS_USE_SSL
-    XC_RSA,
-    XC_RSAPR,
-    XC_RS256,
-#endif
     XC_CRC32,
     XC_CRC32B,
     XC_CASEAR,
@@ -54,6 +49,11 @@ typedef enum
     XC_SHA256_SUM,
     XC_REVERSE,
     XC_MULTY,
+#ifdef _XUTILS_USE_SSL
+    XC_RSA,
+    XC_RSAPR,
+    XC_RS256,
+#endif
     XC_INVALID
 } xcrypt_chipher_t;
 
