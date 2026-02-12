@@ -870,8 +870,8 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
     XSTATUS nStatus = XSock_Init(pNewSock, nFlags, XSOCK_INVALID);
     if (nStatus < 0) return XSOCK_INVALID;
 
-    xsockaddr_t* pSockAddr = XSock_GetSockAddr(pSock);
-    xsocklen_t nAddrLen = XSock_GetAddrLen(pSock);
+    xsockaddr_t* pSockAddr = XSock_GetSockAddr(pNewSock);
+    xsocklen_t nAddrLen = XSock_GetAddrLen(pNewSock);
 
     pNewSock->nFD = accept(pSock->nFD, pSockAddr, &nAddrLen);
     if (pNewSock->nFD == XSOCK_INVALID)

@@ -195,7 +195,7 @@ typedef struct XSocket {
 const char* XSock_GetStatusStr(xsock_status_t eStatus);
 const char* XSock_ErrStr(xsock_t* pSock);
 
-#ifdef _XSOCK_USE_SSL
+#ifdef XSOCK_USE_SSL
 SSL_CTX* XSock_GetSSLCTX(xsock_t *pSock);
 SSL* XSock_GetSSL(xsock_t *pSock);
 #endif

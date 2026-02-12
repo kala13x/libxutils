@@ -550,6 +550,33 @@ static char* XAPI_GetWSKey(xapi_t *pApi, xapi_data_t *pApiData)
     return NULL;
 }
 
+static xbool_t XAPI_HeaderHasTokenCI(const char *pValue, const char *pToken)
+{
+    if (!xstrused(pValue) || !xstrused(pToken)) return XFALSE;
+    const size_t nTokenLen = strlen(pToken);
+
+    const char *p = pValue;
+    while (*p != XSTR_NUL)
+    {
+        while (*p == ' ' || *p == '\t' || *p == ',') p++;
+        if (*p == XSTR_NUL) break;
+
+        const char *pStart = p;
+        while (*p != XSTR_NUL && *p != ',') p++;
+        const char *pEnd = p;
+
+        while (pEnd > pStart && (pEnd[-1] == ' ' || pEnd[-1] == '\t')) pEnd--;
+
+        const size_t nLen = (size_t)(pEnd - pStart);
+        if (nLen == nTokenLen && xstrncasecmp(pStart, pToken, nTokenLen))
+            return XTRUE;
+
+        if (*p == ',') p++;
+    }
+
+    return XFALSE;
+}
+
 static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
 {
     xhttp_t handle;
@@ -658,6 +685,19 @@ static int XAPI_ServerHandshake(xapi_t *pApi, xapi_data_t *pApiData)
     xhttp_status_t eStatus = XHTTP_NONE;
     int nRetVal = XEVENTS_CONTINUE;
 
+    if (pBuffer->nUsed >= 3)
+    {
+        const uint8_t *pData = (const uint8_t*)pBuffer->pData;
+        if (pData != NULL &&
+            pData[0] == 0x16 &&
+            pData[1] == 0x03 &&
+            pData[2] <= 0x04)
+        {
+            XAPI_ErrorCb(pApi, pApiData, XAPI_WS, XWS_INVALID_REQUEST);
+            return XEVENTS_DISCONNECT;
+        }
+    }
+
     xhttp_t handle;
     XHTTP_Init(&handle, XHTTP_DUMMY, XSTDNON);
     eStatus = XHTTP_ParseBuff(&handle, pBuffer);
@@ -667,7 +707,7 @@ static int XAPI_ServerHandshake(xapi_t *pApi, xapi_data_t *pApiData)
         const char *pUpgrade = XHTTP_GetHeader(&handle, "Upgrade");
         const char *pSecKey = XHTTP_GetHeader(&handle, "Sec-WebSocket-Key");
 
-        if (!xstrused(pUpgrade) || strncmp(pUpgrade, "websocket", 9))
+        if (!XAPI_HeaderHasTokenCI(pUpgrade, "websocket"))
         {
             XAPI_ErrorCb(pApi, pApiData, XAPI_WS, XWS_INVALID_REQUEST);
             XHTTP_Clear(&handle);
@@ -730,7 +770,7 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_data_t *pApiData)
         const char *pUpgrade = XHTTP_GetHeader(&handle, "Upgrade");
         const char *pSecKey = XHTTP_GetHeader(&handle, "Sec-WebSocket-Accept");
 
-        if (!xstrused(pUpgrade) || !xstrncmp(pUpgrade, "websocket", 9))
+        if (!XAPI_HeaderHasTokenCI(pUpgrade, "websocket"))
         {
             XAPI_ErrorCb(pApi, pApiData, XAPI_WS, XWS_INVALID_RESPONSE);
             XHTTP_Clear(&handle);
@@ -817,6 +857,7 @@ static int XAPI_HandleWS(xapi_t *pApi, xapi_data_t *pApiData)
 
         XASSERT_RET((nRetVal == XEVENTS_CONTINUE), nRetVal);
         XASSERT_RET((pBuffer->nUsed > 0), XEVENTS_CONTINUE);
+        XASSERT_RET(pApiData->bHandshakeDone, XEVENTS_CONTINUE);
     }
 
     xws_frame_t frame;
