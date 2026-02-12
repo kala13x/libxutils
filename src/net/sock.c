@@ -559,7 +559,7 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
     int nLeft = (int)nSize;
     int nReceived = 0;
 
-    while ((nLeft > 0 && nExact) || !nReceived)
+    while (nLeft > 0 && (nExact || !nReceived || SSL_pending(pSSL)))
     {
         int nBytes = SSL_read(pSSL, &pBuff[nReceived], nLeft);
         if (nBytes <= 0)
@@ -604,8 +604,8 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
         nReceived += nBytes;
         nLeft -= nBytes;
 
-        /* Wait for read event if non-blocking */
-        if (XSock_IsNB(pSock)) break;
+        /* Wait for read event if non-blocking, but drain SSL internal buffer first */
+        if (XSock_IsNB(pSock) && !SSL_pending(pSSL)) break;
     }
 
     return nReceived;
@@ -898,6 +898,12 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
 
         XSOCKET nFD = XSock_SetSSL(pNewSock, pSSL);
         XASSERT((nFD != XSOCK_INVALID), XSOCK_INVALID);
+
+#ifdef SSL_OP_IGNORE_UNEXPECTED_EOF
+        long nOpts = (long)SSL_get_options(pSSL);
+        nOpts |= SSL_OP_IGNORE_UNEXPECTED_EOF;
+        SSL_set_options(pSSL, nOpts);
+#endif
 
         return XSock_SSLAccept(pNewSock);
     }
