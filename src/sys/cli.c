@@ -12,11 +12,6 @@
 #include "str.h"
 #include "xtime.h"
 
-#if !defined(_WIN32) && !defined(_WIN64)
-#include <termios.h>
-#include <unistd.h>
-#endif
-
 #define XBAR_FRAME_BYTES 3
 #define XCLI_PERCENT_MAX 4
 
@@ -116,7 +111,7 @@ XSTATUS XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
     }
 
     if (tcsetattr(nFD, TCSANOW, &nflags)) return XSTDERR;
-    char *pRet = fgets(pPass, nSize, stdin);
+    char *pRet = fgets(pPass, (int)nSize, stdin);
     if (tcsetattr(nFD, TCSANOW, &oflags)) return XSTDERR;
 
     if (pRet != NULL)
@@ -132,7 +127,7 @@ XSTATUS XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
         fflush(stdout);
     }
 
-    char *pRet = fgets(pPass, nSize, stdin);
+    char *pRet = fgets(pPass, (int)nSize, stdin);
     if (pRet != NULL)
     {
         nLength = strlen(pPass);

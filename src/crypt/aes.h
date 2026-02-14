@@ -38,7 +38,7 @@ typedef enum {
     XAES_MODE_SIV       /* AES-SIV deterministic authenticated encryption (RFC 5297) */
 } xaes_mode_t;
 
-typedef struct XAESKey {
+typedef struct XXAESKey {
     uint8_t aesKey[XAES_KEY_LENGTH];            /* AES key or CMAC key for SIV mode (RFC 4493) */
     uint8_t ctrKey[XAES_KEY_LENGTH];            /* CTR key for SIV mode (RFC 5297) */
     uint8_t IV[XAES_BLOCK_SIZE];                /* Initialization vector */
@@ -46,34 +46,38 @@ typedef struct XAESKey {
     size_t nKeySize;                            /* Key size in bits */
 } xaes_key_t;
 
-typedef struct AESContext {
-    xaes_mode_t eMode;                      /* Encryption mode */
-    xaes_key_t key;                         /* AES key context */
-    uint8_t CMACRoundKey[XAES_RKEY_SIZE];   /* CMAC round key for SIV mode */
+typedef struct XAESContext {
+    uint8_t cmacRoundKey[XAES_RKEY_SIZE];   /* CMAC round key for SIV mode */
     uint8_t roundKey[XAES_RKEY_SIZE];       /* Encrypt/Decrypt round key (CTR key for SIV) */
     uint8_t nNB;                            /* Number of columns (32-bit words) comprising the State */
     uint8_t nNK;                            /* Number of 32-bit words comprising the Cipher Key */
     uint8_t nNR;                            /* Number of rounds */
 } xaes_ctx_t;
 
+typedef struct XAES {
+    xaes_mode_t mode;                       /* Encryption mode */
+    xaes_key_t key;                         /* AES key context */
+    xaes_ctx_t ctx;                         /* AES context */
+} xaes_t;
+
 void XAES_InitSIVKey(xaes_key_t *pKey, const uint8_t *pMacKey, const uint8_t *pCtrKey, size_t nKeySize);
 void XAES_InitKey(xaes_key_t *pKey, const uint8_t *pAESKey, size_t nKeySize, const uint8_t *pIV, uint8_t bContainIV);
-int XAES_Init(xaes_ctx_t *pCtx, const xaes_key_t *pKey, xaes_mode_t eMode);
+int XAES_Init(xaes_t *pAES, const xaes_key_t *pKey, xaes_mode_t eMode);
 
-void XAES_ECB_Crypt(const xaes_ctx_t* pCtx, uint8_t* pBuffer);
-void XAES_ECB_Decrypt(const xaes_ctx_t* pCtx, uint8_t* pBuffer);
+void XAES_ECB_Crypt(const xaes_t* pAES, uint8_t* pBuffer);
+void XAES_ECB_Decrypt(const xaes_t* pAES, uint8_t* pBuffer);
 
-uint8_t* XAES_CBC_Crypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
-uint8_t* XAES_CBC_Decrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_CBC_Crypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_CBC_Decrypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength);
 
-uint8_t* XAES_SIV_Crypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
-uint8_t* XAES_SIV_Decrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_SIV_Crypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_SIV_Decrypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength);
 
-uint8_t* XAES_XBC_Crypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
-uint8_t* XAES_XBC_Decrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_XBC_Crypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_XBC_Decrypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength);
 
-uint8_t* XAES_Encrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
-uint8_t* XAES_Decrypt(xaes_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_Encrypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength);
+uint8_t* XAES_Decrypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength);
 
 #ifdef __cplusplus
 }

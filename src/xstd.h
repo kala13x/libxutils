@@ -33,9 +33,12 @@
 
 #ifndef _WIN32
 #include <pthread.h>
-#include <dirent.h>
+#include <termios.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <netdb.h>
+#include <grp.h>
+#include <pwd.h>
 
 #include <sys/utsname.h>
 #include <sys/socket.h>
@@ -50,8 +53,6 @@
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <net/if.h>
-#include <grp.h>
-#include <pwd.h>
 #else
 #include <ws2tcpip.h>
 #include <winsock2.h>
