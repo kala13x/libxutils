@@ -914,7 +914,7 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
 
 XSOCKET XSock_AcceptNB(xsock_t *pSock)
 {
-#ifdef _XUTILS_USE_GNU
+#if defined(_XUTILS_USE_GNU) && defined(__linux__)
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
 
     xsockaddr_t* pSockAddr = XSock_GetSockAddr(pSock);

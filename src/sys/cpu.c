@@ -15,6 +15,7 @@
 #include "sync.h"
 #include "str.h"
 #include "xfs.h"
+#include <unistd.h>
 
 #define XCPU_INFO_FILE      "/proc/cpuinfo"
 #define XCPU_KEYWORD        "processor"
@@ -32,6 +33,14 @@ int XCPU_GetCount(void)
     nCount = sysInfo.dwNumberOfProcessors;
     XSYNC_ATOMIC_SET(&g_nCPUCount, nCount);
 #else
+    long nCPU = sysconf(_SC_NPROCESSORS_ONLN);
+    if (nCPU > 0)
+    {
+        nCount = (xatomic_t)nCPU;
+        XSYNC_ATOMIC_SET(&g_nCPUCount, nCount);
+        return (int)nCount;
+    }
+
     xbyte_buffer_t buffer;
     int nFoundPosit = 0;
     int nPosit = 0;
@@ -65,7 +74,7 @@ int XCPU_SetAffinity(int *pCPUs, size_t nCount, xpid_t nPID)
     int nCPUCount = XCPU_GetCount();
     if (nCPUCount <= 0) return XSTDERR;
 
-#ifdef _XUTILS_USE_GNU
+#if defined(_XUTILS_USE_GNU) && defined(__linux__)
     cpu_set_t mask;
     CPU_ZERO(&mask);
     size_t i;
@@ -105,7 +114,7 @@ int XCPU_SetSingle(int nCPU, xpid_t nPID)
 
 int XCPU_AddAffinity(int nCPU, xpid_t nPID)
 {
-#ifdef _XUTILS_USE_GNU
+#if defined(_XUTILS_USE_GNU) && defined(__linux__)
     int nCPUCount = XCPU_GetCount();
     if (nCPU < 0 || nCPU >= nCPUCount) return XSTDERR;
 
@@ -131,7 +140,7 @@ int XCPU_AddAffinity(int nCPU, xpid_t nPID)
 
 int XCPU_DelAffinity(int nCPU, xpid_t nPID)
 {
-#ifdef _XUTILS_USE_GNU
+#if defined(_XUTILS_USE_GNU) && defined(__linux__)
     int nCPUCount = XCPU_GetCount();
     if (nCPU < 0 || nCPU >= nCPUCount) return XSTDERR;
 

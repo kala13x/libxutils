@@ -12,6 +12,11 @@
 #include "str.h"
 #include "xtime.h"
 
+#if !defined(_WIN32) && !defined(_WIN64)
+#include <termios.h>
+#include <unistd.h>
+#endif
+
 #define XBAR_FRAME_BYTES 3
 #define XCLI_PERCENT_MAX 4
 
@@ -93,26 +98,47 @@ XSTATUS XCLI_GetChar(char *pChar, xbool_t bAsync)
 XSTATUS XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
 {
     if (pPass == NULL || !nSize) return XSTDERR;
-    size_t nLength = XSTDNON;
+    size_t nLength = 0;
 
-#ifdef __linux__
+#if !defined(_WIN32) && !defined(_WIN64)
     struct termios oflags, nflags;
-    tcgetattr(fileno(stdin), &oflags);
+    int nFD = fileno(stdin);
+    if (nFD < 0) return XSTDERR;
+    if (tcgetattr(nFD, &oflags)) return XSTDERR;
 
     nflags = oflags;
     nflags.c_lflag &= ~ECHO;
     nflags.c_lflag |= ECHONL;
-    if (pText != NULL) printf("%s", pText);
+    if (pText != NULL)
+    {
+        printf("%s", pText);
+        fflush(stdout);
+    }
 
-    if (tcsetattr(fileno(stdin), TCSANOW, &nflags)) return XSTDERR;
+    if (tcsetattr(nFD, TCSANOW, &nflags)) return XSTDERR;
     char *pRet = fgets(pPass, nSize, stdin);
-    nLength = pRet != NULL ? strlen(pPass) : 0;
+    if (tcsetattr(nFD, TCSANOW, &oflags)) return XSTDERR;
 
-    if (nLength > 0 &&
-        pRet[nLength-1] == '\n')
-        pRet[--nLength] = '\0';
+    if (pRet != NULL)
+    {
+        nLength = strlen(pPass);
+        if (nLength > 0 && pPass[nLength - 1] == '\n')
+            pPass[--nLength] = '\0';
+    }
+#else
+    if (pText != NULL)
+    {
+        printf("%s", pText);
+        fflush(stdout);
+    }
 
-    if (tcsetattr(fileno(stdin), TCSANOW, &oflags)) return XSTDERR;
+    char *pRet = fgets(pPass, nSize, stdin);
+    if (pRet != NULL)
+    {
+        nLength = strlen(pPass);
+        if (nLength > 0 && pPass[nLength - 1] == '\n')
+            pPass[--nLength] = '\0';
+    }
 #endif
 
     pPass[nLength] = 0;
@@ -124,7 +150,11 @@ XSTATUS XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCu
     XASSERT(pInput, XSTDINV);
     pInput[0] = XSTR_NUL;
 
-    if (pText != NULL) printf("%s", pText);
+    if (pText != NULL)
+    {
+        printf("%s", pText);
+        fflush(stdout);
+    }
     char *pRet = fgets(pInput, (int)nSize, stdin);
 
     XASSERT_RET((pRet != NULL), XSTDERR);
