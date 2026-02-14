@@ -15,7 +15,6 @@
 #include "sync.h"
 #include "str.h"
 #include "xfs.h"
-#include <unistd.h>
 
 #define XCPU_INFO_FILE      "/proc/cpuinfo"
 #define XCPU_KEYWORD        "processor"
