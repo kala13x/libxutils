@@ -100,7 +100,7 @@ static void XAES_KeyExpansion(xaes_ctx_t *pCtx, const uint8_t* pKey, size_t nKey
     }
 
     // All other round keys are found from the previous round keys
-    for (i = pCtx->nNK; i < pCtx->nNB * (pCtx->nNR + 1); ++i)
+    for (i = pCtx->nNK; i < pCtx->nNB * (pCtx->nNR + (unsigned)1); ++i)
     {
         {
             k = (i - 1) * 4;
