@@ -1615,7 +1615,7 @@ static XSOCKET XSock_SetupStream(xsock_t *pSock, const char *pAddr, size_t nFdMa
     return pSock->nFD;
 }
 
-static XSOCKET XSock_SetupDgram(xsock_t *pSock)
+static XSOCKET XSock_SetupDgram(xsock_t *pSock, xbool_t bReuseAddr)
 {
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
     int nEnabled = 1;
@@ -1643,9 +1643,14 @@ static XSOCKET XSock_SetupDgram(xsock_t *pSock)
     }
     else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_MULTICAST))
     {
-        if (XSock_ReuseAddr(pSock, 1) == XSOCK_INVALID) return XSOCK_INVALID;
-        else if (XSock_Bind(pSock) == XSOCK_INVALID) return XSOCK_INVALID;
-        else if (XSock_AddMembership(pSock, NULL) == XSOCK_INVALID) return XSOCK_INVALID;
+        if (!bReuseAddr && XSock_ReuseAddr(pSock, 1) == XSOCK_INVALID)
+            return XSOCK_INVALID;
+
+        if (XSock_Bind(pSock) == XSOCK_INVALID)
+            return XSOCK_INVALID;
+
+        if (XSock_AddMembership(pSock, NULL) == XSOCK_INVALID)
+            return XSOCK_INVALID;
     }
 
     return pSock->nFD;
@@ -1716,8 +1721,9 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
         return XSOCK_INVALID;
     }
 
+    xbool_t bReuseAddr = XFLAGS_CHECK(pSock->nFlags, XSOCK_REUSEADDR);
     if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock, pAddr, nFdMax);
-    else if (pSock->nType == SOCK_DGRAM) XSock_SetupDgram(pSock);
+    else if (pSock->nType == SOCK_DGRAM) XSock_SetupDgram(pSock, bReuseAddr);
 
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_NB))
         return XSock_NonBlock(pSock, XTRUE);
