@@ -1485,7 +1485,7 @@ XSOCKET XSock_SSLAccept(xsock_t *pSock)
     return XSOCK_INVALID;
 }
 
-XSOCKET XSock_InitSSLServer(xsock_t *pSock)
+XSOCKET XSock_InitSSLServer(xsock_t *pSock, int nVerifyFlags)
 {
 #ifdef XSOCK_USE_SSL
     const SSL_METHOD *pMethod = XSock_GetSSLMethod(pSock);
@@ -1504,7 +1504,10 @@ XSOCKET XSock_InitSSLServer(xsock_t *pSock)
         return XSOCK_INVALID;
     }
 
-    SSL_CTX_set_verify(pSSLCtx, SSL_VERIFY_NONE, NULL);
+    int nVerify = nVerifyFlags > XSTDNON ?
+        nVerifyFlags : SSL_VERIFY_NONE;
+
+    SSL_CTX_set_verify(pSSLCtx, nVerify, NULL);
     return XSock_SetSSLCTX(pSock, pSSLCtx);
 #endif
 
@@ -1594,7 +1597,7 @@ static XSOCKET XSock_SetupStream(xsock_t *pSock, const char *pAddr, size_t nFdMa
         }
 
         if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSL))
-            XSock_InitSSLServer(pSock);
+            XSock_InitSSLServer(pSock, XSTDNON);
     }
     else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_CLIENT))
     {

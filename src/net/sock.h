@@ -232,7 +232,7 @@ XSTATUS XSock_LoadPKCS12(xsock_ssl_cert_t* pCert, const char* p12Path, const cha
 XSOCKET XSock_SetSSLCert(xsock_t* pSock, xsock_cert_t* pCert);
 void XSock_InitCert(xsock_cert_t *pCert);
 
-XSOCKET XSock_InitSSLServer(xsock_t* pSock);
+XSOCKET XSock_InitSSLServer(xsock_t* pSock, int nVerifyFlags);
 XSOCKET XSock_InitSSLClient(xsock_t* pSock, const char* pAddr);
 
 XSOCKET XSock_SSLConnect(xsock_t *pSock);
