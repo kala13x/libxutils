@@ -647,7 +647,8 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
 
     char sHost[XSOCK_ADDR_MAX + XSTR_TINY];
     xbool_t bSSL = XSock_IsSSL(&pApiData->sock);
-    xbool_t bDefaultPort = (bSSL && pApiData->nPort == 443) || (!bSSL && pApiData->nPort == 80);
+    xbool_t bDefaultPort = (bSSL && pApiData->nPort == XHTTP_SSL_PORT) ||
+                           (!bSSL && pApiData->nPort == XHTTP_DEF_PORT);
     if (bDefaultPort) xstrncpy(sHost, sizeof(sHost), pApiData->sAddr);
     else xstrncpyf(sHost, sizeof(sHost), "%s:%u", pApiData->sAddr, (unsigned)pApiData->nPort);
 
