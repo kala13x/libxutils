@@ -167,6 +167,7 @@ typedef union {
 typedef struct XSocket {
     xsock_status_t eStatus;
     xsock_addr_t sockAddr;
+    char sTLSServerName[XSOCK_INFO_MAX];
 
     uint32_t nFlags;
     uint32_t nAddr;
