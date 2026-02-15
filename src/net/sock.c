@@ -475,6 +475,7 @@ XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
 {
     XASSERT_RET((pSock != NULL), XSOCK_ERROR);
     memset(&pSock->sockAddr, 0, sizeof(pSock->sockAddr));
+    pSock->sTLSServerName[0] = XSTR_NUL;
 
     pSock->pPrivate = NULL;
     pSock->nDomain = 0;
@@ -1044,6 +1045,7 @@ XSTATUS XSock_GetAddrInfo(xsock_info_t *pAddr, const char *pHost)
     char *savePtr = NULL;
     char *ptr = xstrtok(sHost, ":", &savePtr);
     if (ptr == NULL) return XSOCK_ERROR;
+    xstrncpy(pAddr->sName, sizeof(pAddr->sName), ptr);
 
     int nStatus = XSock_AddrInfo(pAddr, XF_IPV4, ptr);
     if (nStatus <= 0) return XSOCK_ERROR;
@@ -1546,6 +1548,18 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
     SSL_set_connect_state(pSSL);
     SSL_set_fd(pSSL, (int)pSock->nFD);
 
+#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
+    if (xstrused(pSock->sTLSServerName) &&
+        SSL_set_tlsext_host_name(pSSL, pSock->sTLSServerName) != 1)
+    {
+        pSock->eStatus = XSOCK_ERR_SSLCNT;
+        SSL_free(pSSL);
+        SSL_CTX_free(pSSLCtx);
+        XSock_Close(pSock);
+        return XSOCK_INVALID;
+    }
+#endif
+
 #ifdef SSL_OP_IGNORE_UNEXPECTED_EOF
     long nOpts = (long)SSL_get_options(pSSL);
     nOpts |= SSL_OP_IGNORE_UNEXPECTED_EOF;
@@ -1667,8 +1681,12 @@ static void XSock_SetupAddr(xsock_t *pSock, const char *pAddr, uint16_t nPort)
 
 XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const char *pAddr, uint16_t nPort)
 {
+    char sTLSServerName[XSOCK_INFO_MAX];
+    xstrncpy(sTLSServerName, sizeof(sTLSServerName), pSock->sTLSServerName);
+
     XSTATUS nStatus = XSock_Init(pSock, nFlags, XSOCK_INVALID);
     if (nStatus == XSOCK_ERROR) return XSOCK_INVALID;
+    xstrncpy(pSock->sTLSServerName, sizeof(pSock->sTLSServerName), sTLSServerName);
 
     if (!xstrused(pAddr) || (!nPort && !XFLAGS_CHECK(nFlags, XSOCK_UNIX)))
     {
@@ -1712,6 +1730,9 @@ XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_info_t *pAddr)
         pSock->nFD = XSOCK_INVALID;
         return XSOCK_INVALID;
     }
+
+    if (XFLAGS_CHECK(nFlags, XSOCK_SSL) && xstrused(pAddr->sName))
+        xstrncpy(pSock->sTLSServerName, sizeof(pSock->sTLSServerName), pAddr->sName);
 
     return XSock_Create(pSock, nFlags, pAddr->sAddr, pAddr->nPort);
 }
