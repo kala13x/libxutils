@@ -475,7 +475,6 @@ XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
 {
     XASSERT_RET((pSock != NULL), XSOCK_ERROR);
     memset(&pSock->sockAddr, 0, sizeof(pSock->sockAddr));
-    pSock->sTLSServerName[0] = XSTR_NUL;
 
     pSock->pPrivate = NULL;
     pSock->nDomain = 0;
@@ -1514,13 +1513,12 @@ XSOCKET XSock_InitSSLServer(xsock_t *pSock)
     return XSOCK_INVALID;
 }
 
-XSOCKET XSock_InitSSLClient(xsock_t *pSock)
+XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
 {
 #ifdef XSOCK_USE_SSL
     const SSL_METHOD *pMethod = XSock_GetSSLMethod(pSock);
     if (pMethod == NULL)
     {
-        printf("SSL Method is NULL\n");
         pSock->eStatus = XSOCK_ERR_SSLMET;
         XSock_Close(pSock);
         return XSOCK_INVALID;
@@ -1549,8 +1547,7 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
     SSL_set_fd(pSSL, (int)pSock->nFD);
 
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-    if (xstrused(pSock->sTLSServerName) &&
-        SSL_set_tlsext_host_name(pSSL, pSock->sTLSServerName) != 1)
+    if (xstrused(pAddr) && SSL_set_tlsext_host_name(pSSL, pAddr) != 1)
     {
         pSock->eStatus = XSOCK_ERR_SSLCNT;
         SSL_free(pSSL);
@@ -1568,6 +1565,7 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
 
     if (XSock_SetSSLCTX(pSock, pSSLCtx) < 0)
     {
+        SSL_free(pSSL);
         SSL_CTX_free(pSSLCtx);
         return XSOCK_INVALID;
     }
@@ -1583,7 +1581,7 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock)
     return XSOCK_INVALID;
 }
 
-static XSOCKET XSock_SetupStream(xsock_t *pSock, size_t nFdMax)
+static XSOCKET XSock_SetupStream(xsock_t *pSock, const char *pAddr, size_t nFdMax)
 {
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
 
@@ -1615,7 +1613,7 @@ static XSOCKET XSock_SetupStream(xsock_t *pSock, size_t nFdMax)
         }
 
         if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSL))
-            XSock_InitSSLClient(pSock);
+            XSock_InitSSLClient(pSock, pAddr);
     }
 
     return pSock->nFD;
@@ -1681,12 +1679,8 @@ static void XSock_SetupAddr(xsock_t *pSock, const char *pAddr, uint16_t nPort)
 
 XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const char *pAddr, uint16_t nPort)
 {
-    char sTLSServerName[XSOCK_INFO_MAX];
-    xstrncpy(sTLSServerName, sizeof(sTLSServerName), pSock->sTLSServerName);
-
     XSTATUS nStatus = XSock_Init(pSock, nFlags, XSOCK_INVALID);
     if (nStatus == XSOCK_ERROR) return XSOCK_INVALID;
-    xstrncpy(pSock->sTLSServerName, sizeof(pSock->sTLSServerName), sTLSServerName);
 
     if (!xstrused(pAddr) || (!nPort && !XFLAGS_CHECK(nFlags, XSOCK_UNIX)))
     {
@@ -1708,7 +1702,7 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
     }
 
     XSock_SetupAddr(pSock, pAddr, nPort);
-    if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock, nFdMax);
+    if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock, pAddr, nFdMax);
     else if (pSock->nType == SOCK_DGRAM) XSock_SetupDgram(pSock);
 
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_NB))
@@ -1730,9 +1724,6 @@ XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_info_t *pAddr)
         pSock->nFD = XSOCK_INVALID;
         return XSOCK_INVALID;
     }
-
-    if (XFLAGS_CHECK(nFlags, XSOCK_SSL) && xstrused(pAddr->sName))
-        xstrncpy(pSock->sTLSServerName, sizeof(pSock->sTLSServerName), pAddr->sName);
 
     return XSock_Create(pSock, nFlags, pAddr->sAddr, pAddr->nPort);
 }

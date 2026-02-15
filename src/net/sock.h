@@ -167,7 +167,6 @@ typedef union {
 typedef struct XSocket {
     xsock_status_t eStatus;
     xsock_addr_t sockAddr;
-    char sTLSServerName[XSOCK_INFO_MAX];
 
     uint32_t nFlags;
     uint32_t nAddr;
@@ -234,7 +233,7 @@ XSOCKET XSock_SetSSLCert(xsock_t* pSock, xsock_cert_t* pCert);
 void XSock_InitCert(xsock_cert_t *pCert);
 
 XSOCKET XSock_InitSSLServer(xsock_t* pSock);
-XSOCKET XSock_InitSSLClient(xsock_t* pSock);
+XSOCKET XSock_InitSSLClient(xsock_t* pSock, const char* pAddr);
 
 XSOCKET XSock_SSLConnect(xsock_t *pSock);
 XSOCKET XSock_SSLAccept(xsock_t *pSock);

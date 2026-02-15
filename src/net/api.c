@@ -649,15 +649,16 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_data_t *pApiData)
     xbool_t bSSL = XSock_IsSSL(&pApiData->sock);
     xbool_t bDefaultPort = (bSSL && pApiData->nPort == XHTTP_SSL_PORT) ||
                            (!bSSL && pApiData->nPort == XHTTP_DEF_PORT);
+
     if (bDefaultPort) xstrncpy(sHost, sizeof(sHost), pApiData->sAddr);
     else xstrncpyf(sHost, sizeof(sHost), "%s:%u", pApiData->sAddr, (unsigned)pApiData->nPort);
 
     if (XHTTP_AddHeader(&handle, "Upgrade", "websocket") < 0 ||
         XHTTP_AddHeader(&handle, "Connection", "Upgrade") < 0 ||
-        XHTTP_AddHeader(&handle, "Host", "%s", sHost) < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Version", "%d", XWS_SEC_WS_VERSION) < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Key", "%s", pApiData->sKey) < 0 ||
         XHTTP_AddHeader(&handle, "User-Agent", "%s", pApiData->sUserAgent) < 0 ||
+        XHTTP_AddHeader(&handle, "Host", "%s", sHost) < 0 ||
         XHTTP_Assemble(&handle, NULL, XSTDNON) == NULL)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_NONE, XAPI_ERR_ASSEMBLE);
@@ -1453,16 +1454,8 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
     else nFlags |= XSOCK_TCP;
 
-    if (pEndpt->bUnix)
-    {
-        XSock_Create(pSock, nFlags, pEndpt->pAddr, pEndpt->nPort);
-    }
-    else
-    {
-        addrInfo.nPort = pEndpt->nPort;
-        XSock_Open(pSock, nFlags, &addrInfo);
-    }
 
+    XSock_Create(pSock, nFlags, pEndpt->pAddr, pEndpt->nPort);
     if (pSock->nFD == XSOCK_INVALID)
     {
         XAPI_ErrorCb(pApi, pApiData, XAPI_SOCK, pSock->eStatus);
