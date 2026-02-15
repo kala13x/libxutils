@@ -1563,15 +1563,11 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
     SSL_set_options(pSSL, nOpts);
 #endif
 
-    if (XSock_SetSSLCTX(pSock, pSSLCtx) < 0)
-    {
-        SSL_free(pSSL);
-        SSL_CTX_free(pSSLCtx);
-        return XSOCK_INVALID;
-    }
+    XASSERT_CALL2((XSock_SetSSLCTX(pSock, pSSLCtx) >= 0),
+        SSL_free, pSSL, SSL_CTX_free, pSSLCtx, XSOCK_INVALID);
 
-    XSOCKET nFD = XSock_SetSSL(pSock, pSSL);
-    XASSERT_CALL((nFD >= 0), SSL_free, pSSL, nFD);
+    XASSERT_CALL2((XSock_SetSSL(pSock, pSSL) >= 0),
+        SSL_free, pSSL, SSL_CTX_free, pSSLCtx, XSOCK_INVALID);
 
     return XSock_SSLConnect(pSock);
 #endif
@@ -1655,7 +1651,7 @@ static XSOCKET XSock_SetupDgram(xsock_t *pSock)
     return pSock->nFD;
 }
 
-static void XSock_SetupAddr(xsock_t *pSock, const char *pAddr, uint16_t nPort)
+static int XSock_SetupAddr(xsock_t *pSock, const char *pAddr, uint16_t nPort)
 {
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_UNIX))
     {
@@ -1665,7 +1661,18 @@ static void XSock_SetupAddr(xsock_t *pSock, const char *pAddr, uint16_t nPort)
     }
     else if (!XFLAGS_CHECK(pSock->nFlags, XSOCK_RAW))
     {
-        pSock->nAddr = XSock_NetAddr(pAddr);
+        xsock_info_t addrInfo;
+        xbool_t bIsIPAddr;
+
+        bIsIPAddr = XSock_NetAddr(pAddr) > 0 ? XTRUE : XFALSE;
+        if (!bIsIPAddr && XSock_GetAddrInfo(&addrInfo, pAddr) < 0)
+        {
+            pSock->eStatus = XSOCK_ERR_ADDR;
+            return XSTDERR;
+        }
+
+        const char *pAddrStr = bIsIPAddr ? pAddr : addrInfo.sAddr;
+        pSock->nAddr = XSock_NetAddr(pAddrStr);
         pSock->nPort = nPort;
 
         pSock->sockAddr.inAddr.sin_addr.s_addr = pSock->nAddr;
@@ -1675,6 +1682,8 @@ static void XSock_SetupAddr(xsock_t *pSock, const char *pAddr, uint16_t nPort)
 
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_REUSEADDR))
         XSock_ReuseAddr(pSock, XTRUE);
+
+    return XSTDOK;
 }
 
 XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const char *pAddr, uint16_t nPort)
@@ -1701,7 +1710,12 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
         return XSOCK_INVALID;
     }
 
-    XSock_SetupAddr(pSock, pAddr, nPort);
+    if (XSock_SetupAddr(pSock, pAddr, nPort) < 0)
+    {
+        XSock_Close(pSock);
+        return XSOCK_INVALID;
+    }
+
     if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock, pAddr, nFdMax);
     else if (pSock->nType == SOCK_DGRAM) XSock_SetupDgram(pSock);
 

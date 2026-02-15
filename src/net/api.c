@@ -1454,7 +1454,6 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
     else nFlags |= XSOCK_TCP;
 
-
     XSock_Create(pSock, nFlags, pEndpt->pAddr, pEndpt->nPort);
     if (pSock->nFD == XSOCK_INVALID)
     {
