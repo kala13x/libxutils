@@ -149,6 +149,32 @@ uint8_t XWS_OpCode(xws_frame_type_t eType)
     return 0;
 }
 
+static uint32_t XWS_GenerateMaskKey(void)
+{
+    static xbool_t bSeeded = XFALSE;
+
+    if (!bSeeded)
+    {
+        unsigned int nSeed = (unsigned int)time(NULL);
+#ifdef _WIN32
+        nSeed ^= (unsigned int)GetCurrentProcessId();
+#else
+        nSeed ^= (unsigned int)getpid();
+#endif
+        nSeed ^= (unsigned int)clock();
+
+        srand(nSeed);
+        bSeeded = XTRUE;
+    }
+
+    uint32_t nMaskKey = ((uint32_t)(rand() & 0xFF) << 24) |
+                        ((uint32_t)(rand() & 0xFF) << 16) |
+                        ((uint32_t)(rand() & 0xFF) << 8) |
+                        ((uint32_t)(rand() & 0xFF));
+
+    return nMaskKey ? nMaskKey : 0xA5A5A5A5;
+}
+
 uint8_t* XWS_CreateFrame(const uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize)
 {
     if (pFrameSize != NULL) *pFrameSize = 0;
@@ -245,7 +271,8 @@ void XWebFrame_Free(xws_frame_t **pFrame)
     }
 }
 
-xws_status_t XWebFrame_Create(xws_frame_t *pFrame, const uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bFin)
+xws_status_t XWebFrame_Create(xws_frame_t *pFrame, const uint8_t *pPayload, size_t nLength,
+                              xws_frame_type_t eType, xbool_t bMask, xbool_t bFin)
 {
     XASSERT(pFrame, XWS_INVALID_ARGS);
     XASSERT((pPayload || !nLength), XWS_INVALID_ARGS);
@@ -269,6 +296,9 @@ xws_status_t XWebFrame_Create(xws_frame_t *pFrame, const uint8_t *pPayload, size
     pFrame->nHeaderSize = nFrameSize - nLength;
     pFrame->nPayloadLength = nLength;
 
+    // RFC 6455: The client should always mask the frame
+    if (bMask) return XWebFrame_Mask(pFrame);
+
     return XWS_ERR_NONE;
 }
 
@@ -288,13 +318,13 @@ xws_frame_t* XWebFrame_Alloc(xws_frame_type_t eType, size_t nBuffSize)
     return pFrame;
 }
 
-xws_frame_t* XWebFrame_New(const uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bFin)
+xws_frame_t* XWebFrame_New(const uint8_t *pPayload, size_t nLength, xws_frame_type_t eType,  xbool_t bMask, xbool_t bFin)
 {
     xws_frame_t *pFrame = XWebFrame_Alloc(eType, XSTDNON);
     XASSERT((pFrame != NULL), NULL);
     XSTATUS nStatus;
 
-    nStatus = XWebFrame_Create(pFrame, pPayload, nLength, eType, bFin);
+    nStatus = XWebFrame_Create(pFrame, pPayload, nLength, eType, bMask, bFin);
     XASSERT_CALL((nStatus == XWS_ERR_NONE), free, pFrame, NULL);
 
     pFrame->bAlloc = XTRUE;
@@ -379,13 +409,44 @@ xbyte_buffer_t* XWebFrame_GetBuffer(xws_frame_t *pFrame)
     return &pFrame->buffer;
 }
 
+xws_status_t XWebFrame_Mask(xws_frame_t *pFrame)
+{
+    XASSERT(pFrame, XWS_INVALID_ARGS);
+    XASSERT((pFrame->buffer.pData != NULL), XWS_INVALID_ARGS);
+    XASSERT_RET((pFrame->nHeaderSize >= 2), XWS_ERR_SIZE);
+    XASSERT_RET((pFrame->buffer.nUsed >= pFrame->nHeaderSize), XWS_FRAME_INCOMPLETE);
+    if (pFrame->bMask || (pFrame->buffer.pData[1] & 0x80)) return XWS_ERR_NONE;
+
+    pFrame->nMaskKey = XWS_GenerateMaskKey();
+    uint8_t *pMaskKey = (uint8_t*)&pFrame->nMaskKey;
+
+    int nStatus = XByteBuffer_Insert(&pFrame->buffer, pFrame->nHeaderSize, pMaskKey, 4);
+    XASSERT((nStatus > XSTDNON), XWS_ERR_ALLOC);
+
+    pFrame->buffer.pData[1] |= 0x80;
+    pFrame->nHeaderSize += 4;
+    pFrame->bMask = XTRUE;
+
+    uint8_t *pPayload = pFrame->buffer.pData + pFrame->nHeaderSize;
+    size_t i, nPayloadLen = pFrame->nPayloadLength;
+
+    for (i = 0; i < nPayloadLen; i++)
+        pPayload[i] ^= pMaskKey[i % 4];
+
+    return XWS_ERR_NONE;
+}
+
 xws_status_t XWebFrame_Unmask(xws_frame_t *pFrame)
 {
     XASSERT_RET(pFrame->bMask, XWS_ERR_NONE);
-    size_t i, nPayloadLen;
+    XASSERT_RET((pFrame->buffer.nUsed >= pFrame->nHeaderSize), XWS_FRAME_INCOMPLETE);
+    size_t i, nPayloadLen = pFrame->nPayloadLength;
 
-    nPayloadLen = XWebFrame_GetPayloadLength(pFrame);
-    XASSERT_RET(nPayloadLen, XWS_MISSING_PAYLOAD);
+    if (!nPayloadLen)
+    {
+        pFrame->bMask = XFALSE;
+        return XWS_ERR_NONE;
+    }
 
     uint8_t *pPayload = pFrame->buffer.pData + pFrame->nHeaderSize;
     uint8_t *pMaskKey = (uint8_t*)&pFrame->nMaskKey;
@@ -404,7 +465,8 @@ xws_status_t XWebFrame_Parse(xws_frame_t *pFrame)
 
     size_t nSize = pFrame->buffer.nUsed;
     const uint8_t *pData = pFrame->buffer.pData;
-    if (pData == NULL || nSize < 2) return XWS_FRAME_INCOMPLETE;
+    XASSERT((pData != NULL), XWS_FRAME_INCOMPLETE);
+    XASSERT_RET((nSize >= 2), XWS_FRAME_INCOMPLETE);
 
     uint8_t nStartByte = pData[0];
     uint8_t nNextByte = pData[1];

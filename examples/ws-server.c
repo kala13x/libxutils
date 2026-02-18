@@ -110,7 +110,7 @@ int send_pong(xapi_data_t *pData)
     xws_status_t status;
     xws_frame_t frame;
 
-    status = XWebFrame_Create(&frame, NULL, 0, XWS_PONG, XTRUE);
+    status = XWebFrame_Create(&frame, NULL, 0, XWS_PONG, XFALSE, XTRUE);
     if (status != XWS_ERR_NONE)
     {
         xloge("Failed to create WS PONG frame: %s",
@@ -135,7 +135,7 @@ int send_response(xapi_data_t *pData, const uint8_t *pPayload, size_t nLength, x
     xws_status_t status;
     xws_frame_t frame;
 
-    status = XWebFrame_Create(&frame, pPayload, nLength, eType, XTRUE);
+    status = XWebFrame_Create(&frame, pPayload, nLength, eType, XFALSE, XTRUE);
     if (status != XWS_ERR_NONE)
     {
         xloge("Failed to create WS frame: %s",
