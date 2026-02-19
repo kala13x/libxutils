@@ -44,6 +44,7 @@
 #include <sys/socket.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/wait.h>
 #include <sys/un.h>
 
 #include <netinet/tcp.h>

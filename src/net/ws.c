@@ -413,9 +413,10 @@ xws_status_t XWebFrame_Mask(xws_frame_t *pFrame)
 {
     XASSERT(pFrame, XWS_INVALID_ARGS);
     XASSERT((pFrame->buffer.pData != NULL), XWS_INVALID_ARGS);
+
     XASSERT_RET((pFrame->nHeaderSize >= 2), XWS_ERR_SIZE);
     XASSERT_RET((pFrame->buffer.nUsed >= pFrame->nHeaderSize), XWS_FRAME_INCOMPLETE);
-    if (pFrame->bMask || (pFrame->buffer.pData[1] & 0x80)) return XWS_ERR_NONE;
+    XASSERT_RET((!pFrame->bMask && !(pFrame->buffer.pData[1] & 0x80)), XWS_ERR_NONE);
 
     pFrame->nMaskKey = XWS_GenerateMaskKey();
     uint8_t *pMaskKey = (uint8_t*)&pFrame->nMaskKey;
