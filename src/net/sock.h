@@ -201,6 +201,7 @@ SSL* XSock_GetSSL(xsock_t *pSock);
 #endif
 
 xsock_status_t XSock_Status(const xsock_t *pSock);
+xbool_t XSock_IsSSLError(xsock_status_t eStatus);
 uint32_t XSock_GetFlags(const xsock_t *pSock);
 xbool_t XFlags_IsSSL(uint32_t nFlags);
 

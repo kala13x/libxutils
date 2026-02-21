@@ -388,6 +388,21 @@ const char* XSock_GetStatusStr(xsock_status_t eStatus)
     return "Undefined error";
 }
 
+xbool_t XSock_IsSSLError(xsock_status_t eStatus)
+{
+    return (eStatus == XSOCK_ERR_SSLACC ||
+            eStatus == XSOCK_ERR_SSLCNT ||
+            eStatus == XSOCK_ERR_SSLREAD ||
+            eStatus == XSOCK_ERR_SSLWRITE ||
+            eStatus == XSOCK_ERR_SYSCALL ||
+            eStatus == XSOCK_ERR_SSLERR ||
+            eStatus == XSOCK_ERR_INVSSL ||
+            eStatus == XSOCK_ERR_PKCS12 ||
+            eStatus == XSOCK_ERR_SSLKEY ||
+            eStatus == XSOCK_ERR_SSLCRT ||
+            eStatus == XSOCK_ERR_SSLCA);
+}
+
 const char* XSock_ErrStr(xsock_t *pSock)
 {
     if (pSock == NULL) return XSTR_EMPTY;
