@@ -49,6 +49,7 @@ const char *XPacket_GetTypeStr(xpacket_type_t eType)
         case XPACKET_TYPE_PING: return "ping";
         case XPACKET_TYPE_PONG: return "pong";
         case XPACKET_TYPE_INFO: return "info";
+        case XPACKET_TYPE_ACK: return "ack";
         case XPACKET_TYPE_CMD: return "cmd";
         case XPACKET_TYPE_EOS: return "eos";
         case XPACKET_TYPE_KA: return "ka";
@@ -68,10 +69,27 @@ xpacket_type_t XPacket_GetType(const char *pType)
     else if (!strncmp(pType, "ping", 4)) return XPACKET_TYPE_PING;
     else if (!strncmp(pType, "pong", 4)) return XPACKET_TYPE_PONG;
     else if (!strncmp(pType, "info", 4)) return XPACKET_TYPE_INFO;
+    else if (!strncmp(pType, "ack", 3)) return XPACKET_TYPE_ACK;
     else if (!strncmp(pType, "cmd", 3)) return XPACKET_TYPE_CMD;
     else if (!strncmp(pType, "eos", 3)) return XPACKET_TYPE_EOS;
     else if (!strncmp(pType, "ka", 2)) return XPACKET_TYPE_KA;
     return XPACKET_TYPE_INVALID;
+}
+
+static uint32_t XPacket_ReadU32LE(const uint8_t *pData)
+{
+    return (uint32_t)pData[0] |
+           ((uint32_t)pData[1] << 8) |
+           ((uint32_t)pData[2] << 16) |
+           ((uint32_t)pData[3] << 24);
+}
+
+static void XPacket_WriteU32LE(uint8_t *pData, uint32_t nValue)
+{
+    pData[0] = (uint8_t)(nValue & 0xff);
+    pData[1] = (uint8_t)((nValue >> 8) & 0xff);
+    pData[2] = (uint8_t)((nValue >> 16) & 0xff);
+    pData[3] = (uint8_t)((nValue >> 24) & 0xff);
 }
 
 void XPacket_Clear(xpacket_t *pPacket)
@@ -126,11 +144,11 @@ void XPacket_ParseHeader(xpacket_header_t *pHeader, xjson_obj_t *pHeaderObj)
         if (xstrused(pPayloadType)) xstrncpy(pHeader->sPayloadType, sizeof(pHeader->sPayloadType), pPayloadType);
 
         pHeader->nPayloadSize = XJSON_GetU32(XJSON_GetObject(pPayloadObj, "payloadSize"));
-        pHeader->bCrypted = XJSON_GetBool(XJSON_GetObject(pPayloadObj, "crypted"));
+        pHeader->bEncrypted = XJSON_GetBool(XJSON_GetObject(pPayloadObj, "encrypted"));
         pHeader->nSSRCHash = XJSON_GetU32(XJSON_GetObject(pPayloadObj, "ssrcHash"));
     }
 
-    xjson_obj_t *pExtraObj = XJSON_GetObject(pHeaderObj, "extension");
+    xjson_obj_t *pExtraObj = XJSON_GetObject(pHeaderObj, "extra");
     if (pExtraObj != NULL)
     {
         const char *pTime = XJSON_GetString(XJSON_GetObject(pExtraObj, "time"));
@@ -175,15 +193,15 @@ xpacket_status_t XPacket_UpdateHeader(xpacket_t *pPacket)
 
     if (nHaveTime || nHaveTZ)
     {
-        xjson_obj_t *pExtension = XJSON_GetOrCreateObject(pHeaderObj, "extension", 1);
-        if (pExtension == NULL)
+        xjson_obj_t *pExtra = XJSON_GetOrCreateObject(pHeaderObj, "extra", 1);
+        if (pExtra == NULL)
         {
             pHeader->eType = XPACKET_TYPE_ERROR;
             return XPACKET_ERR_ALLOC;
         }
 
-        if ((nHaveTime && XJSON_AddString(pExtension, "time", pHeader->sTime) != XJSON_ERR_NONE) ||
-            (nHaveTZ && XJSON_AddString(pExtension, "timeZone", pHeader->sTZ) != XJSON_ERR_NONE))
+        if ((nHaveTime && XJSON_AddString(pExtra, "time", pHeader->sTime) != XJSON_ERR_NONE) ||
+            (nHaveTZ && XJSON_AddString(pExtra, "timeZone", pHeader->sTZ) != XJSON_ERR_NONE))
         {
             pHeader->eType = XPACKET_TYPE_ERROR;
             return XPACKET_ERR_ALLOC;
@@ -200,8 +218,8 @@ xpacket_status_t XPacket_UpdateHeader(xpacket_t *pPacket)
         }
 
         if ((nHaveDataType && XJSON_AddString(pPayloadObj, "payloadType", pHeader->sPayloadType) != XJSON_ERR_NONE) ||
-            (pHeader->bCrypted && XJSON_AddBool(pPayloadObj, "crypted", pHeader->bCrypted) != XJSON_ERR_NONE) ||
-            XJSON_AddU32(pPayloadObj, "payloadSize", pHeader->nPayloadSize) != XJSON_ERR_NONE)
+            (pHeader->bEncrypted && XJSON_AddBool(pPayloadObj, "encrypted", pHeader->bEncrypted) != XJSON_ERR_NONE) ||
+            (XJSON_AddU32(pPayloadObj, "payloadSize", pHeader->nPayloadSize) != XJSON_ERR_NONE))
         {
             pHeader->eType = XPACKET_TYPE_ERROR;
             return XPACKET_ERR_ALLOC;
@@ -228,8 +246,9 @@ xpacket_status_t XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize
     pPacket->callback = NULL;
 
     pPacket->pHeaderObj = XJSON_NewObject(NULL, NULL, 1);
-    return (pPacket->pHeaderObj == NULL) ?
-        XPACKET_ERR_ALLOC : XPACKET_ERR_NONE;
+    XASSERT(pPacket->pHeaderObj, XPACKET_ERR_ALLOC);
+
+    return XPACKET_ERR_NONE;
 }
 
 xpacket_t *XPacket_New(uint8_t *pData, uint32_t nSize)
@@ -246,8 +265,14 @@ xpacket_t *XPacket_New(uint8_t *pData, uint32_t nSize)
 
 xpacket_status_t XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, size_t nHdrLen, uint8_t *pData, size_t nSize)
 {
-    if ((pBuffer == NULL || pHeader == NULL || !nHdrLen) ||
-        (!XByteBuffer_Add(pBuffer, (uint8_t*)&nHdrLen, sizeof(nHdrLen))) ||
+    XASSERT((pBuffer != NULL), XPACKET_INVALID_ARGS);
+    XASSERT((pHeader != NULL ), XPACKET_INVALID_ARGS);
+    XASSERT((nHdrLen > 0), XPACKET_INVALID_ARGS);
+
+    uint8_t sInfoBytes[XPACKET_INFO_BYTES];
+    XPacket_WriteU32LE(sInfoBytes, nHdrLen);
+
+    if ((!XByteBuffer_Add(pBuffer, sInfoBytes, sizeof(sInfoBytes))) ||
         (!XByteBuffer_Add(pBuffer, (uint8_t*)pHeader, nHdrLen)) ||
         (pData != NULL && nSize && !XByteBuffer_Add(pBuffer, pData, nSize)))
     {
@@ -290,26 +315,34 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
 
 xpacket_status_t XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize)
 {
+    XASSERT((pPacket != NULL), XPACKET_INVALID_ARGS);
+    XASSERT((pData != NULL), XPACKET_INVALID_ARGS);
+    XASSERT((nSize > 0), XPACKET_INVALID_ARGS);
     xpacket_header_t *pHdr = &pPacket->header;
+
+    if (nSize < XPACKET_INFO_BYTES)
+    {
+        pHdr->eType = XPACKET_TYPE_INCOMPLETE;
+        return XPACKET_INCOMPLETE;
+    }
+
+    pPacket->nHeaderLength = XPacket_ReadU32LE(pData);
+    if ((nSize - XPACKET_INFO_BYTES) < pPacket->nHeaderLength)
+    {
+        pHdr->eType = XPACKET_TYPE_INCOMPLETE;
+        return XPACKET_INCOMPLETE;
+    }
+
     memset(pHdr, 0, sizeof(xpacket_header_t));
     pHdr->eType = XPACKET_TYPE_INVALID;
 
-    if (pData == NULL || nSize <= 0) return XPACKET_INVALID;
-    XByteBuffer_Init(&pPacket->rawData, 0, 0);
-
-    pPacket->nHeaderLength = (*(uint32_t*)pData);
+    XByteBuffer_Init(&pPacket->rawData, XSTDNON, XFALSE);
     pPacket->pHeaderObj = NULL;
     pPacket->pPayload = NULL;
     pPacket->pUserData = NULL;
     pPacket->callback = NULL;
     pPacket->nPacketSize = 0;
     pPacket->nAllocated = 0;
-
-    if ((int)(nSize - XPACKET_INFO_BYTES) < pPacket->nHeaderLength)
-    {
-        pHdr->eType = XPACKET_TYPE_INCOMPLETE;
-        return XPACKET_INCOMPLETE;
-    }
 
     xstrncpy(pHdr->sVersion, sizeof(pHdr->sVersion), XPACKET_VERSION_STR);
     const char *pHeader = &((char*)pData)[XPACKET_INFO_BYTES];

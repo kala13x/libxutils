@@ -55,6 +55,7 @@ typedef enum {
     XPACKET_TYPE_PING,
     XPACKET_TYPE_PONG,
     XPACKET_TYPE_INFO,
+    XPACKET_TYPE_ACK,
     XPACKET_TYPE_CMD,
     XPACKET_TYPE_EOS,
     XPACKET_TYPE_KA
@@ -67,7 +68,7 @@ typedef struct XPacketHeader {
     uint32_t nTimeStamp;
     uint32_t nPayloadSize;
     uint32_t nSSRCHash;
-    xbool_t bCrypted;
+    xbool_t bEncrypted;
 
     char sPayloadType[XPACKET_TYPE_MAX];
     char sVersion[XPACKET_VER_MAX];

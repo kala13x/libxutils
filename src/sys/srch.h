@@ -58,7 +58,7 @@ struct XSearchCtx {
     xbool_t bMatchOnly;             // Search match only
     xbool_t bReadStdin;             // Read from stdin
 
-    xsearch_cb_t callback;     // Search callback
+    xsearch_cb_t callback;          // Search callback
     void *pUserCtx;                 // User space
 
     /* Search criteria */
