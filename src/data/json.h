@@ -95,6 +95,7 @@ xjson_error_t XJSON_AddU32(xjson_obj_t *pObject, const char *pName, uint32_t nVa
 xjson_error_t XJSON_AddInt(xjson_obj_t *pObject, const char *pName, int nValue);
 xjson_error_t XJSON_AddFloat(xjson_obj_t *pObject, const char *pName, double fValue);
 xjson_error_t XJSON_AddString(xjson_obj_t *pObject, const char *pName, const char *pValue);
+xjson_error_t XJSON_AddStrIfUsed(xjson_obj_t *pObject, const char *pName, const char *pValue);
 xjson_error_t XJSON_AddBool(xjson_obj_t *pObject, const char *pName, int nValue);
 xjson_error_t XJSON_AddNull(xjson_obj_t *pObject, const char *pName);
 

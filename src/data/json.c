@@ -556,6 +556,19 @@ xjson_error_t XJSON_AddString(xjson_obj_t *pObject, const char *pName, const cha
     return status;
 }
 
+xjson_error_t XJSON_AddStrIfUsed(xjson_obj_t *pObject, const char *pName, const char *pValue)
+{
+    if (!xstrused(pValue)) return XJSON_ERR_NONE;
+    xpool_t *pPool = pObject->pPool;
+
+    xjson_obj_t *pNewObj = XJSON_NewString(pPool, pName, pValue);
+    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+
+    xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
+    if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
+    return status;
+}
+
 xjson_obj_t* XJSON_NewBool(xpool_t *pPool, const char *pName, int nValue)
 {
     char *pValue = (char*)xalloc(pPool, XJSON_BOOL_MAX);
