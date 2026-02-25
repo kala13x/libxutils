@@ -19,26 +19,40 @@ extern "C" {
 #define _GNU_SOURCE
 #endif
 
+#ifdef __linux__
+# ifndef _XEVENTS_USE_EPOLL
+# define _XEVENTS_USE_EPOLL 1
+# endif
+#elif _WIN32
+# ifndef _XEVENTS_USE_WSAPOLL
+# define _XEVENTS_USE_WSAPOLL 1
+# endif
+#else
+# ifndef _XEVENTS_USE_POLL
+# define _XEVENTS_USE_POLL 1
+# endif
+#endif
+
+#ifndef __linux__
+# ifndef _XEVENTS_USE_EVENT_LIST
+# define _XEVENTS_USE_EVENT_LIST 1
+# endif
+#endif
+
 #include "xstd.h"
 #include "sock.h"
 #include "hash.h"
 
-#ifdef __linux__
+#ifdef _XEVENTS_USE_EPOLL
 #include <sys/timerfd.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
-#elif !defined(_WIN32)
+#elif defined(_XEVENTS_USE_POLL)
 #include <sys/poll.h>
 #endif
 
-#ifndef __linux__
-# ifndef _USE_EVENT_LIST
-# define _USE_EVENT_LIST 1
-# endif
-#endif
-
 // Event flags compatibility macros
-#ifdef __linux__
+#ifdef _XEVENTS_USE_EPOLL
 #define XPOLLRDHUP              EPOLLRDHUP
 #define XPOLLHUP                EPOLLHUP
 #define XPOLLERR                EPOLLERR
@@ -65,7 +79,7 @@ extern "C" {
 #define XEVENTS_USERCALL        3
 #define XEVENTS_BREAK           4
 
-#ifdef __linux__
+#ifdef _XEVENTS_USE_EPOLL
 #define XEVENTS_ACTION          XEVENTS_CONTINUE
 #else
 #define XEVENTS_ACTION          XEVENTS_RELOOP
@@ -119,7 +133,7 @@ typedef enum {
 
 // Event data structure
 typedef struct XEventData {
-#ifdef _USE_EVENT_LIST
+#ifdef _XEVENTS_USE_EVENT_LIST
     uint64_t nTimerValue;
     xlist_t *pTimerNode;
 #endif
@@ -134,14 +148,14 @@ typedef struct XEventData {
 typedef int(*xevent_cb_t)(void *events, void* data, XSOCKET fd, xevent_cb_type_t reason);
 
 typedef struct XEvents {
-#ifdef __linux__
+#ifdef _XEVENTS_USE_EPOLL
     struct epoll_event*     pEventArray;        /* EPOLL event array */
     int                     nEventFd;           /* EPOLL file decriptor */
 #else
     struct pollfd*          pEventArray;        /* POLL event array */
 #endif
 
-#ifdef _USE_EVENT_LIST
+#ifdef _XEVENTS_USE_EVENT_LIST
     xlist_t                 timerList;          /* Linked list for timer events */
 #endif
 

@@ -71,7 +71,7 @@ static void XEvents_ClearCb(void *pCtx, void *pData, int nKey)
 
     if (pEvData != NULL)
     {
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
         // Close fd for timer and event types
         // All other types are managed by user
         if (pEvData->nType == XEVENT_TYPE_TIMER ||
@@ -179,7 +179,7 @@ xevent_data_t* XEvents_CreateEvent(xevents_t *pEvents, void *pCtx)
 {
     XASSERT((pEvents != NULL), NULL);
 
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
     int nEventFD = eventfd(0, EFD_NONBLOCK);
     XASSERT((nEventFD >= 0), NULL);
 
@@ -188,13 +188,13 @@ xevent_data_t* XEvents_CreateEvent(xevents_t *pEvents, void *pCtx)
 
     return pData;
 #else
-    // No-op for non-linux systems
+    // No-op for poll
     (void)pCtx;
     return NULL;
 #endif
 }
 
-#ifdef _USE_EVENT_LIST
+#if defined(_XEVENTS_USE_EVENT_LIST)
 static void XEvents_ListClearCb(void *pCtx, void *pData)
 {
     xevents_t *pEvents = (xevents_t*)pCtx;
@@ -363,7 +363,7 @@ static int XEvents_TimerService(xevents_t *pEvents, xevent_data_t *pData, XSOCKE
 
 xevent_data_t* XEvents_AddTimer(xevents_t *pEvents, void *pContext, int nTimeoutMs)
 {
-#ifdef _USE_EVENT_LIST
+#if defined(_XEVENTS_USE_EVENT_LIST)
     return XEvents_AddTimerCommon(pEvents, pContext, nTimeoutMs);
 #else
     return XEvents_AddTimerLinux(pEvents, pContext, nTimeoutMs);
@@ -372,7 +372,7 @@ xevent_data_t* XEvents_AddTimer(xevents_t *pEvents, void *pContext, int nTimeout
 
 xevent_status_t XEvents_ExtendTimer(xevents_t *pEvents, xevent_data_t *pTimer, int nTimeoutMs)
 {
-#ifdef _USE_EVENT_LIST
+#if defined(_XEVENTS_USE_EVENT_LIST)
     return XEvents_ExtendTimerCommon(pEvents, pTimer, nTimeoutMs);
 #else
     return XEvents_ExtendTimerLinux(pEvents, pTimer, nTimeoutMs);
@@ -381,12 +381,12 @@ xevent_status_t XEvents_ExtendTimer(xevents_t *pEvents, xevent_data_t *pTimer, i
 
 static int XEvents_ServiceCb(xevents_t *pEvents, xevent_data_t *pData, XSOCKET nFD, uint32_t nEvents)
 {
-    XASSERT((pEvents && pData), XEVENTS_EINVALID);
+    XASSERT((pEvents != NULL), XEVENTS_EINVALID);
     if (pData != NULL) pData->nEvents = nEvents;
     int nRetVal = XEVENTS_CONTINUE;
 
-#ifndef _USE_EVENT_LIST
-    if (pData->nType == XEVENT_TYPE_TIMER)
+#ifndef _XEVENTS_USE_EVENT_LIST
+    if (pData != NULL && pData->nType == XEVENT_TYPE_TIMER)
     {
         nRetVal = XEvents_TimerService(pEvents, pData, nFD, nEvents);
         return XEVENTS_RETURN_VALUE(nRetVal);
@@ -456,7 +456,7 @@ void XEvents_Destroy(xevents_t *pEvents)
         pEvents->pEventArray = NULL;
     }
 
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
     if (pEvents->nEventFd >= 0)
     {
         close(pEvents->nEventFd);
@@ -464,7 +464,7 @@ void XEvents_Destroy(xevents_t *pEvents)
     }
 #endif
 
-#ifdef _USE_EVENT_LIST
+#if defined(_XEVENTS_USE_EVENT_LIST)
     XList_Clear(&pEvents->timerList);
 #endif
 
@@ -494,13 +494,13 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     pEvents->nEventCount = 0;
     pEvents->pEventArray = NULL;
 
-#ifdef _USE_EVENT_LIST
+#if defined(_XEVENTS_USE_EVENT_LIST)
     XList_Init(&pEvents->timerList, NULL, XSTDNON, XEvents_ListClearCb, pEvents);
 #endif
 
     if (pEvents->bUseHash) XHash_Init(&pEvents->eventsMap, XEvents_ClearCb, pEvents);
 
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
     struct epoll_event *pEventArray = calloc(pEvents->nEventMax, sizeof(struct epoll_event));
     XASSERT_CALL((pEventArray != NULL), XEvents_DestroyEventMap, pEvents, XEVENTS_EALLOC);
 
@@ -532,7 +532,7 @@ xevent_data_t *XEvents_NewData(void *pCtx, XSOCKET nFd, int nType)
     xevent_data_t* pData = (xevent_data_t*)malloc(sizeof(xevent_data_t));
     XASSERT((pData != NULL), NULL);
 
-#ifdef _USE_EVENT_LIST
+#if defined(_XEVENTS_USE_EVENT_LIST)
     pData->nTimerValue = XSTDNON;
     pData->pTimerNode = NULL;
 #endif
@@ -551,7 +551,7 @@ xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvent
     XASSERT((pEvents != NULL && pData != NULL), XEVENTS_EINVALID);
     XASSERT((pData->nFD != XSOCK_INVALID), XEVENTS_EINVALID);
 
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
     struct epoll_event event;
     event.data.ptr = pData;
     event.events = nEvents;
@@ -566,7 +566,7 @@ xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvent
 
     if (pEvents->bUseHash && XHash_Insert(&pEvents->eventsMap, pData, XSTDNON, (int)pData->nFD) < 0)
     {
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
         epoll_ctl(pEvents->nEventFd, EPOLL_CTL_DEL, pData->nFD, NULL);
 #else
         pEvents->pEventArray[pData->nIndex].revents = 0;
@@ -588,7 +588,7 @@ xevent_status_t XEvents_Modify(xevents_t *pEvents, xevent_data_t *pData, int nEv
     XASSERT((pEvents != NULL), XEVENTS_EINVALID);
     XASSERT((pData != NULL), XEVENTS_EINVALID);
 
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
     struct epoll_event event;
     event.data.ptr = pData;
     event.events = nEvents;
@@ -610,7 +610,7 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
     XASSERT_RET((pData != NULL), XEVENTS_SUCCESS);
     XSTATUS nStatus = XSTDERR;
 
-#ifdef _USE_EVENT_LIST
+#if defined(_XEVENTS_USE_EVENT_LIST)
     if (pData->nType == XEVENT_TYPE_TIMER)
     {
         XList_Unlink(pData->pTimerNode);
@@ -618,7 +618,7 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
     }
 #endif
 
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
     if (pData->nFD >= 0)
     {
         nStatus = epoll_ctl(pEvents->nEventFd, EPOLL_CTL_DEL, pData->nFD, NULL);
@@ -660,18 +660,18 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
     int i = 0, nCount = 0, nRet = 0;
     int nTimeout = nTimeoutMs;
 
-#ifdef _USE_EVENT_LIST
+#if defined(_XEVENTS_USE_EVENT_LIST)
     xbool_t bBreak = XFALSE;
     nTimeout = XEvents_TimerServiceCommon(pEvents, XTime_GetMs(), &bBreak);
     if (nTimeout <= 0 || nTimeout > nTimeoutMs) nTimeout = nTimeoutMs;
     if (bBreak) return XEVENTS_BREAK;
 #endif
 
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
     nCount = epoll_wait(pEvents->nEventFd, pEvents->pEventArray, pEvents->nEventMax, nTimeout);
-#elif _WIN32
+#elif defined(_XEVENTS_USE_WSAPOLL)
     nCount = WSAPoll(pEvents->pEventArray, pEvents->nEventCount, nTimeout);
-#else
+#elif defined(_XEVENTS_USE_POLL)
     nCount = poll(pEvents->pEventArray, pEvents->nEventCount, nTimeout);
 #endif
 
@@ -681,7 +681,7 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
     XASSERT((nCount > 0), XEVENTS_EWAIT);
     XASSERT(((uint32_t)nCount <= pEvents->nEventMax), XEVENTS_EWAIT);
 
-#ifdef __linux__
+#if defined(_XEVENTS_USE_EPOLL)
     for (i = 0; i < nCount; i++)
     {
         if (pEvents->pEventArray[i].data.ptr == NULL) continue;
