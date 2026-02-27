@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-#define XHASH_MIX(num, range) ((num ^ (num >> 8) ^ (num >> 16)) % range)
+#define XHASH_MIX(num, range) (((uint32_t)(num) ^ ((uint32_t)(num) >> 8) ^ ((uint32_t)(num) >> 16)) % (range))
 
 #include "xstd.h"
 #include "list.h"

@@ -378,7 +378,7 @@ int XHTTP_Copy(xhttp_t *pDst, xhttp_t *pSrc)
         return XSTDERR;
     }
 
-    pDst->nHeaderCount = (uint16_t)pDstMap->nUsed;
+    pDst->nHeaderCount = (uint16_t)pDstMap->nCount;
     pDst->nContentLength = pSrc->nContentLength;
     pDst->nHeaderLength = pSrc->nHeaderLength;
 
@@ -437,7 +437,7 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
         {
             if (!xstrncmp(pPair->pData, sOption, nLength))
             {
-                nStatus = (int)pHttp->headerMap.nUsed;
+                nStatus = (int)pHttp->headerMap.nCount;
                 return nStatus > 0 ? nStatus : XSTDERR;
             }
 
@@ -465,7 +465,7 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
         }
     }
 
-    nStatus = (int)pHttp->headerMap.nUsed;
+    nStatus = (int)pHttp->headerMap.nCount;
     XASSERT_RET((nStatus > 0), XSTDERR);
 
     pHttp->nComplete = XFALSE;
@@ -550,12 +550,12 @@ xbyte_buffer_t* XHTTP_Assemble(xhttp_t *pHttp, const uint8_t *pContent, size_t n
         if (nStatus <= 0) return NULL;
     }
 
-    if ((pHdrMap->nUsed > 0 &&
+    if ((pHdrMap->nCount > 0 &&
         XMap_Iterate(pHdrMap, XHTTP_HeaderWriteCb, pHttp) != XMAP_OK) ||
         XByteBuffer_AddFmt(pBuffer, "%s", "\r\n") == XSTDERR) return NULL;
 
     pHttp->nHeaderLength = pBuffer->nUsed;
-    pHttp->nHeaderCount = (uint16_t)pHdrMap->nUsed;
+    pHttp->nHeaderCount = (uint16_t)pHdrMap->nCount;
     if (nLength > 0 && XByteBuffer_Add(pBuffer, pContent, nLength) <= 0) return NULL;
 
     pHttp->nAllowUpdate = nAllowUpdate;
@@ -779,7 +779,7 @@ static int XHTTP_ParseHeaders(xhttp_t *pHttp)
         }
     }
 
-    pHttp->nHeaderCount = (uint16_t)pHttp->headerMap.nUsed;
+    pHttp->nHeaderCount = (uint16_t)pHttp->headerMap.nCount;
     XArray_Destroy(pArr);
     return nStatus;
 }

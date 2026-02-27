@@ -14,13 +14,13 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
-#include <stdlib.h>
+#include "xstd.h"
 #include "pool.h"
 
-#define XMAP_INITIAL_SIZE   16
+#define XMAP_INITIAL_SIZE   64
 #define XMAP_CHAIN_LENGTH   32
 
+#define XMAP_EEXIST         -7  /* Element already exists */
 #define XMAP_EINIT          -6  /* Map is not initialized */
 #define XMAP_MISSING        -5  /* No such element */
 #define XMAP_OINV           -4  /* Invalid parameter */
@@ -30,10 +30,16 @@ extern "C" {
 #define XMAP_EMPTY          0   /* Map is empty */
 #define XMAP_OK             1   /* Success */
 
+typedef enum XMapPairStatus {
+    XMAP_PAIR_UNUSED = 0,
+    XMAP_PAIR_USED,
+    XMAP_PAIR_DELETED
+} xmap_pair_status_t;
+
 typedef struct XMapPair {
+    xmap_pair_status_t eStatus;
     char *pKey;
     void *pData;
-    int nUsed;
 } xmap_pair_t;
 
 typedef int(*xmap_iterator_t)(xmap_pair_t*, void*);
@@ -52,22 +58,28 @@ typedef enum XMapHashType {
 typedef struct XMap {
     xmap_hash_type_t eHashType;
     xmap_clear_cb_t clearCb;
+
     xmap_pair_t *pPairs;
     xpool_t *pPool;
-    size_t nTableSize;
-    size_t nUsed;
-    int nAlloc;
+
+    uint32_t nTableSize;
+    uint32_t nCount;
+
+    xbool_t bAllowUpdate;
+    xbool_t bAlloc;
 } xmap_t;
 
-int XMap_Init(xmap_t *pMap, xpool_t *pPool, size_t nSize);
+int XMap_Init(xmap_t *pMap, xpool_t *pPool, uint32_t nSize);
 int XMap_Realloc(xmap_t *pMap);
 void XMap_Destroy(xmap_t *pMap);
 void XMap_Reset(xmap_t *pMap);
 
-xmap_t *XMap_New(xpool_t *pPool, size_t nSize);
+xmap_t *XMap_New(xpool_t *pPool, uint32_t nSize);
 void XMap_Free(xmap_t *pMap);
 
 xmap_pair_t *XMap_GetPair(xmap_t *pMap, const char* pKey);
+void XMap_ClearPair(xmap_pair_t *pPair);
+
 void* XMap_GetIndex(xmap_t *pMap, const char* pKey, int *pIndex);
 void* XMap_Get(xmap_t *pMap, const char* pKey);
 int XMap_Put(xmap_t *pMap, char* pKey, void *pValue);

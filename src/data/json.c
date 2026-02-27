@@ -1249,7 +1249,7 @@ static int XJSON_WriteHashmap(xjson_obj_t *pObj, xjson_writer_t *pWriter)
     xmap_t *pMap = (xmap_t*)pObj->pData;
 
     XASSERT(XJSON_WriteString(pWriter, nIndent, "{"), XJSON_FAILURE);
-    nIndent = (pWriter->nTabSize && pMap->nUsed && pObj->nAllowLinter) ? 1 : 0;
+    nIndent = (pWriter->nTabSize && pMap->nCount && pObj->nAllowLinter) ? 1 : 0;
 
     if (nIndent)
     {
@@ -1257,7 +1257,7 @@ static int XJSON_WriteHashmap(xjson_obj_t *pObj, xjson_writer_t *pWriter)
         XASSERT(XJSON_Ident(pWriter, XJSON_IDENT_INC), XJSON_FAILURE);
     }
 
-    if (pMap->nUsed)
+    if (pMap->nCount)
     {
         xpool_t *pPool = pWriter->pPool;
         xjson_iterator_t *pIterator = (xjson_iterator_t*)xalloc(pPool, sizeof(xjson_iterator_t));
@@ -1265,7 +1265,7 @@ static int XJSON_WriteHashmap(xjson_obj_t *pObj, xjson_writer_t *pWriter)
 
         pIterator->nCurrent = 0;
         pIterator->pWriter = pWriter;
-        pIterator->nUsed = pMap->nUsed;
+        pIterator->nUsed = pMap->nCount;
 
         if (XMap_Iterate(pMap, XJSON_MapIt, pIterator) != XMAP_OK)
         {

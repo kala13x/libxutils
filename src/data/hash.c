@@ -17,7 +17,7 @@ typedef struct XHashIterator {
 static int XHash_IteratorCb(void *pCtx, xlist_t *pNode)
 {
     xhash_iterator_t *pIter = (xhash_iterator_t*)pCtx;
-    if (pIter != NULL && pIter->itfunc != NULL) return XSTDERR;
+    if (pIter == NULL || pIter->itfunc == NULL) return XSTDERR;
     xhash_pair_t *pPair = (xhash_pair_t*)pNode->data.pData;
     return pPair != NULL ? pIter->itfunc(pPair, pIter->pUserCtx) : 0;
 }
@@ -32,12 +32,9 @@ static void XHash_ClearCb(void *pCbCtx, void *pData)
 {
     xhash_pair_t* pPair = (xhash_pair_t*)pData;
     xhash_t *pHash = (xhash_t*)pCbCtx;
+    if (pPair == NULL) return;
 
-    if (pHash == NULL ||
-        pPair == NULL ||
-        pPair->pData == NULL) return;
-
-    if (pHash->clearCb != NULL)
+    if (pHash != NULL && pHash->clearCb != NULL && pPair->pData != NULL)
         pHash->clearCb(pHash->pUserContext, pPair->pData, pPair->nKey);
 
     free(pPair);
@@ -56,6 +53,7 @@ xhash_pair_t* XHash_NewPair(void *pData, size_t nSize, int nKey)
 
 void XHash_Init(xhash_t *pHash, xhash_clearcb_t clearCb, void *pCtx)
 {
+    if (pHash == NULL) return;
     pHash->pUserContext = pCtx;
     pHash->clearCb = clearCb;
     pHash->nPairCount = 0;
@@ -70,6 +68,7 @@ void XHash_Init(xhash_t *pHash, xhash_clearcb_t clearCb, void *pCtx)
 
 void XHash_Destroy(xhash_t *pHash)
 {
+    if (pHash == NULL) return;
     unsigned int i;
     for (i = 0; i < XHASH_MODULES; i++)
         XList_Clear(&pHash->tables[i]);
@@ -81,6 +80,7 @@ void XHash_Destroy(xhash_t *pHash)
 
 xlist_t* XHash_GetNode(xhash_t *pHash, int nKey)
 {
+    if (pHash == NULL) return NULL;
     uint32_t nHash = XHASH_MIX(nKey, XHASH_MODULES);
     xlist_t *pTable = (xlist_t*)&pHash->tables[nHash];
     return XList_Search(pTable, (void*)&nKey, XHash_SearchCb);
@@ -88,24 +88,30 @@ xlist_t* XHash_GetNode(xhash_t *pHash, int nKey)
 
 xhash_pair_t* XHash_GetPair(xhash_t *pHash, int nKey)
 {
+    if (pHash == NULL) return NULL;
     xlist_t *pNode = XHash_GetNode(pHash, nKey);
     return pNode != NULL ? (xhash_pair_t*)pNode->data.pData : NULL;
 }
 
 void* XHash_GetData(xhash_t *pHash, int nKey)
 {
+    if (pHash == NULL) return NULL;
     xhash_pair_t *pPair = XHash_GetPair(pHash, nKey);
     return pPair != NULL ? pPair->pData : NULL;
 }
 
 int XHash_GetSize(xhash_t *pHash, int nKey)
 {
+    if (pHash == NULL) return XSTDERR;
     xhash_pair_t *pPair = XHash_GetPair(pHash, nKey);
     return pPair != NULL ? (int)pPair->nSize : XSTDERR;
 }
 
 int XHash_InsertPair(xhash_t *pHash, xhash_pair_t *pData)
 {
+    if (pHash == NULL || pData == NULL) return XSTDERR;
+    if (XHash_GetNode(pHash, pData->nKey) != NULL) return XSTDEXC;
+
     uint32_t nHash = XHASH_MIX(pData->nKey, XHASH_MODULES);
     xlist_t *pTable = (xlist_t*)&pHash->tables[nHash];
 
@@ -120,6 +126,7 @@ int XHash_InsertPair(xhash_t *pHash, xhash_pair_t *pData)
 
 int XHash_Insert(xhash_t *pHash, void *pData, size_t nSize, int nKey)
 {
+    if (pHash == NULL) return XSTDERR;
     xhash_pair_t *pPair = XHash_NewPair(pData, nSize, nKey);
     if (pPair == NULL) return XSTDERR;
     int nStatus = XHash_InsertPair(pHash, pPair);
@@ -129,6 +136,7 @@ int XHash_Insert(xhash_t *pHash, void *pData, size_t nSize, int nKey)
 
 int XHash_Delete(xhash_t *pHash, int nKey)
 {
+    if (pHash == NULL) return XSTDERR;
     xlist_t *pNode = XHash_GetNode(pHash, nKey);
     if (pNode == NULL) return XSTDERR;
     XList_Unlink(pNode);
@@ -138,6 +146,7 @@ int XHash_Delete(xhash_t *pHash, int nKey)
 
 void XHash_Iterate(xhash_t *pHash, xhash_itfunc_t itfunc, void *pCtx)
 {
+    if (pHash == NULL || itfunc == NULL) return;
     xhash_iterator_t iter;
     iter.pUserCtx = pCtx;
     iter.itfunc = itfunc;
@@ -146,6 +155,6 @@ void XHash_Iterate(xhash_t *pHash, xhash_itfunc_t itfunc, void *pCtx)
     for (i = 0; i < XHASH_MODULES; i++)
     {
         xlist_t *pTable = (xlist_t*)&pHash->tables[i];
-        if (XList_Search(pTable, &iter, XHash_IteratorCb) == NULL) break;
+        if (XList_Search(pTable, &iter, XHash_IteratorCb) != NULL) break;
     }
 }
