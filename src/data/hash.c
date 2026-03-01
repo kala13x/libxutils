@@ -12,14 +12,19 @@
 typedef struct XHashIterator {
     xhash_itfunc_t itfunc;
     void *pUserCtx;
+    int nStatus;
 } xhash_iterator_t;
 
 static int XHash_IteratorCb(void *pCtx, xlist_t *pNode)
 {
     xhash_iterator_t *pIter = (xhash_iterator_t*)pCtx;
     if (pIter == NULL || pIter->itfunc == NULL) return XSTDERR;
+
     xhash_pair_t *pPair = (xhash_pair_t*)pNode->data.pData;
-    return pPair != NULL ? pIter->itfunc(pPair, pIter->pUserCtx) : 0;
+    if (pPair == NULL) return 0;
+
+    pIter->nStatus = pIter->itfunc(pPair, pIter->pUserCtx);
+    return pIter->nStatus;
 }
 
 static int XHash_SearchCb(void *pKey, xlist_t *pNode)
@@ -70,6 +75,7 @@ void XHash_Destroy(xhash_t *pHash)
 {
     if (pHash == NULL) return;
     unsigned int i;
+
     for (i = 0; i < XHASH_MODULES; i++)
         XList_Clear(&pHash->tables[i]);
 
@@ -139,8 +145,12 @@ int XHash_Delete(xhash_t *pHash, int nKey)
     if (pHash == NULL) return XSTDERR;
     xlist_t *pNode = XHash_GetNode(pHash, nKey);
     if (pNode == NULL) return XSTDERR;
+
     XList_Unlink(pNode);
-    pHash->nPairCount--;
+
+    if (pHash->nPairCount > 0)
+        pHash->nPairCount--;
+
     return XSTDOK;
 }
 
@@ -150,11 +160,13 @@ void XHash_Iterate(xhash_t *pHash, xhash_itfunc_t itfunc, void *pCtx)
     xhash_iterator_t iter;
     iter.pUserCtx = pCtx;
     iter.itfunc = itfunc;
+    iter.nStatus = 0;
     unsigned int i;
 
     for (i = 0; i < XHASH_MODULES; i++)
     {
         xlist_t *pTable = (xlist_t*)&pHash->tables[i];
-        if (XList_Search(pTable, &iter, XHash_IteratorCb) != NULL) break;
+        XList_Search(pTable, &iter, XHash_IteratorCb);
+        if (iter.nStatus != 0) break;
     }
 }

@@ -18,7 +18,6 @@ extern "C" {
 #include "pool.h"
 
 #define XMAP_INITIAL_SIZE   64
-#define XMAP_CHAIN_LENGTH   32
 
 #define XMAP_EEXIST         -7  /* Element already exists */
 #define XMAP_EINIT          -6  /* Map is not initialized */
@@ -63,6 +62,7 @@ typedef struct XMap {
     xpool_t *pPool;
 
     uint32_t nTableSize;
+    uint32_t nDeleted;
     uint32_t nCount;
 
     xbool_t bAllowUpdate;
@@ -78,14 +78,12 @@ xmap_t *XMap_New(xpool_t *pPool, uint32_t nSize);
 void XMap_Free(xmap_t *pMap);
 
 xmap_pair_t *XMap_GetPair(xmap_t *pMap, const char* pKey);
-void XMap_ClearPair(xmap_pair_t *pPair);
-
 void* XMap_GetIndex(xmap_t *pMap, const char* pKey, int *pIndex);
 void* XMap_Get(xmap_t *pMap, const char* pKey);
 int XMap_Put(xmap_t *pMap, char* pKey, void *pValue);
 int XMap_PutPair(xmap_t *pMap, xmap_pair_t *pPair);
 int XMap_Remove(xmap_t *pMap, const char* pKey);
-int XMap_Update(xmap_t *pMap, int nHash, char *pKey, void *pValue);
+int XMap_Update(xmap_t *pMap, int nHash, void *pValue);
 
 #ifdef _XMAP_USE_CRYPT
 int XMap_HashMIX(xmap_t* pMap, const char* pStr);

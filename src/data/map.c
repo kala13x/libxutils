@@ -23,7 +23,7 @@ static int XMap_Alloc(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
     XASSERT_RET(pMap, XMAP_OINV);
     if (!nSize) return XMAP_OK;
 
-    pMap->pPairs = (xmap_pair_t*)xalloc(pPool, nSize * sizeof(xmap_pair_t));
+    pMap->pPairs = (xmap_pair_t*)xalloc(pPool, (size_t)nSize * sizeof(xmap_pair_t));
     if (pMap->pPairs == NULL) return XMAP_OMEM;
 
     uint32_t i;
@@ -37,25 +37,6 @@ static int XMap_Alloc(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
     return XMAP_OK;
 }
 
-void XMap_ClearPair(xmap_pair_t *pPair)
-{
-    if (pPair == NULL) return;
-
-    if (pPair->pKey != NULL)
-    {
-        free(pPair->pKey);
-        pPair->pKey = NULL;
-    }
-
-    if (pPair->pData != NULL)
-    {
-        free(pPair->pData);
-        pPair->pData = NULL;
-    }
-
-    pPair->eStatus = XMAP_PAIR_DELETED;
-}
-
 int XMap_Init(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
 {
     XASSERT_RET(pMap, XMAP_OINV);
@@ -63,6 +44,7 @@ int XMap_Init(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
     pMap->nTableSize = nSize;
     pMap->clearCb = NULL;
     pMap->pPairs = NULL;
+    pMap->nDeleted = 0;
     pMap->nCount = 0;
     pMap->pPool = pPool;
     pMap->eHashType = XMAP_HASH_FNV;
@@ -106,7 +88,9 @@ void XMap_Free(xmap_t *pMap)
         }
         else
         {
+            pMap->nTableSize = 0;
             pMap->clearCb = NULL;
+            pMap->nDeleted = 0;
             pMap->nCount = 0;
         }
     }
@@ -114,6 +98,9 @@ void XMap_Free(xmap_t *pMap)
 
 static int XMap_ClearIt(xmap_pair_t *pPair, void *pCtx)
 {
+    XASSERT((pCtx != NULL), XMAP_OINV);
+    XASSERT((pPair != NULL), XMAP_OINV);
+
     xmap_t *pMap = (xmap_t*)pCtx;
     if (pMap->clearCb != NULL)
         pMap->clearCb(pPair);
@@ -126,6 +113,9 @@ static int XMap_ClearIt(xmap_pair_t *pPair, void *pCtx)
 
 int XMap_Iterate(xmap_t *pMap, xmap_iterator_t itfunc, void *pCtx)
 {
+    XASSERT((pMap != NULL), XMAP_OINV);
+    XASSERT_RET((pMap->pPairs != NULL), XMAP_EINIT);
+
     if (!XMap_UsedSize(pMap)) return XMAP_EMPTY;
     uint32_t i;
 
@@ -143,7 +133,8 @@ int XMap_Iterate(xmap_t *pMap, xmap_iterator_t itfunc, void *pCtx)
 
 void XMap_Reset(xmap_t *pMap)
 {
-    if (pMap == NULL || pMap->pPairs == NULL) return;
+    XASSERT_VOID((pMap != NULL));
+    XASSERT_VOID((pMap->pPairs != NULL));
 
     uint32_t i;
     for (i = 0; i < pMap->nTableSize; i++)
@@ -155,6 +146,7 @@ void XMap_Reset(xmap_t *pMap)
     }
 
     pMap->nCount = 0;
+    pMap->nDeleted = 0;
 }
 
 void XMap_Destroy(xmap_t *pMap)
@@ -166,6 +158,7 @@ void XMap_Destroy(xmap_t *pMap)
 #ifdef _XMAP_USE_CRYPT
 int XMap_HashMIX(xmap_t *pMap, const char *pStr)
 {
+    XASSERT((pMap != NULL), XMAP_OINV);
     if (!pMap->nTableSize) return XMAP_EINIT;
     uint32_t nHash = XCRC32_Compute((unsigned char*)(pStr), strlen(pStr));
 
@@ -186,6 +179,7 @@ int XMap_HashMIX(xmap_t *pMap, const char *pStr)
 
 int XMap_HashCRC32(xmap_t *pMap, const char *pStr)
 {
+    XASSERT((pMap != NULL), XMAP_OINV);
     if (!pMap->nTableSize) return XMAP_EINIT;
     uint32_t nHash = XCRC32_Compute((unsigned char*)(pStr), strlen(pStr));
 
@@ -197,6 +191,7 @@ int XMap_HashCRC32(xmap_t *pMap, const char *pStr)
 
 int XMap_HashSHA256(xmap_t *pMap, const char *pStr)
 {
+    XASSERT((pMap != NULL), XMAP_OINV);
     if (!pMap->nTableSize) return XMAP_EINIT;
 
     unsigned char hash[XSHA256_LENGTH + 1];
@@ -220,12 +215,13 @@ int XMap_HashSHA256(xmap_t *pMap, const char *pStr)
 
 int XMap_HashFNV(xmap_t *pMap, const char *pStr)
 {
+    XASSERT((pMap != NULL), XMAP_OINV);
     if (!pMap->nTableSize) return XMAP_EINIT;
     uint32_t nHash = XFNV_OFFSET_32;
 
     while (*pStr)
     {
-        nHash ^= *pStr++;
+        nHash ^= (uint8_t)*pStr++;
         nHash *= XFNV_PRIME_32;
     }
 
@@ -234,7 +230,8 @@ int XMap_HashFNV(xmap_t *pMap, const char *pStr)
 
 int XMap_Hash(xmap_t *pMap, const char *pStr)
 {
-    if (pMap == NULL || pStr == NULL) return XMAP_EINIT;
+    XASSERT((pMap != NULL), XMAP_OINV);
+    XASSERT((pStr != NULL), XMAP_OINV);
 
     switch (pMap->eHashType)
     {
@@ -257,15 +254,19 @@ int XMap_Hash(xmap_t *pMap, const char *pStr)
 
 int XMap_GetHash(xmap_t *pMap, const char* pKey)
 {
-    if (pMap == NULL || pKey == NULL) return XMAP_EINIT;    
-    if (pMap->nCount >= pMap->nTableSize) return XMAP_FULL;
+    XASSERT((pMap != NULL), XMAP_OINV);
+    XASSERT_RET((pKey != NULL), XMAP_OINV);
+    XASSERT_RET((pMap->nTableSize > 0), XMAP_EINIT);
+    XASSERT_RET((pMap->pPairs != NULL), XMAP_EINIT);
+    XASSERT_RET((pMap->nCount <= pMap->nTableSize), XMAP_OINV);
 
     int nIndex = XMap_Hash(pMap, pKey);
     if (nIndex < 0) return nIndex;
 
-    int i, nFirstAvail = -1;
-    
-    for (i = 0; i < XMAP_CHAIN_LENGTH; i++)
+    int nFirstAvail = -1;
+    uint32_t i;
+
+    for (i = 0; i < pMap->nTableSize; i++)
     {
         xmap_pair_t *pPair = &pMap->pPairs[nIndex];
 
@@ -292,16 +293,34 @@ int XMap_GetHash(xmap_t *pMap, const char* pKey)
     return (nFirstAvail >= 0) ? nFirstAvail : XMAP_FULL;
 }
 
+static int XMap_PutRaw(xmap_t *pMap, char *pKey, void *pValue)
+{
+    int nHash = XMap_GetHash(pMap, pKey);
+    if (nHash < 0) return nHash;
+
+    if (pMap->pPairs[nHash].eStatus == XMAP_PAIR_DELETED &&
+        pMap->nDeleted > 0) pMap->nDeleted--;
+
+    if (pMap->pPairs[nHash].eStatus != XMAP_PAIR_USED)
+        pMap->nCount++;
+
+    pMap->pPairs[nHash].pKey = pKey;
+    pMap->pPairs[nHash].pData = pValue;
+    pMap->pPairs[nHash].eStatus = XMAP_PAIR_USED;
+    return XMAP_OK;
+}
+
 int XMap_Realloc(xmap_t *pMap)
 {
-    if (pMap == NULL) return XMAP_OINV;
+    XASSERT((pMap != NULL), XMAP_OINV);
+    XASSERT((pMap->nTableSize < UINT32_MAX / 2), XMAP_OINV);
+
     xpool_t *pPool = pMap->pPool;
     int nStatus = XMAP_OK;
 
-    if (pMap->nTableSize >= UINT32_MAX / 2) return XMAP_OINV;
     uint32_t i, nNewSize = pMap->nTableSize ? pMap->nTableSize * 2 : XMAP_INITIAL_SIZE;
-    xmap_pair_t *pPairs = (xmap_pair_t*)xalloc(pPool, nNewSize * sizeof(xmap_pair_t));
-    if (pPairs == NULL) return XMAP_OMEM;
+    xmap_pair_t *pPairs = (xmap_pair_t*)xalloc(pPool, (size_t)nNewSize * sizeof(xmap_pair_t));
+    XASSERT((pPairs != NULL), XMAP_OMEM);
 
     for (i = 0; i < nNewSize; i++)
     {
@@ -312,21 +331,24 @@ int XMap_Realloc(xmap_t *pMap)
 
     xmap_pair_t* pOldPairs = pMap->pPairs;
     uint32_t nOldSize = pMap->nTableSize;
+    uint32_t nDeleted = pMap->nDeleted;
     uint32_t nCount = pMap->nCount;
 
     pMap->nCount = 0;
+    pMap->nDeleted = 0;
     pMap->pPairs = pPairs;
     pMap->nTableSize = nNewSize;
     if (pOldPairs == NULL) return nStatus;
 
-    for(i = 0; i < nOldSize; i++)
+    for (i = 0; i < nOldSize; i++)
     {
         if (pOldPairs[i].eStatus != XMAP_PAIR_USED) continue;
-        nStatus = XMap_Put(pMap, pOldPairs[i].pKey, pOldPairs[i].pData);
+        nStatus = XMap_PutRaw(pMap, pOldPairs[i].pKey, pOldPairs[i].pData);
 
         if (nStatus != XMAP_OK)
         {
             pMap->nTableSize = nOldSize;
+            pMap->nDeleted = nDeleted;
             pMap->pPairs = pOldPairs;
             pMap->nCount = nCount;
 
@@ -339,11 +361,72 @@ int XMap_Realloc(xmap_t *pMap)
     return nStatus;
 }
 
+static int XMap_Rehash(xmap_t *pMap)
+{
+    XASSERT((pMap != NULL), XMAP_OINV);
+    XASSERT_RET((pMap->pPairs != NULL), XMAP_EINIT);
+    XASSERT_RET((pMap->nTableSize > 0), XMAP_EINIT);
+
+    uint32_t nOldSize = pMap->nTableSize;
+    xpool_t *pPool = pMap->pPool;
+
+    size_t nAllocSize = (size_t)nOldSize * sizeof(xmap_pair_t);
+    xmap_pair_t *pNew = (xmap_pair_t*)xalloc(pPool, nAllocSize);
+    XASSERT((pNew != NULL), XMAP_OMEM);
+
+    uint32_t i;
+    for (i = 0; i < nOldSize; i++)
+    {
+        pNew[i].eStatus = XMAP_PAIR_UNUSED;
+        pNew[i].pKey = NULL;
+        pNew[i].pData = NULL;
+    }
+
+    xmap_pair_t *pOld = pMap->pPairs;
+    pMap->pPairs = pNew;
+    pMap->nCount = 0;
+    pMap->nDeleted = 0;
+
+    for (i = 0; i < nOldSize; i++)
+    {
+        if (pOld[i].eStatus != XMAP_PAIR_USED) continue;
+        int nStatus = XMap_PutRaw(pMap, pOld[i].pKey, pOld[i].pData);
+
+        if (nStatus != XMAP_OK)
+        {
+            pMap->nTableSize = nOldSize;
+            pMap->pPairs = pOld;
+            pMap->nDeleted = 0;
+            pMap->nCount = 0;
+
+            for (uint32_t j = 0; j < nOldSize; j++)
+            {
+                if (pOld[j].eStatus == XMAP_PAIR_DELETED) pMap->nDeleted++;
+                else if (pOld[j].eStatus == XMAP_PAIR_USED) pMap->nCount++;
+            }
+
+            xfree(pPool, pNew);
+            return nStatus;
+        }
+    }
+
+    xfree(pPool, pOld);
+    return XMAP_OK;
+}
+
 int XMap_Put(xmap_t *pMap, char* pKey, void *pValue)
 {
-    if (pMap == NULL || pKey == NULL) return XMAP_OINV;
-    int nHash = XMap_GetHash(pMap, pKey);
+    XASSERT((pMap != NULL), XMAP_OINV);
+    XASSERT_RET((pKey != NULL), XMAP_OINV);
 
+    if ((!pMap->nTableSize || pMap->pPairs == NULL) ||
+        ((uint64_t)pMap->nCount * 10 >= (uint64_t)pMap->nTableSize * 7))
+    {
+        int nStatus = XMap_Realloc(pMap);
+        if (nStatus < 0) return nStatus;
+    }
+
+    int nHash = XMap_GetHash(pMap, pKey);
     while (nHash == XMAP_FULL)
     {
         int nStatus = XMap_Realloc(pMap);
@@ -351,6 +434,8 @@ int XMap_Put(xmap_t *pMap, char* pKey, void *pValue)
         nHash = XMap_GetHash(pMap, pKey);
     }
 
+    if (nHash < 0) return nHash;
+    if (pMap->pPairs[nHash].eStatus == XMAP_PAIR_DELETED && pMap->nDeleted > 0) pMap->nDeleted--;
     if (pMap->pPairs[nHash].eStatus != XMAP_PAIR_USED) pMap->nCount++;
     else if (!pMap->bAllowUpdate) return XMAP_EEXIST;
 
@@ -359,25 +444,36 @@ int XMap_Put(xmap_t *pMap, char* pKey, void *pValue)
     pMap->pPairs[nHash].pKey = pKey;
     pMap->pPairs[nHash].eStatus = XMAP_PAIR_USED;
 
+    /* Tombstone pressure trigger */
+    if (pMap->nDeleted > pMap->nTableSize / 4)
+    {
+        int nStatus = XMap_Rehash(pMap);
+        if (nStatus < 0) return nStatus;
+    }
+
     return XMAP_OK;
 }
 
 int XMap_PutPair(xmap_t *pMap, xmap_pair_t *pPair)
 {
-    if (pMap == NULL || pPair == NULL) return XMAP_OINV;
+    XASSERT((pMap != NULL), XMAP_OINV);
+    XASSERT((pPair != NULL), XMAP_OINV);
     return XMap_Put(pMap, pPair->pKey, pPair->pData);
 }
 
-int XMap_Update(xmap_t *pMap, int nHash,  char *pKey, void *pValue)
+int XMap_Update(xmap_t *pMap, int nHash, void *pValue)
 {
-    if (pMap == NULL || nHash < 0) return XMAP_OINV;
-    if ((uint32_t)nHash >= pMap->nTableSize) return XMAP_MISSING;
+    XASSERT((pMap != NULL), XMAP_OINV);
+    XASSERT_RET((nHash >= 0), XMAP_OINV);
+
+    if ((uint32_t)nHash >= pMap->nTableSize)
+        return XMAP_MISSING;
 
     xmap_pair_t *pPair = &pMap->pPairs[nHash];
+    if (pPair->eStatus == XMAP_PAIR_DELETED && pMap->nDeleted > 0) pMap->nDeleted--;
     if (pPair->eStatus != XMAP_PAIR_USED) pMap->nCount++;
 
     pPair->pData = pValue;
-    pPair->pKey = pKey;
     pPair->eStatus = XMAP_PAIR_USED;
 
     return XMAP_OK;
@@ -385,15 +481,15 @@ int XMap_Update(xmap_t *pMap, int nHash,  char *pKey, void *pValue)
 
 xmap_pair_t *XMap_GetPair(xmap_t *pMap, const char* pKey)
 {
-    if (pMap == NULL || pKey == NULL) return NULL;
+    XASSERT((pMap != NULL), NULL);
+    XASSERT_RET((pKey != NULL), NULL);
+    XASSERT_RET((pMap->pPairs != NULL), NULL);
 
-    int nIndex = -1;
-    int i = 0;
+    uint32_t i;
+    int nIndex = XMap_Hash(pMap, pKey);
+    if (nIndex < 0) return NULL;
 
-    nIndex = XMap_Hash(pMap, pKey);
-    if (nIndex == XMAP_EINIT) return NULL;
-
-    for (i = 0; i < XMAP_CHAIN_LENGTH; i++)
+    for (i = 0; i < pMap->nTableSize; i++)
     {
         xmap_pair_t *pPair = &pMap->pPairs[nIndex];
 
@@ -409,15 +505,18 @@ xmap_pair_t *XMap_GetPair(xmap_t *pMap, const char* pKey)
 
 void* XMap_GetIndex(xmap_t *pMap, const char* pKey, int *pIndex)
 {
-    if (pMap == NULL || pKey == NULL) return NULL;
+    XASSERT((pMap != NULL), NULL);
+    XASSERT((pKey != NULL), NULL);
+    XASSERT((pIndex != NULL), NULL);
+    XASSERT_RET((pMap->pPairs != NULL), NULL);
 
     *pIndex = -1;
-    int i = 0;
+    uint32_t i;
 
     *pIndex = XMap_Hash(pMap, pKey);
-    if (*pIndex == XMAP_EINIT) return NULL;
+    if (*pIndex < 0) return NULL;
 
-    for (i = 0; i < XMAP_CHAIN_LENGTH; i++)
+    for (i = 0; i < pMap->nTableSize; i++)
     {
         xmap_pair_t *pPair = &pMap->pPairs[*pIndex];
 
@@ -428,22 +527,29 @@ void* XMap_GetIndex(xmap_t *pMap, const char* pKey, int *pIndex)
         *pIndex = (*pIndex + 1) % (int)pMap->nTableSize;
     }
 
+    *pIndex = -1;
     return NULL;
 }
 
 void* XMap_Get(xmap_t *pMap, const char* pKey)
 {
+    XASSERT((pMap != NULL), NULL);
+    XASSERT_RET((pKey != NULL), NULL);
     int nDummy = 0;
     return XMap_GetIndex(pMap, pKey, &nDummy);
 }
 
 int XMap_Remove(xmap_t *pMap, const char* pKey)
 {
-    if (pMap == NULL || pKey == NULL) return XMAP_OINV;
-    int i, nIndex = XMap_Hash(pMap, pKey);
-    if (nIndex == XMAP_EINIT) return nIndex;
+    XASSERT((pMap != NULL), XMAP_OINV);
+    XASSERT_RET((pKey != NULL), XMAP_OINV);
+    XASSERT_RET((pMap->pPairs != NULL), XMAP_EINIT);
 
-    for (i = 0; i < XMAP_CHAIN_LENGTH; i++)
+    int nIndex = XMap_Hash(pMap, pKey);
+    if (nIndex < 0) return nIndex;
+
+    uint32_t i;
+    for (i = 0; i < pMap->nTableSize; i++)
     {
         xmap_pair_t *pPair = &pMap->pPairs[nIndex];
         if (pPair->eStatus == XMAP_PAIR_UNUSED) break;
@@ -457,6 +563,7 @@ int XMap_Remove(xmap_t *pMap, const char* pKey)
             pPair->pData = NULL;
             pPair->pKey = NULL;
 
+            pMap->nDeleted++;
             return XMAP_OK;
         }
 
@@ -468,6 +575,6 @@ int XMap_Remove(xmap_t *pMap, const char* pKey)
 
 int XMap_UsedSize(xmap_t *pMap)
 {
-    if(pMap == NULL) return XMAP_OINV;
+    XASSERT((pMap != NULL), XMAP_OINV);
     return (int)pMap->nCount;
 }

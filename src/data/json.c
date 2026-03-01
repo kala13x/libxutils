@@ -331,7 +331,7 @@ xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc)
             if (!pDst->nAllowUpdate) return XJSON_ERR_EXITS;
             XJSON_FreeObject(pFound);
 
-            int nStatus = XMap_Update(pMap, nHash, pSrc->pName, (void*)pSrc);
+            int nStatus = XMap_Update(pMap, nHash, (void*)pSrc);
             return nStatus < 0 ? XJSON_ERR_BOUNDS : XJSON_ERR_NONE;
         }
 

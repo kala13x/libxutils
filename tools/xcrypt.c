@@ -325,7 +325,7 @@ static xbool_t XCrypt_GetIV(xcrypt_args_t *pArgs, xcrypt_key_t *pKey)
     printf("Enter IV for the cipher '%s': ", pCipher);
 
     size_t nLength = XCLI_GetPass(NULL, pKey->sIV, sizeof(pKey->sIV));
-    if (!nLength)
+    if (!nLength && !pArgs->bDecrypt)
     {
         xlogw("Random IV will be used for cipher '%s'", pCipher);
         memset(pKey->sIV, 0, sizeof(pKey->sIV));

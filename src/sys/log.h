@@ -58,9 +58,10 @@ typedef enum
     XLOG_TRACE = (1 << 5),
     XLOG_ERROR = (1 << 6),
     XLOG_FATAL = (1 << 7),
-    XLOG_DEFAULT = 203,
     XLOG_ALL = 255
 } xlog_flag_t;
+
+#define XLOG_DEFAULT (XLOG_NONE | XLOG_WARN | XLOG_ERROR | XLOG_FATAL)
 
 typedef int(*xlog_cb_t)(const char *pLog, size_t nLength, xlog_flag_t eFlag, void *pCtx);
 
