@@ -461,6 +461,34 @@ xjson_obj_t* XJSON_NewU32(xpool_t *pPool, const char *pName, uint32_t nValue)
     return pObj;
 }
 
+xjson_obj_t* XJSON_NewU16(xpool_t *pPool, const char *pName, uint16_t nValue)
+{
+    char *pValue = (char*)xalloc(pPool, XJSON_NUMBER_MAX);
+    if (pValue == NULL) return NULL;
+
+    xstrncpyf(pValue, XJSON_NUMBER_MAX, "%u", nValue);
+    xjson_obj_t *pObj = XJSON_CreateObject(pPool, pName, pValue, XJSON_TYPE_NUMBER);
+
+    if (pObj == NULL)
+    {
+        xfree(pPool, pValue);
+        return NULL;
+    }
+
+    return pObj;
+}
+
+xjson_error_t XJSON_AddU16(xjson_obj_t *pObject, const char *pName, uint16_t nValue)
+{
+    xpool_t *pPool = pObject->pPool;
+    xjson_obj_t *pNewObj = XJSON_NewU16(pPool, pName, nValue);
+    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+
+    xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
+    if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
+    return status;
+}
+
 xjson_error_t XJSON_AddU32(xjson_obj_t *pObject, const char *pName, uint32_t nValue)
 {
     xpool_t *pPool = pObject->pPool;
@@ -1045,10 +1073,16 @@ double XJSON_GetFloat(xjson_obj_t *pObj)
     return atof((const char*)pObj->pData);
 }
 
+uint16_t XJSON_GetU16(xjson_obj_t *pObj)
+{
+    if (!XJSON_CheckObject(pObj, XJSON_TYPE_NUMBER)) return 0;
+    return (uint16_t)atol((const char*)pObj->pData);
+}
+
 uint32_t XJSON_GetU32(xjson_obj_t *pObj)
 {
     if (!XJSON_CheckObject(pObj, XJSON_TYPE_NUMBER)) return 0;
-    return atol((const char*)pObj->pData);
+    return (uint32_t)atol((const char*)pObj->pData);
 }
 
 uint64_t XJSON_GetU64(xjson_obj_t *pObj)

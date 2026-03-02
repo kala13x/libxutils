@@ -82,6 +82,7 @@ xjson_obj_t* XJSON_NewObject(xpool_t *pPool, const char *pName, uint8_t nAllowUp
 xjson_obj_t* XJSON_NewArray(xpool_t *pPool, const char *pName, uint8_t nAllowUpdate);
 xjson_obj_t* XJSON_NewU64(xpool_t *pPool, const char *pName, uint64_t nValue);
 xjson_obj_t* XJSON_NewU32(xpool_t *pPool, const char *pName, uint32_t nValue);
+xjson_obj_t* XJSON_NewU16(xpool_t *pPool, const char *pName, uint16_t nValue);
 xjson_obj_t* XJSON_NewInt(xpool_t *pPool, const char *pName, int nValue);
 xjson_obj_t* XJSON_NewFloat(xpool_t *pPool, const char *pName, double fValue);
 xjson_obj_t* XJSON_NewString(xpool_t *pPool, const char *pName, const char *pValue);
@@ -92,6 +93,7 @@ void XJSON_FreeObject(xjson_obj_t *pObj);
 xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc);
 xjson_error_t XJSON_AddU64(xjson_obj_t *pObject, const char *pName, uint64_t nValue);
 xjson_error_t XJSON_AddU32(xjson_obj_t *pObject, const char *pName, uint32_t nValue);
+xjson_error_t XJSON_AddU16(xjson_obj_t *pObject, const char *pName, uint16_t nValue);
 xjson_error_t XJSON_AddInt(xjson_obj_t *pObject, const char *pName, int nValue);
 xjson_error_t XJSON_AddFloat(xjson_obj_t *pObject, const char *pName, double fValue);
 xjson_error_t XJSON_AddString(xjson_obj_t *pObject, const char *pName, const char *pValue);
@@ -124,6 +126,7 @@ xjson_obj_t *XJSON_GetOrCreateObject(xjson_obj_t *pObj, const char *pName, uint8
 xjson_obj_t *XJSON_GetOrCreateArray(xjson_obj_t *pObj, const char *pName, uint8_t nAllowUpdate);
 
 const char* XJSON_GetString(xjson_obj_t *pObj);
+uint16_t XJSON_GetU16(xjson_obj_t *pObj);
 uint32_t XJSON_GetU32(xjson_obj_t *pObj);
 uint64_t XJSON_GetU64(xjson_obj_t *pObj);
 uint8_t XJSON_GetBool(xjson_obj_t *pObj);
