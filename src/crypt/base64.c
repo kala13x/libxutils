@@ -71,12 +71,12 @@ static const char g_base64UrlEncTable[] =
 
 char *XBase64_Encrypt(const uint8_t *pInput, size_t *pLength)
 {
-    XASSERT((pInput && pLength && (*pLength)), NULL);
+    XCHECK((pInput && pLength && (*pLength)), NULL);
     size_t nOutLength = ((*pLength + 2) / 3) * 4;
     size_t i, j, nLength = *pLength;
 
     char *pEncodedData = (char *)calloc(1, nOutLength + 1);
-    XASSERT(pEncodedData, NULL);
+    XCHECK(pEncodedData, NULL);
 
     for (i = 0, j = 0; i < nLength;)
     {
@@ -111,7 +111,7 @@ char *XBase64_Encrypt(const uint8_t *pInput, size_t *pLength)
 
 char *XBase64_Decrypt(const uint8_t *pInput, size_t *pLength)
 {
-    XASSERT((pInput && pLength && (*pLength)), NULL);
+    XCHECK((pInput && pLength && (*pLength)), NULL);
     size_t i, j, nLength = *pLength;
 
     while (nLength % 4 != 0) nLength++;
@@ -119,7 +119,7 @@ char *XBase64_Decrypt(const uint8_t *pInput, size_t *pLength)
     nLength = *pLength;
 
     char *pDecodedData = (char *)calloc(1, nOutLength + 1);
-    XASSERT(pDecodedData, NULL);
+    XCHECK(pDecodedData, NULL);
 
     for (i = 0, j = 0; i < nLength;)
     {
@@ -151,10 +151,10 @@ char *XBase64_Decrypt(const uint8_t *pInput, size_t *pLength)
 
 char *XBase64_UrlDecrypt(const uint8_t *pInput, size_t *pLength)
 {
-    XASSERT((pInput && pLength && (*pLength)), NULL);
+    XCHECK((pInput && pLength && (*pLength)), NULL);
     uint8_t *pUrlDecoded = (uint8_t*)malloc(*pLength + 1);
 
-    XASSERT(pUrlDecoded, NULL);
+    XCHECK(pUrlDecoded, NULL);
     size_t i;
 
     for (i = 0; i < *pLength; i++)
@@ -173,12 +173,12 @@ char *XBase64_UrlDecrypt(const uint8_t *pInput, size_t *pLength)
 
 char *XBase64_UrlEncrypt(const uint8_t *pInput, size_t *pLength)
 {
-    XASSERT((pInput && pLength && (*pLength)), NULL);
+    XCHECK((pInput && pLength && (*pLength)), NULL);
     size_t nOutLength = ((*pLength + 2) / 3) * 4;
     size_t i, j, nLength = *pLength;
 
     char *pEncodedData = (char *)calloc(1, nOutLength + 1);
-    XASSERT(pEncodedData, NULL);
+    XCHECK(pEncodedData, NULL);
 
     for (i = 0, j = 0; i < nLength;)
     {

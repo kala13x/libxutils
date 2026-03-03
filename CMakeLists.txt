@@ -6,7 +6,7 @@ if (WIN32)
 elseif(APPLE)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall")
 else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall -D_XUTILS_USE_GNU -D_ASSERT_XLOG -D_XUTILS_DEBUG")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall -D_XUTILS_USE_GNU -D_XCHECK_LOG")
 endif()
 
 set(XUTILS_INSTALL_PREFIX "/usr/local")

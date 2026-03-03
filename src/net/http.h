@@ -23,7 +23,7 @@
 extern "C" {
 #endif
 
-#define XHTTP_CHECK_FLAG(c, f) (((c) & (f)) == (f))
+#define XHTTP_XCHECK_FLAG(c, f) (((c) & (f)) == (f))
 
 #define XHTTP_VER_DEFAULT       "1.0"
 #define XHTTP_PACKAGE_MAX       5000 * 1024

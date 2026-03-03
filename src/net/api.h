@@ -144,7 +144,7 @@ typedef struct xapi_data_ {
 
     void *pSessionData;
     void *pPacket;
-} xapi_data_t;
+} xapi_session_t;
 
 typedef struct xapi_ctx_ {
     xapi_cb_type_t eCbType;
@@ -153,7 +153,7 @@ typedef struct xapi_ctx_ {
     xapi_t *pApi;
 } xapi_ctx_t;
 
-typedef int(*xapi_cb_t)(xapi_ctx_t *pCtx, xapi_data_t *pData);
+typedef int(*xapi_cb_t)(xapi_ctx_t *pCtx, xapi_session_t *pData);
 
 struct xapi_ {
     xapi_cb_t callback;
@@ -170,25 +170,25 @@ struct xapi_ {
 const char* XAPI_GetStatus(xapi_ctx_t *pCtx);
 const char* XAPI_GetStatusStr(xapi_status_t eStatus);
 
-xbyte_buffer_t* XAPI_GetTxBuff(xapi_data_t *pApiData);
-xbyte_buffer_t* XAPI_GetRxBuff(xapi_data_t *pApiData);
-XSTATUS XAPI_PutTxBuff(xapi_data_t *pApiData, xbyte_buffer_t *pBuffer);
+xbyte_buffer_t* XAPI_GetTxBuff(xapi_session_t *pApiData);
+xbyte_buffer_t* XAPI_GetRxBuff(xapi_session_t *pApiData);
+XSTATUS XAPI_PutTxBuff(xapi_session_t *pApiData, xbyte_buffer_t *pBuffer);
 
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
 void XAPI_Destroy(xapi_t *pApi);
 
-XSTATUS XAPI_Disconnect(xapi_data_t *pData);
-XSTATUS XAPI_DeleteTimer(xapi_data_t *pData);
-XSTATUS XAPI_AddTimer(xapi_data_t *pData, int nTimeoutMs);
-XSTATUS XAPI_ExtendTimer(xapi_data_t *pData, int nTimeoutMs);
+XSTATUS XAPI_Disconnect(xapi_session_t *pData);
+XSTATUS XAPI_DeleteTimer(xapi_session_t *pData);
+XSTATUS XAPI_AddTimer(xapi_session_t *pData, int nTimeoutMs);
+XSTATUS XAPI_ExtendTimer(xapi_session_t *pData, int nTimeoutMs);
 
-XSTATUS XAPI_DisableEvent(xapi_data_t *pData, int nEvent);
-XSTATUS XAPI_EnableEvent(xapi_data_t *pData, int nEvent);
-XSTATUS XAPI_SetEvents(xapi_data_t *pData, int nEvents);
+XSTATUS XAPI_DisableEvent(xapi_session_t *pData, int nEvent);
+XSTATUS XAPI_EnableEvent(xapi_session_t *pData, int nEvent);
+XSTATUS XAPI_SetEvents(xapi_session_t *pData, int nEvents);
 size_t XAPI_GetEventCount(xapi_t *pApi);
 
-XSTATUS XAPI_RespondHTTP(xapi_data_t *pApiData, int nCode, xapi_status_t eStatus);
-XSTATUS XAPI_AuthorizeHTTP(xapi_data_t *pApiData, const char *pToken, const char *pKey);
+XSTATUS XAPI_RespondHTTP(xapi_session_t *pApiData, int nCode, xapi_status_t eStatus);
+XSTATUS XAPI_AuthorizeHTTP(xapi_session_t *pApiData, const char *pToken, const char *pKey);
 
 void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt);
 XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt);

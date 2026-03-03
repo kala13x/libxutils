@@ -364,13 +364,13 @@ static XSTATUS XSearch_CheckCriteria(xsearch_t *pSearch, const char *pPath, cons
 
     if (pSearch->nFileTypes)
     {
-        if (XFILE_CHECK_FL(pSearch->nFileTypes, XF_EXEC) &&
+        if (XFILE_XCHECK_FL(pSearch->nFileTypes, XF_EXEC) &&
             !XFile_IsExec(pStat->st_mode)) return XSTDNON;
 
         if (pSearch->nFileTypes & ~XF_EXEC)
         {
             xfile_type_t eType = XFile_GetType(pStat->st_mode);
-            if (!XFILE_CHECK_FL(pSearch->nFileTypes, eType)) return XSTDNON;
+            if (!XFILE_XCHECK_FL(pSearch->nFileTypes, eType)) return XSTDNON;
         }
     }
 
@@ -440,7 +440,7 @@ void XSearch_Init(xsearch_t *pSrcCtx, const char *pFileName)
 
 void XSearch_Destroy(xsearch_t *pSrcCtx)
 {
-    XASSERT_VOID_RET(pSrcCtx);
+    XCHECK_VOID_NL(pSrcCtx);
     XSYNC_ATOMIC_SET(pSrcCtx->pInterrupted, 1);
 
     pSrcCtx->nameTokens.clearCb = XSearch_ClearCb;

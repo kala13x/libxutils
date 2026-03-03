@@ -45,7 +45,7 @@ void XSHA1_Init(xsha1_ctx_t *pCtx)
 
 void XSHA1_Update(xsha1_ctx_t *pCtx, const uint8_t* pData, uint32_t nLength)
 {
-    XASSERT_VOID((pCtx && pData && nLength));
+    XCHECK_VOID((pCtx && pData && nLength));
     uint32_t i, j = pCtx->count[0];
 
     if ((pCtx->count[0] += nLength << 3) < j)
@@ -143,7 +143,7 @@ void XSHA1_Transform(uint32_t uState[5], const uint8_t uBuffer[64])
 
 XSTATUS XSHA1_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
-    XASSERT((nSize >= XSHA1_DIGEST_SIZE &&
+    XCHECK((nSize >= XSHA1_DIGEST_SIZE &&
             pOutput != NULL), XSTDINV);
 
     xsha1_ctx_t xsha;
@@ -156,7 +156,7 @@ XSTATUS XSHA1_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, siz
 
 XSTATUS XSHA1_ComputeSum(char *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
-    XASSERT((nSize >= XSHA1_LENGTH + 1 &&
+    XCHECK((nSize >= XSHA1_LENGTH + 1 &&
             pOutput != NULL), XSTDINV);
 
     uint8_t i, nDigest[XSHA1_DIGEST_SIZE];

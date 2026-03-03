@@ -142,7 +142,7 @@ XSTATUS XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
 
 XSTATUS XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNewLine)
 {
-    XASSERT(pInput, XSTDINV);
+    XCHECK(pInput, XSTDINV);
     pInput[0] = XSTR_NUL;
 
     if (pText != NULL)
@@ -152,7 +152,7 @@ XSTATUS XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCu
     }
     char *pRet = fgets(pInput, (int)nSize, stdin);
 
-    XASSERT_RET((pRet != NULL), XSTDERR);
+    XCHECK_NL((pRet != NULL), XSTDERR);
     if (!xstrused(pInput)) return XSTDNON;
     else if (!bCutNewLine) return XSTDOK;
 

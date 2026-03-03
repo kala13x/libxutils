@@ -20,7 +20,7 @@
 
 static int XMap_Alloc(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
 {
-    XASSERT_RET(pMap, XMAP_OINV);
+    XCHECK_NL(pMap, XMAP_OINV);
     if (!nSize) return XMAP_OK;
 
     pMap->pPairs = (xmap_pair_t*)xalloc(pPool, (size_t)nSize * sizeof(xmap_pair_t));
@@ -39,7 +39,7 @@ static int XMap_Alloc(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
 
 int XMap_Init(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
 {
-    XASSERT_RET(pMap, XMAP_OINV);
+    XCHECK_NL(pMap, XMAP_OINV);
 
     pMap->nTableSize = nSize;
     pMap->clearCb = NULL;
@@ -98,8 +98,8 @@ void XMap_Free(xmap_t *pMap)
 
 static int XMap_ClearIt(xmap_pair_t *pPair, void *pCtx)
 {
-    XASSERT((pCtx != NULL), XMAP_OINV);
-    XASSERT((pPair != NULL), XMAP_OINV);
+    XCHECK((pCtx != NULL), XMAP_OINV);
+    XCHECK((pPair != NULL), XMAP_OINV);
 
     xmap_t *pMap = (xmap_t*)pCtx;
     if (pMap->clearCb != NULL)
@@ -113,8 +113,8 @@ static int XMap_ClearIt(xmap_pair_t *pPair, void *pCtx)
 
 int XMap_Iterate(xmap_t *pMap, xmap_iterator_t itfunc, void *pCtx)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
-    XASSERT_RET((pMap->pPairs != NULL), XMAP_EINIT);
+    XCHECK((pMap != NULL), XMAP_OINV);
+    XCHECK_NL((pMap->pPairs != NULL), XMAP_EINIT);
 
     if (!XMap_UsedSize(pMap)) return XMAP_EMPTY;
     uint32_t i;
@@ -133,8 +133,8 @@ int XMap_Iterate(xmap_t *pMap, xmap_iterator_t itfunc, void *pCtx)
 
 void XMap_Reset(xmap_t *pMap)
 {
-    XASSERT_VOID((pMap != NULL));
-    XASSERT_VOID((pMap->pPairs != NULL));
+    XCHECK_VOID((pMap != NULL));
+    XCHECK_VOID((pMap->pPairs != NULL));
 
     uint32_t i;
     for (i = 0; i < pMap->nTableSize; i++)
@@ -158,7 +158,7 @@ void XMap_Destroy(xmap_t *pMap)
 #ifdef _XMAP_USE_CRYPT
 int XMap_HashMIX(xmap_t *pMap, const char *pStr)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
     if (!pMap->nTableSize) return XMAP_EINIT;
     uint32_t nHash = XCRC32_Compute((unsigned char*)(pStr), strlen(pStr));
 
@@ -179,7 +179,7 @@ int XMap_HashMIX(xmap_t *pMap, const char *pStr)
 
 int XMap_HashCRC32(xmap_t *pMap, const char *pStr)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
     if (!pMap->nTableSize) return XMAP_EINIT;
     uint32_t nHash = XCRC32_Compute((unsigned char*)(pStr), strlen(pStr));
 
@@ -191,7 +191,7 @@ int XMap_HashCRC32(xmap_t *pMap, const char *pStr)
 
 int XMap_HashSHA256(xmap_t *pMap, const char *pStr)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
     if (!pMap->nTableSize) return XMAP_EINIT;
 
     unsigned char hash[XSHA256_LENGTH + 1];
@@ -215,7 +215,7 @@ int XMap_HashSHA256(xmap_t *pMap, const char *pStr)
 
 int XMap_HashFNV(xmap_t *pMap, const char *pStr)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
     if (!pMap->nTableSize) return XMAP_EINIT;
     uint32_t nHash = XFNV_OFFSET_32;
 
@@ -230,8 +230,8 @@ int XMap_HashFNV(xmap_t *pMap, const char *pStr)
 
 int XMap_Hash(xmap_t *pMap, const char *pStr)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
-    XASSERT((pStr != NULL), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
+    XCHECK((pStr != NULL), XMAP_OINV);
 
     switch (pMap->eHashType)
     {
@@ -254,11 +254,11 @@ int XMap_Hash(xmap_t *pMap, const char *pStr)
 
 int XMap_GetHash(xmap_t *pMap, const char* pKey)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
-    XASSERT_RET((pKey != NULL), XMAP_OINV);
-    XASSERT_RET((pMap->nTableSize > 0), XMAP_EINIT);
-    XASSERT_RET((pMap->pPairs != NULL), XMAP_EINIT);
-    XASSERT_RET((pMap->nCount <= pMap->nTableSize), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
+    XCHECK_NL((pKey != NULL), XMAP_OINV);
+    XCHECK_NL((pMap->nTableSize > 0), XMAP_EINIT);
+    XCHECK_NL((pMap->pPairs != NULL), XMAP_EINIT);
+    XCHECK_NL((pMap->nCount <= pMap->nTableSize), XMAP_OINV);
 
     int nIndex = XMap_Hash(pMap, pKey);
     if (nIndex < 0) return nIndex;
@@ -312,15 +312,15 @@ static int XMap_PutRaw(xmap_t *pMap, char *pKey, void *pValue)
 
 int XMap_Realloc(xmap_t *pMap)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
-    XASSERT((pMap->nTableSize < UINT32_MAX / 2), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
+    XCHECK((pMap->nTableSize < UINT32_MAX / 2), XMAP_OINV);
 
     xpool_t *pPool = pMap->pPool;
     int nStatus = XMAP_OK;
 
     uint32_t i, nNewSize = pMap->nTableSize ? pMap->nTableSize * 2 : XMAP_INITIAL_SIZE;
     xmap_pair_t *pPairs = (xmap_pair_t*)xalloc(pPool, (size_t)nNewSize * sizeof(xmap_pair_t));
-    XASSERT((pPairs != NULL), XMAP_OMEM);
+    XCHECK((pPairs != NULL), XMAP_OMEM);
 
     for (i = 0; i < nNewSize; i++)
     {
@@ -363,16 +363,16 @@ int XMap_Realloc(xmap_t *pMap)
 
 static int XMap_Rehash(xmap_t *pMap)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
-    XASSERT_RET((pMap->pPairs != NULL), XMAP_EINIT);
-    XASSERT_RET((pMap->nTableSize > 0), XMAP_EINIT);
+    XCHECK((pMap != NULL), XMAP_OINV);
+    XCHECK_NL((pMap->pPairs != NULL), XMAP_EINIT);
+    XCHECK_NL((pMap->nTableSize > 0), XMAP_EINIT);
 
     uint32_t nOldSize = pMap->nTableSize;
     xpool_t *pPool = pMap->pPool;
 
     size_t nAllocSize = (size_t)nOldSize * sizeof(xmap_pair_t);
     xmap_pair_t *pNew = (xmap_pair_t*)xalloc(pPool, nAllocSize);
-    XASSERT((pNew != NULL), XMAP_OMEM);
+    XCHECK((pNew != NULL), XMAP_OMEM);
 
     uint32_t i;
     for (i = 0; i < nOldSize; i++)
@@ -416,8 +416,8 @@ static int XMap_Rehash(xmap_t *pMap)
 
 int XMap_Put(xmap_t *pMap, char* pKey, void *pValue)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
-    XASSERT_RET((pKey != NULL), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
+    XCHECK_NL((pKey != NULL), XMAP_OINV);
 
     if ((!pMap->nTableSize || pMap->pPairs == NULL) ||
         ((uint64_t)pMap->nCount * 10 >= (uint64_t)pMap->nTableSize * 7))
@@ -456,15 +456,15 @@ int XMap_Put(xmap_t *pMap, char* pKey, void *pValue)
 
 int XMap_PutPair(xmap_t *pMap, xmap_pair_t *pPair)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
-    XASSERT((pPair != NULL), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
+    XCHECK((pPair != NULL), XMAP_OINV);
     return XMap_Put(pMap, pPair->pKey, pPair->pData);
 }
 
 int XMap_Update(xmap_t *pMap, int nHash, void *pValue)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
-    XASSERT_RET((nHash >= 0), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
+    XCHECK_NL((nHash >= 0), XMAP_OINV);
 
     if ((uint32_t)nHash >= pMap->nTableSize)
         return XMAP_MISSING;
@@ -481,9 +481,9 @@ int XMap_Update(xmap_t *pMap, int nHash, void *pValue)
 
 xmap_pair_t *XMap_GetPair(xmap_t *pMap, const char* pKey)
 {
-    XASSERT((pMap != NULL), NULL);
-    XASSERT_RET((pKey != NULL), NULL);
-    XASSERT_RET((pMap->pPairs != NULL), NULL);
+    XCHECK((pMap != NULL), NULL);
+    XCHECK_NL((pKey != NULL), NULL);
+    XCHECK_NL((pMap->pPairs != NULL), NULL);
 
     uint32_t i;
     int nIndex = XMap_Hash(pMap, pKey);
@@ -505,10 +505,10 @@ xmap_pair_t *XMap_GetPair(xmap_t *pMap, const char* pKey)
 
 void* XMap_GetIndex(xmap_t *pMap, const char* pKey, int *pIndex)
 {
-    XASSERT((pMap != NULL), NULL);
-    XASSERT((pKey != NULL), NULL);
-    XASSERT((pIndex != NULL), NULL);
-    XASSERT_RET((pMap->pPairs != NULL), NULL);
+    XCHECK((pMap != NULL), NULL);
+    XCHECK((pKey != NULL), NULL);
+    XCHECK((pIndex != NULL), NULL);
+    XCHECK_NL((pMap->pPairs != NULL), NULL);
 
     *pIndex = -1;
     uint32_t i;
@@ -533,17 +533,17 @@ void* XMap_GetIndex(xmap_t *pMap, const char* pKey, int *pIndex)
 
 void* XMap_Get(xmap_t *pMap, const char* pKey)
 {
-    XASSERT((pMap != NULL), NULL);
-    XASSERT_RET((pKey != NULL), NULL);
+    XCHECK((pMap != NULL), NULL);
+    XCHECK_NL((pKey != NULL), NULL);
     int nDummy = 0;
     return XMap_GetIndex(pMap, pKey, &nDummy);
 }
 
 int XMap_Remove(xmap_t *pMap, const char* pKey)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
-    XASSERT_RET((pKey != NULL), XMAP_OINV);
-    XASSERT_RET((pMap->pPairs != NULL), XMAP_EINIT);
+    XCHECK((pMap != NULL), XMAP_OINV);
+    XCHECK_NL((pKey != NULL), XMAP_OINV);
+    XCHECK_NL((pMap->pPairs != NULL), XMAP_EINIT);
 
     int nIndex = XMap_Hash(pMap, pKey);
     if (nIndex < 0) return nIndex;
@@ -575,6 +575,6 @@ int XMap_Remove(xmap_t *pMap, const char* pKey)
 
 int XMap_UsedSize(xmap_t *pMap)
 {
-    XASSERT((pMap != NULL), XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
     return (int)pMap->nCount;
 }

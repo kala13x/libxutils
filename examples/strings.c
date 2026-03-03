@@ -18,15 +18,15 @@ xbool_t va_string_test1(const char *pOriginalString, size_t nOriginalLength, con
 {
     char *pDest = NULL;
     XSTRCPYFMT(pDest, pFmt, NULL);
-    XASSERT(pDest, XFALSE);
+    XCHECK(pDest, XFALSE);
 
     xlog("%s", pDest);
 
     xbool_t status = xstrcmp(pOriginalString, pDest);
-    XASSERT_CALL(status, free, pDest, XFALSE);
+    XCHECK_CALL(status, free, pDest, XFALSE);
 
     size_t nLength = strlen(pDest);
-    XASSERT_CALL((nLength == nOriginalLength), free, pDest, XFALSE);
+    XCHECK_CALL((nLength == nOriginalLength), free, pDest, XFALSE);
 
     free(pDest);
     return XTRUE;
@@ -43,7 +43,7 @@ xbool_t va_string_test2(const char *pOriginalString, size_t nOriginalLength, con
 
     xlog("%s (%zu)", sDest, nLength);
 
-    XASSERT((nLength == nOriginalLength), XFALSE);
+    XCHECK((nLength == nOriginalLength), XFALSE);
     return xstrcmp(pOriginalString, sDest);
 }
 

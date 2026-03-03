@@ -519,18 +519,18 @@ static void XSearch_DisplayEntry(xsearch_t *pSearch, xsearch_entry_t *pEntry)
 int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
 {
     if (pEntry->eType != XF_REGULAR) return XSTDNON;
-    XASSERT(xstrused(pEntry->sName), XSTDERR);
-    XASSERT(xstrused(pEntry->sPath), XSTDERR);
+    XCHECK(xstrused(pEntry->sName), XSTDERR);
+    XCHECK(xstrused(pEntry->sPath), XSTDERR);
 
     char sEntry[XPATH_MAX];
     xstrncpyf(sEntry, sizeof(sEntry), "%s%s", pEntry->sPath, pEntry->sName);
 
     xbyte_buffer_t buffer;
     XByteBuffer_Init(&buffer, XLINE_MAX, XSTDNON);
-    XASSERT((buffer.nSize > 0), XSTDERR);
+    XCHECK((buffer.nSize > 0), XSTDERR);
 
     xfile_t file;
-    XASSERT_CALL((XFile_Open(&file, sEntry, "r", NULL) > 0),
+    XCHECK_CALL((XFile_Open(&file, sEntry, "r", NULL) > 0),
         XByteBuffer_Clear, &buffer, XSTDERR);
 
     xbool_t bDirty = XFALSE;
@@ -579,7 +579,7 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
 
         if (!bDropLine)
         {
-            XASSERT_CALL2((XByteBuffer_Add(&buffer, (const uint8_t*)sLine, nLength) > 0),
+            XCHECK_CALL2((XByteBuffer_Add(&buffer, (const uint8_t*)sLine, nLength) > 0),
                 XByteBuffer_Clear, &buffer, XFile_Close, &file, XSTDERR);
         }
 
@@ -599,7 +599,7 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
     if (pArgs->bFinalNewline && buffer.nUsed &&
         buffer.pData[buffer.nUsed - 1] != '\n')
     {
-        XASSERT_CALL((XByteBuffer_Add(&buffer,
+        XCHECK_CALL((XByteBuffer_Add(&buffer,
             (const uint8_t*)"\n", sizeof("\n") - 1) > 0),
             XByteBuffer_Clear, &buffer, XSTDERR);
 
@@ -615,7 +615,7 @@ int XSearch_StripEmptySpaces(xsearch_args_t *pArgs, xsearch_entry_t *pEntry)
     char sEntryBackup[XPATH_MAX];
     xstrncpyf(sEntryBackup, sizeof(sEntryBackup), "%s.xsrc.bak", sEntry);
 
-    XASSERT_CALL((rename(sEntry, sEntryBackup) == 0),
+    XCHECK_CALL((rename(sEntry, sEntryBackup) == 0),
         XByteBuffer_Clear, &buffer, XSTDERR);
 
     if (XFile_OpenM(&file, sEntry, "cwt", pEntry->nMode) < 0)

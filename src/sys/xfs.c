@@ -119,8 +119,8 @@ int XFile_ParseFlags(const char *pFlags)
     }
 
 #if defined(O_RDONLY) && defined(O_WRONLY) && defined(O_RDWR)
-    if (XFILE_CHECK_FL(nFlags, O_RDONLY) &&
-        XFILE_CHECK_FL(nFlags, O_WRONLY))
+    if (XFILE_XCHECK_FL(nFlags, O_RDONLY) &&
+        XFILE_XCHECK_FL(nFlags, O_WRONLY))
     {
         nFlags &= ~O_RDONLY;
         nFlags &= ~O_WRONLY;
@@ -175,7 +175,7 @@ int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char
 
 int XFile_Reopen(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms)
 {
-    XASSERT(pFile, XSTDERR);
+    XCHECK(pFile, XSTDERR);
     XFile_Close(pFile);
 
     return XFile_Open(pFile, pPath, pFlags, pPerms);
@@ -198,7 +198,7 @@ xfile_t* XFile_Alloc(const char *pPath, const char *pFlags, const char *pPerms)
 
 xbool_t XFile_IsOpen(xfile_t *pFile)
 {
-    XASSERT(pFile, XFALSE);
+    XCHECK(pFile, XFALSE);
     return (pFile->nFD >= 0) ?
             XTRUE : XFALSE;
 }
@@ -231,7 +231,7 @@ void XFile_Destroy(xfile_t *pFile)
 
 void XFile_Free(xfile_t **ppFile)
 {
-    XASSERT_VOID_RET((ppFile && *ppFile));
+    XCHECK_VOID_NL((ppFile && *ppFile));
     xfile_t *pFile = *ppFile;
 
     XFile_Destroy(pFile);
@@ -240,7 +240,7 @@ void XFile_Free(xfile_t **ppFile)
 
 size_t XFile_Seek(xfile_t *pFile, uint64_t nPosit, int nOffset)
 {
-    XASSERT(XFile_IsOpen(pFile), XSTDERR);
+    XCHECK(XFile_IsOpen(pFile), XSTDERR);
 #ifdef _WIN32
     return (int)_lseek(pFile->nFD, (long)nPosit, nOffset);
 #else
@@ -250,7 +250,7 @@ size_t XFile_Seek(xfile_t *pFile, uint64_t nPosit, int nOffset)
 
 int XFile_Write(xfile_t *pFile, const void *pBuff, size_t nSize)
 {
-    XASSERT(XFile_IsOpen(pFile), XSTDERR);
+    XCHECK(XFile_IsOpen(pFile), XSTDERR);
 #ifdef _WIN32
     return _write(pFile->nFD, pBuff, (unsigned int)nSize);
 #else
@@ -260,7 +260,7 @@ int XFile_Write(xfile_t *pFile, const void *pBuff, size_t nSize)
 
 int XFile_Read(xfile_t *pFile, void *pBuff, size_t nSize)
 {
-    XASSERT(XFile_IsOpen(pFile), XSTDERR);
+    XCHECK(XFile_IsOpen(pFile), XSTDERR);
 
 #ifdef _WIN32
     int nRead = _read(pFile->nFD, pBuff, (unsigned int)nSize);
@@ -286,7 +286,7 @@ int XFile_Print(xfile_t *pFile, const char *pFmt, ...)
     char *pDest = xstracpyargs(pFmt, args, &nLength);
     va_end(args);
 
-    XASSERT(pDest, XSTDERR);
+    XCHECK(pDest, XSTDERR);
     int nStatus = XFile_Write(pFile, pDest, nLength);
 
     free(pDest);
@@ -295,7 +295,7 @@ int XFile_Print(xfile_t *pFile, const char *pFmt, ...)
 
 int XFile_GetStats(xfile_t *pFile)
 {
-    XASSERT(XFile_IsOpen(pFile), XSTDERR);
+    XCHECK(XFile_IsOpen(pFile), XSTDERR);
 
     xstat_t fileStat;
     if (fstat(pFile->nFD, &fileStat) < 0) return XSTDERR;
@@ -357,8 +357,8 @@ uint8_t* XFile_Load(xfile_t *pFile, size_t *pSize)
 
 int XFile_Copy(xfile_t *pIn, xfile_t *pOut)
 {
-    XASSERT((XFile_GetStats(pIn) > 0), XSTDERR);
-    XASSERT((XFile_IsOpen(pOut)), XSTDERR);
+    XCHECK((XFile_GetStats(pIn) > 0), XSTDERR);
+    XCHECK((XFile_IsOpen(pOut)), XSTDERR);
 
     uint8_t *pBlock = (uint8_t*)malloc(pIn->nBlockSize);
     if (pBlock == NULL) return XSTDERR;
@@ -379,10 +379,10 @@ int XFile_Copy(xfile_t *pIn, xfile_t *pOut)
 
 int XFile_GetLine(xfile_t *pFile, char* pLine, size_t nSize)
 {
-    XASSERT((pLine && nSize), XSTDINV);
+    XCHECK((pLine && nSize), XSTDINV);
     pLine[0] = '\0';
 
-    XASSERT(XFile_IsOpen(pFile), XSTDERR);
+    XCHECK(XFile_IsOpen(pFile), XSTDERR);
     int nAvail = (int)nSize - 1;
     int nRead = 0;
     char cByte;
@@ -403,7 +403,7 @@ int XFile_GetLineCount(xfile_t *pFile)
     char sLine[XLINE_MAX];
     int nLineNum = 0;
 
-    XASSERT((XFile_GetStats(pFile) > 0), XSTDERR);
+    XCHECK((XFile_GetStats(pFile) > 0), XSTDERR);
     while (XFile_GetLine(pFile, sLine, sizeof(sLine)) > 0) nLineNum++;
 
     return nLineNum;
@@ -533,11 +533,11 @@ char XFile_GetTypeChar(xfile_type_t eType)
 
 int XPath_Parse(xpath_t *pPath, const char *pPathStr, xbool_t bStat)
 {
-    XASSERT(pPath, XSTDINV);
+    XCHECK(pPath, XSTDINV);
     pPath->sPath[0] = XSTR_NUL;
     pPath->sFile[0] = XSTR_NUL;
 
-    XASSERT((xstrused(pPathStr)), XSTDERR);
+    XCHECK((xstrused(pPathStr)), XSTDERR);
     size_t nLength = strlen(pPathStr);
     xbool_t bIsDir = XFALSE;
 

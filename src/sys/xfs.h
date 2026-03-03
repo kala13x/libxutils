@@ -77,7 +77,7 @@ typedef struct stat xstat_t;
 #define xfprintf(xf, ...) \
     XFile_Print(xf, __VA_ARGS__)
 
-#define XFILE_CHECK_FL(c, f) (((c) & (f)) == (f))
+#define XFILE_XCHECK_FL(c, f) (((c) & (f)) == (f))
 
 int xstat(const char *pPath, xstat_t *pStat);
 int xmkdir(const char* pPath, xmode_t nMode);

@@ -31,10 +31,10 @@ void signal_callback(int sig)
     g_nInterrupted = 1;
 }
 
-int handle_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int handle_status(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
-    int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
+    int nFD = pSession ? (int)pSession->sock.nFD : XSTDERR;
 
     if (pCtx->eCbType == XAPI_CB_STATUS)
         xlogn("%s: fd(%d)", pStr, nFD);
@@ -44,57 +44,57 @@ int handle_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_CONTINUE;
 }
 
-int handle_read(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int handle_read(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    xbyte_buffer_t *pBuffer = XAPI_GetRxBuff(pData);
+    xbyte_buffer_t *pBuffer = XAPI_GetRxBuff(pSession);
 
     xlogn("Received response: fd(%d), buff(%zu): %s",
-        (int)pData->sock.nFD, pBuffer->nUsed,
+        (int)pSession->sock.nFD, pBuffer->nUsed,
         (const char*)pBuffer->pData);
 
     return XAPI_DISCONNECT;
 }
 
-int handle_write(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int handle_write(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    xbyte_buffer_t *pBuffer = XAPI_GetTxBuff(pData);
+    xbyte_buffer_t *pBuffer = XAPI_GetTxBuff(pSession);
     XByteBuffer_AddFmt(pBuffer, "My simple request");
-    return XAPI_EnableEvent(pData, XPOLLOUT);
+    return XAPI_EnableEvent(pSession, XPOLLOUT);
 }
 
-int send_complete(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int send_complete(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    xlogn("Request sent: fd(%d)", (int)pData->sock.nFD);
+    xlogn("Request sent: fd(%d)", (int)pSession->sock.nFD);
 
-    xbyte_buffer_t *pBuffer = XAPI_GetTxBuff(pData);
-    if (!pBuffer->nUsed) XAPI_DisableEvent(pData, XPOLLOUT);
+    xbyte_buffer_t *pBuffer = XAPI_GetTxBuff(pSession);
+    if (!pBuffer->nUsed) XAPI_DisableEvent(pSession, XPOLLOUT);
 
-    return XAPI_EnableEvent(pData, XPOLLIN);
+    return XAPI_EnableEvent(pSession, XPOLLIN);
 }
 
-int init_data(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int init_data(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    xlogn("Conected to server: fd(%d)", (int)pData->sock.nFD);
-    return XAPI_SetEvents(pData, XPOLLOUT);
+    xlogn("Conected to server: fd(%d)", (int)pSession->sock.nFD);
+    return XAPI_SetEvents(pSession, XPOLLOUT);
 }
 
-int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int service_callback(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
     switch (pCtx->eCbType)
     {
         case XAPI_CB_ERROR:
         case XAPI_CB_STATUS:
-            return handle_status(pCtx, pData);
+            return handle_status(pCtx, pSession);
         case XAPI_CB_READ:
-            return handle_read(pCtx, pData);
+            return handle_read(pCtx, pSession);
         case XAPI_CB_WRITE:
-            return handle_write(pCtx, pData);
+            return handle_write(pCtx, pSession);
         case XAPI_CB_CONNECTED:
-            return init_data(pCtx, pData);
+            return init_data(pCtx, pSession);
         case XAPI_CB_COMPLETE:
-            return send_complete(pCtx, pData);
+            return send_complete(pCtx, pSession);
         case XAPI_CB_CLOSED:
-            xlogn("Connection closed: fd(%d)", (int)pData->sock.nFD);
+            xlogn("Connection closed: fd(%d)", (int)pSession->sock.nFD);
             return XAPI_DISCONNECT;
         case XAPI_CB_INTERRUPT:
             if (g_nInterrupted) return XAPI_DISCONNECT;

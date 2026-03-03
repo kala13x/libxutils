@@ -3,7 +3,7 @@
 # https://github.com/kala13x/smake #
 ####################################
 
-CFLAGS = -g -O2 -Wall -D_XUTILS_DEBUG -D_ASSERT_XLOG
+CFLAGS = -g -O2 -Wall -D_XCHECK_LOG
 LIBS = -lpthread -lm
 LD_LIBS = ../build/libxutils.a
 

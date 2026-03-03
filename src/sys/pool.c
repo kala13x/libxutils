@@ -42,7 +42,7 @@ xpool_t* XPool_Create(size_t nSize)
 
 void XPool_Destroy(xpool_t *pPool)
 {
-    XASSERT_VOID_RET(pPool);
+    XCHECK_VOID_NL(pPool);
 
     if (pPool->pData)
     {
@@ -64,15 +64,15 @@ void XPool_Destroy(xpool_t *pPool)
 
 void XPool_Reset(xpool_t *pPool)
 {
-    XASSERT_VOID_RET(pPool);
+    XCHECK_VOID_NL(pPool);
     pPool->nUsed = 0;
     XPool_Reset(pPool->pNext);
 }
 
 void *XPool_Alloc(xpool_t *pPool, size_t nSize)
 {
-    XASSERT_RET(pPool, NULL);
-    XASSERT_RET(nSize, NULL);
+    XCHECK_NL(pPool, NULL);
+    XCHECK_NL(nSize, NULL);
 
     // Find space in current pool
     if (pPool->nUsed + nSize > pPool->nSize)
@@ -97,8 +97,8 @@ void *XPool_Alloc(xpool_t *pPool, size_t nSize)
 
 void *XPool_Realloc(xpool_t *pPool, void *pData, size_t nDataSize, size_t nNewSize)
 {
-    XASSERT_RET(nNewSize, NULL);
-    XASSERT_RET(pPool, NULL);
+    XCHECK_NL(nNewSize, NULL);
+    XCHECK_NL(pPool, NULL);
 
     void *pNew = XPool_Alloc(pPool, nNewSize);
     if (pNew == NULL) return NULL;
@@ -115,8 +115,8 @@ void *XPool_Realloc(xpool_t *pPool, void *pData, size_t nDataSize, size_t nNewSi
 
 void XPool_Free(xpool_t *pPool, void *pData, size_t nSize)
 {
-    XASSERT_VOID_RET(pData);
-    XASSERT_VOID_RET(nSize);
+    XCHECK_VOID_NL(pData);
+    XCHECK_VOID_NL(nSize);
 
     xpool_t *pCur = pPool;
     if (pCur == NULL)
@@ -156,39 +156,39 @@ void XPool_Free(xpool_t *pPool, void *pData, size_t nSize)
 
 void* xalloc(xpool_t *pPool, size_t nSize)
 {
-    XASSERT_RET(nSize, NULL);
+    XCHECK_NL(nSize, NULL);
     if (!pPool) return malloc(nSize);
     return XPool_Alloc(pPool, nSize);
 }
 
 void* xrealloc(xpool_t *pPool, void *pData, size_t nDataSize, size_t nNewSize)
 {
-    XASSERT_RET(nNewSize, NULL);
+    XCHECK_NL(nNewSize, NULL);
     if (!pPool) return realloc(pData, nNewSize);
     return XPool_Realloc(pPool, pData, nDataSize, nNewSize);
 }
 
 void xfree(xpool_t *pPool, void *pData)
 {
-    XASSERT_VOID_RET(pData);
+    XCHECK_VOID_NL(pData);
     if (!pPool) free(pData);
 }
 
 void xfreen(xpool_t *pPool, void *pData, size_t nSize)
 {
-    XASSERT_VOID_RET(pData);
+    XCHECK_VOID_NL(pData);
     if (!nSize) xfree(pPool, pData);
     else XPool_Free(pPool, pData, nSize);
 }
 
 size_t XPool_GetSize(xpool_t *pPool)
 {
-    XASSERT_RET(pPool, 0);
+    XCHECK_NL(pPool, 0);
     return pPool->nSize;
 }
 
 size_t XPool_GetUsed(xpool_t *pPool)
 {
-    XASSERT_RET(pPool, 0);
+    XCHECK_NL(pPool, 0);
     return pPool->nUsed;
 }

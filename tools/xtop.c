@@ -1431,7 +1431,7 @@ int XTOP_GetRemoteStats(xtop_ctx_t *pCtx, xmon_stats_t *pStats)
     return nStatus;
 }
 
-int XTOP_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int XTOP_PrintStatus(xapi_ctx_t *pCtx, xapi_session_t *pData)
 {
     const char *pStr = XAPI_GetStatus(pCtx);
     int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
@@ -1447,7 +1447,7 @@ int XTOP_PrintStatus(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XSTDOK;
 }
 
-int XTOP_HandleComplete(xapi_data_t *pData)
+int XTOP_HandleComplete(xapi_session_t *pData)
 {
     xlogi("Response sent to the client: id(%u), fd(%d)",
         pData->nID, (int)pData->sock.nFD);
@@ -1461,7 +1461,7 @@ int XTOP_HandleComplete(xapi_data_t *pData)
     return XAPI_DISCONNECT;
 }
 
-int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int XTOP_HandleRequest(xapi_ctx_t *pCtx, xapi_session_t *pData)
 {
     xtop_ctx_t *pAppCtx = (xtop_ctx_t*)pData->pApi->pUserCtx;
     int nStatus = XAPI_AuthorizeHTTP(pData, pAppCtx->sToken, pAppCtx->sKey);
@@ -1721,7 +1721,7 @@ int XTOP_AppendCPUJson(xmon_stats_t *pStats, xstring_t *pJsonStr)
     return XSTDERR;
 }
 
-int XTOP_AssembleBody(xapi_data_t *pData, xstring_t *pJsonStr)
+int XTOP_AssembleBody(xapi_session_t *pData, xstring_t *pJsonStr)
 {
     xtop_ctx_t *pCtx = (xtop_ctx_t*)pData->pApi->pUserCtx;
     xmon_stats_t *pStats = (xmon_stats_t*)pCtx->pStats;
@@ -1787,7 +1787,7 @@ int XTOP_AssembleBody(xapi_data_t *pData, xstring_t *pJsonStr)
     return XSTDOK;
 }
 
-int XTOP_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int XTOP_SendResponse(xapi_ctx_t *pCtx, xapi_session_t *pData)
 {
     xhttp_t handle;
     if (XHTTP_InitResponse(&handle, 200, NULL) <= 0)
@@ -1831,7 +1831,7 @@ int XTOP_SendResponse(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_EnableEvent(pData, XPOLLOUT);
 }
 
-int XTOP_InitSessionData(xapi_data_t *pData)
+int XTOP_InitSessionData(xapi_session_t *pData)
 {
     xmon_request_t *pRequest = (xmon_request_t *)malloc(sizeof(xmon_request_t));
     if (pRequest == NULL)
@@ -1850,7 +1850,7 @@ int XTOP_InitSessionData(xapi_data_t *pData)
     return XAPI_SetEvents(pData, XPOLLIN);
 }
 
-int XTOP_ClearSessionData(xapi_data_t *pData)
+int XTOP_ClearSessionData(xapi_session_t *pData)
 {
     xlogn("Connection closed: id(%u), fd(%d), ip(%s)", pData->nID, (int)pData->sock.nFD, pData->sAddr);
     free(pData->pSessionData);
@@ -1858,7 +1858,7 @@ int XTOP_ClearSessionData(xapi_data_t *pData)
     return XSTDERR;
 }
 
-int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int XTOP_ServiceCb(xapi_ctx_t *pCtx, xapi_session_t *pData)
 {
     switch (pCtx->eCbType)
     {

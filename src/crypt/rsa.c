@@ -33,7 +33,7 @@ char* XSSL_LastErrors(size_t *pOutLen)
     if (pOutLen) *pOutLen = 0;
 
     BIO *pBIO = BIO_new(BIO_s_mem());
-    XASSERT(pBIO, NULL);
+    XCHECK(pBIO, NULL);
 
     ERR_print_errors(pBIO);
     char *pErrBuff = NULL;
@@ -61,7 +61,7 @@ char* XSSL_LastErrors(size_t *pOutLen)
 
 void XRSA_Init(xrsa_ctx_t *pCtx)
 {
-    XASSERT_VOID(pCtx);
+    XCHECK_VOID(pCtx);
     pCtx->nPadding = RSA_PKCS1_PADDING;
     pCtx->nPrivKeyLen = 0;
     pCtx->nPubKeyLen = 0;
@@ -73,7 +73,7 @@ void XRSA_Init(xrsa_ctx_t *pCtx)
 
 void XRSA_Destroy(xrsa_ctx_t *pCtx)
 {
-    XASSERT_VOID(pCtx);
+    XCHECK_VOID(pCtx);
     RSA_free(pCtx->pKeyPair);
     free(pCtx->pPrivateKey);
     free(pCtx->pPublicKey);
@@ -88,11 +88,11 @@ void XRSA_Destroy(xrsa_ctx_t *pCtx)
 
 XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp)
 {
-    XASSERT(pCtx, XSTDINV);
+    XCHECK(pCtx, XSTDINV);
     XRSA_Init(pCtx);
 
     BIGNUM *pBigNum = BN_new();
-    XASSERT(pBigNum, XSTDERR);
+    XCHECK(pBigNum, XSTDERR);
 
     int nRetVal = BN_set_word(pBigNum, nPubKeyExp);
     if (nRetVal != XSTDOK)
@@ -191,18 +191,18 @@ XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp
 
 uint8_t* XRSA_Crypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength)
 {
-    XASSERT((pCtx && pData && nLength), NULL);
+    XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
     RSA *pRSA = pCtx->pKeyPair;
 
     int nRSASize = RSA_size(pRSA);
-    XASSERT(nRSASize, NULL);
+    XCHECK(nRSASize, NULL);
 
     uint8_t *pOutput = malloc(nRSASize + 1);
-    XASSERT(pOutput, NULL);
+    XCHECK(pOutput, NULL);
 
     int nOutLength = RSA_public_encrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    XASSERT_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
+    XCHECK_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
     pOutput[nOutLength] = '\0';
@@ -212,18 +212,18 @@ uint8_t* XRSA_Crypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size
 
 uint8_t* XRSA_PrivCrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength)
 {
-    XASSERT((pCtx && pData && nLength), NULL);
+    XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
     RSA *pRSA = pCtx->pKeyPair;
 
     int nRSASize = RSA_size(pRSA);
-    XASSERT(nRSASize, NULL);
+    XCHECK(nRSASize, NULL);
 
     uint8_t *pOutput = malloc(nRSASize + 1);
-    XASSERT(pOutput, NULL);
+    XCHECK(pOutput, NULL);
 
     int nOutLength = RSA_private_encrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    XASSERT_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
+    XCHECK_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
     pOutput[nOutLength] = '\0';
@@ -233,18 +233,18 @@ uint8_t* XRSA_PrivCrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, 
 
 uint8_t* XRSA_PubDecrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength)
 {
-    XASSERT((pCtx && pData && nLength), NULL);
+    XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
     RSA *pRSA = pCtx->pKeyPair;
 
     int nRSASize = RSA_size(pRSA);
-    XASSERT((nRSASize > 0), NULL);
+    XCHECK((nRSASize > 0), NULL);
 
     uint8_t *pOutput = malloc(nRSASize + 1);
-    XASSERT(pOutput, NULL);
+    XCHECK(pOutput, NULL);
 
     int nOutLength = RSA_public_decrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    XASSERT_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
+    XCHECK_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
     pOutput[nOutLength] = '\0';
@@ -254,15 +254,15 @@ uint8_t* XRSA_PubDecrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength,
 
 uint8_t* XRSA_Decrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength)
 {
-    XASSERT((pCtx && pData && nLength), NULL);
+    XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
     RSA *pRSA = pCtx->pKeyPair;
 
     uint8_t *pOutput = malloc(nLength + 1);
-    XASSERT(pOutput, NULL);
+    XCHECK(pOutput, NULL);
 
     int nOutLength = RSA_private_decrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    XASSERT_FREE((nOutLength > 0), pOutput, NULL);
+    XCHECK_FREE((nOutLength > 0), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
     size_t nTermPos = (size_t)nOutLength < nLength ?
@@ -274,51 +274,51 @@ uint8_t* XRSA_Decrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, si
 
 XSTATUS XRSA_LoadPrivKey(xrsa_ctx_t *pCtx)
 {
-    XASSERT((pCtx && pCtx->pPrivateKey && pCtx->nPrivKeyLen), XSTDINV);
+    XCHECK((pCtx && pCtx->pPrivateKey && pCtx->nPrivKeyLen), XSTDINV);
 
     if (pCtx->pKeyPair == NULL)
     {
         pCtx->pKeyPair = RSA_new();
-        XASSERT(pCtx->pKeyPair, XSTDERR);
+        XCHECK(pCtx->pKeyPair, XSTDERR);
     }
 
     BIO* pBIO = BIO_new_mem_buf((void*)pCtx->pPrivateKey, (int)pCtx->nPrivKeyLen);
-    XASSERT(pBIO, XSTDERR);
+    XCHECK(pBIO, XSTDERR);
 
     RSA *pRSA = PEM_read_bio_RSAPrivateKey(pBIO, &pCtx->pKeyPair, NULL, NULL);
     BIO_free(pBIO);
 
-    XASSERT(pRSA, XSTDERR);
+    XCHECK(pRSA, XSTDERR);
     return XSTDOK;
 }
 
 XSTATUS XRSA_LoadPubKey(xrsa_ctx_t *pCtx)
 {
-    XASSERT((pCtx && pCtx->pPublicKey && pCtx->nPubKeyLen), XSTDINV);
+    XCHECK((pCtx && pCtx->pPublicKey && pCtx->nPubKeyLen), XSTDINV);
 
     if (pCtx->pKeyPair == NULL)
     {
         pCtx->pKeyPair = RSA_new();
-        XASSERT(pCtx->pKeyPair, XSTDERR);
+        XCHECK(pCtx->pKeyPair, XSTDERR);
     }
 
     BIO* pBIO = BIO_new_mem_buf((void*)pCtx->pPublicKey, (int)pCtx->nPubKeyLen);
-    XASSERT(pBIO, XSTDERR);
+    XCHECK(pBIO, XSTDERR);
 
     RSA *pRSA = PEM_read_bio_RSAPublicKey(pBIO, &pCtx->pKeyPair, NULL, NULL);
     BIO_free(pBIO);
 
-    XASSERT(pRSA, XSTDERR);
+    XCHECK(pRSA, XSTDERR);
     return XSTDOK;
 }
 
 XSTATUS XRSA_SetPubKey(xrsa_ctx_t *pCtx, const char *pPubKey, size_t nLength)
 {
-    XASSERT((pCtx && pPubKey && nLength), XSTDINV);
+    XCHECK((pCtx && pPubKey && nLength), XSTDINV);
     if (pCtx->pPublicKey) free(pCtx->pPublicKey);
 
     pCtx->pPublicKey = (char*)malloc(nLength + 1);
-    XASSERT(pCtx->pPublicKey, XSTDERR);
+    XCHECK(pCtx->pPublicKey, XSTDERR);
 
     memcpy(pCtx->pPublicKey, pPubKey, nLength);
     pCtx->pPublicKey[nLength] = '\0';
@@ -329,11 +329,11 @@ XSTATUS XRSA_SetPubKey(xrsa_ctx_t *pCtx, const char *pPubKey, size_t nLength)
 
 XSTATUS XRSA_SetPrivKey(xrsa_ctx_t *pCtx, const char *pPrivKey, size_t nLength)
 {
-    XASSERT((pCtx && pPrivKey && nLength), XSTDINV);
+    XCHECK((pCtx && pPrivKey && nLength), XSTDINV);
     if (pCtx->pPrivateKey) free(pCtx->pPrivateKey);
 
     pCtx->pPrivateKey = (char*)malloc(nLength + 1);
-    XASSERT(pCtx->pPrivateKey, XSTDERR);
+    XCHECK(pCtx->pPrivateKey, XSTDERR);
 
     memcpy(pCtx->pPrivateKey, pPrivKey, nLength);
     pCtx->pPrivateKey[nLength] = '\0';
@@ -344,7 +344,7 @@ XSTATUS XRSA_SetPrivKey(xrsa_ctx_t *pCtx, const char *pPrivKey, size_t nLength)
 
 XSTATUS XRSA_LoadPubKeyFile(xrsa_ctx_t *pCtx, const char *pPath)
 {
-    XASSERT(pCtx && pPath, XSTDINV);
+    XCHECK(pCtx && pPath, XSTDINV);
     if (pCtx->pPublicKey)
     {
         free(pCtx->pPublicKey);
@@ -353,14 +353,14 @@ XSTATUS XRSA_LoadPubKeyFile(xrsa_ctx_t *pCtx, const char *pPath)
     }
 
     pCtx->pPublicKey = (char*)XPath_Load(pPath, &pCtx->nPubKeyLen);
-    XASSERT(pCtx->pPublicKey, XSTDERR);
+    XCHECK(pCtx->pPublicKey, XSTDERR);
 
     return XRSA_LoadPubKey(pCtx);
 }
 
 XSTATUS XRSA_LoadPrivKeyFile(xrsa_ctx_t *pCtx, const char *pPath)
 {
-    XASSERT((pCtx && pPath), XSTDINV);
+    XCHECK((pCtx && pPath), XSTDINV);
     if (pCtx->pPrivateKey)
     {
         free(pCtx->pPrivateKey);
@@ -369,14 +369,14 @@ XSTATUS XRSA_LoadPrivKeyFile(xrsa_ctx_t *pCtx, const char *pPath)
     }
 
     pCtx->pPrivateKey = (char*)XPath_Load(pPath, &pCtx->nPrivKeyLen);
-    XASSERT(pCtx->pPrivateKey, XSTDERR);
+    XCHECK(pCtx->pPrivateKey, XSTDERR);
 
     return XRSA_LoadPrivKey(pCtx);
 }
 
 XSTATUS XRSA_LoadKeyFiles(xrsa_ctx_t *pCtx, const char *pPrivPath, const char *pPubPath)
 {
-    XASSERT(pCtx, XSTDINV);
+    XCHECK(pCtx, XSTDINV);
     XSTATUS nStatus = XSTDNON;
 
     if (pPrivPath != NULL) nStatus = XRSA_LoadPrivKeyFile(pCtx, pPrivPath);
@@ -388,7 +388,7 @@ XSTATUS XRSA_LoadKeyFiles(xrsa_ctx_t *pCtx, const char *pPrivPath, const char *p
 
 uint8_t* XCrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPubKey, size_t nKeyLen, size_t *pOutLen)
 {
-    XASSERT((pInput && nLength && pPubKey && nKeyLen), NULL);
+    XCHECK((pInput && nLength && pPubKey && nKeyLen), NULL);
     if (pOutLen) *pOutLen = 0;
 
     xrsa_ctx_t key;
@@ -409,7 +409,7 @@ uint8_t* XCrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPubKey, 
 
 uint8_t* XDecrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen)
 {
-    XASSERT((pInput && nLength && pPrivKey && nKeyLen), NULL);
+    XCHECK((pInput && nLength && pPrivKey && nKeyLen), NULL);
     if (pOutLen) *pOutLen = 0;
 
     xrsa_ctx_t key;
@@ -430,7 +430,7 @@ uint8_t* XDecrypt_RSA(const uint8_t *pInput, size_t nLength, const char *pPrivKe
 
 uint8_t* XCrypt_PrivRSA(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen)
 {
-    XASSERT((pInput && nLength && pPrivKey && nKeyLen), NULL);
+    XCHECK((pInput && nLength && pPrivKey && nKeyLen), NULL);
     if (pOutLen) *pOutLen = 0;
 
     xrsa_ctx_t key;
@@ -451,7 +451,7 @@ uint8_t* XCrypt_PrivRSA(const uint8_t *pInput, size_t nLength, const char *pPriv
 
 uint8_t* XDecrypt_PubRSA(const uint8_t *pInput, size_t nLength, const char *pPubKey, size_t nKeyLen, size_t *pOutLen)
 {
-    XASSERT((pInput && nLength && pPubKey && nKeyLen), NULL);
+    XCHECK((pInput && nLength && pPubKey && nKeyLen), NULL);
     if (pOutLen) *pOutLen = 0;
 
     xrsa_ctx_t key;
@@ -473,7 +473,7 @@ uint8_t* XDecrypt_PubRSA(const uint8_t *pInput, size_t nLength, const char *pPub
 static XSTATUS XRSA_PadSHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
     size_t nFinalSize = XSHA256_DIGEST_SIZE + XSHA256_PADDING_SIZE;
-    XASSERT((pInput && nSize >= nFinalSize), XSTDERR);
+    XCHECK((pInput && nSize >= nFinalSize), XSTDERR);
 
     uint8_t hash[XSHA256_DIGEST_SIZE];
     XSHA256_Compute(hash, sizeof(hash), pInput, nLength);
@@ -485,7 +485,7 @@ static XSTATUS XRSA_PadSHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pIn
 
 uint8_t* XCrypt_RS256(const uint8_t *pInput, size_t nLength, const char *pPrivKey, size_t nKeyLen, size_t *pOutLen)
 {
-    XASSERT((pInput && nLength), NULL);
+    XCHECK((pInput && nLength), NULL);
     if (pOutLen) *pOutLen = 0;
 
     uint8_t paddingHash[XSHA256_DIGEST_SIZE + sizeof(g_shaPadding)];
@@ -495,14 +495,14 @@ uint8_t* XCrypt_RS256(const uint8_t *pInput, size_t nLength, const char *pPrivKe
 
 XSTATUS XCrypt_VerifyRS256(const uint8_t *pSignature, size_t nSignatureLen, const uint8_t *pData, size_t nLength, const char *pPubKey, size_t nKeyLen)
 {
-    XASSERT((pData && nLength && pSignature && nSignatureLen && pPubKey && nKeyLen), XSTDINV);
+    XCHECK((pData && nLength && pSignature && nSignatureLen && pPubKey && nKeyLen), XSTDINV);
 
     uint8_t inputHash[XSHA256_DIGEST_SIZE + XSHA256_PADDING_SIZE];
     XRSA_PadSHA256(inputHash, sizeof(inputHash), pData, nLength);
     size_t i, nHashLen = 0;
 
     uint8_t *pDecrypted = XDecrypt_PubRSA(pSignature, nSignatureLen, pPubKey, nKeyLen, &nHashLen);
-    XASSERT_FREE((pDecrypted && nHashLen == sizeof(inputHash)), pDecrypted, XSTDEXC);
+    XCHECK_FREE((pDecrypted && nHashLen == sizeof(inputHash)), pDecrypted, XSTDEXC);
 
     for (i = 0; i < nHashLen; i++)
     {

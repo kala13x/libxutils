@@ -145,22 +145,22 @@ size_t xstrrand(char *pDst, size_t nSize, size_t nLength, xbool_t bUpper, xbool_
 
 xbool_t xstrncmp(const char *pStr, const char *pCmp, size_t nCmpLen)
 {
-    XASSERT_RET((pStr && pCmp && nCmpLen), XFALSE);
+    XCHECK_NL((pStr && pCmp && nCmpLen), XFALSE);
     int nDifferent = strncmp(pStr, pCmp, nCmpLen);
     return nDifferent ? XFALSE : XTRUE;
 }
 
 xbool_t xstrncmpn(const char *pStr, size_t nStrLen, const char *pCmp, size_t nCmpLen)
 {
-    XASSERT_RET((pStr && pCmp && nStrLen), XFALSE);
-    XASSERT_RET((nStrLen == nCmpLen), XFALSE);
+    XCHECK_NL((pStr && pCmp && nStrLen), XFALSE);
+    XCHECK_NL((nStrLen == nCmpLen), XFALSE);
     int nDiff = strncmp(pStr, pCmp, nCmpLen);
     return nDiff ? XFALSE : XTRUE;
 }
 
 xbool_t xstrncasecmp(const char *pStr, const char *pCmp, size_t nCmpLen)
 {
-    XASSERT_RET((pStr && pCmp && nCmpLen), XFALSE);
+    XCHECK_NL((pStr && pCmp && nCmpLen), XFALSE);
 #ifdef _WIN32
     int nDifferent = _strnicmp(pStr, pCmp, nCmpLen);
 #else
@@ -171,13 +171,13 @@ xbool_t xstrncasecmp(const char *pStr, const char *pCmp, size_t nCmpLen)
 
 xbool_t xstrcmp(const char *pStr, const char *pCmp)
 {
-    XASSERT_RET(((pStr != NULL) && (pCmp != NULL)), XFALSE);
+    XCHECK_NL(((pStr != NULL) && (pCmp != NULL)), XFALSE);
     return strcmp(pStr, pCmp) ? XFALSE : XTRUE;
 }
 
 xbool_t xstrnmatch(const char *pStr, size_t nLength, const char *pPattern, size_t nPatternLength)
 {
-    XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
+    XCHECK_NL(((pStr != NULL) && (pPattern != NULL)), XFALSE);
     if (!nPatternLength) return !nLength ? XTRUE : XFALSE;
 
     if (pPattern[0] == '*')
@@ -219,7 +219,7 @@ xbool_t xstrnmatch(const char *pStr, size_t nLength, const char *pPattern, size_
 
 xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern)
 {
-    XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
+    XCHECK_NL(((pStr != NULL) && (pPattern != NULL)), XFALSE);
     if (!nLength) return !xstrused(pPattern) ? XTRUE : XFALSE;
     size_t nPatternLength = strlen(pPattern);
     return xstrnmatch(pStr, nLength, pPattern, nPatternLength);
@@ -227,7 +227,7 @@ xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern)
 
 xbool_t xstrmatchm(const char *pStr, size_t nLength, const char *pPattern, const char *pDelimiter)
 {
-    XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
+    XCHECK_NL(((pStr != NULL) && (pPattern != NULL)), XFALSE);
     if (!nLength) return !xstrused(pPattern) ? XTRUE : XFALSE;
 
     const char *pDlmt = pDelimiter == NULL ? ";" : pDelimiter;
@@ -255,7 +255,7 @@ xbool_t xstrmatchm(const char *pStr, size_t nLength, const char *pPattern, const
 
 xbool_t xstrregex(const char *pStr, size_t nLength, const char *pPattern)
 {
-    XASSERT_RET(((pStr != NULL) && (pPattern != NULL)), XFALSE);
+    XCHECK_NL(((pStr != NULL) && (pPattern != NULL)), XFALSE);
     xarray_t *pTokens = xstrsplitd(pPattern, "*");
     size_t nUsed = XArray_Used(pTokens);
 
@@ -958,7 +958,7 @@ char *xstrrep(const char *pOrig, const char *pRep, const char *pWith)
     size_t nSpaceAvail = ((nWithLen - nRepLen) * nCount) + nOrigLen + 1;
 
     char *pResult = (char*)malloc(nSpaceAvail);
-    XASSERT(pResult, NULL);
+    XCHECK(pResult, NULL);
     char *pOffset = pResult;
 
     while (nCount--)
@@ -985,7 +985,7 @@ char *xstrrep(const char *pOrig, const char *pRep, const char *pWith)
 
 int xstrnrep(char *pDst, size_t nSize, const char *pOrig, const char *pRep, const char *pWith)
 {
-    XASSERT(pDst, XSTDINV);
+    XCHECK(pDst, XSTDINV);
     char *pOffset = pDst;
 
     size_t nOrigLen = strlen(pOrig);

@@ -94,7 +94,7 @@ static void XPacket_WriteU32LE(uint8_t *pData, uint32_t nValue)
 
 void XPacket_Clear(xpacket_t *pPacket)
 {
-    XASSERT_VOID_RET(pPacket);
+    XCHECK_VOID_NL(pPacket);
 
     if (pPacket->callback != NULL)
     {
@@ -114,7 +114,7 @@ void XPacket_Clear(xpacket_t *pPacket)
 
 void XPacket_Free(xpacket_t **pPacket)
 {
-    XASSERT_VOID_RET((pPacket && *pPacket));
+    XCHECK_VOID_NL((pPacket && *pPacket));
     xpacket_t *pMDTPPacket = *pPacket;
 
     XPacket_Clear(pMDTPPacket);
@@ -161,7 +161,7 @@ void XPacket_ParseHeader(xpacket_header_t *pHeader, xjson_obj_t *pHeaderObj)
 
 xpacket_status_t XPacket_UpdateHeader(xpacket_t *pPacket)
 {
-    XASSERT(pPacket, XPACKET_INVALID_ARGS);
+    XCHECK(pPacket, XPACKET_INVALID_ARGS);
     xpacket_header_t *pHeader = &pPacket->header;
 
     if (pPacket->pHeaderObj == NULL)
@@ -246,7 +246,7 @@ xpacket_status_t XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize
     pPacket->callback = NULL;
 
     pPacket->pHeaderObj = XJSON_NewObject(NULL, NULL, 1);
-    XASSERT(pPacket->pHeaderObj, XPACKET_ERR_ALLOC);
+    XCHECK(pPacket->pHeaderObj, XPACKET_ERR_ALLOC);
 
     return XPACKET_ERR_NONE;
 }
@@ -254,10 +254,10 @@ xpacket_status_t XPacket_Init(xpacket_t *pPacket, uint8_t *pData, uint32_t nSize
 xpacket_t *XPacket_New(uint8_t *pData, uint32_t nSize)
 {
     xpacket_t *pPacket = (xpacket_t*)malloc(sizeof(xpacket_t));
-    XASSERT(pPacket, NULL);
+    XCHECK(pPacket, NULL);
 
     xpacket_status_t nStatus = XPacket_Init(pPacket, pData, nSize);
-    XASSERT_CALL((nStatus != XPACKET_ERR_NONE), free, pPacket, NULL);
+    XCHECK_CALL((nStatus != XPACKET_ERR_NONE), free, pPacket, NULL);
 
     pPacket->nAllocated = 1;
     return pPacket;
@@ -265,9 +265,9 @@ xpacket_t *XPacket_New(uint8_t *pData, uint32_t nSize)
 
 xpacket_status_t XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, size_t nHdrLen, uint8_t *pData, size_t nSize)
 {
-    XASSERT((pBuffer != NULL), XPACKET_INVALID_ARGS);
-    XASSERT((pHeader != NULL ), XPACKET_INVALID_ARGS);
-    XASSERT((nHdrLen > 0), XPACKET_INVALID_ARGS);
+    XCHECK((pBuffer != NULL), XPACKET_INVALID_ARGS);
+    XCHECK((pHeader != NULL ), XPACKET_INVALID_ARGS);
+    XCHECK((nHdrLen > 0), XPACKET_INVALID_ARGS);
 
     uint8_t sInfoBytes[XPACKET_INFO_BYTES];
     XPacket_WriteU32LE(sInfoBytes, nHdrLen);
@@ -286,7 +286,7 @@ xpacket_status_t XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, si
 xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
 {
     xpacket_status_t nStatus = XPacket_UpdateHeader(pPacket);
-    XASSERT((nStatus != XPACKET_ERR_NONE), NULL);
+    XCHECK((nStatus != XPACKET_ERR_NONE), NULL);
 
     xpacket_header_t *pHeader = &pPacket->header;
     xjson_writer_t jsonWriter;
@@ -304,7 +304,7 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
             pHeader->nPayloadSize
         );
 
-        XASSERT((nStatus == XPACKET_ERR_NONE), NULL);
+        XCHECK((nStatus == XPACKET_ERR_NONE), NULL);
         pPacket->nHeaderLength = (uint32_t)jsonWriter.nLength;
         XPacket_ParseHeader(&pPacket->header, pPacket->pHeaderObj);
     }
@@ -315,9 +315,9 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
 
 xpacket_status_t XPacket_Parse(xpacket_t *pPacket, const uint8_t *pData, size_t nSize)
 {
-    XASSERT((pPacket != NULL), XPACKET_INVALID_ARGS);
-    XASSERT((pData != NULL), XPACKET_INVALID_ARGS);
-    XASSERT((nSize > 0), XPACKET_INVALID_ARGS);
+    XCHECK((pPacket != NULL), XPACKET_INVALID_ARGS);
+    XCHECK((pData != NULL), XPACKET_INVALID_ARGS);
+    XCHECK((nSize > 0), XPACKET_INVALID_ARGS);
     xpacket_header_t *pHdr = &pPacket->header;
 
     if (nSize < XPACKET_INFO_BYTES)

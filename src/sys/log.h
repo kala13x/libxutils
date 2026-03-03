@@ -153,7 +153,7 @@ typedef enum
 #define xlog_path(path) XLog_PathSet(path)
 #define xlog_name(name) XLog_NameSet(name)
 
-#define XLOG_ASSERT(condition, value, ...)  \
+#define XLOG_CHECK(condition, value, ...)   \
     do {                                    \
         if (!condition) {                   \
             if (__VA_ARGS__)                \

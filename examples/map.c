@@ -48,7 +48,7 @@ static int map_put_dup(xmap_t *pMap, const char *pKey, const char *pVal)
 
 static void print_used(xmap_t *pMap, const char *pMsg)
 {
-	printf("%s (used=%d, table=%zu)\n", pMsg, XMap_UsedSize(pMap), pMap->nTableSize);
+	printf("%s (used=%d, table=%u)\n", pMsg, XMap_UsedSize(pMap), pMap->nTableSize);
 }
 
 int main(void)

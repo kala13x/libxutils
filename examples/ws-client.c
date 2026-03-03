@@ -35,30 +35,30 @@ void signal_callback(int sig)
     g_bFinish = XTRUE;
 }
 
-int print_status(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int print_status(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
+    int nFD = pSession ? (int)pSession->sock.nFD : XSTDERR;
     const char *pStr = XAPI_GetStatus(pCtx);
 
     xlogn("%s: fd(%d)", pStr, nFD);
     return XAPI_CONTINUE;
 }
 
-int print_error(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int print_error(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    int nFD = pData ? (int)pData->sock.nFD : XSTDERR;
+    int nFD = pSession ? (int)pSession->sock.nFD : XSTDERR;
     const char *pStr = XAPI_GetStatus(pCtx);
 
     xloge("%s: fd(%d), errno(%d)", pStr, nFD, errno);
     return XAPI_CONTINUE;
 }
 
-int handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int handshake_request(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
+    xhttp_t *pHandle = (xhttp_t*)pSession->pPacket;
 
     xlogn("Sending handhshake request: fd(%d), uri(%s), buff(%zu)",
-        (int)pData->sock.nFD, pHandle->sUri, pHandle->rawData.nUsed);
+        (int)pSession->sock.nFD, pHandle->sUri, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
     if (pHeader != NULL)
@@ -70,12 +70,12 @@ int handshake_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_CONTINUE;
 }
 
-int handshake_response(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int handshake_response(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    xhttp_t *pHandle = (xhttp_t*)pData->pPacket;
+    xhttp_t *pHandle = (xhttp_t*)pSession->pPacket;
 
     xlogn("Received handhshake response: fd(%d), buff(%zu)",
-        (int)pData->sock.nFD, pHandle->rawData.nUsed);
+        (int)pSession->sock.nFD, pHandle->rawData.nUsed);
 
     char *pHeader = XHTTP_GetHeaderRaw(pHandle);
     if (pHeader != NULL)
@@ -87,7 +87,7 @@ int handshake_response(xapi_ctx_t *pCtx, xapi_data_t *pData)
     return XAPI_CONTINUE;
 }
 
-int send_pong(xapi_data_t *pData)
+int send_pong(xapi_session_t *pSession)
 {
     xws_status_t status;
     xws_frame_t frame;
@@ -102,28 +102,28 @@ int send_pong(xapi_data_t *pData)
     }
 
     xlogn("Sending PONG: fd(%d), buff(%zu)",
-        (int)pData->sock.nFD, frame.buffer.nUsed);
+        (int)pSession->sock.nFD, frame.buffer.nUsed);
 
-    XByteBuffer_AddBuff(&pData->txBuffer, &frame.buffer);
+    XByteBuffer_AddBuff(&pSession->txBuffer, &frame.buffer);
     XWebFrame_Clear(&frame);
 
-    return XAPI_EnableEvent(pData, XPOLLOUT);
+    return XAPI_EnableEvent(pSession, XPOLLOUT);
 }
 
-int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int handle_frame(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    xws_frame_t *pFrame = (xws_frame_t*)pData->pPacket;
-    session_data_t *pSession = (session_data_t*)pData->pSessionData;
+    xws_frame_t *pFrame = (xws_frame_t*)pSession->pPacket;
+    session_data_t *pSessionData = (session_data_t*)pSession->pSessionData;
 
     xlogn("Received WS frame: fd(%d), type(%s), fin(%s), hdr(%zu), pl(%zu), buff(%zu)",
-        (int)pData->sock.nFD, XWS_FrameTypeStr(pFrame->eType), pFrame->bFin?"true":"false",
+        (int)pSession->sock.nFD, XWS_FrameTypeStr(pFrame->eType), pFrame->bFin?"true":"false",
         pFrame->nHeaderSize, pFrame->nPayloadLength, pFrame->buffer.nUsed);
 
     if (pFrame->eType == XWS_PING)
     {
-        pSession->nRxCount++;
-        pSession->nTxCount++;
-        return send_pong(pData);
+        pSessionData->nRxCount++;
+        pSessionData->nTxCount++;
+        return send_pong(pSession);
     }
 
     /* Received close request, we should destroy this session */
@@ -133,13 +133,13 @@ int handle_frame(xapi_ctx_t *pCtx, xapi_data_t *pData)
     if (pPayload && pFrame->eType == XWS_TEXT)
         xlogn("WS frame payload: %s", pPayload);
 
-    pSession->nRxCount++;
-    return XAPI_EnableEvent(pData, XPOLLOUT);
+    pSessionData->nRxCount++;
+    return XAPI_EnableEvent(pSession, XPOLLOUT);
 }
 
-int send_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int send_request(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    session_data_t *pSession = (session_data_t*)pData->pSessionData;
+    session_data_t *pSessionData = (session_data_t*)pSession->pSessionData;
     xws_status_t status;
     xws_frame_t frame;
 
@@ -159,62 +159,62 @@ int send_request(xapi_ctx_t *pCtx, xapi_data_t *pData)
     }
 
     xlogn("Sending message: fd(%d), buff(%zu)",
-        (int)pData->sock.nFD, frame.buffer.nUsed);
+        (int)pSession->sock.nFD, frame.buffer.nUsed);
     xlogn("Message payload: %s", sPayload);
 
-    XByteBuffer_AddBuff(&pData->txBuffer, &frame.buffer);
+    XByteBuffer_AddBuff(&pSession->txBuffer, &frame.buffer);
     XWebFrame_Clear(&frame);
 
-    pSession->nTxCount++;
-    return XAPI_EnableEvent(pData, XPOLLOUT);
+    pSessionData->nTxCount++;
+    return XAPI_EnableEvent(pSession, XPOLLOUT);
 }
 
-int init_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int init_session(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
     xlogn("Client connected to server: fd(%d) %s:%u",
-        (int)pData->sock.nFD, pData->sAddr, pData->nPort);
+        (int)pSession->sock.nFD, pSession->sAddr, pSession->nPort);
 
-    session_data_t *pSession = (session_data_t*)pData->pSessionData;
-    pSession->nRxCount = 0;
-    pSession->nTxCount = 0;
+    session_data_t *pSessionData = (session_data_t*)pSession->pSessionData;
+    pSessionData->nRxCount = 0;
+    pSessionData->nTxCount = 0;
 
-    return XAPI_SetEvents(pData, XPOLLIO);
+    return XAPI_SetEvents(pSession, XPOLLIO);
 }
 
-int destroy_session(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int destroy_session(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
-    session_data_t *pSession = (session_data_t*)pData->pSessionData;
-    xlogn("Connection closed: fd(%d)", (int)pData->sock.nFD);
+    session_data_t *pSessionData = (session_data_t*)pSession->pSessionData;
+    xlogn("Connection closed: fd(%d)", (int)pSession->sock.nFD);
 
     xlogi("Frame statistics: rx(%d), tx(%d)",
-        pSession->nRxCount, pSession->nTxCount);
+        pSessionData->nRxCount, pSessionData->nTxCount);
 
     g_bFinish = XTRUE;
     return XAPI_DISCONNECT;
 }
 
-int service_callback(xapi_ctx_t *pCtx, xapi_data_t *pData)
+int service_callback(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
     switch (pCtx->eCbType)
     {
         case XAPI_CB_HANDSHAKE_REQUEST:
-            return handshake_request(pCtx, pData);
+            return handshake_request(pCtx, pSession);
         case XAPI_CB_HANDSHAKE_RESPONSE:
-            return handshake_response(pCtx, pData);
+            return handshake_response(pCtx, pSession);
         case XAPI_CB_CONNECTED:
-            return init_session(pCtx, pData);
+            return init_session(pCtx, pSession);
         case XAPI_CB_CLOSED:
-            return destroy_session(pCtx, pData);
+            return destroy_session(pCtx, pSession);
         case XAPI_CB_READ:
-            return handle_frame(pCtx, pData);
+            return handle_frame(pCtx, pSession);
         case XAPI_CB_WRITE:
-            return send_request(pCtx, pData);
+            return send_request(pCtx, pSession);
         case XAPI_CB_ERROR:
-            return print_error(pCtx, pData);
+            return print_error(pCtx, pSession);
         case XAPI_CB_STATUS:
-            return print_status(pCtx, pData);
+            return print_status(pCtx, pSession);
         case XAPI_CB_COMPLETE:
-            xlogn("TX complete: fd(%d)", (int)pData->sock.nFD);
+            xlogn("TX complete: fd(%d)", (int)pSession->sock.nFD);
             break;
         case XAPI_CB_INTERRUPT:
             if (g_bFinish) return XAPI_DISCONNECT;

@@ -152,10 +152,10 @@ static int XHost_InitContext(xhost_ctx_t *pCtx, xbool_t bReset)
         pCtx->sLine[0] = XSTR_NUL;
     }
 
-    XASSERT((XFile_Open(&pCtx->file, XHOST_FILE_PATH, "r", NULL) >= 0),
+    XCHECK((XFile_Open(&pCtx->file, XHOST_FILE_PATH, "r", NULL) >= 0),
         xthrowe("Failed to open hosts file"));
 
-    XASSERT_CALL((XString_Init(&pCtx->hosts, XSTDNON, XFALSE) >= 0),
+    XCHECK_CALL((XString_Init(&pCtx->hosts, XSTDNON, XFALSE) >= 0),
         XFile_Close, &pCtx->file, xthrowe("Failed alloc hosts file buffer"));
 
     return XSTDOK;
@@ -172,7 +172,7 @@ static int XHost_RemoveHeader()
     xhost_ctx_t ctx;
     uint8_t nHeaderSkipped = 0;
 
-    XASSERT((XHost_InitContext(&ctx, XTRUE) > 0),
+    XCHECK((XHost_InitContext(&ctx, XTRUE) > 0),
         xthrowe("Failed to init context"));
 
     while (XFile_GetLine(&ctx.file, ctx.sLine, sizeof(ctx.sLine)) > 0)
@@ -194,14 +194,14 @@ static int XHost_RemoveHeader()
             continue;
         }
 
-        XASSERT((XString_Append(&ctx.hosts, "%s", ctx.sLine) >= 0),
+        XCHECK((XString_Append(&ctx.hosts, "%s", ctx.sLine) >= 0),
             xthrowe("Failed to add line to hosts buffer"));
     }
 
-    XASSERT_CALL((XFile_Reopen(&ctx.file, XHOST_FILE_PATH, "cwt", NULL) >= 0),
+    XCHECK_CALL((XFile_Reopen(&ctx.file, XHOST_FILE_PATH, "cwt", NULL) >= 0),
         XHost_ClearContext, &ctx, xthrowe("Failed to open hosts file for writing"));
 
-    XASSERT_CALL((XFile_Write(&ctx.file, ctx.hosts.pData, ctx.hosts.nLength) >= 0),
+    XCHECK_CALL((XFile_Write(&ctx.file, ctx.hosts.pData, ctx.hosts.nLength) >= 0),
         XHost_ClearContext, &ctx, xthrowe("Failed to write hosts file"));
 
     XHost_ClearContext(&ctx);
@@ -216,7 +216,7 @@ static int XHost_WriteHeader(xhost_ctx_t *pCtx)
     xbyte_buffer_t buffer;
     XByteBuffer_Init(&buffer, XSTDNON, XFALSE);
 
-    XASSERT((XPath_LoadBuffer(XHOST_FILE_PATH, &buffer) > 0),
+    XCHECK((XPath_LoadBuffer(XHOST_FILE_PATH, &buffer) > 0),
         xthrowe("Failed to load hosts file for header analysis"));
 
     char sHeader[XSTR_MIN];
@@ -231,14 +231,14 @@ static int XHost_WriteHeader(xhost_ctx_t *pCtx)
         pCtx->nTabSize);
 
     xfile_t file;
-    XASSERT_CALL((XFile_Open(&file, XHOST_FILE_PATH, "cwt", NULL) >= 0),
+    XCHECK_CALL((XFile_Open(&file, XHOST_FILE_PATH, "cwt", NULL) >= 0),
         XByteBuffer_Clear, &buffer, xthrowe("Failed to open hosts file for writing"));
 
-    XASSERT_CALL2((XFile_Write(&file, sHeader, nWritten) >= 0),
+    XCHECK_CALL2((XFile_Write(&file, sHeader, nWritten) >= 0),
         XFile_Close, &file, XByteBuffer_Clear, &buffer,
         xthrowe("Failed to write hosts header"));
 
-    XASSERT_CALL2((XFile_Write(&file, buffer.pData, buffer.nUsed) >= 0),
+    XCHECK_CALL2((XFile_Write(&file, buffer.pData, buffer.nUsed) >= 0),
         XFile_Close, &file, XByteBuffer_Clear, &buffer,
         xthrowe("Failed to write hosts data"));
 
@@ -399,7 +399,7 @@ static xbool_t XHost_SearchEntry(xhost_ctx_t *pCtx)
 static int XHost_InsertEntry(xhost_ctx_t *pCtx)
 {
     if (!xstrused(pCtx->sHost) || !xstrused(pCtx->sAddr)) return XSTDNON;
-    XASSERT((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
+    XCHECK((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
 
     xbool_t bFound = XFALSE;
     size_t nLineNumber = 0;
@@ -408,14 +408,14 @@ static int XHost_InsertEntry(xhost_ctx_t *pCtx)
     {
         if (pCtx->nLineNumber == ++nLineNumber)
         {
-            XASSERT((XString_Append(&pCtx->hosts, "%s %s\n",
+            XCHECK((XString_Append(&pCtx->hosts, "%s %s\n",
                 pCtx->sAddr, pCtx->sHost) >= 0),
                 xthrowe("Failed to add new line to hosts buffer"));
 
             bFound = XTRUE;
         }
 
-        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+        XCHECK((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
             xthrowe("Failed to add line to hosts buffer"));
     }
 
@@ -423,7 +423,7 @@ static int XHost_InsertEntry(xhost_ctx_t *pCtx)
 
     if (bFound)
     {
-        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
+        XCHECK((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Inserted new entry: %s %s", pCtx->sAddr, pCtx->sHost);
     }
 
@@ -436,7 +436,7 @@ static int XHost_ParseHeader(xhost_ctx_t *pCtx)
     int nStatus = XSTDNON;
 
     xhost_ctx_t ctx;
-    XASSERT((XHost_InitContext(&ctx, XFALSE) > 0),
+    XCHECK((XHost_InitContext(&ctx, XFALSE) > 0),
         xthrowe("Failed to init context"));
 
     while (XFile_GetLine(&ctx.file, ctx.sLine, sizeof(ctx.sLine)) > 0)
@@ -471,7 +471,7 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
         {
             if (pCtx->nLineNumber == ++nLineNumber)
             {
-                XASSERT((XString_Append(&pCtx->hosts, "\n") >= 0),
+                XCHECK((XString_Append(&pCtx->hosts, "\n") >= 0),
                     xthrowe("Failed to add line to hosts buffer"));
 
                 bAddedLine = XTRUE;
@@ -484,7 +484,7 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
             break;
         }
 
-        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+        XCHECK((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
             xthrowe("Failed to add existing line to hosts buffer"));
     }
 
@@ -492,7 +492,7 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
 
     if (bAddedLine)
     {
-        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
+        XCHECK((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Added newline at: %d", pCtx->nLineNumber);
         return XSTDNON;
     }
@@ -513,11 +513,11 @@ static int XHost_AddEntry(xhost_ctx_t *pCtx, xbool_t bNewLine)
             return XSTDERR;
         }
 
-        XASSERT((XString_Append(&pCtx->hosts, "%s %s\n",
+        XCHECK((XString_Append(&pCtx->hosts, "%s %s\n",
             pCtx->sAddr, pCtx->sHost) >= 0),
             xthrowe("Failed to append new host entry"));
 
-        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
+        XCHECK((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Added new entry: %s %s", pCtx->sAddr, pCtx->sHost);
     }
 
@@ -542,14 +542,14 @@ static int XHost_RemoveEntry(xhost_ctx_t *pCtx, xbool_t bComment)
 
                 if (pCtx->sLine[nPosit] && pCtx->sLine[nPosit] == '#')
                 {
-                    XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+                    XCHECK((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
                         xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
 
                     nCount++;
                     continue;
                 }
 
-                XASSERT((XString_Append(&pCtx->hosts, "#%s", pCtx->sLine) >= 0),
+                XCHECK((XString_Append(&pCtx->hosts, "#%s", pCtx->sLine) >= 0),
                     xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
             }
 
@@ -557,7 +557,7 @@ static int XHost_RemoveEntry(xhost_ctx_t *pCtx, xbool_t bComment)
             continue;
         }
 
-        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+        XCHECK((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
             xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
     }
 
@@ -565,7 +565,7 @@ static int XHost_RemoveEntry(xhost_ctx_t *pCtx, xbool_t bComment)
 
     if (nCount)
     {
-        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
+        XCHECK((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("%s entres: %d", bComment ? "Commented" : "Removed", nCount);
     }
 
@@ -610,7 +610,7 @@ static int XHost_UncommentEntry(xhost_ctx_t *pCtx)
         }
 
         if (bComment) pCtx->sLine[nPosit] = '#';
-        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+        XCHECK((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
             xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
     }
 
@@ -618,7 +618,7 @@ static int XHost_UncommentEntry(xhost_ctx_t *pCtx)
 
     if (nCount)
     {
-        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
+        XCHECK((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Uncommented host entres: %d", nCount);
     }
 
@@ -628,7 +628,7 @@ static int XHost_UncommentEntry(xhost_ctx_t *pCtx)
 static int XHost_LintEntries(xhost_ctx_t *pCtx)
 {
     XHost_ClearContext(pCtx);
-    XASSERT((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
+    XCHECK((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
 
     int nCount = 0;
     while (XFile_GetLine(&pCtx->file, pCtx->sLine, sizeof(pCtx->sLine)) > 0)
@@ -641,23 +641,23 @@ static int XHost_LintEntries(xhost_ctx_t *pCtx)
             size_t nAddrLen = XSTD_MIN(strlen(entry.sAddr), XHOST_ADDR_LEN_MAX);
             size_t nPadding = XHOST_ADDR_LEN_MAX - nAddrLen;
 
-            XASSERT((XString_Append(&pCtx->hosts, "%s", entry.sAddr) >= 0),
+            XCHECK((XString_Append(&pCtx->hosts, "%s", entry.sAddr) >= 0),
                 xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
 
             for (size_t i = 0; i < nPadding + pCtx->nTabSize; i++)
             {
-                XASSERT((XString_Add(&pCtx->hosts, XSTR_SPACE, 1) >= 0),
+                XCHECK((XString_Add(&pCtx->hosts, XSTR_SPACE, 1) >= 0),
                     xthrow("Failed to add spaces to the buffer (%s)", XSTRERR));
             }
 
-            XASSERT((XString_Append(&pCtx->hosts, "%s", entry.sHost) >= 0),
+            XCHECK((XString_Append(&pCtx->hosts, "%s", entry.sHost) >= 0),
                 xthrow("Failed to add host line to the buffer (%s)", XSTRERR));
 
             if (xstrused(entry.sComment))
-                XASSERT((XString_Append(&pCtx->hosts, " # %s", entry.sComment) >= 0),
+                XCHECK((XString_Append(&pCtx->hosts, " # %s", entry.sComment) >= 0),
                     xthrow("Failed to add comment line to hosts buffer (%s)", XSTRERR));
 
-            XASSERT((XString_Add(&pCtx->hosts, XSTR_NEW_LINE, 1) >= 0),
+            XCHECK((XString_Add(&pCtx->hosts, XSTR_NEW_LINE, 1) >= 0),
                 xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
 
             nCount++;
@@ -665,14 +665,14 @@ static int XHost_LintEntries(xhost_ctx_t *pCtx)
         }
         else if (xstrused(entry.sComment))
         {
-            XASSERT((XString_Append(&pCtx->hosts, "# %s\n", entry.sComment) >= 0),
+            XCHECK((XString_Append(&pCtx->hosts, "# %s\n", entry.sComment) >= 0),
                 xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
 
             nCount++;
             continue;
         }
 
-        XASSERT((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
+        XCHECK((XString_Append(&pCtx->hosts, "%s", pCtx->sLine) >= 0),
             xthrow("Failed to add line to hosts buffer (%s)", XSTRERR));
     }
 
@@ -680,7 +680,7 @@ static int XHost_LintEntries(xhost_ctx_t *pCtx)
 
     if (pCtx->hosts.nLength && pCtx->hosts.pData)
     {
-        XASSERT((XHost_Write(pCtx) >= 0), XSTDERR);
+        XCHECK((XHost_Write(pCtx) >= 0), XSTDERR);
         xlogd("Linted host entries: %d", nCount);
     }
 
@@ -700,7 +700,7 @@ static void XHost_AddLineNumber(xstring_t *pString, int nLine)
 static int XHost_DisplayHosts(xhost_ctx_t *pCtx, xbool_t bHideLines)
 {
     XHost_ClearContext(pCtx);
-    XASSERT((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
+    XCHECK((XHost_InitContext(pCtx, XFALSE) > 0), xthrowe("Failed to init context"));
 
     size_t nLineNumber = 0;
     int nPosit = 0;
@@ -783,7 +783,7 @@ int main(int argc, char *argv[])
     ctx.bWritten = XFALSE;
     int nStatus = 0;
 
-    XASSERT((XHost_InitContext(&ctx, XTRUE) > 0),
+    XCHECK((XHost_InitContext(&ctx, XTRUE) > 0),
         xthrowe("Failed to init context"));
 
     xstrncpy(ctx.sAddr, sizeof(ctx.sAddr), args.sAddress);

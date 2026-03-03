@@ -42,7 +42,7 @@ static const uint32_t g_radians[] =
 
 XSTATUS XMD5_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
-    XASSERT((nSize >= XMD5_DIGEST_SIZE &&
+    XCHECK((nSize >= XMD5_DIGEST_SIZE &&
         nLength && pOutput && pInput), XSTDINV);
 
     uint32_t hash0 = 0x67452301;
@@ -56,7 +56,7 @@ XSTATUS XMD5_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size
 
     nNewLen /= 8;
     uint8_t *pMessage = (uint8_t*)calloc(nNewLen + 64, 1);
-    XASSERT(pMessage, XSTDERR);
+    XCHECK(pMessage, XSTDERR);
 
     memcpy(pMessage, pInput, nLength);
     pMessage[nLength] = 128;
@@ -126,7 +126,7 @@ char* XMD5_Sum(const uint8_t *pInput, size_t nLength)
 {
     size_t nHashSize = XMD5_LENGTH + 1;
     char *pOutput = (char*)malloc(nHashSize);
-    XASSERT(pOutput, NULL);
+    XCHECK(pOutput, NULL);
 
     uint8_t digest[XMD5_DIGEST_SIZE];
     XMD5_Compute(digest, sizeof(digest), pInput, nLength);
@@ -146,7 +146,7 @@ uint8_t* XMD5_Encrypt(const uint8_t *pInput, size_t nLength)
 {
     size_t nDigestSize = XMD5_DIGEST_SIZE + 1;
     uint8_t *pOutput = (uint8_t*)malloc(nDigestSize);
-    XASSERT(pOutput, NULL);
+    XCHECK(pOutput, NULL);
 
     XMD5_Compute(pOutput, nDigestSize, pInput, nLength);
     pOutput[XMD5_DIGEST_SIZE] = '\0';

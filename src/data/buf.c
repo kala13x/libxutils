@@ -117,7 +117,7 @@ int XByteBuffer_Init(xbyte_buffer_t *pBuffer, size_t nSize, int nFastAlloc)
 
 void XByteBuffer_Clear(xbyte_buffer_t *pBuffer)
 {
-    XASSERT_VOID(pBuffer);
+    XCHECK_VOID(pBuffer);
 
     if (pBuffer->pData != NULL &&
         pBuffer->nSize > 0)
@@ -131,7 +131,7 @@ void XByteBuffer_Clear(xbyte_buffer_t *pBuffer)
 
 void XByteBuffer_Free(xbyte_buffer_t **pBuffer)
 {
-    XASSERT_VOID_RET((pBuffer && *pBuffer));
+    XCHECK_VOID_NL((pBuffer && *pBuffer));
     xbyte_buffer_t *pByteBuff = *pBuffer;
 
     XByteBuffer_Clear(pByteBuff);
@@ -144,7 +144,7 @@ void XByteBuffer_Free(xbyte_buffer_t **pBuffer)
 
 void XByteBuffer_Reset(xbyte_buffer_t *pBuffer)
 {
-    XASSERT_VOID(pBuffer);
+    XCHECK_VOID(pBuffer);
     if (pBuffer->pData != NULL)
         pBuffer->pData[0] = '\0';
     else pBuffer->nSize = 0;
@@ -155,7 +155,7 @@ void XByteBuffer_Reset(xbyte_buffer_t *pBuffer)
 
 int XByteBuffer_SetData(xbyte_buffer_t *pBuffer, uint8_t *pData, size_t nSize)
 {
-    XASSERT(pBuffer, XSTDINV);
+    XCHECK(pBuffer, XSTDINV);
     pBuffer->nStatus = XSTDOK;
     pBuffer->nSize = XSTDNON;
     pBuffer->nUsed = nSize;
@@ -165,7 +165,7 @@ int XByteBuffer_SetData(xbyte_buffer_t *pBuffer, uint8_t *pData, size_t nSize)
 
 int XByteBuffer_Set(xbyte_buffer_t *pBuffer, xbyte_buffer_t *pSrc)
 {
-    XASSERT(pBuffer, XSTDINV);
+    XCHECK(pBuffer, XSTDINV);
     pBuffer->nStatus = XSTDOK;
     pBuffer->nSize = XSTDNON;
     pBuffer->nUsed = pSrc->nUsed;
@@ -175,7 +175,7 @@ int XByteBuffer_Set(xbyte_buffer_t *pBuffer, xbyte_buffer_t *pSrc)
 
 int XByteBuffer_OwnData(xbyte_buffer_t *pBuffer, uint8_t *pData, size_t nSize)
 {
-    XASSERT(pBuffer, XSTDINV);
+    XCHECK(pBuffer, XSTDINV);
     XByteBuffer_Clear(pBuffer);
     XByteBuffer_SetData(pBuffer, pData, nSize);
     pBuffer->nSize = nSize;
@@ -184,7 +184,7 @@ int XByteBuffer_OwnData(xbyte_buffer_t *pBuffer, uint8_t *pData, size_t nSize)
 
 int XByteBuffer_Own(xbyte_buffer_t *pBuffer, xbyte_buffer_t *pSrc)
 {
-    XASSERT((pBuffer && pSrc), XSTDINV);
+    XCHECK((pBuffer && pSrc), XSTDINV);
     XByteBuffer_Clear(pBuffer);
 
     XByteBuffer_Set(pBuffer, pSrc);

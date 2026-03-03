@@ -444,7 +444,7 @@ static xbool_t XPass_FindEntry(xpass_ctx_t *pCtx, const char *pName)
 static xbool_t XPass_GetName(xpass_ctx_t *pCtx)
 {
     printf("Enter unique name of the entry: ");
-    XASSERT((fgets(pCtx->sName, sizeof(pCtx->sName), stdin)), XFALSE);
+    XCHECK((fgets(pCtx->sName, sizeof(pCtx->sName), stdin)), XFALSE);
 
     size_t nLength = strlen(pCtx->sName);
     pCtx->sName[nLength - 1] = XSTR_NUL;
@@ -800,8 +800,8 @@ static xbool_t XPass_InitDatabase(xpass_ctx_t *pCtx)
         char sAnswer[XSTR_TINY];
         sAnswer[0] = XSTR_NUL;
 
-        XASSERT((fgets(sAnswer, sizeof(sAnswer), stdin)), XFALSE);
-        XASSERT((sAnswer[0] == 'Y' && sAnswer[0] == 'y'), XFALSE);
+        XCHECK((fgets(sAnswer, sizeof(sAnswer), stdin)), XFALSE);
+        XCHECK((sAnswer[0] == 'Y' && sAnswer[0] == 'y'), XFALSE);
     }
 
     xpath_t path;
@@ -868,8 +868,8 @@ static xbool_t XPass_InitConfigFile(xpass_ctx_t *pCtx)
         char sAnswer[XSTR_TINY];
         sAnswer[0] = XSTR_NUL;
 
-        XASSERT((fgets(sAnswer, sizeof(sAnswer), stdin)), XFALSE);
-        XASSERT((sAnswer[0] == 'Y' || sAnswer[0] == 'y'), XFALSE);
+        XCHECK((fgets(sAnswer, sizeof(sAnswer), stdin)), XFALSE);
+        XCHECK((sAnswer[0] == 'Y' || sAnswer[0] == 'y'), XFALSE);
     }
 
     xpath_t path;

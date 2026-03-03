@@ -16,7 +16,7 @@
 
 XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
 {
-    XASSERT((nSize >= XSHA256_DIGEST_SIZE &&
+    XCHECK((nSize >= XSHA256_DIGEST_SIZE &&
              nLength && nKeyLen && pOutput &&
              pData && pKey), XSTDINV);
 
@@ -98,7 +98,7 @@ char *XHMAC_SHA256_NEW(const uint8_t *pData, size_t nLength, const uint8_t *pKey
 
 XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
 {
-    XASSERT((nSize >= XMD5_LENGTH + 1 &&
+    XCHECK((nSize >= XMD5_LENGTH + 1 &&
              nLength && nKeyLen && pOutput &&
              pData && pKey),
             XSTDINV);
@@ -133,7 +133,7 @@ XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLen
     /* Perform inner MD5 */
     size_t nBufLen = sizeof(kIpad) + nLength;
     uint8_t *pPadBuf = (uint8_t *)malloc(nBufLen);
-    XASSERT(pPadBuf, XSTDERR);
+    XCHECK(pPadBuf, XSTDERR);
 
     memcpy(pPadBuf, kIpad, sizeof(kIpad));
     memcpy(&pPadBuf[sizeof(kIpad)], pData, nLength);
@@ -144,7 +144,7 @@ XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLen
     /* Perform outer MD5 */
     nBufLen = sizeof(kOpad) + sizeof(digest);
     pPadBuf = (uint8_t *)malloc(nBufLen);
-    XASSERT(pPadBuf, XSTDERR);
+    XCHECK(pPadBuf, XSTDERR);
 
     memcpy(pPadBuf, kOpad, sizeof(kOpad));
     memcpy(&pPadBuf[sizeof(kOpad)], digest, sizeof(digest));

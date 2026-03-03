@@ -179,7 +179,7 @@ static int XHTTP_Callback(xhttp_t *pHandle, xhttp_cbtype_t eType, const void *pD
 {
     if (pData == NULL || !nLength) return XSTDERR;
     else if (pHandle->callback == NULL) return XSTDUSR;
-    else if (!XHTTP_CHECK_FLAG(pHandle->nCbTypes, eType)) return XSTDUSR;
+    else if (!XHTTP_XCHECK_FLAG(pHandle->nCbTypes, eType)) return XSTDUSR;
 
     xhttp_ctx_t cbCtx;
     cbCtx.pData = pData;
@@ -192,7 +192,7 @@ static int XHTTP_Callback(xhttp_t *pHandle, xhttp_cbtype_t eType, const void *pD
 static xhttp_status_t XHTTP_StatusCb(xhttp_t *pHandle, xhttp_status_t eStatus)
 {
     xhttp_cbtype_t eType = eStatus < XHTTP_TERMINATED ? XHTTP_ERROR : XHTTP_STATUS;
-    if (XHTTP_CHECK_FLAG(pHandle->nCbTypes, eType) && pHandle->callback != NULL)
+    if (XHTTP_XCHECK_FLAG(pHandle->nCbTypes, eType) && pHandle->callback != NULL)
     {
         char sBuffer[XHTTP_OPTION_MAX];
         const char *pStr = XHTTP_GetStatusStr(eStatus);
@@ -277,7 +277,7 @@ int XHTTP_Init(xhttp_t *pHttp, xhttp_method_t eMethod, size_t nSize)
 
 size_t XHTTP_SetUnixAddr(xhttp_t *pHttp, const char *pUnixAddr)
 {
-    XASSERT_RET((pHttp && xstrused(pUnixAddr)), XSTDERR);
+    XCHECK_NL((pHttp && xstrused(pUnixAddr)), XSTDERR);
     return xstrncpy(pHttp->sUnixAddr, sizeof(pHttp->sUnixAddr), pUnixAddr);
 }
 
@@ -408,7 +408,7 @@ void XHTTP_Clear(xhttp_t *pHttp)
 
 void XHTTP_Free(xhttp_t **pHttp)
 {
-    XASSERT_VOID_RET((pHttp && *pHttp));
+    XCHECK_VOID_NL((pHttp && *pHttp));
     xhttp_t *pHandle = *pHttp;
 
     XHTTP_Clear(pHandle);
@@ -441,19 +441,19 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
                 return nStatus > 0 ? nStatus : XSTDERR;
             }
 
-            XASSERT(pHttp->nAllowUpdate, XSTDEXC);
+            XCHECK(pHttp->nAllowUpdate, XSTDEXC);
             free(pPair->pData);
 
             pPair->pData = xstrdup(sOption);
-            XASSERT(pPair->pData, XSTDERR);
+            XCHECK(pPair->pData, XSTDERR);
         }
         else
         {
             char *pValue = xstrdup(sOption);
-            XASSERT(pValue, XSTDERR);
+            XCHECK(pValue, XSTDERR);
 
             char *pKey = xstrdup(pHeader);
-            XASSERT_CALL(pKey, free, pValue, XSTDERR);
+            XCHECK_CALL(pKey, free, pValue, XSTDERR);
 
             nStatus = XMap_Put(&pHttp->headerMap, pKey, pValue);
             if (nStatus != XMAP_OK)
@@ -466,7 +466,7 @@ int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
     }
 
     nStatus = (int)pHttp->headerMap.nCount;
-    XASSERT_RET((nStatus > 0), XSTDERR);
+    XCHECK_NL((nStatus > 0), XSTDERR);
 
     pHttp->nComplete = XFALSE;
     return nStatus;
@@ -602,51 +602,51 @@ char* XHTTP_GetHeaderRaw(xhttp_t *pHttp)
 
 const uint8_t* XHTTP_GetBody(xhttp_t *pHttp)
 {
-    XASSERT_RET((pHttp && pHttp->nHeaderLength), NULL);
+    XCHECK_NL((pHttp && pHttp->nHeaderLength), NULL);
     xbyte_buffer_t *pBuffer = &pHttp->rawData;
 
-    XASSERT_RET((pBuffer->nUsed > pHttp->nHeaderLength), NULL);
+    XCHECK_NL((pBuffer->nUsed > pHttp->nHeaderLength), NULL);
     return &pBuffer->pData[pHttp->nHeaderLength];
 }
 
 size_t XHTTP_GetBodySize(xhttp_t *pHttp)
 {
-    XASSERT_RET((pHttp && pHttp->nHeaderLength), XSTDNON);
+    XCHECK_NL((pHttp && pHttp->nHeaderLength), XSTDNON);
     const xbyte_buffer_t *pBuffer = &pHttp->rawData;
 
-    XASSERT_RET((pBuffer->nUsed > pHttp->nHeaderLength), XSTDNON);
+    XCHECK_NL((pBuffer->nUsed > pHttp->nHeaderLength), XSTDNON);
     return pBuffer->nUsed - pHttp->nHeaderLength;
 }
 
 size_t XHTTP_GetExtraSize(xhttp_t *pHttp)
 {
-    XASSERT_RET((pHttp != NULL && pHttp->nHeaderLength), XSTDNON);
+    XCHECK_NL((pHttp != NULL && pHttp->nHeaderLength), XSTDNON);
     size_t nPayloadSize = XHTTP_GetBodySize(pHttp);
-    XASSERT_RET(nPayloadSize, XSTDNON);
+    XCHECK_NL(nPayloadSize, XSTDNON);
 
     const char *pCntType = XHTTP_GetHeader(pHttp, "Content-Type");
     const char *pCntLen = XHTTP_GetHeader(pHttp, "Content-Length");
-    XASSERT_RET((pCntType != NULL && pCntLen != NULL), nPayloadSize);
+    XCHECK_NL((pCntType != NULL && pCntLen != NULL), nPayloadSize);
 
-    XASSERT_RET((nPayloadSize > pHttp->nContentLength), XSTDNON);
+    XCHECK_NL((nPayloadSize > pHttp->nContentLength), XSTDNON);
     return nPayloadSize - pHttp->nContentLength;
 }
 
 const uint8_t* XHTTP_GetExtraData(xhttp_t *pHttp)
 {
     size_t nExtraSize = XHTTP_GetExtraSize(pHttp);
-    XASSERT_RET(nExtraSize, NULL);
+    XCHECK_NL(nExtraSize, NULL);
 
     size_t nPacketLen = pHttp->nHeaderLength + pHttp->nContentLength;
     const xbyte_buffer_t *pBuffer = &pHttp->rawData;
 
-    XASSERT_RET((pBuffer->nUsed > nPacketLen), NULL);
+    XCHECK_NL((pBuffer->nUsed > nPacketLen), NULL);
     return &pBuffer->pData[nPacketLen];
 }
 
 size_t XHTTP_GetPacketSize(xhttp_t *pHttp)
 {
-    XASSERT_RET((pHttp != NULL), XSTDNON);
+    XCHECK_NL((pHttp != NULL), XSTDNON);
     const xbyte_buffer_t *pBuffer = &pHttp->rawData;
     return pBuffer->nUsed - XHTTP_GetExtraSize(pHttp);
 }
@@ -1065,7 +1065,7 @@ xhttp_status_t XHTTP_Connect(xhttp_t *pHttp, xsock_t *pSock, xlink_t *pLink)
     int nStatus = XHTTP_SetAuthBasic(pHttp, pLink->sUser, pLink->sPass);
     if (nStatus < 0) return XHTTP_StatusCb(pHttp, XHTTP_EAUTH);
 
-    if (XHTTP_CHECK_FLAG(pHttp->nCbTypes, XHTTP_STATUS) && pHttp->callback != NULL)
+    if (XHTTP_XCHECK_FLAG(pHttp->nCbTypes, XHTTP_STATUS) && pHttp->callback != NULL)
     {
         char sBuffer[XHTTP_OPTION_MAX];
         xhttp_ctx_t cbCtx;

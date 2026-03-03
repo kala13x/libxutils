@@ -187,7 +187,7 @@ size_t XTime_ToHTTP(const xtime_t *pTime, char *pStr, size_t nSize)
 
 uint64_t XTime_ToU64(const xtime_t *pTime)
 {
-    XASSERT_RET(pTime, 0);
+    XCHECK_NL(pTime, 0);
     xtimeu_t xtime;
     xtime.time = *pTime;
     return xtime.uTime;
@@ -281,7 +281,7 @@ double XTime_Diff(const xtime_t *pSrc1, const xtime_t *pSrc2, xtime_diff_t eDiff
 
 void XTime_Copy(xtime_t *pDst, const xtime_t *pSrc)
 {
-    XASSERT_VOID_RET((pDst && pSrc));
+    XCHECK_VOID_NL((pDst && pSrc));
     *pDst = *pSrc;
 }
 

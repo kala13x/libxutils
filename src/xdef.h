@@ -127,10 +127,10 @@ typedef volatile xatomic_t  xvolatile_t;
 #define XLOCATION_LVL2(line)    XLOCATION_LVL1(line)
 #define __XLOCATION__           XLOCATION_LVL2(__LINE__)
 
-#if defined(_ASSERT_TIMED)
+#if defined(_XCHECK_TIMED)
 #include <time.h>
 #include <stdio.h>
-#define XTROW_LOCATION                          \
+#define XCHECK_THROW                            \
     do {                                        \
         char timeStr[32];                       \
         struct timespec ts;                     \
@@ -153,17 +153,17 @@ typedef volatile xatomic_t  xvolatile_t;
                 __FILE__,                       \
                 __FUNCTION__,                   \
                 __XLOCATION__);                 \
-    } while (XSTDNON)
-#elif defined(_ASSERT_XLOG)
+    } while (XFALSE)
+#elif defined(_XCHECK_LOG)
 #include "log.h"
-#define XTROW_LOCATION                          \
+#define XCHECK_THROW                            \
             xloge("Assert failed: "             \
                 "%s:%s():%s",                   \
                 __FILE__,                       \
                 __FUNCTION__,                   \
                 __XLOCATION__)
-#else
-#define XTROW_LOCATION                          \
+#elif !defined(_XCHECK_NOLOG)
+#define XCHECK_THROW                            \
             printf("%s<error>%s "               \
                 "Assert failed: "               \
                 "%s:%s():%s\n",                 \
@@ -171,71 +171,73 @@ typedef volatile xatomic_t  xvolatile_t;
                 __FILE__,                       \
                 __FUNCTION__,                   \
                 __XLOCATION__)
+#else
+#define XCHECK_THROW
 #endif
 
-#define XASSERT_RET(condition, value)           \
+#define XCHECK_NL(condition, value)             \
     if (!condition) return value
 
-#define XASSERT_LOG(condition, value)           \
+#define XCHECK(condition, value)                \
     do {                                        \
         if (!condition) {                       \
-            XTROW_LOCATION;                     \
+            XCHECK_THROW;                       \
             return value;                       \
         }                                       \
     }                                           \
-    while (XSTDNON)
+    while (XFALSE)
 
-#define XASSERT_VOID_RET(condition)             \
+#define XCHECK_VOID_NL(condition)               \
     if (!condition) return
 
-#define XASSERT_VOID_LOG(condition)             \
+#define XCHECK_VOID(condition)                  \
     do {                                        \
         if (!condition) {                       \
-            XTROW_LOCATION;                     \
+            XCHECK_THROW;                       \
             return;                             \
         }                                       \
     }                                           \
-    while (XSTDNON)
+    while (XFALSE)
 
-#define XASSERT_FREE_RET(condition, var, value) \
+#define XCHECK_FREE_NL(condition, var, value)   \
     do {                                        \
         if (!condition) {                       \
             free(var);                          \
             return value;                       \
         }                                       \
     }                                           \
-    while (XSTDNON)
+    while (XFALSE)
 
-#define XASSERT_FREE_LOG(condition, var, value) \
+#define XCHECK_FREE(condition, var, value)      \
     do {                                        \
         if (!condition) {                       \
-            XTROW_LOCATION;                     \
+            XCHECK_THROW;                       \
             free(var);                          \
             return value;                       \
         }                                       \
     }                                           \
-    while (XSTDNON)
+    while (XFALSE)
 
-#define XASSERT_CALL_RET(cnd, func, var, val)   \
+#define XCHECK_CALL_NL(cnd, func, var, val)     \
     do {                                        \
         if (!cnd) {                             \
             func(var);                          \
             return val;                         \
         }                                       \
     }                                           \
-    while (XSTDNON)
+    while (XFALSE)
 
-#define XASSERT_CALL_LOG(cnd, func, var, val)   \
+#define XCHECK_CALL(cnd, func, var, val)        \
     do {                                        \
         if (!cnd) {                             \
-            XTROW_LOCATION;                     \
+            XCHECK_THROW;                       \
             func(var);                          \
             return val;                         \
         }                                       \
     }                                           \
-    while (XSTDNON)
+    while (XFALSE)
 
-#define XASSERT_CALL_RET2(cnd, func, var, func2, var2, val) \
+#define XCHECK_CALL_NL2(cnd, func, var, func2, var2, val)   \
     do {                                                    \
         if (!cnd) {                                         \
             func(var);                                      \
@@ -243,20 +245,20 @@ typedef volatile xatomic_t  xvolatile_t;
             return val;                                     \
         }                                                   \
     }                                                       \
-    while (XSTDNON)
+    while (XFALSE)
 
-#define XASSERT_CALL_LOG2(cnd, func, var, func2, var2, val) \
+#define XCHECK_CALL2(cnd, func, var, func2, var2, val)      \
     do {                                                    \
         if (!cnd) {                                         \
-            XTROW_LOCATION;                                 \
+            XCHECK_THROW;                                   \
             func(var);                                      \
             func2(var2);                                    \
             return val;                                     \
         }                                                   \
     }                                                       \
-    while (XSTDNON)
+    while (XFALSE)
 
-#define XASSERT_CALL_RET3(cnd, func, var, func2, var2, func3, var3, val) \
+#define XCHECK_CALL_NL3(cnd, func, var, func2, var2, func3, var3, val)   \
     do {                                                                 \
         if (!cnd) {                                                      \
             func(var);                                                   \
@@ -265,35 +267,20 @@ typedef volatile xatomic_t  xvolatile_t;
             return val;                                                  \
         }                                                                \
     }                                                                    \
-    while (XSTDNON)
+    while (XFALSE)
 
-#define XASSERT_CALL_LOG3(cnd, func, var, func2, var2, func3, var3, val) \
+#define XCHECK_CALL3(cnd, func, var, func2, var2, func3, var3, val)      \
     do {                                                                 \
         if (!cnd) {                                                      \
-            XTROW_LOCATION;                                              \
+            XCHECK_THROW;                                                \
             func(var);                                                   \
             func2(var2);                                                 \
             func3(var3);                                                 \
             return val;                                                  \
         }                                                                \
     }                                                                    \
-    while (XSTDNON)
+    while (XFALSE)
 
-#ifdef _XUTILS_DEBUG
-# define XASSERT        XASSERT_LOG
-# define XASSERT_VOID   XASSERT_VOID_LOG
-# define XASSERT_FREE   XASSERT_FREE_LOG
-# define XASSERT_CALL   XASSERT_CALL_LOG
-# define XASSERT_CALL2  XASSERT_CALL_LOG2
-# define XASSERT_CALL3  XASSERT_CALL_LOG3
-#else
-# define XASSERT        XASSERT_RET
-# define XASSERT_VOID   XASSERT_VOID_RET
-# define XASSERT_FREE   XASSERT_FREE_RET
-# define XASSERT_CALL   XASSERT_CALL_RET
-# define XASSERT_CALL2  XASSERT_CALL_RET2
-# define XASSERT_CALL3  XASSERT_CALL_RET3
-#endif
 
 #ifdef _XUTILS_BACKTRACE_SIZE
 # define XUTILS_BACKTRACE_SIZE _XUTILS_BACKTRACE_SIZE
