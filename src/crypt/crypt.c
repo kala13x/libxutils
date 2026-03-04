@@ -351,7 +351,7 @@ static xbool_t XCrypt_NeedsIV(xcrypt_chipher_t eCipher)
 void XCrypt_ErrorCallback(xcrypt_ctx_t *pCtx, const char *pStr, ...)
 {
     if (pCtx->callback == NULL) return;
-    char sBuff[XSTR_MIN];
+    char sBuff[XSTR_MID];
 
     va_list args;
     va_start(args, pStr);

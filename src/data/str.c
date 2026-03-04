@@ -1067,7 +1067,7 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
 {
     if (!xstrused(pString) || !xstrused(pDlmt) || pTokens == NULL) return XSTDNON;
 
-    char sDelimiter[XSTR_MIN];
+    char sDelimiter[XSTR_MID];
     char sToken[XSTR_MAX];
 
     int nDlmtLen = 0;
@@ -1695,7 +1695,7 @@ xarray_t* XString_SplitStr(xstring_t *pString, const char *pDlmt)
 {
     if (pString == NULL || !pString->nLength) return NULL;
 
-    xstring_t *pToken = XString_New(XSTR_MIN, 0);
+    xstring_t *pToken = XString_New(XSTR_MID, 0);
     if (pToken == NULL) return NULL;
 
     xarray_t *pArray = XArray_NewPool(XSTDNON, 2, 0);
@@ -1713,7 +1713,7 @@ xarray_t* XString_SplitStr(xstring_t *pString, const char *pDlmt)
         XArray_AddData(pArray, pToken, 0);
         if (!nNext) break;
 
-        pToken = XString_New(XSTR_MIN, 0);
+        pToken = XString_New(XSTR_MID, 0);
         if (pToken == NULL)
         {
             XArray_Destroy(pArray);

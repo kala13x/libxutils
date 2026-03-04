@@ -209,7 +209,7 @@ int XByteBuffer_Add(xbyte_buffer_t *pBuffer, const uint8_t *pData, size_t nSize)
 int XByteBuffer_ReadStdin(xbyte_buffer_t *pBuffer)
 {
     if (pBuffer == NULL) return XSTDERR;
-    char sBuffer[XSTR_MID];
+    char sBuffer[XSTR_BIG];
     size_t nRead = 0;
 
     while ((nRead = fread(sBuffer, 1, sizeof(sBuffer), stdin)) > 0)

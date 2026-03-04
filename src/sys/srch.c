@@ -109,7 +109,7 @@ static int XSearch_ErrorCallback(xsearch_t *pSearch, const char *pStr, ...)
     if (pSearch == NULL) return XSTDERR;
     else if (pSearch->callback == NULL) return XSTDOK;
 
-    char sMessage[XSTR_MID];
+    char sMessage[XSTR_BIG];
     va_list args;
 
     va_start(args, pStr);
@@ -299,7 +299,7 @@ static XSTATUS XSearch_LoadData(xsearch_t *pSearch, xbyte_buffer_t *pBuffer, con
 
     if (pSearch->bReadStdin)
     {
-        XByteBuffer_Init(pBuffer, XSTR_MID, XFALSE);
+        XByteBuffer_Init(pBuffer, XSTR_BIG, XFALSE);
         XByteBuffer_ReadStdin(pBuffer);
     }
     else

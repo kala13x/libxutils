@@ -68,7 +68,7 @@ typedef enum
 typedef struct XCryptKey
 {
     xcrypt_chipher_t eCipher;
-    char sKey[XSTR_MIN];
+    char sKey[XSTR_MID];
     char sIV[XSTR_MICRO];
     size_t nLength;
 } xcrypt_key_t;

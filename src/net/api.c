@@ -386,7 +386,7 @@ XSTATUS XAPI_RespondHTTP(xapi_session_t *pSession, int nCode, xapi_status_t eSta
     xhttp_t handle;
     XHTTP_InitResponse(&handle, nCode, NULL);
 
-    char sContent[XSTR_MIN];
+    char sContent[XSTR_MID];
     size_t nLength = xstrncpyf(sContent, sizeof(sContent), "{\"status\": \"%s\"}",
         eStatus != XAPI_UNKNOWN ? XAPI_GetStatusStr(eStatus) : XHTTP_GetCodeStr(nCode));
 
@@ -534,7 +534,7 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_session_t *pSession)
 static char* XAPI_GetWSKey(xapi_t *pApi, xapi_session_t *pSession)
 {
     uint8_t uDigest[XSHA1_DIGEST_SIZE];
-    char sBuffer[XSTR_MIN];
+    char sBuffer[XSTR_MID];
     size_t nLength;
 
     nLength = xstrncpyf(sBuffer, sizeof(sBuffer), "%s%s", pSession->sKey, XWS_GUID);

@@ -63,7 +63,7 @@ struct XSearchCtx {
 
     /* Search criteria */
     char sName[XPATH_MAX];          // Needed file name
-    char sText[XSTR_MID];           // Containing text
+    char sText[XSTR_BIG];           // Containing text
     int nPermissions;               // Needed file permissions
     int nLinkCount;                 // Needed file link count
     int nFileTypes;                 // Needed file types
