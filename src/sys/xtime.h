@@ -34,7 +34,8 @@ typedef enum {
     XTIME_STR_SIMPLE = 0,
     XTIME_STR_HTTP,
     XTIME_STR_LSTR,
-    XTIME_STR_HSTR
+    XTIME_STR_HSTR,
+    XTIME_STR_ISO
 } xtime_fmt_t;
 
 typedef enum {
@@ -98,12 +99,16 @@ double XTime_Diff(const xtime_t *pSrc1, const xtime_t *pSrc2, xtime_diff_t eDiff
 
 uint64_t XTime_Serialize(const xtime_t *pTime);
 uint64_t XTime_ToU64(const xtime_t *pTime);
-time_t XTime_ToEpoch(const xtime_t *pTime);
+uint64_t XTime_ToEpochLocal(const xtime_t *pTime);
+uint64_t XTime_ToEpochUTC(const xtime_t *pTime);
+uint64_t XTime_ISOToEpochUTC(const char *pStr);
+
 size_t XTime_ToStr(const xtime_t *pTime, char *pStr, size_t nSize);
 size_t XTime_ToHstr(const xtime_t *pTime, char *pStr, size_t nSize);
 size_t XTime_ToLstr(const xtime_t *pTime, char *pStr, size_t nSize);
 size_t XTime_ToRstr(const xtime_t *pTime, char *pStr, size_t nSize);
 size_t XTime_ToHTTP(const xtime_t *pTime, char *pStr, size_t nSize);
+size_t XTime_ToISO(const xtime_t *pTime, char *pStr, size_t nSize);
 void XTime_ToTm(const xtime_t* pTime, struct tm *pTm);
 
 void XTime_Deserialize(xtime_t *pTime, const uint64_t nTime);
@@ -114,6 +119,7 @@ int XTime_FromHstr(xtime_t *pTime, const char *pStr);
 int XTime_FromLstr(xtime_t *pTime, const char *pStr);
 int XTime_FromRstr(xtime_t *pTime, const char *pStr);
 int XTime_FromStr(xtime_t *pTime, const char *pStr);
+int XTime_FromISO(xtime_t *pTime, const char *pStr);
 
 #ifdef __cplusplus
 }

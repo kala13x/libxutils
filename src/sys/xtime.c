@@ -36,6 +36,7 @@ void XTime_FromTm(xtime_t *pTime, const struct tm *pTm)
 
 int XTime_FromStr(xtime_t *pTime, const char *pStr)
 {
+    XCHECK(xstrused(pStr), 0);
     XTime_Init(pTime);
 #ifdef _WIN32
     return sscanf_s(pStr, "%04d%02d%02d%02d%02d%02d%02d",
@@ -52,6 +53,7 @@ int XTime_FromStr(xtime_t *pTime, const char *pStr)
 
 int XTime_FromHStr(xtime_t *pTime, const char *pStr)
 {
+    XCHECK(xstrused(pStr), 0);
     XTime_Init(pTime);
 #ifdef _WIN32
     return sscanf_s(pStr, "%04d.%02d.%02d-%02d:%02d:%02d.%02d",
@@ -68,8 +70,8 @@ int XTime_FromHStr(xtime_t *pTime, const char *pStr)
 
 int XTime_FromLstr(xtime_t *pTime, const char *pStr)
 {
+    XCHECK(xstrused(pStr), 0);
     XTime_Init(pTime);
-
 #ifdef _WIN32
     return sscanf_s(pStr, "%04d/%02d/%02d/%02d/%02d/%02d",
         (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
@@ -83,6 +85,7 @@ int XTime_FromLstr(xtime_t *pTime, const char *pStr)
 
 int XTime_FromRstr(xtime_t *pTime, const char *pStr)
 {
+    XCHECK(xstrused(pStr), 0);
     XTime_Init(pTime);
 #ifdef _WIN32
     return sscanf_s(pStr, "%02d/%02d/%04d %02d:%02d:%02d.%02d",
@@ -94,6 +97,21 @@ int XTime_FromRstr(xtime_t *pTime, const char *pStr)
         (int*)&pTime->nMonth, (int*)&pTime->nDay, (int*)&pTime->nYear,
         (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
         (int*)&pTime->nFraq);
+#endif
+}
+
+int XTime_FromISO(xtime_t *pTime, const char *pStr)
+{
+    XCHECK(xstrused(pStr), 0);
+    XTime_Init(pTime);
+#ifdef _WIN32
+    return sscanf_s(pStr, "%04d-%02d-%02dT%02d:%02d:%02d",
+        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
+        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec);
+#else
+    return sscanf(pStr, "%04d-%02d-%02dT%02d:%02d:%02d",
+        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
+        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec);
 #endif
 }
 
@@ -138,11 +156,26 @@ void XTime_ToTm(const xtime_t *pTime, struct tm *pTm)
     pTm->tm_isdst = -1;
 }
 
-time_t XTime_ToEpoch(const xtime_t *pTime)
+uint64_t XTime_ToEpochLocal(const xtime_t *pTime)
 {
     struct tm tminf;
     XTime_ToTm(pTime, &tminf);
-    return mktime(&tminf);
+    return (uint64_t)mktime(&tminf);
+}
+
+uint64_t XTime_ToEpochUTC(const xtime_t *pTime)
+{
+    struct tm tminf;
+    XTime_ToTm(pTime, &tminf);
+    return (uint64_t)timegm(&tminf);
+}
+
+uint64_t XTime_ISOToEpochUTC(const char *pStr)
+{
+    xtime_t time;
+    if (XTime_FromISO(&time, pStr) > 0)
+        return XTime_ToEpochUTC(&time);
+    return 0;
 }
 
 size_t XTime_ToStr(const xtime_t *pTime, char *pStr, size_t nSize)
@@ -176,13 +209,20 @@ size_t XTime_ToRstr(const xtime_t *pTime, char *pStr, size_t nSize)
 size_t XTime_ToHTTP(const xtime_t *pTime, char *pStr, size_t nSize)
 {
     struct tm timeinfo;
-    time_t rawTime = XTime_ToEpoch(pTime);
+    time_t rawTime = XTime_ToEpochUTC(pTime);
 #ifdef _WIN32
     gmtime_s(&timeinfo, &rawTime);
 #else
     gmtime_r(&rawTime, &timeinfo);
 #endif
     return strftime(pStr, nSize, "%a, %d %b %G %H:%M:%S GMT", &timeinfo);
+}
+
+size_t XTime_ToISO(const xtime_t *pTime, char *pStr, size_t nSize)
+{
+    return xstrncpyf(pStr, nSize, "%04d-%02d-%02dT%02d:%02d:%02d",
+        pTime->nYear, pTime->nMonth, pTime->nDay,
+        pTime->nHour, pTime->nMin, pTime->nSec);
 }
 
 uint64_t XTime_ToU64(const xtime_t *pTime)
@@ -361,6 +401,7 @@ size_t XTime_GetStr(char *pDst, size_t nSize, xtime_fmt_t eFmt)
         case XTIME_STR_HTTP: return XTime_ToHTTP(&date, pDst, nSize);
         case XTIME_STR_LSTR: return XTime_ToLstr(&date, pDst, nSize);
         case XTIME_STR_HSTR: return XTime_ToHstr(&date, pDst, nSize);
+        case XTIME_STR_ISO: return XTime_ToISO(&date, pDst, nSize);
         default: break;
     }
 
