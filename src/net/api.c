@@ -26,7 +26,7 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
     {
         case XAPI_TIMER_DESTROY:
             return "Timer event destroyed";
-        case XAPI_AUTH_FAILURE:
+        case XAPI_ERR_AUTH:
             return "Authorization failure";
         case XAPI_MISSING_TOKEN:
             return "Missing auth basic header";
@@ -235,8 +235,9 @@ size_t XAPI_GetEventCount(xapi_t *pApi)
 
 XSTATUS XAPI_DeleteTimer(xapi_session_t *pSession)
 {
-    XCHECK((pSession && pSession->pApi), XSTDINV);
-    XCHECK_NL(pSession->pTimer, XSTDOK);
+    XCHECK((pSession != NULL), XSTDINV);
+    XCHECK((pSession->pApi != NULL), XSTDINV);
+    XCHECK_NL((pSession->pTimer != NULL), XSTDOK);
 
     xapi_t *pApi = pSession->pApi;
     xevent_status_t nStatus;
@@ -247,8 +248,9 @@ XSTATUS XAPI_DeleteTimer(xapi_session_t *pSession)
 
 XSTATUS XAPI_Disconnect(xapi_session_t *pSession)
 {
-    XCHECK((pSession && pSession->pApi), XSTDINV);
-    XCHECK_NL(pSession->pEvData, XSTDOK);
+    XCHECK((pSession != NULL), XSTDINV);
+    XCHECK((pSession->pApi != NULL), XSTDINV);
+    XCHECK_NL((pSession->pEvData != NULL), XSTDOK);
 
     xapi_t *pApi = pSession->pApi;
     xevent_status_t nStatus;
@@ -259,7 +261,9 @@ XSTATUS XAPI_Disconnect(xapi_session_t *pSession)
 
 XSTATUS XAPI_ExtendTimer(xapi_session_t *pSession, int nTimeoutMs)
 {
-    XCHECK((pSession && pSession->pApi && pSession->pTimer), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+    XCHECK((pSession->pApi != NULL), XSTDINV);
+    XCHECK((pSession->pTimer != NULL), XSTDINV);
     XCHECK_NL((nTimeoutMs > 0), XSTDNON);
 
     xevent_data_t *pTimer = pSession->pTimer;
@@ -277,7 +281,8 @@ XSTATUS XAPI_ExtendTimer(xapi_session_t *pSession, int nTimeoutMs)
 
 XSTATUS XAPI_AddTimer(xapi_session_t *pSession, int nTimeoutMs)
 {
-    XCHECK((pSession && pSession->pApi), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+    XCHECK((pSession->pApi != NULL), XSTDINV);
     XCHECK_NL((nTimeoutMs > 0), XSTDNON);
 
     if (pSession->pTimer != NULL)
@@ -299,12 +304,13 @@ XSTATUS XAPI_AddTimer(xapi_session_t *pSession, int nTimeoutMs)
 
 XSTATUS XAPI_SetEvents(xapi_session_t *pSession, int nEvents)
 {
-    XCHECK((pSession && pSession->pEvData), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+    XCHECK((pSession->pApi != NULL), XSTDINV);
+    XCHECK((pSession->pEvData != NULL), XSTDINV);
+    XCHECK((pSession->pApi->bHaveEvents), XSTDERR);
+
     xevent_data_t *pEvData = pSession->pEvData;
     xapi_t *pApi = pSession->pApi;
-
-    XCHECK((pApi != NULL), XSTDINV);
-    XCHECK(pApi->bHaveEvents, XSTDERR);
 
     xevent_status_t eStatus;
     eStatus = XEvents_Modify(&pApi->events, pEvData, nEvents);
@@ -353,20 +359,21 @@ static XSTATUS XAPI_RollbackEvents(xapi_session_t *pSession)
 
 xbyte_buffer_t* XAPI_GetTxBuff(xapi_session_t *pSession)
 {
-    XCHECK_NL(pSession, NULL);
+    XCHECK((pSession != NULL), NULL);
     return &pSession->txBuffer;
 }
 
 xbyte_buffer_t* XAPI_GetRxBuff(xapi_session_t *pSession)
 {
-    XCHECK_NL(pSession, NULL);
+    XCHECK((pSession != NULL), NULL);
     return &pSession->rxBuffer;
 }
 
 XSTATUS XAPI_PutTxBuff(xapi_session_t *pSession, xbyte_buffer_t *pBuffer)
 {
-    XCHECK_NL((pSession && pBuffer), XSTDINV);
-    XCHECK_NL(pBuffer->nUsed, (XSTATUS)pSession->txBuffer.nUsed);
+    XCHECK((pSession != NULL), XSTDINV);
+    XCHECK((pBuffer != NULL), XSTDINV);
+    XCHECK_NL(pBuffer->nUsed, XSTDNON);
 
     XByteBuffer_AddBuff(&pSession->txBuffer, pBuffer);
     if (!pSession->txBuffer.nUsed)
@@ -380,7 +387,8 @@ XSTATUS XAPI_PutTxBuff(xapi_session_t *pSession, xbyte_buffer_t *pBuffer)
 
 XSTATUS XAPI_RespondHTTP(xapi_session_t *pSession, int nCode, xapi_status_t eStatus)
 {
-    XCHECK((pSession && pSession->pApi), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+    XCHECK((pSession->pApi != NULL), XSTDINV);
     xapi_t *pApi = pSession->pApi;
 
     xhttp_t handle;
@@ -403,7 +411,7 @@ XSTATUS XAPI_RespondHTTP(xapi_session_t *pSession, int nCode, xapi_status_t eSta
         return XEVENTS_DISCONNECT;
     }
 
-    if (eStatus > XAPI_UNKNOWN && eStatus < XAPI_STATUS)
+    if (eStatus > XAPI_UNKNOWN && eStatus < XAPI_STATUS_OK)
         XAPI_ErrorCb(pApi, pSession, XAPI_NONE, eStatus);
     else if (eStatus != XAPI_UNKNOWN)
         XAPI_StatusCb(pApi, pSession, XAPI_NONE, eStatus);
@@ -418,7 +426,8 @@ XSTATUS XAPI_RespondHTTP(xapi_session_t *pSession, int nCode, xapi_status_t eSta
 
 XSTATUS XAPI_AuthorizeHTTP(xapi_session_t *pSession, const char *pToken, const char *pKey)
 {
-    XCHECK((pSession && pSession->pPacket), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+    XCHECK((pSession->pPacket != NULL), XSTDINV);
     xhttp_t *pHandle = (xhttp_t*)pSession->pPacket;
 
     size_t nTokenLength = xstrused(pToken) ? strlen(pToken) : XSTDNON;
@@ -449,6 +458,7 @@ XSTATUS XAPI_AuthorizeHTTP(xapi_session_t *pSession, const char *pToken, const c
 
 static int XAPI_HandleMDTP(xapi_t *pApi, xapi_session_t *pSession)
 {
+    XCHECK((pSession != NULL), XSTDINV);
     xbyte_buffer_t *pBuffer = &pSession->rxBuffer;
     xpacket_status_t eStatus = XPACKET_ERR_NONE;
     int nRetVal = XEVENTS_CONTINUE;
@@ -490,6 +500,7 @@ static int XAPI_HandleMDTP(xapi_t *pApi, xapi_session_t *pSession)
 
 static int XAPI_HandleHTTP(xapi_t *pApi, xapi_session_t *pSession)
 {
+    XCHECK((pSession != NULL), XSTDINV);
     xbyte_buffer_t *pBuffer = &pSession->rxBuffer;
     xhttp_status_t eStatus = XHTTP_NONE;
     int nRetVal = XEVENTS_CONTINUE;
@@ -533,6 +544,7 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_session_t *pSession)
 
 static char* XAPI_GetWSKey(xapi_t *pApi, xapi_session_t *pSession)
 {
+    XCHECK((pSession != NULL), NULL);
     uint8_t uDigest[XSHA1_DIGEST_SIZE];
     char sBuffer[XSTR_MID];
     size_t nLength;
@@ -579,6 +591,9 @@ static xbool_t XAPI_HeaderHasTokenCI(const char *pValue, const char *pToken)
 
 static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_session_t *pSession)
 {
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+
     xhttp_t handle;
     XHTTP_InitResponse(&handle, 101, NULL);
 
@@ -624,6 +639,9 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_session_t *pSession)
 
 static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
 {
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+
     xhttp_t handle;
     XHTTP_InitRequest(&handle, XHTTP_GET, pSession->sUri, NULL);
 
@@ -689,6 +707,9 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
 
 static int XAPI_ServerHandshake(xapi_t *pApi, xapi_session_t *pSession)
 {
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+
     if (pSession->bHandshakeStart) return XEVENTS_CONTINUE;
     xbyte_buffer_t *pBuffer = &pSession->rxBuffer;
     xhttp_status_t eStatus = XHTTP_NONE;
@@ -765,6 +786,9 @@ static int XAPI_ServerHandshake(xapi_t *pApi, xapi_session_t *pSession)
 
 static int XAPI_ClientHandshake(xapi_t *pApi, xapi_session_t *pSession)
 {
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+
     if (!pSession->bHandshakeStart) return XEVENTS_CONTINUE;
     xbyte_buffer_t *pBuffer = &pSession->rxBuffer;
     xhttp_status_t eStatus = XHTTP_NONE;
@@ -853,6 +877,9 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_session_t *pSession)
 
 static int XAPI_HandleWS(xapi_t *pApi, xapi_session_t *pSession)
 {
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+
     xbyte_buffer_t *pBuffer = &pSession->rxBuffer;
     xws_status_t eStatus = XWS_ERR_NONE;
     int nRetVal = XEVENTS_CONTINUE;
@@ -906,6 +933,9 @@ static int XAPI_HandleWS(xapi_t *pApi, xapi_session_t *pSession)
 
 static int XAPI_HandleRAW(xapi_t *pApi, xapi_session_t *pSession)
 {
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pSession != NULL), XSTDINV);
+
     xbyte_buffer_t *pBuffer = &pSession->rxBuffer;
     pSession->pPacket = (xbyte_buffer_t*)pBuffer;
 
@@ -972,7 +1002,8 @@ static int XAPI_Read(xapi_t *pApi, xapi_session_t *pSession)
 
 static int XAPI_Accept(xapi_t *pApi, xapi_session_t *pSession)
 {
-    XCHECK((pApi && pSession), XEVENTS_DISCONNECT);
+    XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
+    XCHECK((pSession != NULL), XEVENTS_DISCONNECT);
     XCHECK(pApi->bHaveEvents, XEVENTS_DISCONNECT);
 
     xapi_session_t *pPeerData = XAPI_NewData(pApi, pSession->eType);
@@ -1030,7 +1061,8 @@ static int XAPI_Accept(xapi_t *pApi, xapi_session_t *pSession)
 
 static int XAPI_Write(xapi_t *pApi, xapi_session_t *pSession)
 {
-    XCHECK((pApi && pSession), XEVENTS_DISCONNECT);
+    XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
+    XCHECK((pSession != NULL), XEVENTS_DISCONNECT);
     XCHECK((!pSession->bCancel), XEVENTS_DISCONNECT);
 
     xbyte_buffer_t *pBuffer = &pSession->txBuffer;
@@ -1092,9 +1124,12 @@ static int XAPI_Write(xapi_t *pApi, xapi_session_t *pSession)
 
 static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 {
-    XCHECK((pEvents && pEvData), XEVENTS_DISCONNECT);
+    XCHECK((pEvents != NULL), XEVENTS_DISCONNECT);
+    XCHECK((pEvData != NULL), XEVENTS_DISCONNECT);
+    XCHECK((pEvData->pContext != NULL), XEVENTS_DISCONNECT);
+
     xapi_session_t *pSession = (xapi_session_t*)pEvData->pContext;
-    XCHECK((pSession && !pSession->bCancel), XEVENTS_DISCONNECT);
+    if (pSession->bCancel) return XEVENTS_DISCONNECT;
 
     xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
     XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
@@ -1141,12 +1176,15 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 
 static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 {
-    XCHECK((pEvents && pEvData), XEVENTS_DISCONNECT);
+    XCHECK((pEvents != NULL), XEVENTS_DISCONNECT);
+    XCHECK((pEvData != NULL), XEVENTS_DISCONNECT);
+    XCHECK((pEvData->pContext != NULL), XEVENTS_DISCONNECT);
+
     xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
-    XCHECK(pApi, XEVENTS_DISCONNECT);
+    XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
 
     xapi_session_t *pSession = (xapi_session_t*)pEvData->pContext;
-    XCHECK((pSession && !pSession->bCancel), XEVENTS_DISCONNECT);
+    if (pSession->bCancel) return XEVENTS_DISCONNECT;
 
     if (pSession->bWriteOnRead)
     {
@@ -1178,6 +1216,7 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
 
 static int XAPI_HungedEvent(xapi_t *pApi, xevent_data_t *pEvData)
 {
+    XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
     xapi_session_t *pSession = NULL;
     if (pEvData != NULL) pSession = (xapi_session_t*)pEvData->pContext;
     XAPI_StatusCb(pApi, pSession, XAPI_NONE, XAPI_HUNGED);
@@ -1186,6 +1225,7 @@ static int XAPI_HungedEvent(xapi_t *pApi, xevent_data_t *pEvData)
 
 static int XAPI_ClosedEvent(xapi_t *pApi, xevent_data_t *pEvData)
 {
+    XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
     xapi_session_t *pSession = NULL;
     if (pEvData != NULL) pSession = (xapi_session_t*)pEvData->pContext;
     XAPI_StatusCb(pApi, pSession, XAPI_NONE, XAPI_CLOSED);
@@ -1227,6 +1267,7 @@ static int XAPI_UserEvent(xapi_t *pApi)
 
 static int XAPI_EventCallback(void *events, void* data, XSOCKET fd, xevent_cb_type_t reason)
 {
+    XCHECK((events != NULL), XEVENTS_CONTINUE);
     xevent_data_t *pData = (xevent_data_t*)data;
     xevents_t *pEvents = (xevents_t*)events;
     xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
@@ -1301,6 +1342,7 @@ XSTATUS XAPI_SetRxSize(xapi_t *pApi, size_t nSize)
 
 void XAPI_Destroy(xapi_t *pApi)
 {
+    XCHECK_VOID_NL((pApi != NULL));
     XCHECK_VOID_NL(pApi->bHaveEvents);
     xevents_t *pEvents = &pApi->events;
     XEvents_Destroy(pEvents);
@@ -1317,6 +1359,7 @@ xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
 
 void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
 {
+    XCHECK_VOID_NL((pEndpt != NULL));
     XSock_InitCert(&pEndpt->certs);
     pEndpt->pSessionData = NULL;
     pEndpt->nEvents = XSTDNON;
@@ -1333,7 +1376,8 @@ void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
 
 XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
-    XCHECK((pApi != NULL && pEndpt != NULL), XSTDINV);
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pEndpt != NULL), XSTDINV);
     XCHECK((pEndpt->eType != XAPI_NONE), XSTDINV);
     XCHECK((pEndpt->pAddr != NULL), XSTDINV);
 
@@ -1409,26 +1453,15 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 
 XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
-    XCHECK((pApi != NULL && pEndpt != NULL), XSTDINV);
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pEndpt != NULL), XSTDINV);
     XCHECK((pEndpt->eType != XAPI_NONE), XSTDINV);
     XCHECK((pEndpt->pAddr != NULL), XSTDINV);
-    xsock_info_t addrInfo;
 
     if (!pEndpt->nPort && !pEndpt->bUnix)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_INVALID_ARGS);
         return XSTDINV;
-    }
-
-    if (pEndpt->bUnix)
-    {
-        XSock_InitInfo(&addrInfo);
-        xstrncpy(addrInfo.sAddr, sizeof(addrInfo.sAddr), pEndpt->pAddr);
-    }
-    else if (XSock_GetAddrInfo(&addrInfo, pEndpt->pAddr) < 0)
-    {
-        XAPI_ErrorCb(pApi, NULL, XAPI_NONE, XAPI_ERR_RESOLVE);
-        return XSTDERR;
     }
 
     xapi_session_t *pSession = XAPI_NewData(pApi, pEndpt->eType);
@@ -1494,7 +1527,8 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 
 XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
-    XCHECK((pApi != NULL && pEndpt != NULL), XSTDINV);
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pEndpt != NULL), XSTDINV);
     XCHECK((pEndpt->nFD != XSOCK_INVALID), XSTDINV);
     XCHECK((pEndpt->eType != XAPI_NONE), XSTDINV);
 

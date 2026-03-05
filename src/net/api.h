@@ -58,21 +58,20 @@ typedef enum {
 typedef enum {
     XAPI_UNKNOWN = (uint8_t)0,
     XAPI_NO_STATUS = XAPI_UNKNOWN,
-    XAPI_TIMER_DESTROY,
+    XAPI_MISSING_TOKEN,
     XAPI_MISSING_KEY,
     XAPI_INVALID_KEY,
     XAPI_INVALID_ARGS,
     XAPI_INVALID_ROLE,
     XAPI_INVALID_TOKEN,
-    XAPI_MISSING_TOKEN,
-    XAPI_AUTH_FAILURE,
+    XAPI_ERR_AUTH,
+    XAPI_ERR_ALLOC,
     XAPI_ERR_ASSEMBLE,
+    XAPI_ERR_CRYPT,
     XAPI_ERR_REGISTER,
     XAPI_ERR_RESOLVE,
-    XAPI_ERR_CRYPT,
-    XAPI_ERR_ALLOC,
-    XAPI_ERROR,
-    XAPI_STATUS,
+    XAPI_STATUS_OK = 100,
+    XAPI_TIMER_DESTROY,
     XAPI_DESTROY,
     XAPI_HUNGED,
     XAPI_CLOSED
@@ -110,7 +109,7 @@ typedef struct xapi_endpoint_ {
     XSOCKET nFD;
 } xapi_endpoint_t;
 
-typedef struct xapi_data_ {
+typedef struct xapi_session_ {
     char sUserAgent[XSTR_MID];
     char sAddr[XSOCK_ADDR_MAX];
     char sKey[XSOCK_ADDR_MAX];
