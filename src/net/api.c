@@ -413,34 +413,18 @@ static int XAPI_DetectRealIP(xapi_session_t *pSession, xhttp_t *pHandle)
 {
     XCHECK((pSession != NULL), XSTDINV);
     XCHECK((pHandle != NULL), XSTDINV);
-    int nStatus = XSTDERR;
 
-    const char *pClientIP = XHTTP_GetHeader(pHandle, "X-Client-IP");
-    if (xstrused(pClientIP))
-    {
-        nStatus = XAPI_CopyTrimmedIP(pSession->sRealIP, sizeof(pSession->sRealIP), pClientIP);
-        if (nStatus > 0) return XSTDOK;
-    }
+    if (XAPI_CopyTrimmedIP(pSession->sRealIP, sizeof(pSession->sRealIP),
+        XHTTP_GetHeader(pHandle, "X-Client-IP"))) return XSTDOK;
 
-    const char *pForwardedFor = XHTTP_GetHeader(pHandle, "X-Forwarded-For");
-    if (xstrused(pForwardedFor))
-    {
-        nStatus = XAPI_CopyTrimmedIP(pSession->sRealIP, sizeof(pSession->sRealIP), pForwardedFor);
-        if (nStatus > 0) return XSTDOK;
-    }
+    if (XAPI_CopyTrimmedIP(pSession->sRealIP, sizeof(pSession->sRealIP),
+        XHTTP_GetHeader(pHandle, "X-Forwarded-For"))) return XSTDOK;
 
-    const char *pRealIP = XHTTP_GetHeader(pHandle, "X-Real-IP");
-    if (xstrused(pRealIP))
-    {
-        nStatus = XAPI_CopyTrimmedIP(pSession->sRealIP, sizeof(pSession->sRealIP), pRealIP);
-        if (nStatus > 0) return XSTDOK;
-    }
+    if (XAPI_CopyTrimmedIP(pSession->sRealIP, sizeof(pSession->sRealIP),
+        XHTTP_GetHeader(pHandle, "X-Real-IP"))) return XSTDOK;
 
-    if (xstrused(pSession->sAddr))
-    {
-        xstrncpy(pSession->sRealIP, sizeof(pSession->sRealIP), pSession->sAddr);
-        return XSTDNON;
-    }
+    if (XAPI_CopyTrimmedIP(pSession->sRealIP, sizeof(pSession->sRealIP),
+        pSession->sAddr)) return XSTDNON;
 
     return XSTDERR;
 }
