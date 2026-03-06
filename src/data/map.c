@@ -20,7 +20,7 @@
 
 static int XMap_Alloc(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
 {
-    XCHECK_NL(pMap, XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
     if (!nSize) return XMAP_OK;
 
     pMap->pPairs = (xmap_pair_t*)xalloc(pPool, (size_t)nSize * sizeof(xmap_pair_t));
@@ -39,7 +39,7 @@ static int XMap_Alloc(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
 
 int XMap_Init(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
 {
-    XCHECK_NL(pMap, XMAP_OINV);
+    XCHECK((pMap != NULL), XMAP_OINV);
 
     pMap->nTableSize = nSize;
     pMap->clearCb = NULL;
@@ -58,7 +58,7 @@ int XMap_Init(xmap_t *pMap, xpool_t *pPool, uint32_t nSize)
 xmap_t *XMap_New(xpool_t *pPool, uint32_t nSize)
 {
     xmap_t *pMap = (xmap_t*)xalloc(pPool, sizeof(xmap_t));
-    if(pMap == NULL) return NULL;
+    XCHECK((pMap != NULL), NULL);
 
     if (XMap_Init(pMap, pPool, nSize) < 0)
     {
@@ -134,7 +134,7 @@ int XMap_Iterate(xmap_t *pMap, xmap_iterator_t itfunc, void *pCtx)
 void XMap_Reset(xmap_t *pMap)
 {
     XCHECK_VOID((pMap != NULL));
-    XCHECK_VOID((pMap->pPairs != NULL));
+    XCHECK_VOID_NL((pMap->pPairs != NULL));
 
     uint32_t i;
     for (i = 0; i < pMap->nTableSize; i++)
