@@ -553,6 +553,11 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_session_t *pSession)
     XHTTP_Init(&handle, XHTTP_DUMMY, XSTDNON);
     eStatus = XHTTP_ParseBuff(&handle, pBuffer);
 
+    if (!xstrused(pSession->sRealIP) &&
+        (eStatus == XHTTP_COMPLETE ||
+         eStatus == XHTTP_PARSED))
+        XAPI_DetectRealIP(pSession, &handle);
+
     if (eStatus == XHTTP_COMPLETE)
     {
         pSession->pPacket = &handle;
