@@ -111,6 +111,7 @@ typedef struct xapi_endpoint_ {
 
 typedef struct xapi_session_ {
     char sUserAgent[XSTR_MID];
+    char sRealIP[XSOCK_ADDR_MAX];
     char sAddr[XSOCK_ADDR_MAX];
     char sKey[XSOCK_ADDR_MAX];
     char sUri[XHTTP_URL_MAX];
