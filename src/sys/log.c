@@ -246,7 +246,7 @@ static size_t XLog_CreateLogInfo(const xlog_ctx_t *pCtx, char* pOut, size_t nSiz
     else if (pCfg->eTimeFormat == XLOG_DATE)
     {
         xstrncpyf(sDate, sizeof(sDate),
-            "%04d.%02d.%02d %02d:%02d:%02d.%03d%s",
+            "%04d-%02d-%02d %02d:%02d:%02d.%03d%s",
             pTime->nYear, pTime->nMonth,
             pTime->nDay, pTime->nHour,
             pTime->nMin, pTime->nSec,
