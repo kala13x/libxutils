@@ -493,6 +493,7 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     pEvents->bUseHash = bUseHash;
     pEvents->nEventCount = 0;
     pEvents->pEventArray = NULL;
+    pEvents->bResync = XFALSE;
 
 #if defined(_XEVENTS_USE_EVENT_LIST)
     XList_Init(&pEvents->timerList, NULL, XSTDNON, XEvents_ListClearCb, pEvents);
@@ -579,6 +580,7 @@ xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvent
 
     pData->nEvents = nEvents;
     pEvents->nEventCount++;
+    pEvents->bResync = XTRUE;
 
     return XEVENTS_SUCCESS;
 }
@@ -614,6 +616,7 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
     if (pData->nType == XEVENT_TYPE_TIMER)
     {
         XList_Unlink(pData->pTimerNode);
+        pEvents->bResync = XTRUE;
         return XEVENTS_SUCCESS;
     }
 #endif
@@ -635,8 +638,9 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
         for (i = pData->nIndex; (uint32_t)i < pEvents->nEventCount; i++)
             pEvents->pEventArray[i] = pEvents->pEventArray[i + 1];
 
-        pEvents->nEventCount--;
         pData->nIndex = -1;
+        pEvents->nEventCount--;
+        pEvents->bResync = XTRUE;
     }
 #endif
 
@@ -705,6 +709,14 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
 
         nRet = XEvents_ServiceCb(pEvents, pData, nFD, nEvents);
         if (nRet != XEVENTS_CONTINUE) break;
+
+        if (pEvents->bResync)
+        {
+            // Event added or removed during service
+            // We need to resync event array
+            pEvents->bResync = XFALSE;
+            break;
+        }
     }
 #endif
 

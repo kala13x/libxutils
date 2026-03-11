@@ -164,6 +164,7 @@ typedef struct XEvents {
     uint32_t                nEventCount;        /* Number of event fds in array */
     uint32_t                nEventMax;          /* Max allowed file descriptors */
 
+    xbool_t                 bResync;            /* Flag to indicate if event loop needs resync */
     xbool_t                 bUseHash;           /* Flag to enable/disable hash map usage*/
     xhash_t                 eventsMap;          /* Hash map for events and related data */
 } xevents_t;

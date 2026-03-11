@@ -79,6 +79,7 @@ typedef enum {
 
 typedef enum {
     XAPI_NONE = 0,
+    XAPI_SELF,
     XAPI_EVENT,
     XAPI_HTTP,
     XAPI_MDTP,
@@ -172,6 +173,7 @@ struct xapi_ {
 
 const char* XAPI_GetStatus(xapi_ctx_t *pCtx);
 const char* XAPI_GetStatusStr(xapi_status_t eStatus);
+const char* XAPI_GetTypeStr(xapi_type_t eType);
 
 xbyte_buffer_t* XAPI_GetTxBuff(xapi_session_t *pApiData);
 xbyte_buffer_t* XAPI_GetRxBuff(xapi_session_t *pApiData);
