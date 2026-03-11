@@ -98,6 +98,7 @@ static xapi_session_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     XSock_Init(&pSession->sock, XSOCK_UNDEFINED, XSOCK_INVALID);
     XByteBuffer_Init(&pSession->rxBuffer, XSTDNON, XFALSE);
     XByteBuffer_Init(&pSession->txBuffer, XSTDNON, XFALSE);
+    XByteBuffer_Init(&pSession->wsBuffer, XSTDNON, XFALSE);
 
     pSession->sRealIP[0] = XSTR_NUL;
     pSession->sAddr[0] = XSTR_NUL;
@@ -108,6 +109,7 @@ static xapi_session_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
 
     pSession->bHandshakeStart = XFALSE;
     pSession->bHandshakeDone = XFALSE;
+    pSession->bWSFragStart = XFALSE;
     pSession->bReadOnWrite = XFALSE;
     pSession->bWriteOnRead = XFALSE;
     pSession->bKeepAlive = XFALSE;
@@ -118,6 +120,7 @@ static xapi_session_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pSession->pTimer = NULL;
     pSession->eType = eType;
     pSession->pApi = pApi;
+    pSession->eWSFragType = XWS_INVALID;
 
     pSession->pSessionData = NULL;
     pSession->pPacket = NULL;
@@ -133,6 +136,7 @@ static void XAPI_ClearData(xapi_session_t *pSession)
     XSock_Close(&pSession->sock);
     XByteBuffer_Clear(&pSession->rxBuffer);
     XByteBuffer_Clear(&pSession->txBuffer);
+    XByteBuffer_Clear(&pSession->wsBuffer);
 }
 
 static void XAPI_FreeData(xapi_session_t **pSession)
@@ -929,6 +933,41 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_session_t *pSession)
     return nRetVal;
 }
 
+static void XAPI_ResetWSFragments(xapi_session_t *pSession)
+{
+    XCHECK_VOID_NL((pSession != NULL));
+    XByteBuffer_Clear(&pSession->wsBuffer);
+    pSession->bWSFragStart = XFALSE;
+    pSession->eWSFragType = XWS_INVALID;
+}
+
+static xbool_t XAPI_IsWSControlFrame(xws_frame_type_t eType)
+{
+    return eType == XWS_PING ||
+           eType == XWS_PONG ||
+           eType == XWS_CLOSE;
+}
+
+static xbool_t XAPI_IsWSDataFrame(xws_frame_type_t eType)
+{
+    return eType == XWS_BINARY ||
+           eType == XWS_TEXT;
+}
+
+static int XAPI_DispatchWSFrame(xapi_t *pApi, xapi_session_t *pSession, xws_frame_t *pFrame)
+{
+    XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
+    XCHECK((pSession != NULL), XEVENTS_DISCONNECT);
+    XCHECK((pFrame != NULL), XEVENTS_DISCONNECT);
+
+    pSession->pPacket = pFrame;
+    int nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_READ);
+    int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
+
+    pSession->pPacket = NULL;
+    return nRetVal;
+}
+
 static int XAPI_HandleWS(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pApi != NULL), XSTDINV);
@@ -955,12 +994,92 @@ static int XAPI_HandleWS(xapi_t *pApi, xapi_session_t *pSession)
 
     if (eStatus == XWS_FRAME_COMPLETE)
     {
-        pSession->pPacket = &frame;
-
-        int nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_READ);
-        nRetVal = XAPI_StatusToEvent(pApi, nStatus);
-
+        const uint8_t *pPayload = XWebFrame_GetPayload(&frame);
+        size_t nPayloadLength = XWebFrame_GetPayloadLength(&frame);
         size_t nFrameLength = XWebFrame_GetFrameLength(&frame);
+        xbool_t bControl = XAPI_IsWSControlFrame(frame.eType);
+        xbool_t bData = XAPI_IsWSDataFrame(frame.eType);
+        xbool_t bContinuation = frame.eType == XWS_CONTINUATION;
+
+        if (bControl)
+        {
+            // Control frames must not be fragmented
+            nRetVal = XAPI_DispatchWSFrame(pApi, pSession, &frame);
+        }
+        else if (pSession->bWSFragStart)
+        {
+            if (!bContinuation)
+            {
+                XAPI_ResetWSFragments(pSession);
+                XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_INVALID);
+                nRetVal = XEVENTS_DISCONNECT;
+            }
+            else if (nPayloadLength && XByteBuffer_Add(&pSession->wsBuffer, pPayload, nPayloadLength) <= 0)
+            {
+                XAPI_ResetWSFragments(pSession);
+                XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_ERR_ALLOC);
+                nRetVal = XEVENTS_DISCONNECT;
+            }
+            else if (pSession->wsBuffer.nUsed > pApi->nRxSize)
+            {
+                XAPI_ResetWSFragments(pSession);
+                XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_TOOBIG);
+                nRetVal = XEVENTS_DISCONNECT;
+            }
+            else if (frame.bFin)
+            {
+                xws_frame_t assembled;
+                xws_status_t eAssembled = XWebFrame_Create(
+                    &assembled,
+                    pSession->wsBuffer.pData,
+                    pSession->wsBuffer.nUsed,
+                    pSession->eWSFragType,
+                    XFALSE,
+                    XTRUE
+                );
+
+                if (eAssembled != XWS_ERR_NONE)
+                {
+                    XAPI_ResetWSFragments(pSession);
+                    XAPI_ErrorCb(pApi, pSession, XAPI_WS, eAssembled);
+                    nRetVal = XEVENTS_DISCONNECT;
+                }
+                else
+                {
+                    XAPI_ResetWSFragments(pSession);
+                    nRetVal = XAPI_DispatchWSFrame(pApi, pSession, &assembled);
+                    XWebFrame_Clear(&assembled);
+                }
+            }
+        }
+        else if (!frame.bFin)
+        {
+            if (!bData)
+            {
+                XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_INVALID);
+                nRetVal = XEVENTS_DISCONNECT;
+            }
+            else if (nPayloadLength && XByteBuffer_Add(&pSession->wsBuffer, pPayload, nPayloadLength) <= 0)
+            {
+                XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_ERR_ALLOC);
+                nRetVal = XEVENTS_DISCONNECT;
+            }
+            else
+            {
+                pSession->bWSFragStart = XTRUE;
+                pSession->eWSFragType = frame.eType;
+            }
+        }
+        else if (bContinuation)
+        {
+            XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_INVALID);
+            nRetVal = XEVENTS_DISCONNECT;
+        }
+        else
+        {
+            nRetVal = XAPI_DispatchWSFrame(pApi, pSession, &frame);
+        }
+
         XByteBuffer_Advance(pBuffer, nFrameLength);
     }
     else if (eStatus != XWS_FRAME_PARSED && eStatus != XWS_FRAME_INCOMPLETE)

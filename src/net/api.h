@@ -132,12 +132,15 @@ typedef struct xapi_session_ {
     /* WebSocket handshake routine */
     xbool_t bHandshakeStart;
     xbool_t bHandshakeDone;
+    xbool_t bWSFragStart;
 
     xbyte_buffer_t rxBuffer;
     xbyte_buffer_t txBuffer;
+    xbyte_buffer_t wsBuffer;
     xevent_data_t *pEvData;
     xevent_data_t *pTimer;
 
+    xws_frame_type_t eWSFragType;
     xapi_type_t eType;
     xapi_role_t eRole;
     xapi_t *pApi;
