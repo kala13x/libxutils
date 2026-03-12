@@ -1560,7 +1560,7 @@ void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
     pEndpt->pSessionData = NULL;
     pEndpt->nEvents = XSTDNON;
     pEndpt->eRole = XAPI_INACTIVE;
-    pEndpt->eType = XAPI_SELF;
+    pEndpt->eType = XAPI_NONE;
     pEndpt->nPort = XSTDNON;
     pEndpt->pAddr = NULL;
     pEndpt->pUri = NULL;
@@ -1574,7 +1574,7 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 {
     XCHECK((pApi != NULL), XSTDINV);
     XCHECK((pEndpt != NULL), XSTDINV);
-    XCHECK((pEndpt->eType != XAPI_SELF), XSTDINV);
+    XCHECK((pEndpt->eType != XAPI_NONE), XSTDINV);
     XCHECK((pEndpt->pAddr != NULL), XSTDINV);
 
     if (!pEndpt->nPort && !pEndpt->bUnix)
