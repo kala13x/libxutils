@@ -270,7 +270,7 @@ xpacket_status_t XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, si
     XCHECK((nHdrLen > 0), XPACKET_INVALID_ARGS);
 
     uint8_t sInfoBytes[XPACKET_INFO_BYTES];
-    XPacket_WriteU32LE(sInfoBytes, nHdrLen);
+    XPacket_WriteU32LE(sInfoBytes, (uint32_t)nHdrLen);
 
     if ((!XByteBuffer_Add(pBuffer, sInfoBytes, sizeof(sInfoBytes))) ||
         (!XByteBuffer_Add(pBuffer, (uint8_t*)pHeader, nHdrLen)) ||

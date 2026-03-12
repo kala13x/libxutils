@@ -167,7 +167,11 @@ uint64_t XTime_ToEpochUTC(const xtime_t *pTime)
 {
     struct tm tminf;
     XTime_ToTm(pTime, &tminf);
+#ifdef _WIN32
+    return (uint64_t)_mkgmtime(&tminf);
+#else
     return (uint64_t)timegm(&tminf);
+#endif
 }
 
 uint64_t XTime_ISOToEpochUTC(const char *pStr)
