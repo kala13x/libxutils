@@ -477,6 +477,10 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     XCHECK(pEvents, XEVENTS_EINVALID);
     XCHECK(callBack, XEVENTS_ENOCB);
 
+#if !defined(_XEVENTS_USE_EPOLL)
+    XCHECK(bUseHash, XEVENTS_EINVALID);
+#endif
+
 #ifdef _WIN32
     uint32_t nSysMax = XEVENTS_DEFAULT_FD_MAX;
 #else
@@ -493,6 +497,7 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     pEvents->bUseHash = bUseHash;
     pEvents->nEventCount = 0;
     pEvents->pEventArray = NULL;
+    pEvents->bCheckDup = XTRUE;
     pEvents->bResync = XFALSE;
 
 #if defined(_XEVENTS_USE_EVENT_LIST)
@@ -558,6 +563,10 @@ xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvent
     event.events = nEvents;
     if (epoll_ctl(pEvents->nEventFd, EPOLL_CTL_ADD, pData->nFD, &event) < 0) return XEVENTS_ECTL;
 #else
+    if (pEvents->bUseHash == XTRUE && pEvents->bCheckDup == XTRUE &&
+        XHash_GetData(&pEvents->eventsMap, (int)pData->nFD) != NULL)
+        return XEVENTS_EINSERT;
+
     if (pEvents->nEventCount >= pEvents->nEventMax) return XEVENTS_ECTL;
     pData->nIndex = pEvents->nEventCount;
     pEvents->pEventArray[pData->nIndex].revents = 0;
@@ -630,13 +639,28 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
 #else
     if (pData->nIndex >= 0 && (uint32_t)pData->nIndex < pEvents->nEventCount)
     {
+        int nDeleteIndex = pData->nIndex;
+        int nLastIndex = (int)pEvents->nEventCount - 1;
         pEvents->pEventArray[pData->nIndex].revents = XSTDNON;
         pEvents->pEventArray[pData->nIndex].events = XSTDNON;
         pEvents->pEventArray[pData->nIndex].fd = XSOCK_INVALID;
         int i = nStatus = XSTDNON;
 
-        for (i = pData->nIndex; (uint32_t)i < pEvents->nEventCount; i++)
+        for (i = nDeleteIndex; i < nLastIndex; i++)
+        {
             pEvents->pEventArray[i] = pEvents->pEventArray[i + 1];
+
+            if (pEvents->bUseHash && pEvents->pEventArray[i].fd != XSOCK_INVALID)
+            {
+                xevent_data_t *pMovedData = (xevent_data_t*)XHash_GetData(
+                    &pEvents->eventsMap, (int)pEvents->pEventArray[i].fd);
+                if (pMovedData != NULL) pMovedData->nIndex = i;
+            }
+        }
+
+        pEvents->pEventArray[nLastIndex].revents = XSTDNON;
+        pEvents->pEventArray[nLastIndex].events = XSTDNON;
+        pEvents->pEventArray[nLastIndex].fd = XSOCK_INVALID;
 
         pData->nIndex = -1;
         pEvents->nEventCount--;

@@ -166,6 +166,7 @@ typedef struct XEvents {
 
     xbool_t                 bResync;            /* Flag to indicate if event loop needs resync */
     xbool_t                 bUseHash;           /* Flag to enable/disable hash map usage*/
+    xbool_t                 bCheckDup;          /* Flag to enable/disable duplicate check in hash map */
     xhash_t                 eventsMap;          /* Hash map for events and related data */
 } xevents_t;
 
