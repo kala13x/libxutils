@@ -229,6 +229,18 @@ size_t XTime_ToISO(const xtime_t *pTime, char *pStr, size_t nSize)
         pTime->nHour, pTime->nMin, pTime->nSec);
 }
 
+size_t XTime_ToISO8601(const xtime_t *pTime, char *pStr, size_t nSize)
+{
+    struct tm timeinfo;
+    time_t rawTime = XTime_ToEpochUTC(pTime);
+#ifdef _WIN32
+    gmtime_s(&timeinfo, &rawTime);
+#else
+    gmtime_r(&rawTime, &timeinfo);
+#endif
+    return strftime(pStr, nSize, "%Y-%m-%dT%H:%M:%S.000Z", &timeinfo);
+}
+
 uint64_t XTime_ToU64(const xtime_t *pTime)
 {
     XCHECK_NL(pTime, 0);
@@ -406,6 +418,7 @@ size_t XTime_GetStr(char *pDst, size_t nSize, xtime_fmt_t eFmt)
         case XTIME_STR_LSTR: return XTime_ToLstr(&date, pDst, nSize);
         case XTIME_STR_HSTR: return XTime_ToHstr(&date, pDst, nSize);
         case XTIME_STR_ISO: return XTime_ToISO(&date, pDst, nSize);
+        case XTIME_STR_ISO8601: return XTime_ToISO8601(&date, pDst, nSize);
         default: break;
     }
 

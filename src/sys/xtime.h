@@ -35,7 +35,8 @@ typedef enum {
     XTIME_STR_HTTP,
     XTIME_STR_LSTR,
     XTIME_STR_HSTR,
-    XTIME_STR_ISO
+    XTIME_STR_ISO,
+    XTIME_STR_ISO8601
 } xtime_fmt_t;
 
 typedef enum {
@@ -83,6 +84,7 @@ uint64_t XTime_GetU64(void);
 uint64_t XTime_GetMs(void);
 uint32_t XTime_GetUsec(void);
 uint64_t XTime_GetStamp(void);
+
 int XTime_GetClock(xtime_spec_t *pTs);
 size_t XTime_GetStr(char *pDst, size_t nSize, xtime_fmt_t eFmt);
 
@@ -109,6 +111,7 @@ size_t XTime_ToLstr(const xtime_t *pTime, char *pStr, size_t nSize);
 size_t XTime_ToRstr(const xtime_t *pTime, char *pStr, size_t nSize);
 size_t XTime_ToHTTP(const xtime_t *pTime, char *pStr, size_t nSize);
 size_t XTime_ToISO(const xtime_t *pTime, char *pStr, size_t nSize);
+size_t XTime_ToISO8601(const xtime_t *pTime, char *pStr, size_t nSize);
 void XTime_ToTm(const xtime_t* pTime, struct tm *pTm);
 
 void XTime_Deserialize(xtime_t *pTime, const uint64_t nTime);

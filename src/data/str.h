@@ -105,6 +105,15 @@
 extern "C" {
 #endif
 
+typedef char xstr_max_t[XSTR_MAX];
+typedef char xstr_big_t[XSTR_BIG];
+typedef char xstr_mid_t[XSTR_MID];
+typedef char xstr_sub_t[XSTR_SUB];
+typedef char xstr_min_t[XSTR_MIN];
+typedef char xstr_tiny_t[XSTR_TINY];
+typedef char xstr_micro_t[XSTR_MICRO];
+typedef char xstr_pico_t[XSTR_PICO];
+
 typedef enum {
     XSTR_LOWER = 0,
     XSTR_UPPER
