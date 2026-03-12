@@ -129,6 +129,7 @@ typedef struct xapi_session_ {
     /* Non-blocking SSL routine */
     xbool_t bReadOnWrite;
     xbool_t bWriteOnRead;
+    xbool_t bKeepRxBuffer;
 
     /* WebSocket handshake routine */
     xbool_t bHandshakeStart;
@@ -180,6 +181,7 @@ xbyte_buffer_t* XAPI_GetRxBuff(xapi_session_t *pApiData);
 XSTATUS XAPI_PutTxBuff(xapi_session_t *pApiData, xbyte_buffer_t *pBuffer);
 
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
+XSTATUS XAPI_SetRxSize(xapi_t *pApi, size_t nSize);
 void XAPI_Destroy(xapi_t *pApi);
 
 XSTATUS XAPI_Disconnect(xapi_session_t *pData);

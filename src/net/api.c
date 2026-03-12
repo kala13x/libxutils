@@ -135,6 +135,7 @@ static xapi_session_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pSession->bWSFragStart = XFALSE;
     pSession->bReadOnWrite = XFALSE;
     pSession->bWriteOnRead = XFALSE;
+    pSession->bKeepRxBuffer = XFALSE;
     pSession->bKeepAlive = XFALSE;
     pSession->bCancel = XFALSE;
     pSession->bAlloc = XTRUE;
@@ -1138,7 +1139,7 @@ static int XAPI_HandleRAW(xapi_t *pApi, xapi_session_t *pSession)
     int nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_READ);
     int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
-    XByteBuffer_Clear(pBuffer);
+    if (!pSession->bKeepRxBuffer) XByteBuffer_Clear(pBuffer);
     pSession->pPacket = NULL;
 
     return nRetVal;
