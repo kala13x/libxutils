@@ -1685,6 +1685,7 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     else nFlags |= XSOCK_TCP;
 
     XSock_Create(pSock, nFlags, pEndpt->pAddr, pEndpt->nPort);
+    if (pEndpt->bTLS) XSock_SetSSLCert(pSock, &pEndpt->certs);
     if (pSock->nFD == XSOCK_INVALID)
     {
         XAPI_ErrorCb(pApi, pSession, XAPI_SOCK, pSock->eStatus);

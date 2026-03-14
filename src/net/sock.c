@@ -1320,6 +1320,7 @@ void XSock_InitCert(xsock_cert_t *pCert)
     pCert->pCertPath = NULL;
     pCert->pKeyPath = NULL;
     pCert->pCaPath = NULL;
+    pCert->pHostName = NULL;
     pCert->p12Path = NULL;
     pCert->p12Pass = NULL;
     pCert->nVerifyFlags = 0;
@@ -1331,6 +1332,7 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
 
 #ifdef XSOCK_USE_SSL
     SSL_CTX *pSSLCtx = XSock_GetSSLCTX(pSock);
+    SSL *pSSL = XSock_GetSSL(pSock);
     if (pSSLCtx == NULL)
     {
         pSock->eStatus = XSOCK_ERR_SSLINV;
@@ -1340,6 +1342,33 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
 
     SSL_CTX_set_ecdh_auto(pSSLCtx, 1);
     if (pCert->nVerifyFlags > 0) SSL_CTX_set_verify(pSSLCtx, pCert->nVerifyFlags, NULL);
+
+#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
+    if (pSSL != NULL &&
+        xstrused(pCert->pHostName) &&
+        SSL_set_tlsext_host_name(pSSL, pCert->pHostName) != 1)
+    {
+        pSock->eStatus = XSOCK_ERR_SSLCNT;
+        XSock_Close(pSock);
+        return XSOCK_INVALID;
+    }
+#endif
+
+#if defined(X509_VERIFY_PARAM_set1_host)
+    if (pSSL != NULL &&
+        xstrused(pCert->pHostName) &&
+        pCert->nVerifyFlags > 0)
+    {
+        X509_VERIFY_PARAM *pParam = SSL_get0_param(pSSL);
+        if (pParam == NULL ||
+            X509_VERIFY_PARAM_set1_host(pParam, pCert->pHostName, 0) != 1)
+        {
+            pSock->eStatus = XSOCK_ERR_SSLCNT;
+            XSock_Close(pSock);
+            return XSOCK_INVALID;
+        }
+    }
+#endif
 
     if (xstrused(pCert->pCaPath))
     {
@@ -1396,7 +1425,9 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
             return XSOCK_INVALID;
         }
 
-        if (xstrused(pCert->pCaPath) && SSL_CTX_use_certificate_chain_file(pSSLCtx, pCert->pCaPath) <= 0)
+        if (xstrused(pCert->pCaPath) &&
+            (xstrused(pCert->pCertPath) || xstrused(pCert->pKeyPath)) &&
+            SSL_CTX_use_certificate_chain_file(pSSLCtx, pCert->pCaPath) <= 0)
         {
             pSock->eStatus = XSOCK_ERR_SSLCA;
             XSock_Close(pSock);

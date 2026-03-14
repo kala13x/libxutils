@@ -153,6 +153,7 @@ typedef struct XSocketCert {
     const char *pCertPath;
     const char *pKeyPath;
     const char *pCaPath;
+    const char *pHostName;
     const char *p12Path;
     const char *p12Pass;
     int nVerifyFlags;
