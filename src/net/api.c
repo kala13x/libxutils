@@ -63,6 +63,13 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
     return "Unknown status";
 }
 
+xbool_t XAPI_IsDestroyEvent(xapi_ctx_t *pCtx)
+{
+    XCHECK_NL((pCtx != NULL), XFALSE);
+    return (pCtx->eStatType == XAPI_SELF &&
+            pCtx->nStatus == XAPI_DESTROY);
+}
+
 const char* XAPI_GetTypeStr(xapi_type_t eType)
 {
     switch (eType)
@@ -76,14 +83,14 @@ const char* XAPI_GetTypeStr(xapi_type_t eType)
         case XAPI_MDTP:
             return "MDTP";
         case XAPI_SOCK:
-            return "Sock";
+            return "Socket";
         case XAPI_WS:
-            return "WebSock";
+            return "WebSocket";
         default:
             break;
     }
 
-    return "Unknown type";
+    return "Unknown";
 }
 
 const char* XAPI_GetStatus(xapi_ctx_t *pCtx)
