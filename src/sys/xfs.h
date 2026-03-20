@@ -80,6 +80,7 @@ typedef struct stat xstat_t;
 #define XFILE_XCHECK_FL(c, f) (((c) & (f)) == (f))
 
 int xstat(const char *pPath, xstat_t *pStat);
+int xchmod(const char* pPath, xmode_t nMode);
 int xmkdir(const char* pPath, xmode_t nMode);
 int xunlink(const char* pPath);
 int xrmdir(const char* pPath);
