@@ -9,12 +9,15 @@
 
 #include "log.h"
 #include "str.h"
+#include "xfs.h"
 #include "xtime.h"
 
 #define XLOG_FILE_PATH_MAX XLOG_PATH_MAX + XLOG_NAME_MAX + XLOG_TIME_MAX
 
 typedef struct XLogFile {
     char sFilePath[XLOG_FILE_PATH_MAX];
+    uint16_t nCurrYear;
+    uint8_t nCurrMonth;
     uint8_t nCurrDay;
     FILE *pHandle;
 } xlog_file_t;
@@ -114,7 +117,6 @@ static size_t XLog_GetThreadID(void)
 #endif
 }
 
-
 static void XLog_CloseFile(xlog_file_t *pFile)
 {
     XCHECK_VOID_NL(pFile->pHandle);
@@ -122,14 +124,29 @@ static void XLog_CloseFile(xlog_file_t *pFile)
     pFile->pHandle = NULL;
 }
 
+static void XLog_RotateFile(xlog_file_t *pFile, const xlog_cfg_t *pCfg)
+{
+    XLog_CloseFile(pFile);
+
+    if (XPath_Exists(pFile->sFilePath))
+    {
+        char sRotatedPath[XLOG_FILE_PATH_MAX];
+
+        size_t nLen = xstrncpyf(sRotatedPath, sizeof(sRotatedPath), "%s/%s-%04d-%02d-%02d.log",
+            pCfg->sFilePath, pCfg->sFileName, pFile->nCurrYear, pFile->nCurrMonth, pFile->nCurrDay);
+
+        if (nLen > 0) rename(pFile->sFilePath, sRotatedPath);
+    }
+}
+
 static xbool_t XLog_OpenFile(xlog_file_t *pFile, const xlog_cfg_t *pCfg, const xtime_t *pTime)
 {
     XLog_CloseFile(pFile);
 
-    if (pCfg->bRotate || pFile->sFilePath[0] == XSTR_NUL)
+    if (pFile->sFilePath[0] == XSTR_NUL)
     {
-        snprintf(pFile->sFilePath, sizeof(pFile->sFilePath), "%s/%s-%04d-%02d-%02d.log",
-            pCfg->sFilePath, pCfg->sFileName, pTime->nYear, pTime->nMonth, pTime->nDay);
+        xstrncpyf(pFile->sFilePath, sizeof(pFile->sFilePath), "%s/%s.log",
+            pCfg->sFilePath, pCfg->sFileName);
     }
 
 #ifdef _WIN32
@@ -146,6 +163,8 @@ static xbool_t XLog_OpenFile(xlog_file_t *pFile, const xlog_cfg_t *pCfg, const x
         return XFALSE;
     }
 
+    pFile->nCurrYear = pTime->nYear;
+    pFile->nCurrMonth = pTime->nMonth;
     pFile->nCurrDay = pTime->nDay;
     return XTRUE;
 }
@@ -198,7 +217,7 @@ static void XLog_DisplayMessage(const xlog_ctx_t *pCtx, const char *pInfo, size_
 
         if (pLog != NULL)
         {
-            nCbVal = pCfg->logCallback (
+            nCbVal = pCfg->logCallback(
                 pLog,
                 nLength,
                 pCtx->eFlag,
@@ -218,11 +237,14 @@ static void XLog_DisplayMessage(const xlog_ctx_t *pCtx, const char *pInfo, size_
     if (!pCfg->bToFile || nCbVal < 0) return;
     const xtime_t *pTime = &pCtx->time;
 
-    if (pFile->nCurrDay != pTime->nDay && pCfg->bRotate) XLog_CloseFile(pFile);
-    if (pFile->pHandle == NULL && !XLog_OpenFile(pFile, pCfg, pTime)) return;
+    if (pFile->nCurrDay != pTime->nDay && pCfg->bRotate)
+    {
+        if (!pFile->nCurrDay) XLog_CloseFile(pFile);
+        else XLog_RotateFile(pFile, pCfg);
+    }
 
-    fprintf(pFile->pHandle, "%s%s%s%s%s",
-        pInfo, pSep, pMsg, pReset, pNewLine);
+    if (pFile->pHandle == NULL && !XLog_OpenFile(pFile, pCfg, pTime)) return;
+    fprintf(pFile->pHandle, "%s%s%s%s%s", pInfo, pSep, pMsg, pReset, pNewLine);
 
     if (pCfg->bFlush) fflush(pFile->pHandle);
     if (!pCfg->bKeepOpen) XLog_CloseFile(pFile);
@@ -611,6 +633,8 @@ void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe)
 
     pFile->sFilePath[0] = '\0';
     pFile->pHandle = NULL;
+    pFile->nCurrYear = 0;
+    pFile->nCurrMonth = 0;
     pFile->nCurrDay = 0;
 
 #ifdef _WIN32
