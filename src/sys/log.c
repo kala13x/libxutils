@@ -142,11 +142,29 @@ static void XLog_RotateFile(xlog_file_t *pFile, const xlog_cfg_t *pCfg)
 static xbool_t XLog_OpenFile(xlog_file_t *pFile, const xlog_cfg_t *pCfg, const xtime_t *pTime)
 {
     XLog_CloseFile(pFile);
+    xstat_t st;
 
     if (pFile->sFilePath[0] == XSTR_NUL)
     {
         xstrncpyf(pFile->sFilePath, sizeof(pFile->sFilePath), "%s/%s.log",
             pCfg->sFilePath, pCfg->sFileName);
+    }
+
+    /* Check if existing log file belongs to a different day */
+    if (pCfg->bRotate && xstat(pFile->sFilePath, &st) == XSTDOK)
+    {
+        xtime_t modTime;
+        XTime_FromEpoch(&modTime, (time_t)st.st_mtime);
+
+        if (modTime.nDay != pTime->nDay ||
+            modTime.nMonth != pTime->nMonth ||
+            modTime.nYear != pTime->nYear)
+        {
+            pFile->nCurrYear = modTime.nYear;
+            pFile->nCurrMonth = modTime.nMonth;
+            pFile->nCurrDay = modTime.nDay;
+            XLog_RotateFile(pFile, pCfg);
+        }
     }
 
 #ifdef _WIN32
