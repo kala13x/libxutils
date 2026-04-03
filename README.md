@@ -1,3 +1,4 @@
+![C](https://img.shields.io/badge/language-C-blue)
 [![MIT License](https://img.shields.io/badge/License-MIT-brightgreen.svg?)](https://github.com/kala13x/libxutils/blob/main/LICENSE)
 [![Linux](https://github.com/kala13x/libxutils/actions/workflows/linux.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/linux.yml)
 [![MacOS](https://github.com/kala13x/libxutils/actions/workflows/macos.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/macos.yml)
