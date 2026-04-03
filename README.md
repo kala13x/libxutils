@@ -4,13 +4,13 @@
 [![Windows](https://github.com/kala13x/libxutils/actions/workflows/windows.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/windows.yml)
 [![CodeQL](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml)
 
-## libxutils - Cross-platform C framework release 2.x
+## libxutils - Cross-platform C library release 2.x
 
-`libxutils` is a low-level cross-platform `C` framework designed to eliminate the need for stitching together dozens of unrelated libraries.
+`libxutils` is a low-level cross-platform `C` library designed to eliminate the need for stitching together dozens of unrelated libraries.
 
 It provides a unified, event-driven runtime with consistent APIs for networking, data structures, cryptography and system utilities, optimized for performance-critical native applications.
 
-The framework targets `Linux`, `Unix` and `Windows` and is released under the `MIT` license.
+The library targets `Linux`, `Unix` and `Windows` and is released under the `MIT` license.
 
 ## What makes it strong
 
@@ -24,7 +24,7 @@ The framework targets `Linux`, `Unix` and `Windows` and is released under the `M
 
 The strongest side of `libxutils` is networking.
 
-Instead of combining separate libraries for sockets, event loops, HTTP, WebSocket, SSL and protocol glue, `libxutils` keeps them inside one framework with shared conventions for buffers, callbacks, ownership and runtime flow.
+Instead of combining separate libraries for sockets, event loops, HTTP, WebSocket, SSL and protocol glue, `libxutils` keeps them inside one library with shared conventions for buffers, callbacks, ownership and runtime flow.
 
 Built-in networking pieces include:
 
@@ -63,7 +63,7 @@ Full documentation is available in the [docs](docs/README.md) directory.
 - Category indexes are available in [docs/crypt/README.md](docs/crypt/README.md), [docs/data/README.md](docs/data/README.md), [docs/net/README.md](docs/net/README.md) and [docs/sys/README.md](docs/sys/README.md)
 - The `docs/` tree documents the real behavior from `src/`, including arguments, return values, callback contracts and known quirks
 
-## Framework modules
+## Library modules
 
 Each module below links to documentation with API contracts and behavior.
 
@@ -210,7 +210,7 @@ int main(void)
 
 ## Installation
 
-There are several ways to build and install the framework.
+There are several ways to build and install the library.
 
 ### Using the included script
 
@@ -224,7 +224,7 @@ git clone https://github.com/kala13x/libxutils
 Supported build-script options:
 
 - `--tool=<tool>` choose `cmake`, `smake` or the included `make`
-- `--install` install the framework and tools after building
+- `--install` install the library and tools after building
 - `--examples` include examples in the build
 - `--tools` include tools in the build
 - `--clean` remove object files after build/install
@@ -265,7 +265,7 @@ sudo make install
 
 ## Dependencies
 
-`OpenSSL` is the only external dependency and is only required for `SSL` and `RSA` functionality. If the development package is missing, the framework can still be built without SSL support.
+`OpenSSL` is the only external dependency and is only required for `SSL` and `RSA` functionality. If the development package is missing, the library can still be built without SSL support.
 
 ### Install OpenSSL development package
 
@@ -284,8 +284,8 @@ For exact runtime behavior, use the documentation in [docs/](docs/README.md) ins
 
 The project contains two useful reference areas:
 
-- `examples/` contains smaller and simpler examples focused on showing how to use specific parts of the framework
-- `tools/` contains larger, more advanced examples in the form of ready-made CLI applications built on top of the framework
+- `examples/` contains smaller and simpler examples focused on showing how to use specific parts of the library
+- `tools/` contains larger, more advanced examples in the form of ready-made CLI applications built on top of the library
 
 You can build both with:
 
@@ -308,7 +308,7 @@ make
     <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/examples/xtop.png" alt="xtop screenshot">
 </p>
 
-`XTOP` is an `HTOP`-style performance monitor that displays CPU, memory and network activity in a single CLI window. It is also a good example of how much can be built on top of the framework without adding a large external stack.
+`XTOP` is an `HTOP`-style performance monitor that displays CPU, memory and network activity in a single CLI window. It is also a good example of how much can be built on top of the library without adding a large external stack.
 
 After building the sources in `tools/`, run `sudo make install` to install:
 
