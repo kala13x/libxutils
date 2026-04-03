@@ -36,6 +36,8 @@ Built-in networking pieces include:
 - `MDTP`
 - Cross-platform event loop integration
 
+HTTP, WebSocket, events, timers and raw TCP share the same callback model, endpoint setup and event loop. Switch between protocols by changing a single enum — the rest of your code stays the same. More importantly, they can coexist: a single `xapi_t` instance can serve an HTTP API on one port, a WebSocket feed on another and a raw TCP control channel on a third, all multiplexed through one `XAPI_Service` loop with no threading required.
+
 ## Typical use cases
 
 - High-performance network services such as `HTTP` and `WebSocket` servers, gateways and proxies
