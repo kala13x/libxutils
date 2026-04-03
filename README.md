@@ -28,12 +28,12 @@ Instead of combining separate libraries for sockets, event loops, HTTP, WebSocke
 
 Built-in networking pieces include:
 
-- raw sockets, Unix sockets, `TCP` and `UDP`
-- optional `SSL`
+- Raw sockets, Unix sockets, `TCP` and `UDP`
+- `SSL` (optional)
 - `HTTP`
 - `WebSocket`
 - `MDTP`
-- cross-platform event loop integration
+- Cross-platform event loop integration
 
 ## Typical use cases
 
@@ -47,13 +47,13 @@ Built-in networking pieces include:
 
 | Feature | libxutils | libuv | boost::asio | curl + ad-hoc stack |
 |---|---|---|---|---|
-| Integrated full stack | Yes | No | No | No |
-| Event loop | Yes | Yes | Yes | No |
-| Built-in HTTP/WebSocket | Yes | No | No | Partial |
-| Built-in crypto helpers | Yes | No | No | No |
-| Minimal external deps | Yes | Yes | No | No |
+| Integrated full stack | ✔️ | ❌ | ❌ | ❌ |
+| Event loop | ✔️ | ✔️ | ✔️ | ❌ |
+| Built-in HTTP/WebSocket | ✔️ | ❌ | ❌ | ❌ |
+| Built-in crypto helpers | ✔️ | ❌ | ❌ | ❌ |
+| Minimal external deps | ✔️ | ✔️ | ❌ | ❌ |
 
-This comparison is about what the core stack gives you out of the box, not what you can assemble around it with additional libraries.
+This comparison reflects what each library provides out of the box, without requiring additional libraries or integrations.
 
 ## Documentation
 
@@ -142,21 +142,11 @@ static int on_request(xapi_session_t *s)
     printf("Request: %s %s\n", XHTTP_GetMethodStr(req->eMethod), req->sUri);
 
     xhttp_t res;
-    if (XHTTP_InitResponse(&res, 200, NULL) <= 0)
-        return XAPI_DISCONNECT;
-
-    if (XHTTP_AddHeader(&res, "Content-Type", "text/plain") < 0)
-    {
-        XHTTP_Clear(&res);
-        return XAPI_DISCONNECT;
-    }
+    XHTTP_InitResponse(&res, 200, NULL);
+    XHTTP_AddHeader(&res, "Content-Type", "text/plain");
 
     const char *body = "Hello from libxutils\n";
-    if (XHTTP_Assemble(&res, (const uint8_t*)body, strlen(body)) == NULL)
-    {
-        XHTTP_Clear(&res);
-        return XAPI_DISCONNECT;
-    }
+    XHTTP_Assemble(&res, (const uint8_t*)body, strlen(body));
 
     XByteBuffer_AddBuff(&s->txBuffer, &res.rawData);
     XHTTP_Clear(&res);
@@ -190,16 +180,11 @@ int main(void)
     xapi_endpoint_t ep;
     XAPI_InitEndpoint(&ep);
 
-    ep.eType = XAPI_HTTP;
-    ep.eRole = XAPI_SERVER;
     ep.pAddr = "0.0.0.0";
     ep.nPort = 8080;
-
-    if (XAPI_AddEndpoint(&api, &ep) < 0)
-    {
-        XAPI_Destroy(&api);
-        return 1;
-    }
+    ep.eType = XAPI_HTTP;
+    ep.eRole = XAPI_SERVER;
+    XAPI_AddEndpoint(&api, &ep);
 
     while (XAPI_Service(&api, 100) == XEVENTS_SUCCESS);
 
