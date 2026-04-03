@@ -52,9 +52,9 @@ libxutils started as a personal utility library in 2015 and has evolved over yea
 
 The library is designed around predictable performance and explicit resource control. There are no hidden allocations, no implicit threading and no garbage-collected layers — memory ownership is always visible at the call site.
 
-Every commit is tested against Valgrind as part of the CI pipeline to catch leaks, invalid reads and use-after-free errors before they reach a release. Combined with the CodeQL static analysis already running on every push, this means the codebase is continuously checked for both memory safety and code quality.
+Every commit is tested against Valgrind as part of the CI pipeline to catch leaks, invalid reads and use-after-free errors before they reach a release. Combined with CodeQL static analysis running on every push, the codebase is continuously checked for memory safety and overall quality.
 
-The result is a library that stays small, links fast and behaves the same way whether it runs in a long-lived server or a short-lived CLI tool.
+The result is a library that stays small, builds fast and behaves the same way whether it runs in a long-lived server or a short-lived CLI tool.
 
 ## Compared to other stacks
 
@@ -151,6 +151,8 @@ This example shows the core event-driven flow:
 - Close the session
 
 ```c
+#include <stdio.h>
+#include <string.h>
 #include <xutils/api.h>
 
 static int on_request(xapi_session_t *s)
