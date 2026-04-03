@@ -43,6 +43,12 @@ Built-in networking pieces include:
 - Custom runtimes and protocol implementations
 - Native backends exposed to higher-level languages through `FFI`
 
+## Why libxutils?
+
+libxutils started as a personal utility library in 2015 and has evolved over years of real-world use.
+
+It reflects a design approach focused on performance, control, and avoiding unnecessary abstractions.
+
 ## Compared to other stacks
 
 | Feature | libxutils | libuv | boost::asio | curl + ad-hoc stack |
