@@ -1469,6 +1469,17 @@ static int XAPI_UserEvent(xapi_t *pApi)
     return XAPI_StatusToEvent(pApi, nStatus);
 }
 
+static xevent_status_t XAPI_TickEvent(xapi_t *pApi)
+{
+    XCHECK((pApi != NULL), XEVENTS_EINVALID);
+
+    int nStatus = XAPI_ServiceCb(pApi, NULL, XAPI_CB_TICK);
+    int nEvent = XAPI_StatusToEvent(pApi, nStatus);
+
+    return (nEvent <= XEVENTS_DISCONNECT) ?
+        XEVENTS_EBREAK : XEVENTS_SUCCESS;
+}
+
 static int XAPI_EventCallback(void *events, void* data, XSOCKET fd, xevent_cb_type_t reason)
 {
     XCHECK((events != NULL), XEVENTS_CONTINUE);
@@ -1558,7 +1569,9 @@ xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
     XCHECK(pApi->bHaveEvents, XEVENTS_EINVALID);
 
     xevents_t *pEvents = &pApi->events;
-    return XEvents_Service(pEvents, nTimeoutMs);
+    xevent_status_t eStatus = XEvents_Service(pEvents, nTimeoutMs);
+    if (eStatus != XEVENTS_SUCCESS) return eStatus;
+    return XAPI_TickEvent(pApi);
 }
 
 void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)

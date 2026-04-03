@@ -52,7 +52,8 @@ typedef enum {
     XAPI_CB_PING,
     XAPI_CB_PONG,
     XAPI_CB_USER,
-    XAPI_CB_TIMER
+    XAPI_CB_TIMER,
+    XAPI_CB_TICK
 } xapi_cb_type_t;
 
 typedef enum {
