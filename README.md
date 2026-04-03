@@ -4,29 +4,68 @@
 [![Windows](https://github.com/kala13x/libxutils/actions/workflows/windows.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/windows.yml)
 [![CodeQL](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml/badge.svg)](https://github.com/kala13x/libxutils/actions/workflows/codeql.yml)
 
-## libxutils - Cross-platform C library release 2.x
+## libxutils - Cross-platform C framework release 2.x
 
-`libxutils` is a low-level cross-platform `C` library for building real native software without pulling in a large dependency stack. It combines containers, strings, JSON/JWT helpers, cryptography, sockets, HTTP/WebSocket, event loops, filesystems, logging, threads, synchronization and time utilities in one consistent codebase.
+`libxutils` is a low-level cross-platform `C` framework designed to eliminate the need for stitching together dozens of unrelated libraries.
 
-The library targets `Linux`, `Unix` and `Windows` and is released under the `MIT` license.
+It provides a unified, event-driven runtime with consistent APIs for networking, data structures, cryptography and system utilities, optimized for performance-critical native applications.
 
-## Why libxutils
+The framework targets `Linux`, `Unix` and `Windows` and is released under the `MIT` license.
 
-- It gives you one cohesive low-level stack instead of stitching together many unrelated libraries for buffers, strings, sockets, events, JSON, crypto and system utilities.
-- It is designed around explicit ownership, explicit buffers and event-driven I/O, which makes it practical for performance-sensitive native applications.
-- The networking side is unusually complete for a utility library: raw sockets, Unix sockets, TCP/UDP, SSL, HTTP, WebSocket, MDTP and a cross-platform event loop live in the same runtime.
-- It stays close to C instead of hiding behavior behind heavy abstractions. That makes integration easier for `C`, `C++`, `Rust`, `Objective-C` and FFI-heavy projects.
-- The dependency surface is small. `OpenSSL` is only needed for SSL/RSA-related functionality; most of the library builds without it.
+## What makes it strong
+
+- One consistent low-level stack instead of multiple libraries
+- Explicit memory and ownership model
+- Event-driven architecture
+- Minimal dependencies with optional `OpenSSL`
+- Designed for high-performance native software where control and predictability matter
+
+## Core strength: networking
+
+The strongest side of `libxutils` is networking.
+
+Instead of combining separate libraries for sockets, event loops, HTTP, WebSocket, SSL and protocol glue, `libxutils` keeps them inside one framework with shared conventions for buffers, callbacks, ownership and runtime flow.
+
+Built-in networking pieces include:
+
+- raw sockets, Unix sockets, `TCP` and `UDP`
+- optional `SSL`
+- `HTTP`
+- `WebSocket`
+- `MDTP`
+- cross-platform event loop integration
+
+## Typical use cases
+
+- High-performance network services such as `HTTP` and `WebSocket` servers, gateways and proxies
+- CLI tools that need networking, JSON, crypto and filesystem support in one binary
+- Embedded or system-level software with minimal dependency requirements
+- Custom runtimes and protocol implementations
+- Native backends exposed to higher-level languages through `FFI`
+
+## Compared to other stacks
+
+| Feature | libxutils | libuv | boost::asio | curl + ad-hoc stack |
+|---|---|---|---|---|
+| Integrated full stack | Yes | No | No | No |
+| Event loop | Yes | Yes | Yes | No |
+| Built-in HTTP/WebSocket | Yes | No | No | Partial |
+| Built-in crypto helpers | Yes | No | No | No |
+| Minimal external deps | Yes | Yes | No | No |
+
+This comparison is about what the core stack gives you out of the box, not what you can assemble around it with additional libraries.
 
 ## Documentation
 
 Full documentation is available in the [docs](docs/README.md) directory.
 
-- Start with [docs/README.md](docs/README.md) for the top-level index.
-- Category indexes are available in [docs/crypt/README.md](docs/crypt/README.md), [docs/data/README.md](docs/data/README.md), [docs/net/README.md](docs/net/README.md) and [docs/sys/README.md](docs/sys/README.md).
-- The `docs/` tree documents the real source behavior from `src/`, including argument meaning, return values, callback contracts and known quirks.
+- Start with [docs/README.md](docs/README.md) for the full index
+- Category indexes are available in [docs/crypt/README.md](docs/crypt/README.md), [docs/data/README.md](docs/data/README.md), [docs/net/README.md](docs/net/README.md) and [docs/sys/README.md](docs/sys/README.md)
+- The `docs/` tree documents the real behavior from `src/`, including arguments, return values, callback contracts and known quirks
 
-## Module map
+## Framework modules
+
+Each module below links to documentation with API contracts and behavior.
 
 ### Data and containers
 
@@ -82,9 +121,96 @@ Full documentation is available in the [docs](docs/README.md) directory.
 
 - [Version helpers](docs/xver.md)
 
+## Quick example
+
+Minimal event-driven HTTP server example. For a more complete implementation with logging, timeouts, SSL and full connection lifecycle handling, see [`examples/http-server.c`](examples/http-server.c).
+
+This example shows the core event-driven flow:
+
+- accept a connection
+- read HTTP request
+- assemble a response
+- send it back
+- close the session
+
+```c
+#include <xutils/api.h>
+
+static int on_request(xapi_session_t *s)
+{
+    xhttp_t *req = (xhttp_t*)s->pPacket;
+    printf("Request: %s %s\n", XHTTP_GetMethodStr(req->eMethod), req->sUri);
+
+    xhttp_t res;
+    if (XHTTP_InitResponse(&res, 200, NULL) <= 0)
+        return XAPI_DISCONNECT;
+
+    if (XHTTP_AddHeader(&res, "Content-Type", "text/plain") < 0)
+    {
+        XHTTP_Clear(&res);
+        return XAPI_DISCONNECT;
+    }
+
+    const char *body = "Hello from libxutils\n";
+    if (XHTTP_Assemble(&res, (const uint8_t*)body, strlen(body)) == NULL)
+    {
+        XHTTP_Clear(&res);
+        return XAPI_DISCONNECT;
+    }
+
+    XByteBuffer_AddBuff(&s->txBuffer, &res.rawData);
+    XHTTP_Clear(&res);
+
+    return XAPI_EnableEvent(s, XPOLLOUT);
+}
+
+static int callback(xapi_ctx_t *ctx, xapi_session_t *s)
+{
+    switch (ctx->eCbType)
+    {
+        case XAPI_CB_ACCEPTED:
+            return XAPI_SetEvents(s, XPOLLIN);
+
+        case XAPI_CB_READ:
+            return on_request(s);
+
+        case XAPI_CB_WRITE:
+            return XAPI_DISCONNECT;
+
+        default:
+            return XAPI_CONTINUE;
+    }
+}
+
+int main(void)
+{
+    xapi_t api;
+    XAPI_Init(&api, callback, NULL);
+
+    xapi_endpoint_t ep;
+    XAPI_InitEndpoint(&ep);
+
+    ep.eType = XAPI_HTTP;
+    ep.eRole = XAPI_SERVER;
+    ep.pAddr = "0.0.0.0";
+    ep.nPort = 8080;
+
+    if (XAPI_AddEndpoint(&api, &ep) < 0)
+    {
+        XAPI_Destroy(&api);
+        return 1;
+    }
+
+    while (XAPI_Service(&api, 100) == XEVENTS_SUCCESS);
+
+    XAPI_Destroy(&api);
+    return 0;
+}
+```
+
 ## Installation
 
-There are several ways to build and install the project.
+There are several ways to build and install the framework.
 
 ### Using the included script
 
@@ -98,7 +224,7 @@ git clone https://github.com/kala13x/libxutils
 Supported build-script options:
 
 - `--tool=<tool>` choose `cmake`, `smake` or the included `make`
-- `--install` install the library and tools after building
+- `--install` install the framework and tools after building
 - `--examples` include examples in the build
 - `--tools` include tools in the build
 - `--clean` remove object files after build/install
@@ -139,7 +265,7 @@ sudo make install
 
 ## Dependencies
 
-`OpenSSL` is the only external dependency and is only required for `SSL` and `RSA` functionality. If the development package is missing, the library can still be built without SSL support.
+`OpenSSL` is the only external dependency and is only required for `SSL` and `RSA` functionality. If the development package is missing, the framework can still be built without SSL support.
 
 ### Install OpenSSL development package
 
@@ -150,13 +276,18 @@ macOS: `brew install openssl`
 
 ## Usage
 
-Include the required `<xutils/*.h>` headers in your program and link with `-lxutils`.
+Include the required `<xutils/*.h>` headers in your project and link with `-lxutils`.
 
-For API contracts and exact runtime behavior, use the documentation in [docs/](docs/README.md) instead of relying on symbol names alone.
+For exact runtime behavior, use the documentation in [docs/](docs/README.md) instead of relying on symbol names alone.
 
-## Tools and examples
+## Examples and tools
 
-Use the build script to include CLI tools from `tools/` and sample programs from `examples/`:
+The project contains two useful reference areas:
+
+- `examples/` contains smaller and simpler examples focused on showing how to use specific parts of the framework
+- `tools/` contains larger, more advanced examples in the form of ready-made CLI applications built on top of the framework
+
+You can build both with:
 
 ```bash
 ./libxutils/build.sh --tools --examples
@@ -171,13 +302,13 @@ cmake .
 make
 ```
 
-## XTOP and more
+## XTOP and included tools
 
 <p align="center">
     <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/examples/xtop.png" alt="xtop screenshot">
 </p>
 
-`XTOP` is an `HTOP`-style performance monitor that can display CPU, memory and network activity in a single CLI window. It also supports additional client/server and REST-oriented workflows.
+`XTOP` is an `HTOP`-style performance monitor that displays CPU, memory and network activity in a single CLI window. It is also a good example of how much can be built on top of the framework without adding a large external stack.
 
 After building the sources in `tools/`, run `sudo make install` to install:
 

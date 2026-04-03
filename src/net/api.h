@@ -178,9 +178,9 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus);
 const char* XAPI_GetTypeStr(xapi_type_t eType);
 xbool_t XAPI_IsDestroyEvent(xapi_ctx_t *pCtx);
 
-xbyte_buffer_t* XAPI_GetTxBuff(xapi_session_t *pApiData);
-xbyte_buffer_t* XAPI_GetRxBuff(xapi_session_t *pApiData);
-XSTATUS XAPI_PutTxBuff(xapi_session_t *pApiData, xbyte_buffer_t *pBuffer);
+xbyte_buffer_t* XAPI_GetTxBuff(xapi_session_t *pSession);
+xbyte_buffer_t* XAPI_GetRxBuff(xapi_session_t *pSession);
+XSTATUS XAPI_PutTxBuff(xapi_session_t *pSession, xbyte_buffer_t *pBuffer);
 
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
 XSTATUS XAPI_SetRxSize(xapi_t *pApi, size_t nSize);
@@ -196,8 +196,8 @@ XSTATUS XAPI_EnableEvent(xapi_session_t *pData, int nEvent);
 XSTATUS XAPI_SetEvents(xapi_session_t *pData, int nEvents);
 size_t XAPI_GetEventCount(xapi_t *pApi);
 
-XSTATUS XAPI_RespondHTTP(xapi_session_t *pApiData, int nCode, xapi_status_t eStatus);
-XSTATUS XAPI_AuthorizeHTTP(xapi_session_t *pApiData, const char *pToken, const char *pKey);
+XSTATUS XAPI_RespondHTTP(xapi_session_t *pSession, int nCode, xapi_status_t eStatus);
+XSTATUS XAPI_AuthorizeHTTP(xapi_session_t *pSession, const char *pToken, const char *pKey);
 
 void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt);
 XSTATUS XAPI_AddEndpoint(xapi_t *pApi, xapi_endpoint_t *pEndpt);
