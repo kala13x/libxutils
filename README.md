@@ -36,7 +36,7 @@ Built-in networking pieces include:
 - `MDTP`
 - Cross-platform event loop integration
 
-HTTP, WebSocket, events, timers and raw TCP share the same callback model, endpoint setup and event loop. Switch between protocols by changing a single enum — the rest of your code stays the same. More importantly, they can coexist: a single `xapi_t` instance can serve an HTTP API on one port, a WebSocket feed on another and a raw TCP control channel on a third, all multiplexed through one `XAPI_Service` loop with no threading required.
+HTTP, WebSocket and raw TCP share the same callback model, endpoint setup and event loop. Switch between protocols by changing a single enum — the rest of your code stays the same. More importantly, they can coexist: a single instance can serve an HTTP API on one port, a WebSocket feed on another and a raw TCP control channel on a third, all multiplexed through one service loop with no threading required.
 
 ## Typical use cases
 
@@ -48,9 +48,13 @@ HTTP, WebSocket, events, timers and raw TCP share the same callback model, endpo
 
 ## Why libxutils?
 
-libxutils started as a personal utility library in 2015 and has evolved over years of real-world use.
+libxutils started as a personal utility library in 2015 and has evolved over years of real-world use into a focused, production-tested stack.
 
-It reflects a design approach focused on performance, control, and avoiding unnecessary abstractions.
+The library is designed around predictable performance and explicit resource control. There are no hidden allocations, no implicit threading and no garbage-collected layers — memory ownership is always visible at the call site.
+
+Every commit is tested against Valgrind as part of the CI pipeline to catch leaks, invalid reads and use-after-free errors before they reach a release. Combined with the CodeQL static analysis already running on every push, this means the codebase is continuously checked for both memory safety and code quality.
+
+The result is a library that stays small, links fast and behaves the same way whether it runs in a long-lived server or a short-lived CLI tool.
 
 ## Compared to other stacks
 
@@ -61,6 +65,10 @@ It reflects a design approach focused on performance, control, and avoiding unne
 | Built-in HTTP/WebSocket | ✔️ | ❌ | ❌ | ❌ |
 | Built-in crypto helpers | ✔️ | ❌ | ❌ | ❌ |
 | Minimal external deps | ✔️ | ✔️ | ❌ | ❌ |
+| Ecosystem maturity | Medium | High | High | High |
+| Community / adoption | Growing | Very high | Very high | Very high |
+| High-level abstractions | Selective | Limited | Moderate | Varies |
+| Learning curve | Moderate | Moderate | Higher | Varies |
 
 This comparison reflects what each library provides out of the box, without requiring additional libraries or integrations.
 
@@ -69,23 +77,12 @@ This comparison reflects what each library provides out of the box, without requ
 Full documentation is available in the [docs](docs/README.md) directory.
 
 - Start with [docs/README.md](docs/README.md) for the full index
-- Category indexes are available in [docs/crypt/README.md](docs/crypt/README.md), [docs/data/README.md](docs/data/README.md), [docs/net/README.md](docs/net/README.md) and [docs/sys/README.md](docs/sys/README.md)
+- Category indexes are available in [networking](docs/net/README.md), [data](docs/data/README.md), [crypto](docs/crypt/README.md) and [system](docs/sys/README.md)
 - The `docs/` tree documents the real behavior from `src/`, including arguments, return values, callback contracts and known quirks
 
 ## Library modules
 
 Each module below links to documentation with API contracts and behavior.
-
-### Data and containers
-
-- [Dynamic array](docs/data/array.md)
-- [Byte/data buffers](docs/data/buf.md)
-- [Hash map](docs/data/hash.md)
-- [Key/value map](docs/data/map.md)
-- [Linked list](docs/data/list.md)
-- [String utilities and dynamic string](docs/data/str.md)
-- [JSON parser/writer](docs/data/json.md)
-- [JWT helpers](docs/data/jwt.md)
 
 ### Networking
 
@@ -99,16 +96,27 @@ Each module below links to documentation with API contracts and behavior.
 - [NTP helpers](docs/net/ntp.md)
 - [Address/interface helpers](docs/net/addr.md)
 
+### Data and containers
+
+- [Dynamic array](docs/data/array.md)
+- [Byte/data buffers](docs/data/buf.md)
+- [Hash map](docs/data/hash.md)
+- [Key/value map](docs/data/map.md)
+- [Linked list](docs/data/list.md)
+- [C string utilities and dynamic string](docs/data/str.md)
+- [JSON parser/writer](docs/data/json.md)
+- [JWT parser/writer/verifier](docs/data/jwt.md)
+
 ### Cryptography and encoding
 
 - [Cryptography dispatch helpers](docs/crypt/crypt.md)
+- [AES encryption and decryption](docs/crypt/aes.md)
 - [Base64 and Base64Url](docs/crypt/base64.md)
-- [AES helpers](docs/crypt/aes.md)
-- [HMAC](docs/crypt/hmac.md)
 - [RSA helpers](docs/crypt/rsa.md)
 - [SHA-256](docs/crypt/sha256.md)
 - [SHA-1](docs/crypt/sha1.md)
 - [CRC32](docs/crypt/crc32.md)
+- [HMAC](docs/crypt/hmac.md)
 - [MD5](docs/crypt/md5.md)
 
 ### System and runtime
@@ -116,18 +124,18 @@ Each module below links to documentation with API contracts and behavior.
 - [File and directory operations](docs/sys/xfs.md)
 - [CPU affinity helpers](docs/sys/cpu.md)
 - [Recursive file/content search](docs/sys/srch.md)
-- [Time helpers](docs/sys/xtime.md)
+- [Time and date helpers](docs/sys/xtime.md)
 - [Resource monitoring](docs/sys/mon.md)
 - [Memory pool](docs/sys/pool.md)
 - [Logging](docs/sys/log.md)
 - [Synchronization primitives](docs/sys/sync.md)
 - [Threading and repeating tasks](docs/sys/thread.md)
-- [CLI helpers and progress bars](docs/sys/cli.md)
-- [Signal and daemon helpers](docs/sys/sig.md)
-- [Small type/format helpers](docs/sys/type.md)
 
 ### Miscellaneous
 
+- [CLI helpers and progress bars](docs/sys/cli.md)
+- [Signal and daemon helpers](docs/sys/sig.md)
+- [Small type/format helpers](docs/sys/type.md)
 - [Version helpers](docs/xver.md)
 
 ## Quick example
@@ -136,11 +144,11 @@ Minimal event-driven HTTP server example. For a more complete implementation wit
 
 This example shows the core event-driven flow:
 
-- accept a connection
-- read HTTP request
-- assemble a response
-- send it back
-- close the session
+- Accept a connection
+- Read HTTP request
+- Assemble a response
+- Send it back
+- Close the session
 
 ```c
 #include <xutils/api.h>
@@ -189,10 +197,10 @@ int main(void)
     xapi_endpoint_t ep;
     XAPI_InitEndpoint(&ep);
 
-    ep.pAddr = "0.0.0.0";
-    ep.nPort = 8080;
     ep.eType = XAPI_HTTP;
     ep.eRole = XAPI_SERVER;
+    ep.pAddr = "0.0.0.0";
+    ep.nPort = 8080;
     XAPI_AddEndpoint(&api, &ep);
 
     while (XAPI_Service(&api, 100) == XEVENTS_SUCCESS);
@@ -201,6 +209,8 @@ int main(void)
     return 0;
 }
 ```
+
+A single abstraction covers HTTP, WebSocket and raw TCP. The same `XAPI_Init` → `XAPI_AddEndpoint` → `XAPI_Service` flow, the same callback signature and the same return codes apply regardless of protocol. Code written for one transport carries over to another with minimal changes, which removes the integration cost of combining separate libraries for each protocol. Multiple endpoints with different protocols can also run side by side in the same event loop, making it straightforward to expose an HTTP API, a WebSocket stream and a raw TCP channel from one process without threads or external glue.
 
 ## Installation
 
