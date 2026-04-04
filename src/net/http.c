@@ -552,7 +552,7 @@ xbyte_buffer_t* XHTTP_Assemble(xhttp_t *pHttp, const uint8_t *pContent, size_t n
 
     if ((pHdrMap->nCount > 0 &&
         XMap_Iterate(pHdrMap, XHTTP_HeaderWriteCb, pHttp) != XMAP_OK) ||
-        XByteBuffer_AddFmt(pBuffer, "%s", "\r\n") == XSTDERR) return NULL;
+        XByteBuffer_AddFmt(pBuffer, "%s", "\r\n") <= 0) return NULL;
 
     pHttp->nHeaderLength = pBuffer->nUsed;
     pHttp->nHeaderCount = (uint16_t)pHdrMap->nCount;

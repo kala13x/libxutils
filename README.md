@@ -93,18 +93,17 @@ Each module below links to documentation with API contracts and behavior.
 - [WebSocket framing](docs/net/ws.md)
 - [MDTP packet protocol](docs/net/mdtp.md)
 - [RTP packet helpers](docs/net/rtp.md)
-- [NTP helpers](docs/net/ntp.md)
 - [Address/interface helpers](docs/net/addr.md)
 
 ### Data and containers
 
 - [Dynamic array](docs/data/array.md)
 - [Byte/data buffers](docs/data/buf.md)
-- [Hash map](docs/data/hash.md)
 - [Key/value map](docs/data/map.md)
+- [Hash map](docs/data/hash.md)
 - [Linked list](docs/data/list.md)
 - [C string utilities and dynamic string](docs/data/str.md)
-- [JSON parser/writer](docs/data/json.md)
+- [JSON parser/writer/formatter](docs/data/json.md)
 - [JWT parser/writer/verifier](docs/data/jwt.md)
 
 ### Cryptography and encoding
@@ -136,6 +135,7 @@ Each module below links to documentation with API contracts and behavior.
 - [CLI helpers and progress bars](docs/sys/cli.md)
 - [Signal and daemon helpers](docs/sys/sig.md)
 - [Small type/format helpers](docs/sys/type.md)
+- [NTP client helpers](docs/net/ntp.md)
 - [Version helpers](docs/xver.md)
 
 ## Quick example
@@ -151,14 +151,12 @@ This example shows the core event-driven flow:
 - Close the session
 
 ```c
-#include <stdio.h>
-#include <string.h>
 #include <xutils/api.h>
 
 static int on_request(xapi_session_t *s)
 {
     xhttp_t *req = (xhttp_t*)s->pPacket;
-    printf("Request: %s %s\n", XHTTP_GetMethodStr(req->eMethod), req->sUri);
+    (void)req; // handle request here
 
     xhttp_t res;
     XHTTP_InitResponse(&res, 200, NULL);
@@ -167,7 +165,7 @@ static int on_request(xapi_session_t *s)
     const char *body = "Hello from libxutils\n";
     XHTTP_Assemble(&res, (const uint8_t*)body, strlen(body));
 
-    XByteBuffer_AddBuff(&s->txBuffer, &res.rawData);
+    XAPI_PutTxBuff(s, &res.rawData);
     XHTTP_Clear(&res);
 
     return XAPI_EnableEvent(s, XPOLLOUT);
@@ -183,7 +181,7 @@ static int callback(xapi_ctx_t *ctx, xapi_session_t *s)
         case XAPI_CB_READ:
             return on_request(s);
 
-        case XAPI_CB_WRITE:
+        case XAPI_CB_COMPLETE:
             return XAPI_DISCONNECT;
 
         default:
@@ -199,10 +197,10 @@ int main(void)
     xapi_endpoint_t ep;
     XAPI_InitEndpoint(&ep);
 
-    ep.eType = XAPI_HTTP;
-    ep.eRole = XAPI_SERVER;
     ep.pAddr = "0.0.0.0";
     ep.nPort = 8080;
+    ep.eType = XAPI_HTTP;
+    ep.eRole = XAPI_SERVER;
     XAPI_AddEndpoint(&api, &ep);
 
     while (XAPI_Service(&api, 100) == XEVENTS_SUCCESS);
@@ -314,7 +312,7 @@ make
     <img src="https://raw.githubusercontent.com/kala13x/libxutils/main/examples/xtop.png" alt="xtop screenshot">
 </p>
 
-`XTOP` is an `HTOP`-style performance monitor that displays CPU, memory and network activity in a single CLI window. It is also a good example of how much can be built on top of the library without adding a large external stack.
+`XTOP` is an `HTOP`-style performance monitor that displays CPU, memory and network activity in a single CLI window and has a powerful REST API client/server (daemon) mode and much more. It is also a good example of how much can be built on top of the library without adding a large external stack.
 
 After building the sources in `tools/`, run `sudo make install` to install:
 

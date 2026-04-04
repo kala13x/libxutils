@@ -91,7 +91,7 @@ static int handle_complete(xapi_session_t *pSession)
     xlogi("Response sent to the client: id(%u), fd(%d)",
         pSession->nID, (int)pSession->sock.nFD);
 
-    if (pSession->pTimer || pSession->bKeepAlive)
+    if (pSession->bKeepAlive && pSession->pTimer)
     {
         XAPI_AddTimer(pSession, XHTTP_TIMEOUT_MS);
         return XAPI_EnableEvent(pSession, XPOLLIN);
@@ -109,7 +109,8 @@ static int write_data(xapi_session_t *pSession)
         return XAPI_DISCONNECT;
     }
 
-    if (XHTTP_AddHeader(&handle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
+    if ((pSession->bKeepAlive && XHTTP_AddHeader(&handle, "Connection", "keep-alive") < 0) ||
+        XHTTP_AddHeader(&handle, "Server", "xutils/%s", XUtils_VersionShort()) < 0 ||
         XHTTP_AddHeader(&handle, "Content-Type", "text/plain") < 0)
     {
         xloge("Failed to setup HTTP headers: %s", XSTRERR);
@@ -128,7 +129,7 @@ static int write_data(xapi_session_t *pSession)
     }
 
     xlogn("Sending response: id(%u), fd(%d), buff(%zu)",
-            pSession->nID, (int)pSession->sock.nFD, handle.rawData.nUsed);
+        pSession->nID, (int)pSession->sock.nFD, handle.rawData.nUsed);
 
     XByteBuffer_AddBuff(&pSession->txBuffer, &handle.rawData);
     XHTTP_Clear(&handle);
