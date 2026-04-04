@@ -139,7 +139,6 @@ typedef enum
 #define xlog_separator(sep) XLog_SeparatorSet(sep)
 #define xlog_coloring(fmt) XLog_ColorFormatSet(fmt)
 #define xlog_tracetid(fl) XLog_TraceTid(fl)
-#define xlog_newline(fl) XLog_NewLine(fl)
 #define xlog_useheap(fl) XLog_UseHeap(fl)
 #define xlog_timing(fmt) XLog_TimeFormatSet(fmt)
 #define xlog_screen(fl) XLog_ScreenLogSet(fl)
@@ -197,7 +196,6 @@ typedef struct XLogConfig {
     char sSeparator[XLOG_NAME_MAX];
 } xlog_cfg_t;
 
-const char* XLog_Version(xbool_t bShort);
 void XLog_ConfigGet(struct XLogConfig *pCfg);
 void XLog_ConfigSet(struct XLogConfig *pCfg);
 

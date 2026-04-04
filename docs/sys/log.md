@@ -20,15 +20,6 @@ Process-global singleton logger with screen, file and callback output.
 
 ## API Reference
 
-#### `const char *XLog_Version(xbool_t bShort)`
-
-- Header status:
-  - declared in `log.h`.
-- Implementation status:
-  - no implementation exists in `log.c`.
-- Guidance:
-  - use `XUtils_Version()` / `XUtils_VersionShort()` instead.
-
 #### `xbool_t XLog_IsInit(void)`
 
 - Arguments:
@@ -210,6 +201,4 @@ Process-global singleton logger with screen, file and callback output.
 
 ## Important Notes
 
-- `XLog_Version()` is declared but not implemented.
-- `log.h` also defines `xlog_newline(fl)` as `XLog_NewLine(fl)`, but no `XLog_NewLine()` implementation exists in this module.
 - The logger is singleton/global; all APIs mutate one shared state object.
