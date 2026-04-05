@@ -50,6 +50,7 @@ set(SOURCE_FILES
     async-client.c
     basic-server.c
     http-server.c
+    http-workers.c
     ws-server.c
     ws-client.c
     statcov.c
@@ -70,4 +71,3 @@ foreach(sourcefile ${SOURCE_FILES})
     add_executable(${execname} ${sourcefile})
     target_link_libraries(${execname} Threads::Threads ${EXTRA_LIBS})
 endforeach()
-

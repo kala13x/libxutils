@@ -185,6 +185,59 @@ jobs:
             fi
           done
 
+      - name: Run Valgrind Check for XAPI prefork HTTP workers
+        run: |
+          set -euo pipefail
+
+          LOG_DIR=$(mktemp -d)
+          EXEC_CMD="valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
+
+          $EXEC_CMD --trace-children=yes --log-file="$LOG_DIR/http-workers-server.%p.log" ./examples/build/http-workers >"$LOG_DIR/http-workers-server.out" 2>&1 &
+          server_pid=$!
+
+          sleep 2
+
+          burst_status=0
+          seq 1 64 | xargs -P 16 -I {} sh -c 'xhttp -l 127.0.0.1:8080/get >/dev/null' || burst_status=$?
+
+          client_status=0
+          server_status=0
+
+          $EXEC_CMD --log-file="$LOG_DIR/http-workers-client.log" xhttp -l 127.0.0.1:8080/get || client_status=$?
+          kill -INT "$server_pid" || true
+          wait "$server_pid" || server_status=$?
+
+          cat "$LOG_DIR/http-workers-server.out"
+          for log in "$LOG_DIR"/http-workers-server.*.log "$LOG_DIR"/http-workers-client.log; do
+            cat "$log"
+          done
+
+          if [ "$burst_status" -ne 0 ]; then
+            echo "Burst client requests failed with exit code $burst_status"
+            exit 1
+          fi
+
+          for status in "$client_status" "$server_status"; do
+            if [ "$status" -eq 1 ]; then
+              echo "Valgrind reported errors (exit code $status)"
+              exit 1
+            fi
+
+            if [ "$status" -ne 0 ] && [ "$status" -ne 130 ]; then
+              echo "Unexpected exit code $status"
+              exit 1
+            fi
+          done
+
+          echo "Checking valgrind logs for errors"
+          for log in "$LOG_DIR"/http-workers-server.*.log "$LOG_DIR"/http-workers-client.log; do
+            if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
+              echo "Valgrind errors detected in $log"
+              cat "$log"
+              exit 1
+            fi
+          done
+
       - name: Run Valgrind Check for XEvent based HTTP client/server
         run: |
           set -euo pipefail

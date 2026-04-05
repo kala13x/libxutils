@@ -9,6 +9,7 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
 - `XAPI_CB_INTERRUPT` is only the underlying event-loop interrupt path, typically `EINTR`/signal related.
 - `XAPI_CB_TICK` runs once after every successful `XAPI_Service()` cycle.
 - `XAPI_CB_USER` can be triggered explicitly when the callback returns `XAPI_USER_CB`.
+- `pCtx->nWorkerIndex` carries the current worker index for every callback. It is `-1` when the runtime is not a worker process.
 - Return mapping is:
   - `XAPI_CONTINUE` / `XAPI_NO_ACTION` or any non-negative non-special value: keep servicing.
   - `< XAPI_NO_ACTION`: disconnect.
@@ -100,6 +101,25 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
   - `XSTDOK` on success.
   - `XSTDINV` when `pApi == NULL`.
 
+#### `XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers)`
+
+- Arguments:
+  - `pApi`: initialized runtime that already has registered endpoints/events.
+  - `nWorkers`: number of worker processes to create; must be greater than zero.
+- Does:
+  - Linux+epoll only.
+  - forks `nWorkers` child processes.
+  - parent keeps its existing event/runtime state unchanged and stores worker PIDs on `pApi`.
+  - each child frees the inherited PID list, marks itself as a worker and rebuilds a fresh local epoll instance from the inherited `xevent_data_t`/session snapshot.
+  - requires hash-backed event registration (`bUseHashMap == XTRUE`), because the child rebuild walks the existing event map.
+  - does not re-run `LISTENING`, `REGISTERED` or `CONNECTED` callbacks during the child rebuild.
+- Returns:
+  - `XSTDOK` in the parent process after all workers are forked successfully.
+  - `XSTDUSR` in each child worker after the local event loop has been rebuilt successfully.
+  - `XSTDINV` when `pApi == NULL`, `nWorkers == 0`, no events exist yet, or hash-backed events are disabled.
+  - `XSTDEXC` when worker PIDs were already initialized on the runtime.
+  - `XSTDERR` on fork failure, unsupported platforms/configurations or child rebuild failure.
+
 #### `XSTATUS XAPI_SetRxSize(xapi_t *pApi, size_t nSize)`
 
 - Arguments:
@@ -117,9 +137,44 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
   - `pApi`: runtime.
 - Does:
   - destroys the underlying `XEvents` instance if it exists.
+  - frees the stored parent-side worker PID array if present.
   - session cleanup happens through event clear callbacks.
 - Returns:
   - no return value.
+
+#### `xbool_t XAPI_IsWorker(const xapi_t *pApi)`
+
+#### `int XAPI_GetWorkerIndex(const xapi_t *pApi)`
+
+#### `size_t XAPI_GetWorkerCount(const xapi_t *pApi)`
+
+#### `const xpid_t *XAPI_GetWorkerPIDs(const xapi_t *pApi)`
+
+#### `xpid_t XAPI_WaitWorker(xapi_t *pApi, int *pWaitStatus)`
+
+#### `XSTATUS XAPI_WaitWorkers(xapi_t *pApi)`
+
+#### `XSTATUS XAPI_StopWorkers(xapi_t *pApi, int nSignal)`
+
+- Arguments:
+  - `pApi`: runtime.
+- Does:
+  - exposes worker-mode state after `XAPI_InitWorkers()`.
+  - `XAPI_IsWorker()` reports whether the current process is one of the forked workers.
+  - `XAPI_GetWorkerIndex()` reports the current worker index stored on the runtime.
+  - `XAPI_GetWorkerCount()` reports how many PIDs the parent stored.
+  - `XAPI_GetWorkerPIDs()` returns the parent-owned PID array.
+  - `XAPI_WaitWorker()` waits for a single child exit event and clears the matching PID from the stored worker list when it matches one of the tracked workers.
+  - `XAPI_StopWorkers()` sends the provided signal to every still-tracked worker PID.
+  - `XAPI_WaitWorkers()` blocks until all still-tracked worker PIDs are reaped and clears them from the stored list.
+- Returns:
+  - `XAPI_IsWorker()`: `XTRUE` in worker children, otherwise `XFALSE`.
+  - `XAPI_GetWorkerIndex()`: worker index `0..N-1` in child workers, otherwise `-1`.
+  - `XAPI_GetWorkerCount()`: PID count or `0` for `NULL`.
+  - `XAPI_GetWorkerPIDs()`: PID array pointer or `NULL`.
+  - `XAPI_WaitWorker()`: exited child PID on success, `0` when interrupted by a signal or when there are no remaining child processes, `-1` on wait failure and `-2` for invalid `pApi`.
+  - `XAPI_StopWorkers()`: `XSTDOK` when at least one tracked worker was signaled, `XSTDNON` when there are no tracked workers, `XSTDERR` on signal delivery failure and `XSTDINV` for invalid arguments.
+  - `XAPI_WaitWorkers()`: `XSTDOK` when at least one worker was reaped, `XSTDNON` when there are no tracked workers, `XSTDERR` on wait failure and `XSTDINV` for invalid `pApi`.
 
 #### `size_t XAPI_GetEventCount(xapi_t *pApi)`
 

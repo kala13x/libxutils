@@ -23,6 +23,7 @@ EXECS = array \
 	async-client \
 	basic-server \
 	http-server \
+	http-workers \
 	ws-server \
 	ws-client \
 	statcov \

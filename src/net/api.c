@@ -20,6 +20,16 @@
 #define XAPI_RX_MAX     (5000 * 1024)
 #define XAPI_RX_SIZE    4096
 
+typedef struct XAPIWorkerEvents {
+    xevent_data_t **ppEvents;
+    size_t nCount;
+    size_t nSize;
+} xapi_worker_events_t;
+
+static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID);
+static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal);
+static XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers);
+
 const char* XAPI_GetStatusStr(xapi_status_t eStatus)
 {
     switch (eStatus)
@@ -44,6 +54,10 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
             return "Failed to register event";
         case XAPI_ERR_RESOLVE:
             return "Failed to resolve address";
+        case XAPI_ERR_SUPPORT:
+            return "Unsupported API feature or runtime configuration";
+        case XAPI_ERR_FORK:
+            return "Failed to fork worker process";
         case XAPI_ERR_ALLOC:
             return "Memory allocation failure";
         case XAPI_ERR_ASSEMBLE:
@@ -61,13 +75,6 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
     }
 
     return "Unknown status";
-}
-
-xbool_t XAPI_IsDestroyEvent(xapi_ctx_t *pCtx)
-{
-    XCHECK_NL((pCtx != NULL), XFALSE);
-    return (pCtx->eStatType == XAPI_SELF &&
-            pCtx->nStatus == XAPI_DESTROY);
 }
 
 const char* XAPI_GetTypeStr(xapi_type_t eType)
@@ -115,6 +122,71 @@ const char* XAPI_GetStatus(xapi_ctx_t *pCtx)
     }
 
     return "Unknown status";
+}
+
+xbool_t XAPI_IsWorker(const xapi_t *pApi)
+{
+    XCHECK_NL((pApi != NULL), XFALSE);
+    return pApi->bIsWorker;
+}
+
+size_t XAPI_GetWorkerCount(const xapi_t *pApi)
+{
+    XCHECK_NL((pApi != NULL), XSTDNON);
+    return pApi->nWorkerCount;
+}
+
+int XAPI_GetWorkerIndex(const xapi_t *pApi)
+{
+    XCHECK_NL((pApi != NULL), XSTDERR);
+    return pApi->nWorkerIndex;
+}
+
+const xpid_t* XAPI_GetWorkerPIDs(const xapi_t *pApi)
+{
+    XCHECK_NL((pApi != NULL), NULL);
+    return pApi->pWorkerPIDs;
+}
+
+xpid_t XAPI_WaitWorker(xapi_t *pApi, int *pWaitStatus)
+{
+    XCHECK_NL((pApi != NULL), XSTDINV);
+    XCHECK_NL((pApi->nWorkerCount > 0), XSTDNON);
+    XCHECK_NL((pApi->pWorkerPIDs != NULL), XSTDNON);
+
+    xpid_t nPID = waitpid(-1, pWaitStatus, 0);
+    if (nPID > 0)
+    {
+        int nIndex = XAPI_FindWorker(pApi, nPID);
+        if (nIndex >= 0) pApi->pWorkerPIDs[nIndex] = XSTDNON;
+        return nPID;
+    }
+
+    if (nPID < 0 && (errno == EINTR || errno == ECHILD))
+        return XSTDNON;
+
+    return XSTDERR;
+}
+
+XSTATUS XAPI_WaitWorkers(xapi_t *pApi)
+{
+    XCHECK_NL((pApi != NULL), XSTDINV);
+    XCHECK_NL((pApi->pWorkerPIDs != NULL && pApi->nWorkerCount > 0), XSTDNON);
+    return XAPI_WaitWorkerPIDs(pApi->pWorkerPIDs, pApi->nWorkerCount);
+}
+
+XSTATUS XAPI_StopWorkers(xapi_t *pApi, int nSignal)
+{
+    XCHECK_NL((pApi != NULL), XSTDINV);
+    XCHECK_NL((pApi->pWorkerPIDs != NULL && pApi->nWorkerCount > 0), XSTDNON);
+    return XAPI_StopWorkerPIDs(pApi->pWorkerPIDs, pApi->nWorkerCount, nSignal);
+}
+
+xbool_t XAPI_IsDestroyEvent(xapi_ctx_t *pCtx)
+{
+    XCHECK_NL((pCtx != NULL), XFALSE);
+    return (pCtx->eStatType == XAPI_SELF &&
+            pCtx->nStatus == XAPI_DESTROY);
 }
 
 static xapi_session_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
@@ -189,6 +261,7 @@ static int XAPI_Callback(xapi_t *pApi, xapi_session_t *pSession, xapi_cb_type_t 
     XCHECK_NL(pApi->callback, XSTDOK);
 
     xapi_ctx_t ctx;
+    ctx.nWorkerIndex = pApi->nWorkerIndex;
     ctx.eCbType = eCbType;
     ctx.eStatType = eType;
     ctx.nStatus = nStat;
@@ -231,6 +304,188 @@ static int XAPI_StatusToEvent(xapi_t *pApi, int nStatus)
     return nStatus < XAPI_NO_ACTION ?
         XEVENTS_DISCONNECT :
         XEVENTS_CONTINUE;
+}
+
+static int XAPI_WorkerEventCb(xhash_pair_t *pPair, void *pCtx)
+{
+    XCHECK_NL((pPair != NULL), XSTDNON);
+    XCHECK_NL((pCtx != NULL), XSTDERR);
+
+    xapi_worker_events_t *pEvents = (xapi_worker_events_t*)pCtx;
+    XCHECK_NL((pPair->pData != NULL), XSTDERR);
+    XCHECK_NL((pEvents->nCount < pEvents->nSize), XSTDERR);
+
+    pEvents->ppEvents[pEvents->nCount++] = (xevent_data_t*)pPair->pData;
+    return XSTDNON;
+}
+
+static void XAPI_DetachWorkerEventMap(xevents_t *pEvents)
+{
+    XCHECK_VOID_NL((pEvents != NULL));
+    XCHECK_VOID_NL(pEvents->bUseHash);
+
+    pEvents->eventsMap.clearCb = NULL;
+    pEvents->eventsMap.pUserContext = NULL;
+
+    XHash_Destroy(&pEvents->eventsMap);
+    pEvents->bUseHash = XFALSE;
+}
+
+static void XAPI_ResetWorkerEvents(xevents_t *pEvents)
+{
+    XCHECK_VOID_NL((pEvents != NULL));
+
+    if (pEvents->pEventArray != NULL)
+    {
+        free(pEvents->pEventArray);
+        pEvents->pEventArray = NULL;
+    }
+
+#if defined(_XEVENTS_USE_EPOLL)
+    if (pEvents->nEventFd >= 0)
+    {
+        close(pEvents->nEventFd);
+        pEvents->nEventFd = XSOCK_INVALID;
+    }
+#endif
+
+    XAPI_DetachWorkerEventMap(pEvents);
+    pEvents->nEventCount = XSTDNON;
+    pEvents->bResync = XFALSE;
+}
+
+static xevent_status_t XAPI_RebuildWorkerEvents(xapi_t *pApi)
+{
+    XCHECK((pApi != NULL), XEVENTS_EINVALID);
+    XCHECK((pApi->bHaveEvents), XEVENTS_EINVALID);
+
+    xevents_t *pEvents = &pApi->events;
+    XCHECK((pEvents->bUseHash), XEVENTS_EINVALID);
+
+    const size_t nEventCount = pEvents->eventsMap.nPairCount;
+    XCHECK_NL((nEventCount > 0), XEVENTS_SUCCESS);
+
+    xevent_data_t **ppEvents = (xevent_data_t**)calloc(nEventCount, sizeof(xevent_data_t*));
+    XCHECK((ppEvents != NULL), XEVENTS_EALLOC);
+
+    xapi_worker_events_t workerEvents;
+    workerEvents.ppEvents = ppEvents;
+    workerEvents.nCount = XSTDNON;
+    workerEvents.nSize = nEventCount;
+
+    XHash_Iterate(&pEvents->eventsMap, XAPI_WorkerEventCb, &workerEvents);
+    if (workerEvents.nCount != nEventCount)
+    {
+        free(ppEvents);
+        return XEVENTS_EINVALID;
+    }
+
+    const uint32_t nEventMax = pEvents->nEventMax;
+    const xbool_t bUseHash = pEvents->bUseHash;
+    void *pUserSpace = pEvents->pUserSpace;
+    xevent_cb_t callback = pEvents->eventCallback;
+
+    // Reset the event map to avoid duplicate events
+    XAPI_ResetWorkerEvents(pEvents);
+
+    xevent_status_t eStatus = XEvents_Create(pEvents, nEventMax, pUserSpace, callback, bUseHash);
+    if (eStatus != XEVENTS_SUCCESS)
+    {
+        pApi->bHaveEvents = XFALSE;
+        free(ppEvents);
+        return eStatus;
+    }
+
+    size_t i = 0;
+    for (i = 0; i < workerEvents.nCount; i++)
+    {
+        xevent_data_t *pEvData = ppEvents[i];
+        if (pEvData == NULL || pEvData->nFD == XSOCK_INVALID) continue;
+
+        pEvData->nIndex = -1;
+        eStatus = XEvents_Add(pEvents, pEvData, pEvData->nEvents);
+        if (eStatus != XEVENTS_SUCCESS)
+        {
+            XAPI_ResetWorkerEvents(pEvents);
+            pApi->bHaveEvents = XFALSE;
+
+            free(ppEvents);
+            return eStatus;
+        }
+    }
+
+    free(ppEvents);
+    return XEVENTS_SUCCESS;
+}
+
+static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID)
+{
+    XCHECK_NL((pApi != NULL), XSTDERR);
+    XCHECK_NL((pApi->pWorkerPIDs != NULL), XSTDERR);
+
+    size_t i = 0;
+    for (i = 0; i < pApi->nWorkerCount; i++)
+    {
+        if (pApi->pWorkerPIDs[i] == nPID)
+            return (int)i;
+    }
+
+    return XSTDERR;
+}
+
+static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal)
+{
+    XCHECK_NL((pWorkerPIDs != NULL), XSTDINV);
+    XCHECK_NL((nSignal > 0), XSTDINV);
+
+    XSTATUS nStatus = XSTDNON;
+    size_t i = 0;
+    for (i = 0; i < nWorkers; i++)
+    {
+        if (pWorkerPIDs[i] > 0)
+        {
+            if (kill(pWorkerPIDs[i], nSignal) < 0 && errno != ESRCH)
+                nStatus = XSTDERR;
+            else if (nStatus >= XSTDNON)
+                nStatus = XSTDOK;
+        }
+    }
+
+    return nStatus;
+}
+
+static XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers)
+{
+    XCHECK_NL((pWorkerPIDs != NULL), XSTDINV);
+
+    XSTATUS nStatus = XSTDNON;
+    size_t i = 0;
+    for (i = 0; i < nWorkers; i++)
+    {
+        while (pWorkerPIDs[i] > 0)
+        {
+            xpid_t nPID = waitpid(pWorkerPIDs[i], NULL, 0);
+            if (nPID == pWorkerPIDs[i])
+            {
+                pWorkerPIDs[i] = XSTDNON;
+                nStatus = XSTDOK;
+                break;
+            }
+
+            if (nPID < 0 && errno == EINTR)
+                continue;
+
+            if (nPID < 0 && errno == ECHILD)
+            {
+                pWorkerPIDs[i] = XSTDNON;
+                break;
+            }
+
+            return XSTDERR;
+        }
+    }
+
+    return nStatus;
 }
 
 static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
@@ -1226,7 +1481,9 @@ static int XAPI_Accept(xapi_t *pApi, xapi_session_t *pSession)
         xsock_status_t status = pListener->eStatus != XSOCK_ERR_NONE ?
                                 pListener->eStatus : pNewSock->eStatus;
 
-        XAPI_ErrorCb(pApi, pPeerData, XAPI_SOCK, status);
+        if (status != XSOCK_WANT_READ && status != XSOCK_WANT_WRITE)
+            XAPI_ErrorCb(pApi, pPeerData, XAPI_SOCK, status);
+
         XAPI_FreeData(&pPeerData);
         return XEVENTS_CONTINUE;
     }
@@ -1542,10 +1799,77 @@ XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx)
     pApi->bAllowMissingKey = XFALSE;
     pApi->bHaveEvents = XFALSE;
     pApi->bUseHashMap = XTRUE;
+    pApi->bIsWorker = XFALSE;
+    pApi->nWorkerCount = XSTDNON;
+    pApi->nWorkerIndex = XSTDERR;
+    pApi->pWorkerPIDs = NULL;
     pApi->callback = callback;
     pApi->pUserCtx = pUserCtx;
     pApi->nRxSize = XAPI_RX_MAX;
     return XSTDOK;
+}
+
+XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers)
+{
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((nWorkers > 0), XSTDINV);
+
+#if !defined(__linux__) || !defined(_XEVENTS_USE_EPOLL)
+    XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_SUPPORT);
+    return XSTDERR;
+#else
+    XCHECK((pApi->bHaveEvents), XSTDINV);
+    XCHECK((pApi->events.nEventCount > 0), XSTDINV);
+    XCHECK((pApi->bUseHashMap && pApi->events.bUseHash), XSTDINV);
+    XCHECK((pApi->pWorkerPIDs == NULL && !pApi->nWorkerCount), XSTDEXC);
+
+    xpid_t *pWorkerPIDs = (xpid_t*)calloc(nWorkers, sizeof(xpid_t));
+    if (pWorkerPIDs == NULL)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_ALLOC);
+        return XSTDERR;
+    }
+
+    size_t i = 0;
+    for (i = 0; i < nWorkers; i++)
+    {
+        xpid_t nPID = fork();
+        if (nPID < 0)
+        {
+            XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_FORK);
+            XAPI_StopWorkerPIDs(pWorkerPIDs, i, SIGTERM);
+            XAPI_WaitWorkerPIDs(pWorkerPIDs, i);
+            free(pWorkerPIDs);
+            return XSTDERR;
+        }
+
+        if (!nPID)
+        {
+            free(pWorkerPIDs);
+            pApi->pWorkerPIDs = NULL;
+            pApi->nWorkerCount = XSTDNON;
+            pApi->nWorkerIndex = (int)i;
+            pApi->bIsWorker = XTRUE;
+
+            xevent_status_t eStatus = XAPI_RebuildWorkerEvents(pApi);
+            if (eStatus != XEVENTS_SUCCESS)
+            {
+                XAPI_ErrorCb(pApi, NULL, XAPI_EVENT, eStatus);
+                return XSTDERR;
+            }
+
+            return XSTDUSR;
+        }
+
+        pWorkerPIDs[i] = nPID;
+    }
+
+    pApi->pWorkerPIDs = pWorkerPIDs;
+    pApi->nWorkerCount = nWorkers;
+    pApi->nWorkerIndex = XSTDERR;
+    pApi->bIsWorker = XFALSE;
+    return XSTDOK;
+#endif
 }
 
 XSTATUS XAPI_SetRxSize(xapi_t *pApi, size_t nSize)
@@ -1558,6 +1882,17 @@ XSTATUS XAPI_SetRxSize(xapi_t *pApi, size_t nSize)
 void XAPI_Destroy(xapi_t *pApi)
 {
     XCHECK_VOID_NL((pApi != NULL));
+
+    if (pApi->pWorkerPIDs != NULL)
+    {
+        free(pApi->pWorkerPIDs);
+        pApi->pWorkerPIDs = NULL;
+    }
+
+    pApi->nWorkerCount = XSTDNON;
+    pApi->nWorkerIndex = XSTDERR;
+    pApi->bIsWorker = XFALSE;
+
     XCHECK_VOID_NL(pApi->bHaveEvents);
     xevents_t *pEvents = &pApi->events;
     XEvents_Destroy(pEvents);

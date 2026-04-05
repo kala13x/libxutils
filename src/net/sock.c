@@ -33,6 +33,7 @@ typedef SSIZE_T ssize_t;
 #endif
 
 #define XSOCK_MIN(a,b) (((a)<(b))?(a):(b))
+#define XSOCK_WOULDBLOCK(err) (err == EAGAIN || err == EWOULDBLOCK || err == ECONNABORTED)
 
 xsock_addr_t* XSock_InAddr(xsock_t *pSock) { return &pSock->sockAddr; }
 xsock_status_t XSock_Status(const xsock_t *pSock) { return pSock->eStatus; }
@@ -891,7 +892,9 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
     pNewSock->nFD = accept(pSock->nFD, pSockAddr, &nAddrLen);
     if (pNewSock->nFD == XSOCK_INVALID)
     {
-        pSock->eStatus = XSOCK_ERR_ACCEPT;
+        if (XSOCK_WOULDBLOCK(errno)) pSock->eStatus = XSOCK_WANT_READ;
+        else pSock->eStatus = XSOCK_ERR_ACCEPT;
+
         XSock_Close(pNewSock);
         return XSOCK_INVALID;
     }
@@ -936,7 +939,11 @@ XSOCKET XSock_AcceptNB(xsock_t *pSock)
     xsocklen_t nAddrLen = XSock_GetAddrLen(pSock);
 
     XSOCKET nFD = accept4(pSock->nFD, pSockAddr, &nAddrLen, 1);
-    if (nFD < 0) pSock->eStatus = XSOCK_ERR_ACCEPT;
+    if (nFD < 0)
+    {
+        if (XSOCK_WOULDBLOCK(errno)) pSock->eStatus = XSOCK_WANT_READ;
+        else pSock->eStatus = XSOCK_ERR_ACCEPT;
+    }
 
     return nFD;
 #endif

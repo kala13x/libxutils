@@ -71,6 +71,8 @@ typedef enum {
     XAPI_ERR_CRYPT,
     XAPI_ERR_REGISTER,
     XAPI_ERR_RESOLVE,
+    XAPI_ERR_SUPPORT,
+    XAPI_ERR_FORK,
     XAPI_STATUS_OK = 100,
     XAPI_TIMER_DESTROY,
     XAPI_DESTROY,
@@ -156,6 +158,7 @@ typedef struct xapi_ctx_ {
     xapi_cb_type_t eCbType;
     xapi_type_t eStatType;
     uint8_t nStatus;
+    int nWorkerIndex;
     xapi_t *pApi;
 } xapi_ctx_t;
 
@@ -166,6 +169,10 @@ struct xapi_ {
     xevents_t events;
     size_t nRxSize;
     void *pUserCtx;
+    xpid_t *pWorkerPIDs;
+    size_t nWorkerCount;
+    int nWorkerIndex;
+    xbool_t bIsWorker;
 
     xuint_t nSessionCounter;
     xbool_t bAllowMissingKey;
@@ -185,6 +192,16 @@ XSTATUS XAPI_PutTxBuff(xapi_session_t *pSession, xbyte_buffer_t *pBuffer);
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
 XSTATUS XAPI_SetRxSize(xapi_t *pApi, size_t nSize);
 void XAPI_Destroy(xapi_t *pApi);
+
+xpid_t XAPI_WaitWorker(xapi_t *pApi, int *pWaitStatus);
+XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers);
+XSTATUS XAPI_StopWorkers(xapi_t *pApi, int nSignal);
+XSTATUS XAPI_WaitWorkers(xapi_t *pApi);
+
+xbool_t XAPI_IsWorker(const xapi_t *pApi);
+int XAPI_GetWorkerIndex(const xapi_t *pApi);
+size_t XAPI_GetWorkerCount(const xapi_t *pApi);
+const xpid_t* XAPI_GetWorkerPIDs(const xapi_t *pApi);
 
 XSTATUS XAPI_Disconnect(xapi_session_t *pData);
 XSTATUS XAPI_DeleteTimer(xapi_session_t *pData);
