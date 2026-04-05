@@ -464,6 +464,9 @@ static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSi
 
 static XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers)
 {
+#ifdef _WIN32
+    return XSTDNON;
+#else
     XCHECK_NL((pWorkerPIDs != NULL), XSTDINV);
 
     XSTATUS nStatus = XSTDNON;
@@ -494,6 +497,7 @@ static XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers)
     }
 
     return nStatus;
+#endif
 }
 
 static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)

@@ -200,10 +200,44 @@ XSTATUS XCLI_GetWindowSize(xcli_size_t *pSize)
 #endif
 
     if (!pSize->nColumns)
+    {
+#ifdef _WIN32
+        // use _dupenv_s
+        char *pColumns = NULL;
+        _dupenv_s(&pColumns, NULL, "COLUMNS");
+        if (pColumns != NULL)
+        {
+            pSize->nColumns = atoi(pColumns);
+            free(pColumns);
+        }
+        else
+        {
+            pSize->nColumns = XCLI_WINDOW_COLUMNS_DEFAULT;
+        }
+#else
         pSize->nColumns = XCLI_GetWindowSizeFallback(getenv("COLUMNS"), XCLI_WINDOW_COLUMNS_DEFAULT);
+#endif
+    }
 
     if (!pSize->nRows)
+    {
+#ifdef _WIN32
+        // use _dupenv_s
+        char *pRows = NULL;
+        _dupenv_s(&pRows, NULL, "LINES");
+        if (pRows != NULL)
+        {
+            pSize->nRows = atoi(pRows);
+            free(pRows);
+        }
+        else
+        {
+            pSize->nRows = XCLI_WINDOW_ROWS_DEFAULT;
+        }
+#else
         pSize->nRows = XCLI_GetWindowSizeFallback(getenv("LINES"), XCLI_WINDOW_ROWS_DEFAULT);
+#endif
+    }
 
     return (pSize->nColumns && pSize->nRows) ?  XSTDOK : XSTDERR;
 }
