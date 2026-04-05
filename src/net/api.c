@@ -1935,6 +1935,7 @@ void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
     pEndpt->bTLS = XFALSE;
     pEndpt->bUnix = XFALSE;
     pEndpt->bForce = XFALSE;
+    pEndpt->bExclusive = XTRUE;
     pEndpt->nFD = XSOCK_INVALID;
 }
 
@@ -1992,6 +1993,11 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
         XAPI_FreeData(&pSession);
         return XSTDERR;
     }
+
+#ifdef EPOLLEXCLUSIVE
+    if (pEndpt->bExclusive)
+        nEvents |= EPOLLEXCLUSIVE;
+#endif
 
     /* Add listener socket to the event instance */
     xevent_data_t *pEvData = XEvents_RegisterEvent(pEvents, pSession, pSock->nFD, nEvents, XAPI_SERVER);

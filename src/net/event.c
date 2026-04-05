@@ -561,6 +561,12 @@ xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvent
     struct epoll_event event;
     event.data.ptr = pData;
     event.events = nEvents;
+
+#ifdef EPOLLEXCLUSIVE
+    if (XFLAGS_CHECK(nEvents, EPOLLEXCLUSIVE))
+        nEvents &= ~EPOLLEXCLUSIVE;
+#endif
+
     if (epoll_ctl(pEvents->nEventFd, EPOLL_CTL_ADD, pData->nFD, &event) < 0) return XEVENTS_ECTL;
 #else
     if (pEvents->bUseHash == XTRUE && pEvents->bCheckDup == XTRUE &&

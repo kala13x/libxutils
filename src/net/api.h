@@ -107,6 +107,7 @@ typedef struct xapi_endpoint_ {
     const char *pUri;
     uint32_t nEvents;
     uint16_t nPort;
+    xbool_t bExclusive;
     xbool_t bForce;
     xbool_t bUnix;
     xbool_t bTLS;
