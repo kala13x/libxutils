@@ -126,7 +126,7 @@ Each module below links to documentation with API contracts and behavior.
 - [Time and date helpers](docs/sys/xtime.md)
 - [Resource monitoring](docs/sys/mon.md)
 - [Memory pool](docs/sys/pool.md)
-- [Logging](docs/sys/log.md)
+- [File and screen logging](docs/sys/log.md)
 - [Synchronization primitives](docs/sys/sync.md)
 - [Threading and repeating tasks](docs/sys/thread.md)
 

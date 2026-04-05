@@ -1,3 +1,12 @@
+/*!
+ *  @file libxutils/examples/http-workers.c
+ *
+ *  This source is part of "libxutils" project
+ *  2015-2020  Sun Dro (s.kalatoz@gmail.com)
+ *
+ * @brief Implementation of high performance event based non-blocking HTTP/S workers.
+ */
+
 #include "api.h"
 #include "sig.h"
 #include "cpu.h"

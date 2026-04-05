@@ -95,6 +95,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          export TERM=xterm
+          export COLUMNS=120
+          export LINES=40
+
           LOG_DIR=$(mktemp -d)
           EXEC_CMD="valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1"
 

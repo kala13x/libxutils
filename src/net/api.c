@@ -150,6 +150,9 @@ const xpid_t* XAPI_GetWorkerPIDs(const xapi_t *pApi)
 
 xpid_t XAPI_WaitWorker(xapi_t *pApi, int *pWaitStatus)
 {
+#ifdef _WIN32
+    return XSTDNON;
+#else
     XCHECK_NL((pApi != NULL), XSTDINV);
     XCHECK_NL((pApi->nWorkerCount > 0), XSTDNON);
     XCHECK_NL((pApi->pWorkerPIDs != NULL), XSTDNON);
@@ -166,6 +169,7 @@ xpid_t XAPI_WaitWorker(xapi_t *pApi, int *pWaitStatus)
         return XSTDNON;
 
     return XSTDERR;
+#endif
 }
 
 XSTATUS XAPI_WaitWorkers(xapi_t *pApi)
@@ -435,6 +439,9 @@ static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID)
 
 static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal)
 {
+#ifdef _WIN32
+    return XSTDNON;
+#else
     XCHECK_NL((pWorkerPIDs != NULL), XSTDINV);
     XCHECK_NL((nSignal > 0), XSTDINV);
 
@@ -452,6 +459,7 @@ static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSi
     }
 
     return nStatus;
+#endif
 }
 
 static XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers)

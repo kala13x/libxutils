@@ -15,6 +15,22 @@
 #define XBAR_FRAME_BYTES 3
 #define XCLI_PERCENT_MAX 4
 
+#define XCLI_WINDOW_COLUMNS_DEFAULT 80
+#define XCLI_WINDOW_ROWS_DEFAULT 24
+
+static size_t XCLI_GetWindowSizeFallback(const char *pValue, size_t nDefault)
+{
+    if (!xstrused(pValue)) return nDefault;
+
+    char *pEnd = NULL;
+    unsigned long nParsed = strtoul(pValue, &pEnd, 10);
+
+    if (pEnd == pValue || (pEnd != NULL && *pEnd != XSTR_NUL) || !nParsed)
+        return nDefault;
+
+    return (size_t)nParsed;
+}
+
 XSTATUS XCLI_SetInputMode(void *pAttributes)
 {
 #ifdef __linux__
@@ -165,6 +181,9 @@ XSTATUS XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCu
 
 XSTATUS XCLI_GetWindowSize(xcli_size_t *pSize)
 {
+    if (pSize == NULL)
+        return XSTDINV;
+
 #ifdef _WIN32
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     csbi.srWindow.Right = csbi.srWindow.Left = 0;
@@ -179,6 +198,12 @@ XSTATUS XCLI_GetWindowSize(xcli_size_t *pSize)
     pSize->nColumns = size.ws_col;
     pSize->nRows = size.ws_row;
 #endif
+
+    if (!pSize->nColumns)
+        pSize->nColumns = XCLI_GetWindowSizeFallback(getenv("COLUMNS"), XCLI_WINDOW_COLUMNS_DEFAULT);
+
+    if (!pSize->nRows)
+        pSize->nRows = XCLI_GetWindowSizeFallback(getenv("LINES"), XCLI_WINDOW_ROWS_DEFAULT);
 
     return (pSize->nColumns && pSize->nRows) ?  XSTDOK : XSTDERR;
 }
