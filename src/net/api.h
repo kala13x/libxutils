@@ -171,6 +171,7 @@ struct xapi_ {
     size_t nRxSize;
     void *pUserCtx;
     xpid_t *pWorkerPIDs;
+    xpid_t nWorkerPID;
     size_t nWorkerCount;
     int nWorkerIndex;
     xbool_t bIsWorker;
@@ -196,12 +197,14 @@ void XAPI_Destroy(xapi_t *pApi);
 
 xpid_t XAPI_WaitWorker(xapi_t *pApi, int *pWaitStatus);
 XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers);
+XSTATUS XAPI_WatchWorkers(xapi_t *pApi, const volatile sig_atomic_t *pInterrupted);
 XSTATUS XAPI_StopWorkers(xapi_t *pApi, int nSignal);
 XSTATUS XAPI_WaitWorkers(xapi_t *pApi);
 
 xbool_t XAPI_IsWorker(const xapi_t *pApi);
 int XAPI_GetWorkerIndex(const xapi_t *pApi);
 size_t XAPI_GetWorkerCount(const xapi_t *pApi);
+xpid_t XAPI_GetWorkerPID(const xapi_t *pApi);
 const xpid_t* XAPI_GetWorkerPIDs(const xapi_t *pApi);
 
 XSTATUS XAPI_Disconnect(xapi_session_t *pData);

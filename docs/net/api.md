@@ -152,6 +152,8 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
 
 #### `xpid_t XAPI_WaitWorker(xapi_t *pApi, int *pWaitStatus)`
 
+#### `XSTATUS XAPI_WatchWorkers(xapi_t *pApi, const volatile sig_atomic_t *pInterrupted)`
+
 #### `XSTATUS XAPI_WaitWorkers(xapi_t *pApi)`
 
 #### `XSTATUS XAPI_StopWorkers(xapi_t *pApi, int nSignal)`
@@ -165,6 +167,7 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
   - `XAPI_GetWorkerCount()` reports how many PIDs the parent stored.
   - `XAPI_GetWorkerPIDs()` returns the parent-owned PID array.
   - `XAPI_WaitWorker()` waits for a single child exit event and clears the matching PID from the stored worker list when it matches one of the tracked workers.
+  - `XAPI_WatchWorkers()` is a blocking parent-side watchdog loop. It waits for tracked workers, respawns any worker that exits, returns `XSTDUSR` in the newly spawned child, and performs graceful shutdown when `*pInterrupted` becomes non-zero.
   - `XAPI_StopWorkers()` sends the provided signal to every still-tracked worker PID.
   - `XAPI_WaitWorkers()` blocks until all still-tracked worker PIDs are reaped and clears them from the stored list.
 - Returns:
@@ -173,6 +176,7 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
   - `XAPI_GetWorkerCount()`: PID count or `0` for `NULL`.
   - `XAPI_GetWorkerPIDs()`: PID array pointer or `NULL`.
   - `XAPI_WaitWorker()`: exited child PID on success, `0` when interrupted by a signal or when there are no remaining child processes, `-1` on wait failure and `-2` for invalid `pApi`.
+  - `XAPI_WatchWorkers()`: `XSTDUSR` in a respawned child worker, `XSTDOK` after graceful parent shutdown, `XSTDNON` when called from a worker, when there are no tracked workers, or when the backend does not support worker watching, `XSTDERR` on fork/wait failures and `XSTDINV` for invalid `pApi`.
   - `XAPI_StopWorkers()`: `XSTDOK` when at least one tracked worker was signaled, `XSTDNON` when there are no tracked workers, `XSTDERR` on signal delivery failure and `XSTDINV` for invalid arguments.
   - `XAPI_WaitWorkers()`: `XSTDOK` when at least one worker was reaped, `XSTDNON` when there are no tracked workers, `XSTDERR` on wait failure and `XSTDINV` for invalid `pApi`.
 

@@ -27,8 +27,9 @@ typedef struct XAPIWorkerEvents {
 } xapi_worker_events_t;
 
 static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID);
-static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal);
+static XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex);
 static XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers);
+static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal);
 
 const char* XAPI_GetStatusStr(xapi_status_t eStatus)
 {
@@ -148,6 +149,12 @@ const xpid_t* XAPI_GetWorkerPIDs(const xapi_t *pApi)
     return pApi->pWorkerPIDs;
 }
 
+xpid_t XAPI_GetWorkerPID(const xapi_t *pApi)
+{
+    XCHECK_NL((pApi != NULL), XSTDNON);
+    return pApi->nWorkerPID;
+}
+
 xpid_t XAPI_WaitWorker(xapi_t *pApi, int *pWaitStatus)
 {
 #ifdef _WIN32
@@ -184,6 +191,47 @@ XSTATUS XAPI_StopWorkers(xapi_t *pApi, int nSignal)
     XCHECK_NL((pApi != NULL), XSTDINV);
     XCHECK_NL((pApi->pWorkerPIDs != NULL && pApi->nWorkerCount > 0), XSTDNON);
     return XAPI_StopWorkerPIDs(pApi->pWorkerPIDs, pApi->nWorkerCount, nSignal);
+}
+
+XSTATUS XAPI_WatchWorkers(xapi_t *pApi, const volatile sig_atomic_t *pInterrupted)
+{
+#if !defined(__linux__) || !defined(_XEVENTS_USE_EPOLL)
+    (void)pApi;
+    (void)pInterrupted;
+    return XSTDNON;
+#else
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK_NL((!pApi->bIsWorker), XSTDNON);
+    XCHECK_NL((pApi->pWorkerPIDs != NULL && pApi->nWorkerCount > 0), XSTDNON);
+
+    for (;;)
+    {
+        if (pInterrupted != NULL && *pInterrupted)
+        {
+            XSTATUS nStopStatus = XAPI_StopWorkers(pApi, SIGTERM);
+            XSTATUS nWaitStatus = XAPI_WaitWorkers(pApi);
+
+            if (nStopStatus == XSTDERR || nWaitStatus == XSTDERR) return XSTDERR;
+            return (nStopStatus == XSTDOK || nWaitStatus == XSTDOK) ? XSTDOK : XSTDNON;
+        }
+
+        int nWaitStatus = 0;
+        xpid_t nPID = waitpid(-1, &nWaitStatus, 0);
+        if (nPID < 0)
+        {
+            if (errno == EINTR) continue;
+            if (errno == ECHILD) return XSTDNON;
+            return XSTDERR;
+        }
+
+        int nIndex = XAPI_FindWorker(pApi, nPID);
+        if (nIndex >= 0) pApi->pWorkerPIDs[nIndex] = XSTDNON;
+        if (nIndex < 0 || (pInterrupted != NULL && *pInterrupted)) continue;
+
+        XSTATUS nStatus = XAPI_SpawnWorker(pApi, (size_t)nIndex);
+        if (nStatus != XSTDOK) return nStatus;
+    }
+#endif
 }
 
 xbool_t XAPI_IsDestroyEvent(xapi_ctx_t *pCtx)
@@ -435,6 +483,48 @@ static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID)
     }
 
     return XSTDERR;
+}
+
+static XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex)
+{
+#if !defined(__linux__) || !defined(_XEVENTS_USE_EPOLL)
+    (void)pApi;
+    (void)nIndex;
+    return XSTDERR;
+#else
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK((pApi->bHaveEvents), XSTDINV);
+    XCHECK((pApi->bUseHashMap && pApi->events.bUseHash), XSTDINV);
+
+    xpid_t nPID = fork();
+    if (nPID < 0)
+    {
+        XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_FORK);
+        return XSTDERR;
+    }
+
+    if (!nPID)
+    {
+        free(pApi->pWorkerPIDs);
+        pApi->pWorkerPIDs = NULL;
+        pApi->nWorkerCount = XSTDNON;
+        pApi->nWorkerIndex = (int)nIndex;
+        pApi->nWorkerPID = getpid();
+        pApi->bIsWorker = XTRUE;
+
+        xevent_status_t eStatus = XAPI_RebuildWorkerEvents(pApi);
+        if (eStatus != XEVENTS_SUCCESS)
+        {
+            XAPI_ErrorCb(pApi, NULL, XAPI_EVENT, eStatus);
+            return XSTDERR;
+        }
+
+        return XSTDUSR;
+    }
+
+    pApi->pWorkerPIDs[nIndex] = nPID;
+    return XSTDOK;
+#endif
 }
 
 static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal)
@@ -1815,6 +1905,7 @@ XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx)
     pApi->nWorkerCount = XSTDNON;
     pApi->nWorkerIndex = XSTDERR;
     pApi->pWorkerPIDs = NULL;
+    pApi->nWorkerPID = XSTDNON;
     pApi->callback = callback;
     pApi->pUserCtx = pUserCtx;
     pApi->nRxSize = XAPI_RX_MAX;
@@ -1842,44 +1933,34 @@ XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers)
         return XSTDERR;
     }
 
-    size_t i = 0;
-    for (i = 0; i < nWorkers; i++)
-    {
-        xpid_t nPID = fork();
-        if (nPID < 0)
-        {
-            XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_FORK);
-            XAPI_StopWorkerPIDs(pWorkerPIDs, i, SIGTERM);
-            XAPI_WaitWorkerPIDs(pWorkerPIDs, i);
-            free(pWorkerPIDs);
-            return XSTDERR;
-        }
-
-        if (!nPID)
-        {
-            free(pWorkerPIDs);
-            pApi->pWorkerPIDs = NULL;
-            pApi->nWorkerCount = XSTDNON;
-            pApi->nWorkerIndex = (int)i;
-            pApi->bIsWorker = XTRUE;
-
-            xevent_status_t eStatus = XAPI_RebuildWorkerEvents(pApi);
-            if (eStatus != XEVENTS_SUCCESS)
-            {
-                XAPI_ErrorCb(pApi, NULL, XAPI_EVENT, eStatus);
-                return XSTDERR;
-            }
-
-            return XSTDUSR;
-        }
-
-        pWorkerPIDs[i] = nPID;
-    }
-
     pApi->pWorkerPIDs = pWorkerPIDs;
     pApi->nWorkerCount = nWorkers;
     pApi->nWorkerIndex = XSTDERR;
     pApi->bIsWorker = XFALSE;
+
+    size_t i = 0;
+    for (i = 0; i < nWorkers; i++)
+    {
+        XSTATUS nStatus = XAPI_SpawnWorker(pApi, i);
+        if (nStatus == XSTDERR)
+        {
+            XAPI_StopWorkerPIDs(pWorkerPIDs, i, SIGTERM);
+            XAPI_WaitWorkerPIDs(pWorkerPIDs, i);
+
+            free(pApi->pWorkerPIDs);
+            pApi->pWorkerPIDs = NULL;
+
+            pApi->nWorkerPID = XSTDNON;
+            pApi->nWorkerCount = XSTDNON;
+            pApi->nWorkerIndex = XSTDERR;
+            pApi->bIsWorker = XFALSE;
+            return XSTDERR;
+        }
+
+        if (nStatus == XSTDUSR)
+            return XSTDUSR;
+    }
+
     return XSTDOK;
 #endif
 }
@@ -1903,6 +1984,7 @@ void XAPI_Destroy(xapi_t *pApi)
 
     pApi->nWorkerCount = XSTDNON;
     pApi->nWorkerIndex = XSTDERR;
+    pApi->nWorkerPID = XSTDNON;
     pApi->bIsWorker = XFALSE;
 
     XCHECK_VOID_NL(pApi->bHaveEvents);

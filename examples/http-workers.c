@@ -10,6 +10,8 @@
 #include "api.h"
 #include "sig.h"
 #include "cpu.h"
+#include "xdef.h"
+#include <stdio.h>
 
 static volatile sig_atomic_t g_nInterrupted = 0;
 
@@ -89,34 +91,36 @@ static int run_worker_service(xapi_t *pApi)
 {
     do {
         xevent_status_t eStatus = XAPI_Service(pApi, 100);
-        if (eStatus != XEVENTS_SUCCESS) break;
+        if (eStatus != XEVENTS_SUCCESS) return XSTDERR;
     } while (!g_nInterrupted);
 
-    return XSTDOK;
+    return XSTDNON;
 }
 
 static int run_parent_service(xapi_t *pApi)
 {
     const xpid_t *pWorkerPIDs = XAPI_GetWorkerPIDs(pApi);
     const size_t nWorkers = XAPI_GetWorkerCount(pApi);
-    int nWaitStatus = 0;
+    XSTATUS nStatus = XSTDNON;
 
     printf("Parent process: pid(%d)\n", (int)getpid());
 
     for (size_t i = 0; i < nWorkers; i++)
         printf("Started worker[%zu]: pid(%d)\n", i, (int)pWorkerPIDs[i]);
 
-    xpid_t nPID = XAPI_WaitWorker(pApi, &nWaitStatus);
-    if (nPID > 0)
-    {
-        fprintf(stderr, "Worker exited: pid(%d), status(%d)\n", (int)nPID, nWaitStatus);
-        g_nInterrupted = 1;
-    }
+    do {
+        nStatus = XAPI_WatchWorkers(pApi, &g_nInterrupted);
+        if (nStatus == XSTDUSR)
+        {
+            printf("Respawned worker[%d]: pid(%d)\n",
+                XAPI_GetWorkerIndex(pApi),
+                (int)XAPI_GetWorkerPID(pApi));
 
-    XAPI_StopWorkers(pApi, SIGTERM);
-    XAPI_WaitWorkers(pApi);
+            run_worker_service(pApi);
+        }
+    } while (nStatus == XSTDUSR);
 
-    return XSTDOK;
+    return nStatus < 0 ? XSTDERR : XSTDNON;
 }
 
 int main(void)
@@ -151,9 +155,10 @@ int main(void)
         return 1;
     }
 
-    if (XAPI_IsWorker(&api)) run_worker_service(&api);
-    else run_parent_service(&api);
+    nStatus = XAPI_IsWorker(&api) ?
+        run_worker_service(&api) :
+        run_parent_service(&api);
 
     XAPI_Destroy(&api);
-    return 0;
+    return nStatus;
 }

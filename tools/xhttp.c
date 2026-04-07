@@ -21,7 +21,7 @@
 extern char *optarg;
 
 #define XHTTP_VERSION_MAJ   0
-#define XHTTP_VERSION_MIN   6
+#define XHTTP_VERSION_MIN   7
 
 #define XHTTP_INTERVAL_SEC  1
 
@@ -462,8 +462,16 @@ int XHTTPApp_Perform(xhttp_args_t *pArgs, xlink_t *pLink)
         const char *pLocation = XHTTP_GetHeader(&handle, "Location");
         if (pLocation != NULL)
         {
-            xstrncpy(pArgs->sAddress, sizeof(pArgs->sAddress), pLocation);
-            xlogd("Following location: %s", pArgs->sAddress);
+            if (pLocation[0] == '/')
+            {
+                xstrncpy(pLink->sUri, sizeof(pLink->sUri), pLocation);
+                xlogd("Following location: %s", pLink->sUri);
+            }
+            else
+            {
+                xstrncpy(pArgs->sAddress, sizeof(pArgs->sAddress), pLocation);
+                xlogd("Following location: %s", pArgs->sAddress);
+            }
 
             XFile_Free(&pArgs->pOutputFile);
             XHTTP_Clear(&handle);
