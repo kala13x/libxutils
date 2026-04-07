@@ -26,10 +26,12 @@ typedef struct XAPIWorkerEvents {
     size_t nSize;
 } xapi_worker_events_t;
 
-static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID);
-static XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex);
-static XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers);
-static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal);
+#if defined(_XEVENTS_USE_EPOLL)
+int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID);
+XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex);
+XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers);
+XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal);
+#endif
 
 const char* XAPI_GetStatusStr(xapi_status_t eStatus)
 {
@@ -195,11 +197,7 @@ XSTATUS XAPI_StopWorkers(xapi_t *pApi, int nSignal)
 
 XSTATUS XAPI_WatchWorkers(xapi_t *pApi, const volatile sig_atomic_t *pInterrupted)
 {
-#if !defined(__linux__) || !defined(_XEVENTS_USE_EPOLL)
-    (void)pApi;
-    (void)pInterrupted;
-    return XSTDNON;
-#else
+#if defined(_XEVENTS_USE_EPOLL)
     XCHECK((pApi != NULL), XSTDINV);
     XCHECK_NL((!pApi->bIsWorker), XSTDNON);
     XCHECK_NL((pApi->pWorkerPIDs != NULL && pApi->nWorkerCount > 0), XSTDNON);
@@ -231,6 +229,10 @@ XSTATUS XAPI_WatchWorkers(xapi_t *pApi, const volatile sig_atomic_t *pInterrupte
         XSTATUS nStatus = XAPI_SpawnWorker(pApi, (size_t)nIndex);
         if (nStatus != XSTDOK) return nStatus;
     }
+#else
+    (void)pApi;
+    (void)pInterrupted;
+    return XSTDNON;
 #endif
 }
 
@@ -406,7 +408,7 @@ static void XAPI_ResetWorkerEvents(xevents_t *pEvents)
     pEvents->bResync = XFALSE;
 }
 
-static xevent_status_t XAPI_RebuildWorkerEvents(xapi_t *pApi)
+xevent_status_t XAPI_RebuildWorkerEvents(xapi_t *pApi)
 {
     XCHECK((pApi != NULL), XEVENTS_EINVALID);
     XCHECK((pApi->bHaveEvents), XEVENTS_EINVALID);
@@ -470,7 +472,7 @@ static xevent_status_t XAPI_RebuildWorkerEvents(xapi_t *pApi)
     return XEVENTS_SUCCESS;
 }
 
-static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID)
+int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID)
 {
     XCHECK_NL((pApi != NULL), XSTDERR);
     XCHECK_NL((pApi->pWorkerPIDs != NULL), XSTDERR);
@@ -485,13 +487,9 @@ static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID)
     return XSTDERR;
 }
 
-static XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex)
+XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex)
 {
-#if !defined(__linux__) || !defined(_XEVENTS_USE_EPOLL)
-    (void)pApi;
-    (void)nIndex;
-    return XSTDERR;
-#else
+#if defined(_XEVENTS_USE_EPOLL)
     XCHECK((pApi != NULL), XSTDINV);
     XCHECK((pApi->bHaveEvents), XSTDINV);
     XCHECK((pApi->bUseHashMap && pApi->events.bUseHash), XSTDINV);
@@ -524,14 +522,16 @@ static XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex)
 
     pApi->pWorkerPIDs[nIndex] = nPID;
     return XSTDOK;
+#else
+    (void)pApi;
+    (void)nIndex;
+    return XSTDERR;
 #endif
 }
 
-static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal)
+XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal)
 {
-#ifdef _WIN32
-    return XSTDNON;
-#else
+#if defined(_XEVENTS_USE_EPOLL)
     XCHECK_NL((pWorkerPIDs != NULL), XSTDINV);
     XCHECK_NL((nSignal > 0), XSTDINV);
 
@@ -549,14 +549,17 @@ static XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSi
     }
 
     return nStatus;
+#else
+    (void)pWorkerPIDs;
+    (void)nWorkers;
+    (void)nSignal;
+    return XSTDNON;
 #endif
 }
 
-static XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers)
+XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers)
 {
-#ifdef _WIN32
-    return XSTDNON;
-#else
+#if defined(_XEVENTS_USE_EPOLL)
     XCHECK_NL((pWorkerPIDs != NULL), XSTDINV);
 
     XSTATUS nStatus = XSTDNON;
@@ -587,6 +590,10 @@ static XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers)
     }
 
     return nStatus;
+#else
+    (void)pWorkerPIDs;
+    (void)nWorkers;
+    return XSTDNON;
 #endif
 }
 
@@ -1917,10 +1924,7 @@ XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers)
     XCHECK((pApi != NULL), XSTDINV);
     XCHECK((nWorkers > 0), XSTDINV);
 
-#if !defined(__linux__) || !defined(_XEVENTS_USE_EPOLL)
-    XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_SUPPORT);
-    return XSTDERR;
-#else
+#if defined(_XEVENTS_USE_EPOLL)
     XCHECK((pApi->bHaveEvents), XSTDINV);
     XCHECK((pApi->events.nEventCount > 0), XSTDINV);
     XCHECK((pApi->bUseHashMap && pApi->events.bUseHash), XSTDINV);
@@ -1962,6 +1966,9 @@ XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers)
     }
 
     return XSTDOK;
+#else
+    XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_SUPPORT);
+    return XSTDERR;
 #endif
 }
 
