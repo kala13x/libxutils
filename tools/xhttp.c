@@ -462,16 +462,10 @@ int XHTTPApp_Perform(xhttp_args_t *pArgs, xlink_t *pLink)
         const char *pLocation = XHTTP_GetHeader(&handle, "Location");
         if (pLocation != NULL)
         {
-            if (pLocation[0] == '/')
-            {
-                xstrncpy(pLink->sUri, sizeof(pLink->sUri), pLocation);
-                xlogd("Following location: %s", pLink->sUri);
-            }
-            else
-            {
-                xstrncpy(pArgs->sAddress, sizeof(pArgs->sAddress), pLocation);
-                xlogd("Following location: %s", pArgs->sAddress);
-            }
+            if (pLocation[0] != '/') xstrncpy(pArgs->sAddress, sizeof(pArgs->sAddress), pLocation);
+            else xstrncpyf(pArgs->sAddress, sizeof(pArgs->sAddress), "%s%s", pLink->sHost, pLocation);
+
+            xlogd("Following location: %s", pArgs->sAddress);
 
             XFile_Free(&pArgs->pOutputFile);
             XHTTP_Clear(&handle);
