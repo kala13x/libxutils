@@ -609,6 +609,12 @@ xevent_status_t XEvents_Modify(xevents_t *pEvents, xevent_data_t *pData, int nEv
     struct epoll_event event;
     event.data.ptr = pData;
     event.events = nEvents;
+
+#ifdef EPOLLEXCLUSIVE
+    if (XFLAGS_CHECK(event.events, EPOLLEXCLUSIVE))
+        event.events &= ~EPOLLEXCLUSIVE;
+#endif
+
     XCHECK((pData->nFD != XSOCK_INVALID), XEVENTS_ECTL);
     if (epoll_ctl(pEvents->nEventFd, EPOLL_CTL_MOD, pData->nFD, &event) < 0) return XEVENTS_ECTL;
 #else

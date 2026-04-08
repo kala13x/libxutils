@@ -26,6 +26,12 @@ extern "C" {
 #define XSOCK_USE_SSL       XTRUE
 #endif
 
+#ifdef SSL_VERIFY_PEER
+#define XSOCK_VERIFY_PEER SSL_VERIFY_PEER
+#else
+#define XSOCK_VERIFY_PEER 0
+#endif
+
 /* MacOS Compatibility */
 #ifdef DARWIN
 #include <fcntl.h>

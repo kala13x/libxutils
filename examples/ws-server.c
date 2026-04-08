@@ -358,9 +358,7 @@ int main(int argc, char* argv[])
         endpt.certs.pCaPath = args.sCaPath;
         endpt.certs.pKeyPath = args.sKeyPath;
         endpt.certs.pCertPath = args.sCertPath;
-#ifdef SSL_VERIFY_PEER
-        endpt.certs.nVerifyFlags = SSL_VERIFY_PEER;
-#endif
+        endpt.certs.nVerifyFlags = XSOCK_VERIFY_PEER;
     }
 
     if (XAPI_AddEndpoint(&api, &endpt) < 0)
