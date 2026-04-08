@@ -1791,7 +1791,17 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
         int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
         XCHECK_NL((nRetVal == XEVENTS_CONTINUE), nRetVal);
-        XCHECK_NL((pBuffer->nUsed > 0), XEVENTS_CONTINUE);
+        if (!pBuffer->nUsed)
+        {
+            if (pSession->eRole != XAPI_CUSTOM &&
+                (pSession->nEvents & XPOLLOUT))
+            {
+                nStatus = XAPI_DisableEvent(pSession, XPOLLOUT);
+                XCHECK((nStatus > XSTDNON), XEVENTS_DISCONNECT);
+            }
+
+            return XEVENTS_CONTINUE;
+        }
     }
 
     return XAPI_Write(pApi, pSession);
