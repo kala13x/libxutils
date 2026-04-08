@@ -148,7 +148,7 @@ int main(void)
     size_t nWorkers = (size_t)XCPU_GetCount();
     if (!nWorkers) nWorkers = 2;
 
-    XSTATUS nStatus = XAPI_InitWorkers(&api, nWorkers);
+    XSTATUS nStatus = XAPI_InitWorkers(&api, nWorkers, XTRUE);
     if (nStatus < 0)
     {
         XAPI_Destroy(&api);

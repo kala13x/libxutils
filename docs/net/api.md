@@ -101,11 +101,12 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
   - `XSTDOK` on success.
   - `XSTDINV` when `pApi == NULL`.
 
-#### `XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers)`
+#### `XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers, xbool_t bSetAffinity)`
 
 - Arguments:
   - `pApi`: initialized runtime that already has registered endpoints/events.
   - `nWorkers`: number of worker processes to create; must be greater than zero.
+  - `bSetAffinity`: enables or disables worker CPU pinning for future `XAPI_InitWorkers()` / respawned workers.
 - Does:
   - Linux+epoll only.
   - forks `nWorkers` child processes.
