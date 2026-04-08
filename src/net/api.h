@@ -160,6 +160,7 @@ typedef struct xapi_ctx_ {
     xapi_type_t eStatType;
     uint8_t nStatus;
     int nWorkerIndex;
+    int nCoreIndex;
     xapi_t *pApi;
 } xapi_ctx_t;
 
@@ -170,16 +171,20 @@ struct xapi_ {
     xevents_t events;
     size_t nRxSize;
     void *pUserCtx;
+
     xpid_t *pWorkerPIDs;
     xpid_t nWorkerPID;
-    size_t nWorkerCount;
-    int nWorkerIndex;
-    xbool_t bIsWorker;
 
     xuint_t nSessionCounter;
+    size_t nWorkerCount;
+    int nWorkerIndex;
+    int nCoreIndex;
+
     xbool_t bAllowMissingKey;
     xbool_t bHaveEvents;
     xbool_t bUseHashMap;
+    xbool_t bSetAffinity;
+    xbool_t bIsWorker;
 };
 
 const char* XAPI_GetStatus(xapi_ctx_t *pCtx);
@@ -193,16 +198,18 @@ XSTATUS XAPI_PutTxBuff(xapi_session_t *pSession, xbyte_buffer_t *pBuffer);
 
 XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx);
 XSTATUS XAPI_SetRxSize(xapi_t *pApi, size_t nSize);
+XSTATUS XAPI_SetWorkerAffinity(xapi_t *pApi, xbool_t bEnable);
 void XAPI_Destroy(xapi_t *pApi);
 
 xpid_t XAPI_WaitWorker(xapi_t *pApi, int *pWaitStatus);
-XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers);
+XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers, xbool_t bSetAffinity);
 XSTATUS XAPI_WatchWorkers(xapi_t *pApi, const volatile sig_atomic_t *pInterrupted);
 XSTATUS XAPI_StopWorkers(xapi_t *pApi, int nSignal);
 XSTATUS XAPI_WaitWorkers(xapi_t *pApi);
 
 xbool_t XAPI_IsWorker(const xapi_t *pApi);
 int XAPI_GetWorkerIndex(const xapi_t *pApi);
+int XAPI_GetCoreIndex(const xapi_t *pApi);
 size_t XAPI_GetWorkerCount(const xapi_t *pApi);
 xpid_t XAPI_GetWorkerPID(const xapi_t *pApi);
 const xpid_t* XAPI_GetWorkerPIDs(const xapi_t *pApi);

@@ -14,8 +14,13 @@
 #include "xver.h"
 #include "str.h"
 #include "buf.h"
+#include "cpu.h"
 #include "sha1.h"
 #include "base64.h"
+
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 #define XAPI_RX_MAX     (5000 * 1024)
 #define XAPI_RX_SIZE    4096
@@ -141,6 +146,12 @@ int XAPI_GetWorkerIndex(const xapi_t *pApi)
 {
     XCHECK_NL((pApi != NULL), XSTDERR);
     return pApi->nWorkerIndex;
+}
+
+int XAPI_GetCoreIndex(const xapi_t *pApi)
+{
+    XCHECK_NL((pApi != NULL), XSTDERR);
+    return pApi->nCoreIndex;
 }
 
 const xpid_t* XAPI_GetWorkerPIDs(const xapi_t *pApi)
@@ -314,6 +325,7 @@ static int XAPI_Callback(xapi_t *pApi, xapi_session_t *pSession, xapi_cb_type_t 
 
     xapi_ctx_t ctx;
     ctx.nWorkerIndex = pApi->nWorkerIndex;
+    ctx.nCoreIndex = pApi->nCoreIndex;
     ctx.eCbType = eCbType;
     ctx.eStatType = eType;
     ctx.nStatus = nStat;
@@ -485,6 +497,37 @@ static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID)
     return XSTDERR;
 }
 
+XSTATUS XAPI_InitWorkerDeathSignal(void)
+{
+#ifdef __linux__
+    xpid_t nParentPID = getppid();
+
+    if (prctl(PR_SET_PDEATHSIG, SIGTERM) < 0)
+        return XSTDERR;
+
+    if (nParentPID > 1 && getppid() != nParentPID)
+        _exit(XSTDERR);
+#endif
+
+    return XSTDOK;
+}
+
+XSTATUS XAPI_SetWorkerCPUAffinity(xapi_t *pApi, size_t nIndex)
+{
+    XCHECK((pApi != NULL), XSTDINV);
+    XCHECK_NL(pApi->bSetAffinity, XSTDOK);
+
+    int nCPUCount = XCPU_GetCount();
+    if (nCPUCount <= 0) return XSTDERR;
+
+    int nCPUIndex = (int)(nIndex % (size_t)nCPUCount);
+    int nStatus = XCPU_SetSingle(nCPUIndex, XCPU_CALLER_PID);
+    XCHECK((nStatus >= 0), XSTDERR);
+
+    pApi->nCoreIndex = nCPUIndex;
+    return XSTDOK;
+}
+
 XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex)
 {
 #if defined(_XEVENTS_USE_EPOLL)
@@ -501,6 +544,18 @@ XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex)
 
     if (!nPID)
     {
+        if (XAPI_InitWorkerDeathSignal() < 0)
+        {
+            XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_SUPPORT);
+            return XSTDERR;
+        }
+
+        if (XAPI_SetWorkerCPUAffinity(pApi, nIndex) < 0)
+        {
+            XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_SUPPORT);
+            return XSTDERR;
+        }
+
         free(pApi->pWorkerPIDs);
         pApi->pWorkerPIDs = NULL;
         pApi->nWorkerCount = XSTDNON;
@@ -1907,8 +1962,10 @@ XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx)
     pApi->bHaveEvents = XFALSE;
     pApi->bUseHashMap = XTRUE;
     pApi->bIsWorker = XFALSE;
+    pApi->bSetAffinity = XFALSE;
     pApi->nWorkerCount = XSTDNON;
     pApi->nWorkerIndex = XSTDERR;
+    pApi->nCoreIndex = XSTDERR;
     pApi->pWorkerPIDs = NULL;
     pApi->nWorkerPID = XSTDNON;
     pApi->callback = callback;
@@ -1917,7 +1974,14 @@ XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx)
     return XSTDOK;
 }
 
-XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers)
+XSTATUS XAPI_SetWorkerAffinity(xapi_t *pApi, xbool_t bEnable)
+{
+    XCHECK((pApi != NULL), XSTDINV);
+    pApi->bSetAffinity = bEnable;
+    return XSTDOK;
+}
+
+XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers, xbool_t bSetAffinity)
 {
     XCHECK((pApi != NULL), XSTDINV);
     XCHECK((nWorkers > 0), XSTDINV);
@@ -1935,9 +1999,11 @@ XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers)
         return XSTDERR;
     }
 
+    pApi->bSetAffinity = bSetAffinity;
     pApi->pWorkerPIDs = pWorkerPIDs;
     pApi->nWorkerCount = nWorkers;
     pApi->nWorkerIndex = XSTDERR;
+    pApi->nCoreIndex = XSTDERR;
     pApi->bIsWorker = XFALSE;
 
     size_t i = 0;
@@ -1955,6 +2021,7 @@ XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers)
             pApi->nWorkerPID = XSTDNON;
             pApi->nWorkerCount = XSTDNON;
             pApi->nWorkerIndex = XSTDERR;
+            pApi->nCoreIndex = XSTDERR;
             pApi->bIsWorker = XFALSE;
             return XSTDERR;
         }
@@ -1989,6 +2056,7 @@ void XAPI_Destroy(xapi_t *pApi)
 
     pApi->nWorkerCount = XSTDNON;
     pApi->nWorkerIndex = XSTDERR;
+    pApi->nCoreIndex = XSTDERR;
     pApi->nWorkerPID = XSTDNON;
     pApi->bIsWorker = XFALSE;
 

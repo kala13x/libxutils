@@ -111,6 +111,8 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
   - forks `nWorkers` child processes.
   - parent keeps its existing event/runtime state unchanged and stores worker PIDs on `pApi`.
   - each child frees the inherited PID list, marks itself as a worker and rebuilds a fresh local epoll instance from the inherited `xevent_data_t`/session snapshot.
+  - on Linux, each child also enables `PR_SET_PDEATHSIG(SIGTERM)` before rebuilding its local runtime, so worker processes terminate automatically when the parent dies unexpectedly.
+  - when worker affinity is enabled through `XAPI_SetWorkerAffinity()`, each child is pinned to `workerIndex % cpuCount`.
   - requires hash-backed event registration (`bUseHashMap == XTRUE`), because the child rebuild walks the existing event map.
   - does not re-run `LISTENING`, `REGISTERED` or `CONNECTED` callbacks during the child rebuild.
 - Returns:
@@ -128,6 +130,18 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
 - Does:
   - overrides the RX ceiling.
   - restores the built-in default when `nSize == 0`.
+- Returns:
+  - `XSTDOK` or `XSTDINV`.
+
+#### `XSTATUS XAPI_SetWorkerAffinity(xapi_t *pApi, xbool_t bEnable)`
+
+- Arguments:
+  - `pApi`: runtime.
+  - `bEnable`: enables or disables worker CPU pinning for future `XAPI_InitWorkers()` / respawned workers.
+- Does:
+  - stores an opt-in worker-affinity flag on the runtime.
+  - on Linux workers, enabled mode pins each child to `workerIndex % cpuCount` via `XCPU_SetSingle()`.
+  - has no direct effect until workers are spawned.
 - Returns:
   - `XSTDOK` or `XSTDINV`.
 
