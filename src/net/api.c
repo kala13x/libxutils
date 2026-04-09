@@ -31,6 +31,7 @@ typedef struct XAPIWorkerEvents {
     size_t nSize;
 } xapi_worker_events_t;
 
+static void XAPI_CloseEventBackend(xevents_t *pEvents);
 static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID);
 XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex);
 XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers);
@@ -210,6 +211,7 @@ XSTATUS XAPI_WatchWorkers(xapi_t *pApi, const volatile sig_atomic_t *pInterrupte
     XCHECK((pApi != NULL), XSTDINV);
     XCHECK_NL((!pApi->bIsWorker), XSTDNON);
     XCHECK_NL((pApi->pWorkerPIDs != NULL && pApi->nWorkerCount > 0), XSTDNON);
+    XAPI_CloseEventBackend(&pApi->events);
 
     for (;;)
     {
@@ -395,7 +397,7 @@ static void XAPI_DetachWorkerEventMap(xevents_t *pEvents)
     pEvents->bUseHash = XFALSE;
 }
 
-static void XAPI_ResetWorkerEvents(xevents_t *pEvents)
+static void XAPI_CloseEventBackend(xevents_t *pEvents)
 {
     XCHECK_VOID_NL((pEvents != NULL));
 
@@ -412,7 +414,13 @@ static void XAPI_ResetWorkerEvents(xevents_t *pEvents)
         pEvents->nEventFd = XSOCK_INVALID;
     }
 #endif
+}
 
+static void XAPI_ResetWorkerEvents(xevents_t *pEvents)
+{
+    XCHECK_VOID_NL((pEvents != NULL));
+
+    XAPI_CloseEventBackend(pEvents);
     XAPI_DetachWorkerEventMap(pEvents);
     pEvents->nEventCount = XSTDNON;
     pEvents->bResync = XFALSE;
