@@ -2042,8 +2042,8 @@ XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers, xbool_t bSetAffinity)
 
     return XSTDOK;
 #else
-    XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_SUPPORT);
-    return XSTDERR;
+    (void)bSetAffinity;
+    return XSTDNON;
 #endif
 }
 

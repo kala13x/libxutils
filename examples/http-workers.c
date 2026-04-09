@@ -101,8 +101,14 @@ static int run_parent_service(xapi_t *pApi)
 {
     const xpid_t *pWorkerPIDs = XAPI_GetWorkerPIDs(pApi);
     const size_t nWorkers = XAPI_GetWorkerCount(pApi);
-    XSTATUS nStatus = XSTDNON;
 
+    if (pWorkerPIDs == NULL || !nWorkers)
+    {
+        xlogn("Worker mode is unavailable, running in single-process mode");
+        return run_worker_service(pApi);
+    }
+
+    XSTATUS nStatus = XSTDNON;
     printf("Parent process: pid(%d)\n", (int)getpid());
 
     for (size_t i = 0; i < nWorkers; i++)
