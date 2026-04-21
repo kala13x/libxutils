@@ -69,6 +69,19 @@ static const char g_base64UrlEncTable[] =
         '4', '5', '6', '7', '8', '9', '-', '_'
     };
 
+static int XBase64_DecodeValue(uint8_t nChar)
+{
+    if ((nChar >= 'A' && nChar <= 'Z') ||
+        (nChar >= 'a' && nChar <= 'z') ||
+        (nChar >= '0' && nChar <= '9') ||
+        nChar == '+' || nChar == '/')
+    {
+        return g_base64DecTable[nChar];
+    }
+
+    return -1;
+}
+
 char *XBase64_Encrypt(const uint8_t *pInput, size_t *pLength)
 {
     XCHECK((pInput && pLength && (*pLength)), NULL);
@@ -112,38 +125,72 @@ char *XBase64_Encrypt(const uint8_t *pInput, size_t *pLength)
 char *XBase64_Decrypt(const uint8_t *pInput, size_t *pLength)
 {
     XCHECK((pInput && pLength && (*pLength)), NULL);
-    size_t i, j, nLength = *pLength;
+    size_t i, j, nLength = *pLength, nExplicitPad = 0;
 
-    while (nLength % 4 != 0) nLength++;
-    size_t nOutLength = nLength / 4 * 3 + 1;
-    nLength = *pLength;
+    while (nExplicitPad < nLength && pInput[nLength - 1 - nExplicitPad] == '=')
+        nExplicitPad++;
+
+    if (nExplicitPad > 2) return NULL;
+    if (nExplicitPad > 0 && (nLength % 4) != 0) return NULL;
+
+    for (i = 0; i < nLength - nExplicitPad; i++)
+    {
+        if (pInput[i] == '=' || XBase64_DecodeValue(pInput[i]) < 0)
+            return NULL;
+    }
+
+    size_t nRemainder = nLength % 4;
+    if (nRemainder == 1) return NULL;
+
+    size_t nImplicitPad = (nExplicitPad == 0 && nRemainder != 0) ? (4 - nRemainder) : 0;
+    size_t nPaddedLength = nLength + nImplicitPad;
+    size_t nOutLength = (nPaddedLength / 4) * 3;
+    size_t nPad = nExplicitPad + nImplicitPad;
+
+    if (nPad > nOutLength) return NULL;
+    nOutLength -= nPad;
 
     char *pDecodedData = (char *)calloc(1, nOutLength + 1);
     XCHECK(pDecodedData, NULL);
 
-    for (i = 0, j = 0; i < nLength;)
+    for (i = 0, j = 0; i < nPaddedLength; i += 4)
     {
-        uint32_t nSextetA = pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
-        uint32_t nSextetB = i >= nLength || pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
-        uint32_t nSextetC = i >= nLength || pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
-        uint32_t nSextetD = i >= nLength || pInput[i] == '=' ? 0 & i++ : g_base64DecTable[pInput[i++]];
+        uint32_t nSextets[4] = { 0, 0, 0, 0 };
 
-        uint32_t nTriple = (nSextetA << 3 * 6) + (nSextetB << 2 * 6)
-                         + (nSextetC << 1 * 6) + (nSextetD << 0 * 6);
+        for (size_t k = 0; k < 4; k++)
+        {
+            size_t nIndex = i + k;
+            if (nIndex >= nLength || pInput[nIndex] == '=')
+            {
+                nSextets[k] = 0;
+                continue;
+            }
 
-        if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 2 * 8) & 0xFF;
-        if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 1 * 8) & 0xFF;
-        if (j < nOutLength-1) pDecodedData[j++] = (nTriple >> 0 * 8) & 0xFF;
+            int nValue = XBase64_DecodeValue(pInput[nIndex]);
+            if (nValue < 0)
+            {
+                free(pDecodedData);
+                return NULL;
+            }
+
+            nSextets[k] = (uint32_t)nValue;
+        }
+
+        uint32_t nTriple = (nSextets[0] << 3 * 6) + (nSextets[1] << 2 * 6)
+                         + (nSextets[2] << 1 * 6) + (nSextets[3] << 0 * 6);
+
+        if (j < nOutLength) pDecodedData[j++] = (nTriple >> 2 * 8) & 0xFF;
+        if (j < nOutLength) pDecodedData[j++] = (nTriple >> 1 * 8) & 0xFF;
+        if (j < nOutLength) pDecodedData[j++] = (nTriple >> 0 * 8) & 0xFF;
     }
 
-    xbool_t bDec = XFALSE;
-    while (pDecodedData[nOutLength] == '\0')
+    if (j != nOutLength)
     {
-        bDec = XTRUE;
-        nOutLength--;
+        free(pDecodedData);
+        return NULL;
     }
 
-    *pLength = bDec ? nOutLength + 1 : nOutLength;
+    *pLength = nOutLength;
     pDecodedData[*pLength] = '\0';
 
     return pDecodedData;
