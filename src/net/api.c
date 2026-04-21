@@ -254,6 +254,20 @@ xbool_t XAPI_IsDestroyEvent(xapi_ctx_t *pCtx)
             pCtx->nStatus == XAPI_DESTROY);
 }
 
+xbool_t XAPI_IsSupportedRole(xapi_role_t eRole)
+{
+    return (eRole == XAPI_CUSTOM ||
+            eRole == XAPI_SERVER ||
+            eRole == XAPI_CLIENT ||
+            eRole == XAPI_PEER);
+}
+
+static xbool_t XAPI_ShouldDispatchSession(xapi_session_t *pSession)
+{
+    XCHECK_NL((pSession != NULL), XFALSE);
+    return XAPI_IsSupportedRole(pSession->eRole);
+}
+
 static xapi_session_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
 {
     XCHECK((pApi != NULL), NULL);
@@ -288,6 +302,7 @@ static xapi_session_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pSession->pTimer = NULL;
     pSession->eType = eType;
     pSession->pApi = pApi;
+    pSession->eRole = XAPI_INACTIVE;
     pSession->eWSFragType = XWS_INVALID;
 
     pSession->pSessionData = NULL;
@@ -370,6 +385,18 @@ static int XAPI_StatusToEvent(xapi_t *pApi, int nStatus)
     return nStatus < XAPI_NO_ACTION ?
         XEVENTS_DISCONNECT :
         XEVENTS_CONTINUE;
+}
+
+static int XAPI_DropInvalidRoleEvent(xapi_session_t *pSession)
+{
+    if (pSession != NULL) pSession->bCancel = XTRUE;
+    XCHECK_NL((pSession != NULL), XEVENTS_DISCONNECT);
+
+    xapi_t *pApi = (xapi_t*)pSession->pApi;
+    XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
+
+    XAPI_ErrorCb(pApi, pSession, XAPI_SELF, XAPI_INVALID_ROLE);
+    return XEVENTS_DISCONNECT;
 }
 
 static int XAPI_WorkerEventCb(xhash_pair_t *pPair, void *pCtx)
@@ -676,7 +703,8 @@ static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
         else
         {
             xapi_session_t *pSession = (xapi_session_t*)pEvData->pContext;
-            nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_CLOSED);
+            if (XAPI_ShouldDispatchSession(pSession))
+                nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_CLOSED);
 
             XAPI_FreeData(&pSession);
             pEvData->pContext = NULL;
@@ -1765,6 +1793,9 @@ static int XAPI_WriteEvent(xevents_t *pEvents, xevent_data_t *pEvData)
     xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
     XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
 
+    if (!XAPI_ShouldDispatchSession(pSession))
+        return XAPI_DropInvalidRoleEvent(pSession);
+
     xbyte_buffer_t *pBuffer = &pSession->txBuffer;
     XSTATUS nStatus = XSTDNON;
 
@@ -1827,6 +1858,9 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
     xapi_session_t *pSession = (xapi_session_t*)pEvData->pContext;
     if (pSession->bCancel) return XEVENTS_DISCONNECT;
 
+    if (!XAPI_ShouldDispatchSession(pSession))
+        return XAPI_DropInvalidRoleEvent(pSession);
+
     if (pSession->bWriteOnRead)
     {
         XSTATUS nStatus = XAPI_RollbackEvents(pSession);
@@ -1851,16 +1885,20 @@ static int XAPI_ReadEvent(xevents_t *pEvents, xevent_data_t *pEvData)
         return XAPI_Read(pApi, pSession);
     }
 
-    XAPI_ErrorCb(pApi, pSession, XAPI_SELF, XAPI_INVALID_ROLE);
-    return XEVENTS_DISCONNECT;
+    return XAPI_DropInvalidRoleEvent(pSession);
 }
 
 static int XAPI_HungedEvent(xapi_t *pApi, xevent_data_t *pEvData)
 {
     XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
     xapi_session_t *pSession = NULL;
-    if (pEvData != NULL) pSession = (xapi_session_t*)pEvData->pContext;
-    XAPI_StatusCb(pApi, pSession, XAPI_SELF, XAPI_HUNGED);
+
+    if (pEvData != NULL)
+        pSession = (xapi_session_t*)pEvData->pContext;
+
+    if (XAPI_ShouldDispatchSession(pSession))
+        XAPI_StatusCb(pApi, pSession, XAPI_SELF, XAPI_HUNGED);
+
     return XEVENTS_DISCONNECT;
 }
 
@@ -1868,8 +1906,13 @@ static int XAPI_ClosedEvent(xapi_t *pApi, xevent_data_t *pEvData)
 {
     XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
     xapi_session_t *pSession = NULL;
-    if (pEvData != NULL) pSession = (xapi_session_t*)pEvData->pContext;
-    XAPI_StatusCb(pApi, pSession, XAPI_SELF, XAPI_CLOSED);
+
+    if (pEvData != NULL)
+        pSession = (xapi_session_t*)pEvData->pContext;
+
+    if (XAPI_ShouldDispatchSession(pSession))
+        XAPI_StatusCb(pApi, pSession, XAPI_SELF, XAPI_CLOSED);
+
     return XEVENTS_DISCONNECT;
 }
 
