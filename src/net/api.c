@@ -391,6 +391,7 @@ static int XAPI_DropInvalidRoleEvent(xapi_session_t *pSession)
 {
     if (pSession != NULL) pSession->bCancel = XTRUE;
     XCHECK_NL((pSession != NULL), XEVENTS_DISCONNECT);
+    XCHECK_NL((pSession->eRole != XAPI_INACTIVE), XEVENTS_DISCONNECT);
 
     xapi_t *pApi = (xapi_t*)pSession->pApi;
     XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
