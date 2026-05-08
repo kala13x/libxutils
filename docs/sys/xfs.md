@@ -404,9 +404,10 @@ File, path and directory helpers on top of POSIX/CRT primitives.
   - path to file or directory.
 - Does:
   - removes a regular file with `unlink()` or a directory tree with `XDir_Remove()`.
+  - uses `lstat()` semantics through `xstat()`, so symlinks are unlinked rather than traversed.
 - Returns:
   - result of `xunlink()` or `XDir_Remove()`.
-  - `XSTDERR` when `stat()` fails.
+  - `XSTDERR` when `xstat()` fails.
 
 #### `int XDir_Remove(const char *pPath)`
 
@@ -415,12 +416,11 @@ File, path and directory helpers on top of POSIX/CRT primitives.
 - Does:
   - recursively removes directory contents and then calls `rmdir()` on the directory itself.
 - Returns:
-  - last child-removal status.
-  - often `XSTDERR` for empty directories because of the initial default status.
+  - `XSTDOK` when all children and the directory itself are removed.
+  - `XSTDERR` on the first failed child removal or failed final `rmdir()`.
 
 ## Important Notes
 
 - `XPath_Parse()` is a pragmatic splitter, not a full path-normalization library.
 - `XPath_Write()` assumes full writes more than it should.
-- `XDir_Remove()` has rough return semantics for empty directories.
 - For robust partial-write handling to unusual file descriptors, prefer a caller-side write loop over `XPath_Write()`.

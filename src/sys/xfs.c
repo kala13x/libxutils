@@ -10,7 +10,6 @@
 
 #include "xfs.h"
 #include "str.h"
-#include "sync.h"
 
 #define XFILE_BUF_SIZE      4096
 #define XFILE_FLAGS_LEN     10
@@ -954,7 +953,7 @@ int XDir_Create(const char *pDir, xmode_t nMode)
 int XPath_Remove(const char *pPath)
 {
     xstat_t statbuf;
-    if (!stat(pPath, &statbuf))
+    if (xstat(pPath, &statbuf) == XSTDOK)
     {
         return (S_ISDIR(statbuf.st_mode)) ?
             XDir_Remove(pPath) : xunlink(pPath);
@@ -965,31 +964,53 @@ int XPath_Remove(const char *pPath)
 
 int XDir_Remove(const char *pPath)
 {
-    size_t nLength = strlen(pPath);
-    int nStatus = XSTDERR;
-    xdir_t dir;
-
-    if (XDir_Open(&dir, pPath) > 0)
+    if (!xstrused(pPath))
     {
-        while (XDir_Read(&dir, NULL, 0) > 0)
-        {
-            size_t nSize = nLength + strlen(dir.pCurrEntry) + 2;
-            char *pNewPath = (char*)malloc(nSize);
-
-            if (pNewPath == NULL)
-            {
-                XDir_Close(&dir);
-                return XSTDERR;
-            }
-
-            size_t nLen = xstrncpyf(pNewPath, nSize, "%s/%s", pPath, dir.pCurrEntry);
-            if (nLen > 0) nStatus = XPath_Remove(pNewPath);
-            free(pNewPath);
-        }
-
-        XDir_Close(&dir);
-        xrmdir(pPath);
+        errno = EINVAL;
+        return XSTDERR;
     }
 
-    return nStatus;
+    size_t nLength = strlen(pPath);
+
+    while (XTRUE)
+    {
+        xdir_t dir;
+        if (XDir_Open(&dir, pPath) < 0) return XSTDERR;
+
+        char sName[XNAME_MAX];
+        int nRead = XDir_Read(&dir, NULL, 0);
+        if (nRead > 0) xstrncpy(sName, sizeof(sName), dir.pCurrEntry);
+
+        XDir_Close(&dir);
+        if (nRead <= 0) break;
+
+        size_t nSize = nLength + strlen(sName) + 2;
+        char *pNewPath = (char*)malloc(nSize);
+
+        if (pNewPath == NULL)
+        {
+            if (!errno) errno = ENOMEM;
+            return XSTDERR;
+        }
+
+        size_t nLen = xstrncpyf(pNewPath, nSize, "%s/%s", pPath, sName);
+        if (nLen <= 0)
+        {
+            free(pNewPath);
+            errno = ENAMETOOLONG;
+            return XSTDERR;
+        }
+
+        if (XPath_Remove(pNewPath) < 0)
+        {
+            int nErrno = errno;
+            free(pNewPath);
+            errno = nErrno;
+            return XSTDERR;
+        }
+
+        free(pNewPath);
+    }
+
+    return xrmdir(pPath) == 0 ? XSTDOK : XSTDERR;
 }
