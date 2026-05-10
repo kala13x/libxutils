@@ -36,10 +36,12 @@
 #define XTOP_CPU_EXTRA_MIN      2
 
 #define XTOP_CPU_HEADER " "\
-    "CPU   TEMP     IDL      "\
-    "US      KS      NI      "\
-    "SI      HI      IO      "\
-    "ST      GT      GN"
+    "CPU     IDL      "\
+    "US      KS      "\
+    "NI      SI      "\
+    "HI      IO      "\
+    "ST      GT      "\
+    "GN    TEMP"
 
 #define XTOP_IFACE_HEADER "IFACE"
 
@@ -296,8 +298,13 @@ void XTOP_DisplayUsage(const char *pName)
     printf("%sIf XTOP refresh does not clear the window, try system clear%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
     printf("%sfor screen clearing. Use CLI argument -x to system clear mode.%s\n\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
 
-    printf("%s%sHint%s:\n", XSTR_FMT_DIM, XSTR_CLR_RED, XSTR_FMT_RESET);
+    printf("%s%sHints%s:\n", XSTR_FMT_DIM, XSTR_CLR_RED, XSTR_FMT_RESET);
     printf("%sPress the 'h' key when XTOP is running to see interactive options.%s\n\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+
+    printf("%sYou might need to install 'lm-sensors' package to enable CPU temperature monitoring.%s\n", XSTR_FMT_DIM, XSTR_FMT_RESET);
+    printf("%sDebian family: %ssudo apt install lm-sensors && sudo sensors-detect%s\n", XSTR_FMT_DIM, XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("%sRed-Hat family: %ssudo dnf install lm_sensors && sudo sensors-detect%s\n", XSTR_FMT_DIM, XSTR_CLR_CYAN, XSTR_FMT_RESET);
+    printf("%sArch Linux: %ssudo pacman -S lm_sensors && sudo sensors-detect%s\n\n", XSTR_FMT_DIM, XSTR_CLR_CYAN, XSTR_FMT_RESET);
 
     printf("Examples:\n");
     printf("1) %s -x -e 8\n", pName);
@@ -823,10 +830,10 @@ void XTOP_AddCPUTemperature(char *pLine, size_t nSize, uint32_t nTemperature)
     size_t nTemperatureLen = xstrnclr(sBuff, sizeof(sBuff), pColor, "%.1f", fTempC);
     nTemperatureLen -= xstrextra(sBuff, nTemperatureLen, 0, NULL, NULL);
 
-    if (nTemperatureLen < 7)
+    if (nTemperatureLen < 8)
     {
         char sEmpty[XSTR_TINY];
-        xstrnfill(sEmpty, sizeof(sEmpty), 7 - nTemperatureLen, XSTR_SPACE_CHAR);
+        xstrnfill(sEmpty, sizeof(sEmpty), 8 - nTemperatureLen, XSTR_SPACE_CHAR);
         xstrncat(pLine, nSize, "%s%s", sEmpty, sBuff);
     }
 }
@@ -847,7 +854,6 @@ XSTATUS XTOP_AddCPUInfo(xcli_win_t *pWin, xcpu_info_t *pCore)
         xstrncpyf(sLine, sizeof(sLine), "%s%s%s%s", XSTR_FMT_BOLD, XSTR_FMT_ITALIC, sCore, XSTR_FMT_RESET);
     }
 
-    XTOP_AddCPUTemperature(sLine, sizeof(sLine), pCore->nTemperature);
     XTOP_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nIdleTime), XTRUE);
     XTOP_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nUserSpace), XFALSE);
     XTOP_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nKernelSpace), XFALSE);
@@ -858,6 +864,7 @@ XSTATUS XTOP_AddCPUInfo(xcli_win_t *pWin, xcpu_info_t *pCore)
     XTOP_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nStealTime), XFALSE);
     XTOP_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nGuestTime), XFALSE);
     XTOP_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nGuestNiced), XFALSE);
+    XTOP_AddCPUTemperature(sLine, sizeof(sLine), pCore->nTemperature);
     return XCLIWin_AddLineFmt(pWin, "%s", sLine);
 }
 

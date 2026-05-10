@@ -7,6 +7,7 @@
  * @brief Implementation of CLI window operarions.
  */
 
+#include "buf.h"
 #include "xstd.h"
 #include "cli.h"
 #include "str.h"
@@ -407,14 +408,10 @@ XSTATUS XCLIWin_GetFrame(xcli_win_t *pWin, xbyte_buffer_t *pFrameBuff)
     if (pWin == NULL || pFrameBuff == NULL) return XSTDERR;
     XByteBuffer_Init(pFrameBuff, XSTDNON, XFALSE);
 
-    while (pWin->lines.nUsed < pWin->frame.nRows)
-        if (XCLIWin_AddEmptyLine(pWin) < 0) return XSTDERR;
-
-    xcli_size_t *pFrame = &pWin->frame;
     xarray_t *pLines = &pWin->lines;
-    size_t i, nRows = XSTD_MIN(pFrame->nRows, pLines->nUsed);
+    size_t i;
 
-    for (i = 0; i < nRows; i++)
+    for (i = 0; i < pLines->nUsed; i++)
     {
         xarray_data_t *pData = XArray_Get(pLines, i);
         if (pData == NULL) continue;
@@ -480,7 +477,7 @@ XSTATUS XCLIWin_Display(xcli_win_t *pWin)
         if (nStatus == XSTDERR) return nStatus;
 
         XCLIWin_ClearScreen(pWin->bAscii);
-        printf("%s\r", (char*)frameBuf.pData);
+        printf("%s", (char*)frameBuf.pData);
         fflush(stdout);
 
         XByteBuffer_Clear(&frameBuf);
