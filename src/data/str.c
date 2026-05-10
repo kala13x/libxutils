@@ -587,6 +587,8 @@ size_t xstrisextra(const char *pOffset)
         !strncmp(pOffset, XSTR_FMT_HIDE, 4) ||
         !strncmp(pOffset, XSTR_FMT_DIM, 4)) return 4;
 
+    if (!strncmp(pOffset, XSTR_DEGREE_SYMBOL, 2)) return 1;
+
     return 0;
 }
 
@@ -601,7 +603,7 @@ size_t xstrextra(const char *pStr, size_t nLength, size_t nMaxChars, size_t *pCh
         if (nMaxChars && nChars >= nMaxChars) break;
         const char *pOffset = &pStr[nPosit];
 
-        if (*pOffset == '\x1B')
+        if (*pOffset == '\x1B' || *pOffset == '\xC2')
         {
             size_t nFound = xstrisextra(pOffset);
             if (nFound)

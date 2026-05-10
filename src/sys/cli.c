@@ -252,20 +252,12 @@ void XCLIWin_Init(xcli_win_t *pWin, xbool_t bAscii)
     pWin->bAscii = bAscii;
 }
 
-XSTATUS XCLIWin_UpdateSize(xcli_win_t *pWin)
-{
-    XSTATUS nStatus = XCLI_GetWindowSize(&pWin->frame);
-    if (pWin->eType == XCLI_LINE_BY_LINE &&
-        nStatus != XSTDERR) pWin->frame.nRows--;
-    return nStatus;
-}
-
 XSTATUS XCLIWin_AddLine(xcli_win_t *pWin, char *pLine, size_t nLength)
 {
     xcli_size_t *pFrame = &pWin->frame;
     xarray_t *pLines = &pWin->lines;
 
-    if (XCLIWin_UpdateSize(pWin) == XSTDERR) return XSTDERR;
+    if (XCLI_GetWindowSize(&pWin->frame) == XSTDERR) return XSTDERR;
     if (pLines->nUsed >= pFrame->nRows) return XSTDNON;
 
     if (XArray_AddData(pLines, pLine, nLength) < 0)
@@ -282,7 +274,7 @@ XSTATUS XCLIWin_AddLineFmt(xcli_win_t *pWin, const char *pFmt, ...)
     xcli_size_t *pFrame = &pWin->frame;
     xarray_t *pLines = &pWin->lines;
 
-    if (XCLIWin_UpdateSize(pWin) == XSTDERR) return XSTDERR;
+    if (XCLI_GetWindowSize(&pWin->frame) == XSTDERR) return XSTDERR;
     if (pLines->nUsed >= pFrame->nRows) return XSTDNON;
 
     size_t nLength = 0;
@@ -303,7 +295,7 @@ XSTATUS XCLIWin_AddLineFmt(xcli_win_t *pWin, const char *pFmt, ...)
 
 XSTATUS XCLIWin_AddEmptyLine(xcli_win_t *pWin)
 {
-    if (XCLIWin_UpdateSize(pWin) == XSTDERR) return XSTDERR;
+    if (XCLI_GetWindowSize(&pWin->frame) == XSTDERR) return XSTDERR;
     size_t nColumns = pWin->frame.nColumns;
     char emptyLine[XLINE_MAX];
 
@@ -316,7 +308,7 @@ XSTATUS XCLIWin_AddEmptyLine(xcli_win_t *pWin)
 
 XSTATUS XCLIWin_AddAligned(xcli_win_t *pWin, const char *pInput, const char *pFmt, uint8_t nAlign)
 {
-    if (XCLIWin_UpdateSize(pWin) == XSTDERR) return XSTDERR;
+    if (XCLI_GetWindowSize(&pWin->frame) == XSTDERR) return XSTDERR;
     size_t nColumns = pWin->frame.nColumns;
 
     size_t nInputLen = strlen(pInput);
@@ -361,7 +353,11 @@ int XCLIWin_ClearScreen(xbool_t bAscii)
 
 XSTATUS XCLIWin_RenderLine(xcli_win_t *pWin, xbyte_buffer_t *pLine, xarray_data_t *pArrData)
 {
-    if (XCLIWin_UpdateSize(pWin) == XSTDERR) return XSTDERR;
+    XCHECK(pWin, XSTDERR);
+    XCHECK(pLine, XSTDERR);
+    XCHECK(pArrData, XSTDERR);
+
+    if (XCLI_GetWindowSize(&pWin->frame) == XSTDERR) return XSTDERR;
     size_t nChars = 0, nMaxSize = pWin->frame.nColumns;
 
     XByteBuffer_SetData(pLine, (uint8_t*)pArrData->pData, pArrData->nSize);
@@ -405,13 +401,14 @@ XSTATUS XCLIWin_RenderLine(xcli_win_t *pWin, xbyte_buffer_t *pLine, xarray_data_
 
 XSTATUS XCLIWin_GetFrame(xcli_win_t *pWin, xbyte_buffer_t *pFrameBuff)
 {
-    if (pWin == NULL || pFrameBuff == NULL) return XSTDERR;
+    XCHECK(pWin, XSTDERR);
+    XCHECK(pFrameBuff, XSTDERR);
     XByteBuffer_Init(pFrameBuff, XSTDNON, XFALSE);
 
     xarray_t *pLines = &pWin->lines;
-    size_t i;
+    size_t i, nRows = XSTD_MIN(pWin->frame.nRows, pLines->nUsed);
 
-    for (i = 0; i < pLines->nUsed; i++)
+    for (i = 0; i < nRows; i++)
     {
         xarray_data_t *pData = XArray_Get(pLines, i);
         if (pData == NULL) continue;
@@ -439,15 +436,13 @@ XSTATUS XCLIWin_GetFrame(xcli_win_t *pWin, xbyte_buffer_t *pFrameBuff)
 
 XSTATUS XCLIWin_Display(xcli_win_t *pWin)
 {
-    XSTATUS nStatus = XSTDNON;
-    size_t nLineCount = 0;
+    XCHECK(pWin, XSTDERR);
 
     if (pWin->eType == XCLI_LINE_BY_LINE)
     {
         XCLIWin_ClearScreen(pWin->bAscii);
         xarray_t *pLines = &pWin->lines;
-        size_t i, nWinRows = pWin->frame.nRows;
-        size_t nRows = XSTD_MIN(nWinRows, pLines->nUsed);
+        size_t i, nRows = XSTD_MIN(pWin->frame.nRows, pLines->nUsed);
 
         for (i = 0; i < nRows; i++)
         {
@@ -461,19 +456,17 @@ XSTATUS XCLIWin_Display(xcli_win_t *pWin)
                 return XSTDERR;
             }
 
-            printf("%s\n", (char*)lineBuff.pData);
-            nLineCount++;
+            printf("%s", (char*)lineBuff.pData);
+            if (i < (nRows - 1)) printf("\n");
         }
 
-        for (i = nLineCount; i < nWinRows; i++) printf("\n");
-
         fflush(stdout);
-        nStatus = XSTDOK;
+        return XSTDOK;
     }
     else if (pWin->eType == XCLI_RENDER_FRAME)
     {
         xbyte_buffer_t frameBuf;
-        nStatus = XCLIWin_GetFrame(pWin, &frameBuf);
+        XSTATUS nStatus = XCLIWin_GetFrame(pWin, &frameBuf);
         if (nStatus == XSTDERR) return nStatus;
 
         XCLIWin_ClearScreen(pWin->bAscii);
@@ -481,10 +474,10 @@ XSTATUS XCLIWin_Display(xcli_win_t *pWin)
         fflush(stdout);
 
         XByteBuffer_Clear(&frameBuf);
-        nStatus = XSTDOK;
+        return XSTDOK;
     }
 
-    return nStatus;
+    return XSTDNON;
 }
 
 XSTATUS XCLIWin_Flush(xcli_win_t *pWin)

@@ -41,7 +41,7 @@
     "NI      SI      "\
     "HI      IO      "\
     "ST      GT      "\
-    "GN    TEMP"
+    "GN      "XSTR_DEGREE_SYMBOL"C"
 
 #define XTOP_IFACE_HEADER "IFACE"
 

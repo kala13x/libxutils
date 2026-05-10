@@ -55,6 +55,8 @@
 #define XSTR_FMT_RESET              XSTR_CLR_NONE
 #define XSTR_SCREEN_CLEAR           "\033[H\033[J"
 
+#define XSTR_DEGREE_SYMBOL          "\xC2\xB0"
+
 #define XSTR_DOUBLE_ARG_MAX         309
 #define XSTR_INT_ARG_MAX            32
 #define XSTR_LETTERS                52
