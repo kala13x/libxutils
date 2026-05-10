@@ -16,9 +16,8 @@
 #include "xfs.h"
 
 #define XPROC_BUFFER_SIZE           2048
-#define XSYS_CLASS_HWMON            "/sys/class/hwmon/hwmon1"
+#define XSYS_CLASS_HWMON            "/sys/class/hwmon"
 #define XSYS_CPU_TOPOLOGY_CORE      "/sys/devices/system/cpu/cpu%d/topology/core_id"
-#define XCPU_TEMP_CORE_OFFSET       2
 
 void XMon_ClearCb(xarray_data_t *pArrData)
 {
@@ -339,16 +338,227 @@ static uint8_t XMon_UpdateMemoryInfo(xmem_info_t *pDstInfo, xpid_t nPID)
     return 1;
 }
 
-static uint32_t XMon_ReadCPUTempInput(int nIndex)
+static int XMon_ParseHWMONTempIndex(const char *pName, const char *pSuffix)
+{
+    int nIndex = 0;
+    size_t i = 4;
+
+    if (strncmp(pName, "temp", 4)) return 0;
+    while (isdigit((unsigned char)pName[i]))
+    {
+        nIndex = nIndex * 10 + (pName[i] - '0');
+        i++;
+    }
+
+    if (!nIndex || strcmp(&pName[i], pSuffix)) return 0;
+    return nIndex;
+}
+
+static uint32_t XMon_ReadHWMONTempInput(const char *pHWMONPath, int nIndex)
 {
     char sBuffer[XPROC_BUFFER_SIZE];
     char sPath[XPATH_MAX];
 
-    xstrncpyf(sPath, sizeof(sPath), "%s/temp%d_input", XSYS_CLASS_HWMON, nIndex);
+    xstrncpyf(sPath, sizeof(sPath), "%s/temp%d_input", pHWMONPath, nIndex);
     if (XPath_Read(sPath, (uint8_t*)sBuffer, sizeof(sBuffer)) <= 0) return 0;
 
     int64_t nTemperature = atoll(sBuffer);
     return nTemperature > 0 ? (uint32_t)nTemperature : 0;
+}
+
+static uint32_t XMon_ReadFirstHWMONTemp(const char *pHWMONPath)
+{
+    uint32_t nTemperature = XMon_ReadHWMONTempInput(pHWMONPath, 1);
+    if (nTemperature) return nTemperature;
+
+    DIR *pDir = opendir(pHWMONPath);
+    if (pDir == NULL) return 0;
+
+    struct dirent *pEntry = readdir(pDir);
+    while(pEntry != NULL)
+    {
+        int nIndex = XMon_ParseHWMONTempIndex(pEntry->d_name, "_input");
+        if (nIndex > 1)
+        {
+            nTemperature = XMon_ReadHWMONTempInput(pHWMONPath, nIndex);
+            if (nTemperature)
+            {
+                closedir(pDir);
+                return nTemperature;
+            }
+        }
+
+        pEntry = readdir(pDir);
+    }
+
+    closedir(pDir);
+    return 0;
+}
+
+static xbool_t XMon_HWMONNameIsCPU(const char *pHWMONPath)
+{
+    char sBuffer[XPROC_BUFFER_SIZE];
+    char sPath[XPATH_MAX];
+
+    xstrncpyf(sPath, sizeof(sPath), "%s/name", pHWMONPath);
+    if (XPath_Read(sPath, (uint8_t*)sBuffer, sizeof(sBuffer)) <= 0) return XFALSE;
+
+    if (strstr(sBuffer, "coretemp") != NULL) return XTRUE;
+    if (strstr(sBuffer, "k10temp") != NULL) return XTRUE;
+    if (strstr(sBuffer, "zenpower") != NULL) return XTRUE;
+    if (strstr(sBuffer, "acpitz") != NULL) return XTRUE;
+    if (strstr(sBuffer, "cpu") != NULL) return XTRUE;
+
+    return strstr(sBuffer, "soc") != NULL ? XTRUE : XFALSE;
+}
+
+static uint32_t XMon_ReadHWMONTempLabel(const char *pHWMONPath, const char *pLabel)
+{
+    DIR *pDir = opendir(pHWMONPath);
+    if (pDir == NULL) return 0;
+
+    char sBuffer[XPROC_BUFFER_SIZE];
+    char sPath[XPATH_MAX];
+    uint32_t nTemperature = 0;
+
+    struct dirent *pEntry = readdir(pDir);
+    while(pEntry != NULL)
+    {
+        int nIndex = XMon_ParseHWMONTempIndex(pEntry->d_name, "_label");
+        if (!nIndex)
+        {
+            pEntry = readdir(pDir);
+            continue;
+        }
+
+        xstrncpyf(sPath, sizeof(sPath), "%s/%s", pHWMONPath, pEntry->d_name);
+        if (XPath_Read(sPath, (uint8_t*)sBuffer, sizeof(sBuffer)) > 0 &&
+            strstr(sBuffer, pLabel) != NULL)
+        {
+            nTemperature = XMon_ReadHWMONTempInput(pHWMONPath, nIndex);
+            if (nTemperature) break;
+        }
+
+        pEntry = readdir(pDir);
+    }
+
+    closedir(pDir);
+    return nTemperature;
+}
+
+static uint32_t XMon_ReadHWMONCoreTemp(const char *pHWMONPath, int nCoreID)
+{
+    DIR *pDir = opendir(pHWMONPath);
+    if (pDir == NULL) return 0;
+
+    char sBuffer[XPROC_BUFFER_SIZE];
+    char sPath[XPATH_MAX];
+    uint32_t nTemperature = 0;
+
+    struct dirent *pEntry = readdir(pDir);
+    while(pEntry != NULL)
+    {
+        int nIndex = XMon_ParseHWMONTempIndex(pEntry->d_name, "_label");
+        if (!nIndex)
+        {
+            pEntry = readdir(pDir);
+            continue;
+        }
+
+        int nTempCoreID = -1;
+        xstrncpyf(sPath, sizeof(sPath), "%s/%s", pHWMONPath, pEntry->d_name);
+
+        if (XPath_Read(sPath, (uint8_t*)sBuffer, sizeof(sBuffer)) > 0 &&
+            sscanf(sBuffer, "Core %d", &nTempCoreID) == 1 &&
+            nTempCoreID == nCoreID)
+        {
+            nTemperature = XMon_ReadHWMONTempInput(pHWMONPath, nIndex);
+            if (nTemperature) break;
+        }
+
+        pEntry = readdir(pDir);
+    }
+
+    closedir(pDir);
+    return nTemperature;
+}
+
+static uint32_t XMon_ReadCPUTempByLabel(const char *pLabel)
+{
+    DIR *pDir = opendir(XSYS_CLASS_HWMON);
+    if (pDir == NULL) return 0;
+
+    char sPath[XPATH_MAX];
+    uint32_t nTemperature = 0;
+
+    struct dirent *pEntry = readdir(pDir);
+    while(pEntry != NULL)
+    {
+        if (!strncmp(pEntry->d_name, "hwmon", 5))
+        {
+            xstrncpyf(sPath, sizeof(sPath), "%s/%s", XSYS_CLASS_HWMON, pEntry->d_name);
+            nTemperature = XMon_ReadHWMONTempLabel(sPath, pLabel);
+            if (nTemperature) break;
+        }
+
+        pEntry = readdir(pDir);
+    }
+
+    closedir(pDir);
+    return nTemperature;
+}
+
+static uint32_t XMon_ReadCPUCoreTemp(int nCoreID)
+{
+    DIR *pDir = opendir(XSYS_CLASS_HWMON);
+    if (pDir == NULL) return 0;
+
+    char sPath[XPATH_MAX];
+    uint32_t nTemperature = 0;
+
+    struct dirent *pEntry = readdir(pDir);
+    while(pEntry != NULL)
+    {
+        if (!strncmp(pEntry->d_name, "hwmon", 5))
+        {
+            xstrncpyf(sPath, sizeof(sPath), "%s/%s", XSYS_CLASS_HWMON, pEntry->d_name);
+            nTemperature = XMon_ReadHWMONCoreTemp(sPath, nCoreID);
+            if (nTemperature) break;
+        }
+
+        pEntry = readdir(pDir);
+    }
+
+    closedir(pDir);
+    return nTemperature;
+}
+
+static uint32_t XMon_ReadCPUTempByName(xbool_t bCPUOnly)
+{
+    DIR *pDir = opendir(XSYS_CLASS_HWMON);
+    if (pDir == NULL) return 0;
+
+    char sPath[XPATH_MAX];
+    uint32_t nTemperature = 0;
+
+    struct dirent *pEntry = readdir(pDir);
+    while(pEntry != NULL)
+    {
+        if (!strncmp(pEntry->d_name, "hwmon", 5))
+        {
+            xstrncpyf(sPath, sizeof(sPath), "%s/%s", XSYS_CLASS_HWMON, pEntry->d_name);
+            if (!bCPUOnly || XMon_HWMONNameIsCPU(sPath))
+            {
+                nTemperature = XMon_ReadFirstHWMONTemp(sPath);
+                if (nTemperature) break;
+            }
+        }
+
+        pEntry = readdir(pDir);
+    }
+
+    closedir(pDir);
+    return nTemperature;
 }
 
 static int XMon_ReadCPUCoreID(int nCPUID)
@@ -362,14 +572,33 @@ static int XMon_ReadCPUCoreID(int nCPUID)
     return atoi(sBuffer);
 }
 
+static uint32_t XMon_ReadCPUPackageTemp(void)
+{
+    uint32_t nTemperature = 0;
+
+    nTemperature = XMon_ReadCPUTempByLabel("Package");
+    if (nTemperature) return nTemperature;
+
+    nTemperature = XMon_ReadCPUTempByLabel("Tctl");
+    if (nTemperature) return nTemperature;
+
+    nTemperature = XMon_ReadCPUTempByLabel("Tdie");
+    if (nTemperature) return nTemperature;
+
+    nTemperature = XMon_ReadCPUTempByLabel("CPU");
+    if (nTemperature) return nTemperature;
+
+    nTemperature = XMon_ReadCPUTempByName(XTRUE);
+    if (nTemperature) return nTemperature;
+
+    return 0;
+}
+
 static uint32_t XMon_ReadCPUTemperature(int nCPUID)
 {
-    if (nCPUID < 0) return XMon_ReadCPUTempInput(1);
-
+    if (nCPUID < 0) return XMon_ReadCPUPackageTemp();
     int nCoreID = XMon_ReadCPUCoreID(nCPUID);
-    uint32_t nTemperature = XMon_ReadCPUTempInput(nCoreID + XCPU_TEMP_CORE_OFFSET);
-
-    return nTemperature ? nTemperature : XMon_ReadCPUTempInput(1);
+    return XMon_ReadCPUCoreTemp(nCoreID);
 }
 
 static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
