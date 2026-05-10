@@ -22,7 +22,7 @@
 #include "cli.h"
 
 #define XTOP_VERSION_MAJ        1
-#define XTOP_VERSION_MIN        17
+#define XTOP_VERSION_MIN        18
 
 #define XTOP_SORT_DISABLE       0
 #define XTOP_SORT_BUSY          1
@@ -40,7 +40,8 @@
     "US      KS      "\
     "NI      SI      "\
     "HI      IO      "\
-    "ST      GT      GN"
+    "ST      GT      "\
+    "GN    TEMP"
 
 #define XTOP_IFACE_HEADER "IFACE"
 
@@ -811,6 +812,27 @@ void XTOP_AddCPUInfoUnit(char *pLine, size_t nSize, double fPct, xbool_t bIdle)
     }
 }
 
+void XTOP_AddCPUTemperature(char *pLine, size_t nSize, uint32_t nTemperature)
+{
+    char sBuff[XSTR_TINY];
+    const char *pColor;
+    float fTempC = (float)nTemperature / 1000.0f;
+
+    if (fTempC < 80.) pColor = XSTR_CLR_NONE;
+    else if (fTempC >= 100.) pColor = XLOG_COLOR_RED;
+    else pColor = XLOG_COLOR_YELLOW;
+
+    size_t nTemperatureLen = xstrnclr(sBuff, sizeof(sBuff), pColor, "%.1f", fTempC);
+    nTemperatureLen -= xstrextra(sBuff, nTemperatureLen, 0, NULL, NULL);
+
+    if (nTemperatureLen < 8)
+    {
+        char sEmpty[XSTR_TINY];
+        xstrnfill(sEmpty, sizeof(sEmpty), 8 - nTemperatureLen, XSTR_SPACE_CHAR);
+        xstrncat(pLine, nSize, "%s%s", sEmpty, sBuff);
+    }
+}
+
 XSTATUS XTOP_AddCPUInfo(xcli_win_t *pWin, xcpu_info_t *pCore)
 {
     char sLine[XLINE_MAX];
@@ -837,6 +859,7 @@ XSTATUS XTOP_AddCPUInfo(xcli_win_t *pWin, xcpu_info_t *pCore)
     XTOP_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nStealTime), XFALSE);
     XTOP_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nGuestTime), XFALSE);
     XTOP_AddCPUInfoUnit(sLine, sizeof(sLine), XU32ToFloat(pCore->nGuestNiced), XFALSE);
+    XTOP_AddCPUTemperature(sLine, sizeof(sLine), pCore->nTemperature);
     return XCLIWin_AddLineFmt(pWin, "%s", sLine);
 }
 
@@ -1160,6 +1183,7 @@ void XTOP_ParseCoreObj(xjson_obj_t *pCoreObj, xcpu_info_t *pCore)
     pCore->nStealTime = XJSON_GetU32(XJSON_GetObject(pCoreObj, "stealTime"));
     pCore->nGuestTime = XJSON_GetU32(XJSON_GetObject(pCoreObj, "guestTime"));
     pCore->nGuestNiced = XJSON_GetU32(XJSON_GetObject(pCoreObj, "guestNiced"));
+    pCore->nTemperature = XJSON_GetU32(XJSON_GetObject(pCoreObj, "temperature"));
     pCore->nActive = XJSON_GetU32(XJSON_GetObject(pCoreObj, "active"));
     pCore->nID = XJSON_GetU32(XJSON_GetObject(pCoreObj, "id"));
 }
@@ -1633,7 +1657,8 @@ int XTOP_AppendCoreJson(xcpu_info_t *pCpu, xstring_t *pJsonStr)
             "\"ioWait\": %u,"
             "\"stealTime\": %u,"
             "\"guestTime\": %u,"
-            "\"guestNiced\": %u"
+            "\"guestNiced\": %u,"
+            "\"temperature\": %u"
         "}",
         pCpu->nID,
         pCpu->nActive,
@@ -1646,7 +1671,8 @@ int XTOP_AppendCoreJson(xcpu_info_t *pCpu, xstring_t *pJsonStr)
         pCpu->nIOWait,
         pCpu->nStealTime,
         pCpu->nGuestTime,
-        pCpu->nGuestNiced);
+        pCpu->nGuestNiced,
+        pCpu->nTemperature);
 }
 
 int XTOP_AppendCPUJson(xmon_stats_t *pStats, xstring_t *pJsonStr)

@@ -98,6 +98,9 @@ typedef struct XCPUInfo {
     uint32_t nGuestRaw;
     uint32_t nGuestNicedRaw;
     uint64_t nTotalRaw;
+
+    // Temperature
+    uint32_t nTemperature;
 } xcpu_info_t;
 
 typedef struct XProcInfo {

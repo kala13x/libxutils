@@ -16,6 +16,9 @@
 #include "xfs.h"
 
 #define XPROC_BUFFER_SIZE           2048
+#define XSYS_CLASS_HWMON            "/sys/class/hwmon/hwmon1"
+#define XSYS_CPU_TOPOLOGY_CORE      "/sys/devices/system/cpu/cpu%d/topology/core_id"
+#define XCPU_TEMP_CORE_OFFSET       2
 
 void XMon_ClearCb(xarray_data_t *pArrData)
 {
@@ -77,6 +80,7 @@ static void XMon_CopyCPUInfo(xcpu_info_t *pDstInfo, xcpu_info_t *pSrcInfo)
     pDstInfo->nGuestTime = XSYNC_ATOMIC_GET(&pSrcInfo->nGuestTime);
     pDstInfo->nActive = XSYNC_ATOMIC_GET(&pSrcInfo->nActive);
     pDstInfo->nID = XSYNC_ATOMIC_GET(&pSrcInfo->nID);
+    pDstInfo->nTemperature = XSYNC_ATOMIC_GET(&pSrcInfo->nTemperature);
 }
 
 int XMon_GetCPUStats(xmon_stats_t *pStats, xcpu_stats_t *pCpuStats)
@@ -335,6 +339,39 @@ static uint8_t XMon_UpdateMemoryInfo(xmem_info_t *pDstInfo, xpid_t nPID)
     return 1;
 }
 
+static uint32_t XMon_ReadCPUTempInput(int nIndex)
+{
+    char sBuffer[XPROC_BUFFER_SIZE];
+    char sPath[XPATH_MAX];
+
+    xstrncpyf(sPath, sizeof(sPath), "%s/temp%d_input", XSYS_CLASS_HWMON, nIndex);
+    if (XPath_Read(sPath, (uint8_t*)sBuffer, sizeof(sBuffer)) <= 0) return 0;
+
+    int64_t nTemperature = atoll(sBuffer);
+    return nTemperature > 0 ? (uint32_t)nTemperature : 0;
+}
+
+static int XMon_ReadCPUCoreID(int nCPUID)
+{
+    char sBuffer[XPROC_BUFFER_SIZE];
+    char sPath[XPATH_MAX];
+
+    xstrncpyf(sPath, sizeof(sPath), XSYS_CPU_TOPOLOGY_CORE, nCPUID);
+    if (XPath_Read(sPath, (uint8_t*)sBuffer, sizeof(sBuffer)) <= 0) return nCPUID;
+
+    return atoi(sBuffer);
+}
+
+static uint32_t XMon_ReadCPUTemperature(int nCPUID)
+{
+    if (nCPUID < 0) return XMon_ReadCPUTempInput(1);
+
+    int nCoreID = XMon_ReadCPUCoreID(nCPUID);
+    uint32_t nTemperature = XMon_ReadCPUTempInput(nCoreID + XCPU_TEMP_CORE_OFFSET);
+
+    return nTemperature ? nTemperature : XMon_ReadCPUTempInput(1);
+}
+
 static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
 {
     char sBuffer[XPROC_BUFFER_SIZE];
@@ -365,6 +402,7 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
 
         cpuInfo.nID = nCPUID++;
         cpuInfo.nActive = 1;
+        cpuInfo.nTemperature = XMon_ReadCPUTemperature(cpuInfo.nID);
 
         if (!nCoreCount && cpuInfo.nID >= 0)
         {
@@ -421,6 +459,7 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
             XSYNC_ATOMIC_SET(&pGenCpuInfo->nTotalRaw, cpuInfo.nTotalRaw);
             XSYNC_ATOMIC_SET(&pGenCpuInfo->nActive, cpuInfo.nActive);
             XSYNC_ATOMIC_SET(&pGenCpuInfo->nID, cpuInfo.nID);
+            XSYNC_ATOMIC_SET(&pGenCpuInfo->nTemperature, cpuInfo.nTemperature);
         }
 
         ptr = strtok_r(NULL, "\n", &pSavePtr);
