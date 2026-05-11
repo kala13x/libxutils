@@ -325,6 +325,8 @@ XSTATUS XCLIWin_AddAligned(xcli_win_t *pWin, const char *pInput, const char *pFm
     if (nAlign == XCLI_RIGHT) nSpaces = 0;
     else if (nAlign == XCLI_CENTER && nColumns % 2) nSpaces++;
     else if (nAlign == XCLI_LEFT) nSpaces = nColumns - nInputLen;
+
+    if (strstr(pInput, XSTR_DEGREE_SYMBOL)) nSpaces += 1;
     xstrnfill(sAfterBuf, sizeof(sAfterBuf), nSpaces, XSTR_SPACE_CHAR);
 
     if (pFmt == NULL) return XCLIWin_AddLineFmt(pWin, "%s%s%s", sPreBuf, pInput, sAfterBuf);
