@@ -917,7 +917,7 @@ int XDir_Valid(const char *pPath)
 
 int XDir_Make(char *pPath, xmode_t mode)
 {
-    if ((XPath_Exists(pPath) == 0) &&
+    if ((XPath_Exists(pPath) == XFALSE) &&
         (xmkdir(pPath, mode) < 0) &&
         (errno != EEXIST)) return 0;
 
