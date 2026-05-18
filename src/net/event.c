@@ -517,6 +517,7 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
         XEVENTS_ECREATE);
 
     pEvents->pEventArray = pEventArray;
+    pEvents->nWaitCount = 0;
 #else
     pEvents->pEventArray = calloc(pEvents->nEventMax, sizeof(struct pollfd));
     XCHECK_CALL((pEvents->pEventArray != NULL), XEvents_DestroyEventMap, pEvents, XEVENTS_EALLOC);
@@ -643,6 +644,34 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
 #endif
 
 #if defined(_XEVENTS_USE_EPOLL)
+    /*
+    * Invalidate stale references to pData in the active epoll_wait batch.
+    *
+    * The kernel returns a snapshot of registered event pointers, so a file
+    * descriptor removed recursively from inside a service callback may still
+    * exist in the current epoll_wait result set.
+    *
+    * For example, processing a WebSocket frame may trigger disconnect logic
+    * that closes sibling timer, pipe, or other endpoints while the service
+    * loop is still iterating over the same event batch.
+    *
+    * Without clearing these stale entries, the loop could later dereference
+    * dangling data.ptr pointers after the underlying object has already been
+    * destroyed.
+    *
+    * The service loop already treats data.ptr == NULL as an invalid event,
+    * so nullifying matching entries keeps that check authoritative.
+    */
+    if (pEvents->nWaitCount > 0 && pEvents->pEventArray != NULL)
+    {
+        uint32_t j;
+        for (j = 0; j < pEvents->nWaitCount; j++)
+        {
+            if (pEvents->pEventArray[j].data.ptr == pData)
+                pEvents->pEventArray[j].data.ptr = NULL;
+        }
+    }
+
     if (pData->nFD >= 0)
     {
         nStatus = epoll_ctl(pEvents->nEventFd, EPOLL_CTL_DEL, pData->nFD, NULL);
@@ -722,6 +751,10 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
     XCHECK(((uint32_t)nCount <= pEvents->nEventMax), XEVENTS_EWAIT);
 
 #if defined(_XEVENTS_USE_EPOLL)
+    /* Publish the batch size so XEvents_Delete can invalidate stale ptr entries
+     * if a user callback recursively deletes a sibling pData (see Delete). */
+    pEvents->nWaitCount = (uint32_t)nCount;
+
     for (i = 0; i < nCount; i++)
     {
         if (pEvents->pEventArray[i].data.ptr == NULL) continue;
@@ -732,6 +765,8 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
         nRet = XEvents_ServiceCb(pEvents, pData, pData->nFD, nEvents);
         if (nRet != XEVENTS_CONTINUE) break;
     }
+
+    pEvents->nWaitCount = 0;
 #else
     for (i = 0; i < (int)pEvents->nEventCount; i++)
     {

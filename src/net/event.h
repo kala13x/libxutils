@@ -151,6 +151,7 @@ typedef struct XEvents {
 #ifdef _XEVENTS_USE_EPOLL
     struct epoll_event*     pEventArray;        /* EPOLL event array */
     int                     nEventFd;           /* EPOLL file decriptor */
+    uint32_t                nWaitCount;         /* Active epoll_wait batch size; non-zero only while servicing */
 #else
     struct pollfd*          pEventArray;        /* POLL event array */
 #endif
