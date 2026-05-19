@@ -308,6 +308,8 @@ const char* XSock_GetStatusStr(xsock_status_t eStatus)
             return "No error was identified";
         case XSOCK_ERR_BIND:
             return "Can not bind the socket";
+        case XSOCK_ERR_NAME:
+            return "Can not rename the unix socket";
         case XSOCK_ERR_JOIN:
             return "Can not join to the socket";
         case XSOCK_ERR_SEND:
@@ -1244,20 +1246,49 @@ XSOCKET XSock_NoDelay(xsock_t *pSock, xbool_t nEnabled)
 
 XSOCKET XSock_Bind(xsock_t *pSock)
 {
+    char sUnixTmpPath[sizeof(pSock->sockAddr.unAddr.sun_path)] = { 0 };
+    char sUnixFinalPath[sizeof(pSock->sockAddr.unAddr.sun_path)] = { 0 };
+    xbool_t bUnixAtomic = XFALSE;
+
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_UNIX | XSOCK_FORCE))
     {
         const char *pPath = pSock->sockAddr.unAddr.sun_path;
-        if (XPath_Exists(pPath)) XPath_Remove(pPath);
+        xstrncpy(sUnixFinalPath, sizeof(sUnixFinalPath), pPath);
+        xstrncatf(sUnixTmpPath, sizeof(sUnixTmpPath) - 1, "%s.%d.tmp", pPath, (int)getpid());
+
+        xstrncpy(pSock->sockAddr.unAddr.sun_path,
+            sizeof(pSock->sockAddr.unAddr.sun_path),
+            sUnixTmpPath);
+
+        XPath_Remove(sUnixTmpPath);
+        bUnixAtomic = XTRUE;
     }
 
-    xsockaddr_t* pSockAddr = XSock_GetSockAddr(pSock);
+    xsockaddr_t *pSockAddr = XSock_GetSockAddr(pSock);
     xsocklen_t nAddrLen = XSock_GetAddrLen(pSock);
 
     if (bind(pSock->nFD, pSockAddr, nAddrLen) < 0)
     {
         pSock->eStatus = XSOCK_ERR_BIND;
+        if (bUnixAtomic) XPath_Remove(sUnixTmpPath);
+
         XSock_Close(pSock);
         return XSOCK_INVALID;
+    }
+
+    if (bUnixAtomic)
+    {
+        if (rename(sUnixTmpPath, sUnixFinalPath) < 0)
+        {
+            pSock->eStatus = XSOCK_ERR_NAME;
+            XPath_Remove(sUnixTmpPath);
+            XSock_Close(pSock);
+            return XSOCK_INVALID;
+        }
+
+        xstrncpy(pSock->sockAddr.unAddr.sun_path,
+            sizeof(pSock->sockAddr.unAddr.sun_path),
+            sUnixFinalPath);
     }
 
     return pSock->nFD;

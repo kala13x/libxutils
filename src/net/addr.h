@@ -56,6 +56,15 @@ void XLink_Init(xlink_t *pLink);
 int XLink_Parse(xlink_t *pLink, const char *pInput);
 
 /*!
+ * @brief Parse Unix domain socket link and store values in structure
+ *
+ * @param pLink The pointer to the XLink variable
+ * @param pInput The string containing link to parse
+ * @return On success, XSTDOK is returned, or XSTDERR in case of error
+ */
+int XLink_ParseUnix(xlink_t *pLink, const char *pInput);
+
+/*!
  * @brief Get default port for particular protocol
  *
  * @param pProtocol The string containing protocol name

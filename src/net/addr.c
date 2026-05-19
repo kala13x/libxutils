@@ -62,13 +62,88 @@ void XLink_Init(xlink_t *pLink)
     pLink->sProtocol[0] = XSTR_NUL;
 }
 
-int XLink_Parse(xlink_t *pLink, const char *pInput)
+int XLink_ParseUnix(xlink_t *pLink, const char *pInput)
 {
+    XCHECK((pLink != NULL), XSTDERR);
     XLink_Init(pLink);
 
-    size_t nPosit = 0, nLength = strlen(pInput);
+    XCHECK((xstrused(pInput)), XSTDERR);
+    size_t nLength = strlen(pInput);
     if (!nLength) return XSTDERR;
 
+    size_t nSockLen = 0;
+    size_t nUriPos = 0;
+    size_t nPosit = 0;
+
+    xstrncpy(pLink->sProtocol, sizeof(pLink->sProtocol), "unix");
+    if (xstrsrc(pInput, "unix://") == 0) nPosit = 7;
+    else if (xstrsrc(pInput, "unix:") == 0) nPosit = 5;
+
+    const char *pPath = &pInput[nPosit];
+    if (!pPath[0]) return XSTDERR;
+
+    while (pPath[nSockLen] != XSTR_NUL)
+    {
+        if (pPath[nSockLen] == '?' || pPath[nSockLen] == '#')
+        {
+            nUriPos = nSockLen;
+            break;
+        }
+
+        if (pPath[nSockLen] == ':' && pPath[nSockLen + 1] == '/')
+        {
+            nUriPos = nSockLen + 1;
+            break;
+        }
+
+        nSockLen++;
+    }
+
+    if (!nSockLen) return XSTDERR;
+    xstrncpys(pLink->sHost, sizeof(pLink->sHost), pPath, nSockLen);
+    xstrncpys(pLink->sAddr, sizeof(pLink->sAddr), pPath, nSockLen);
+
+    if (nUriPos > 0)
+    {
+        size_t nLeft = strlen(&pPath[nUriPos]);
+        if (nLeft > 0) xstrncpys(pLink->sUri, sizeof(pLink->sUri), &pPath[nUriPos], nLeft);
+    }
+
+    if (!xstrused(pLink->sUri)) xstrncpy(pLink->sUri, sizeof(pLink->sUri), "/");
+    size_t nUrlLength = strlen(pLink->sUri);
+
+    if (nUrlLength > 0 && pLink->sUri[nUrlLength - 1] != '/')
+    {
+        xarray_t *pTokens = xstrsplit(pLink->sUri, "/");
+        if (pTokens != NULL)
+        {
+            size_t nUsed = XArray_Used(pTokens);
+            if (nUsed > 0)
+            {
+                const char *pLast = (const char*)XArray_GetData(pTokens, nUsed - 1);
+                if (pLast != NULL) xstrncpy(pLink->sFile, sizeof(pLink->sFile), pLast);
+            }
+
+            XArray_Destroy(pTokens);
+        }
+    }
+
+    return XSTDOK;
+}
+
+int XLink_Parse(xlink_t *pLink, const char *pInput)
+{
+    XCHECK((pLink != NULL), XSTDERR);
+    XLink_Init(pLink);
+
+    XCHECK((xstrused(pInput)), XSTDERR);
+    size_t nLength = strlen(pInput);
+    if (!nLength) return XSTDERR;
+
+    if (xstrncasecmp(pInput, "unix:", 5))
+        return XLink_ParseUnix(pLink, pInput);
+
+    size_t nPosit = 0;
     int nTokenLen = xstrsrc(pInput, "://");
     if (nTokenLen > 0)
     {

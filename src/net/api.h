@@ -73,6 +73,8 @@ typedef enum {
     XAPI_ERR_RESOLVE,
     XAPI_ERR_SUPPORT,
     XAPI_ERR_FORK,
+    XAPI_ERR_CHMOD,
+    XAPI_ERR_CHOWN,
     XAPI_STATUS_OK = 100,
     XAPI_TIMER_DESTROY,
     XAPI_DESTROY,
@@ -105,6 +107,9 @@ typedef struct xapi_endpoint_ {
     void *pSessionData;
     const char *pAddr;
     const char *pUri;
+    const char *pUser;
+    const char *pGroup;
+    xmode_t nMode;
     uint32_t nEvents;
     uint16_t nPort;
     xbool_t bExclusive;

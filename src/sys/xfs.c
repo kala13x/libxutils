@@ -24,6 +24,26 @@ int xchmod(const char* pPath, xmode_t nMode)
 #endif
 }
 
+int xchown(const char* pPath, const char* pUser, const char* pGroup)
+{
+#ifdef _WIN32
+    /* No-op on Windows */
+    (void)pPath;
+    (void)pUser;
+    (void)pGroup;
+    return XSTDNON;
+#else
+    struct passwd *pUserEntry = getpwnam(pUser);
+    XCHECK((pUserEntry != NULL), XSTDERR);
+
+    struct group *pGroupEntry = getgrnam(pGroup);
+    XCHECK((pGroupEntry != NULL), XSTDERR);
+
+    int nStatus = chown(pPath, pUserEntry->pw_uid, pGroupEntry->gr_gid);
+    return nStatus < 0 ? XSTDERR : XSTDOK;
+#endif
+}
+
 int xunlink(const char* pPath)
 {
 #ifdef _WIN32

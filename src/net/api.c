@@ -12,9 +12,10 @@
 
 #include "api.h"
 #include "xver.h"
+#include "cpu.h"
 #include "str.h"
 #include "buf.h"
-#include "cpu.h"
+#include "xfs.h"
 #include "sha1.h"
 #include "base64.h"
 
@@ -71,6 +72,10 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
             return "Failed to initialize response";
         case XAPI_ERR_CRYPT:
             return "Failed to crypt WS Sec-Key";
+        case XAPI_ERR_CHMOD:
+            return "Failed to chmod socket file";
+        case XAPI_ERR_CHOWN:
+            return "Failed to chown socket file";
         case XAPI_CLOSED:
             return "Closed remote connection";
         case XAPI_HUNGED:
@@ -2147,6 +2152,9 @@ void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
     pEndpt->eRole = XAPI_INACTIVE;
     pEndpt->eType = XAPI_NONE;
     pEndpt->nPort = XSTDNON;
+    pEndpt->nMode = XSTDNON;
+    pEndpt->pUser = NULL;
+    pEndpt->pGroup = NULL;
     pEndpt->pAddr = NULL;
     pEndpt->pUri = NULL;
     pEndpt->bTLS = XFALSE;
@@ -2201,6 +2209,29 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
         XAPI_ErrorCb(pApi, pSession, XAPI_SOCK, pSock->eStatus);
         XAPI_FreeData(&pSession);
         return XSTDERR;
+    }
+
+    if (pEndpt->bUnix)
+    {
+        if (pEndpt->nMode != XSTDNON)
+        {
+            if (xchmod(pEndpt->pAddr, pEndpt->nMode) < 0)
+            {
+                XAPI_ErrorCb(pApi, pSession, XAPI_SELF, XAPI_ERR_CHMOD);
+                XAPI_FreeData(&pSession);
+                return XSTDERR;
+            }
+        }
+
+        if (xstrused(pEndpt->pUser) && xstrused(pEndpt->pGroup))
+        {
+            if (xchown(pEndpt->pAddr, pEndpt->pUser, pEndpt->pGroup) < 0)
+            {
+                XAPI_ErrorCb(pApi, pSession, XAPI_SELF, XAPI_ERR_CHOWN);
+                XAPI_FreeData(&pSession);
+                return XSTDERR;
+            }
+        }
     }
 
     /* Create event instance */
