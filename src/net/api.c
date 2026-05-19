@@ -78,6 +78,8 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
             return "Failed to chown socket file";
         case XAPI_ERR_CRTDIR:
             return "Failed to create directory for socket file";
+        case XAPI_INVALID_PATH:
+            return "Unix socket file path is too long than supported";
         case XAPI_CLOSED:
             return "Closed remote connection";
         case XAPI_HUNGED:
@@ -2203,11 +2205,21 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
     else nFlags |= XSOCK_TCP;
 
-    if (pEndpt->bUnix && XPath_EnsureDirectory(pEndpt->pAddr) <= 0)
+    if (pEndpt->bUnix)
     {
-        XAPI_ErrorCb(pApi, pSession, XAPI_SELF, XAPI_ERR_CRTDIR);
-        XAPI_FreeData(&pSession);
-        return XSTDERR;
+        if (strlen(pEndpt->pAddr) >= sizeof(pSock->sockAddr.unAddr.sun_path))
+        {
+            XAPI_ErrorCb(pApi, pSession, XAPI_SELF, XAPI_INVALID_PATH);
+            XAPI_FreeData(&pSession);
+            return XSTDERR;
+        }
+
+        if (XPath_EnsureDirectory(pEndpt->pAddr) <= 0)
+        {
+            XAPI_ErrorCb(pApi, pSession, XAPI_SELF, XAPI_ERR_CRTDIR);
+            XAPI_FreeData(&pSession);
+            return XSTDERR;
+        }
     }
 
     XSock_Create(pSock, nFlags, pEndpt->pAddr, pEndpt->nPort);
