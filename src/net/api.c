@@ -76,6 +76,8 @@ const char* XAPI_GetStatusStr(xapi_status_t eStatus)
             return "Failed to chmod socket file";
         case XAPI_ERR_CHOWN:
             return "Failed to chown socket file";
+        case XAPI_ERR_CRTDIR:
+            return "Failed to create directory for socket file";
         case XAPI_CLOSED:
             return "Closed remote connection";
         case XAPI_HUNGED:
@@ -2200,6 +2202,13 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
     if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
     else nFlags |= XSOCK_TCP;
+
+    if (pEndpt->bUnix && XPath_EnsureDirectory(pEndpt->pAddr) <= 0)
+    {
+        XAPI_ErrorCb(pApi, pSession, XAPI_SELF, XAPI_ERR_CRTDIR);
+        XAPI_FreeData(&pSession);
+        return XSTDERR;
+    }
 
     XSock_Create(pSock, nFlags, pEndpt->pAddr, pEndpt->nPort);
     if (pEndpt->bTLS) XSock_SetSSLCert(pSock, &pEndpt->certs);

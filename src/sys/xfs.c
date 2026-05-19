@@ -14,6 +14,7 @@
 #define XFILE_BUF_SIZE      4096
 #define XFILE_FLAGS_LEN     10
 #define XFILE_DEFAULT_PERM  "rw-r--r--"
+#define XPATH_DIR_MODE      0755
 
 int xchmod(const char* pPath, xmode_t nMode)
 {
@@ -449,6 +450,23 @@ xbool_t XPath_Exists(const char *pPath)
 
     memset(&statbuf, 0, sizeof(xstat_t));
     return (stat(pPath, &statbuf) < 0) ? XFALSE : XTRUE;
+}
+
+int XPath_EnsureDirectory(const char *pPath)
+{
+    XCHECK((xstrused(pPath)), XSTDERR);
+
+    char sDir[XPATH_MAX];
+    xstrncpy(sDir, sizeof(sDir), pPath);
+
+    char *pSlash = strrchr(sDir, '/');
+    if (pSlash != NULL)
+    {
+        *pSlash = XSTR_NUL;
+        return XDir_Create(sDir, XPATH_DIR_MODE);
+    }
+
+    return XSTDNON;
 }
 
 char XPath_GetType(xmode_t nMode)

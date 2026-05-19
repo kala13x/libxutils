@@ -124,6 +124,7 @@ int XPath_ModeToPerm(char *pOutput, size_t nSize, xmode_t nMode);
 int XPath_ModeToChmod(char *pOutput, size_t nSize, xmode_t nMode);
 
 long XPath_GetSize(const char *pPath);
+int XPath_EnsureDirectory(const char *pPath);
 uint8_t* XPath_Load(const char *pPath, size_t* pSize);
 uint8_t* XPath_LoadSize(const char *pPath, size_t nMaxSize, size_t* pSize);
 int XPath_CopyFile(const char *pSrc, const char *pDst);
