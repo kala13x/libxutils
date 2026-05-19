@@ -1254,7 +1254,12 @@ XSOCKET XSock_Bind(xsock_t *pSock)
     {
         const char *pPath = pSock->sockAddr.unAddr.sun_path;
         xstrncpy(sUnixFinalPath, sizeof(sUnixFinalPath), pPath);
-        xstrncatf(sUnixTmpPath, sizeof(sUnixTmpPath) - 1, "%s.%d.tmp", pPath, (int)getpid());
+
+#ifndef _WIN32
+        xstrncpyf(sUnixTmpPath, sizeof(sUnixTmpPath), "%s.%d.tmp", pPath, (int)getpid());
+#else
+        xstrncpyf(sUnixTmpPath, sizeof(sUnixTmpPath), "%s.tmp", pPath);
+#endif
 
         xstrncpy(pSock->sockAddr.unAddr.sun_path,
             sizeof(pSock->sockAddr.unAddr.sun_path),
