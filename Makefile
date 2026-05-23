@@ -65,6 +65,7 @@ VPATH = ./src:./src/sys:./src/net:./src/data:./src/crypt
 	$(CC) $(CFLAGS) -c -o $(ODIR)/$@ $< $(LIBS)
 
 $(NAME):$(OBJS)
+	$(RM) $(ODIR)/$(NAME)
 	$(AR) rcs $(ODIR)/$(NAME) $(OBJECTS)
 
 .PHONY: install

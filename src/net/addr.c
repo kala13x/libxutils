@@ -35,6 +35,41 @@ static xprotocol_ports_t g_defaultPorts[] =
     { "unknown", -1, -1}
 };
 
+static int XLink_HexNibble(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static void XLink_DecodeUrlComponent(char *pValue)
+{
+    XCHECK_VOID_NL((pValue != NULL));
+
+    char *pRead = pValue;
+    char *pWrite = pValue;
+
+    while (*pRead != XSTR_NUL)
+    {
+        if (pRead[0] == '%' && pRead[1] != XSTR_NUL && pRead[2] != XSTR_NUL)
+        {
+            int nHi = XLink_HexNibble(pRead[1]);
+            int nLo = XLink_HexNibble(pRead[2]);
+            if (nHi >= 0 && nLo >= 0)
+            {
+                *pWrite++ = (char)((nHi << 4) | nLo);
+                pRead += 3;
+                continue;
+            }
+        }
+
+        *pWrite++ = *pRead++;
+    }
+
+    *pWrite = XSTR_NUL;
+}
+
 int XAddr_GetDefaultPort(const char *pProtocol)
 {
     size_t i, nLength = strlen(pProtocol);
@@ -152,16 +187,26 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
         nPosit += (size_t)nTokenLen + 3;
     }
 
-    nTokenLen = xstrnsrc(pInput, nLength, "/", 0);
-    if (nTokenLen < 0) nTokenLen = (int)nLength;
+    size_t nAuthorityEnd = nPosit;
+    while (nAuthorityEnd < nLength && pInput[nAuthorityEnd] != '/') nAuthorityEnd++;
 
-    nTokenLen = xstrnsrc(pInput, nTokenLen, "@", nPosit);
-    if (nTokenLen > 0)
+    size_t nAtPos = nAuthorityEnd;
+    for (size_t i = nPosit; i < nAuthorityEnd; i++)
     {
+        if (pInput[i] == '@')
+        {
+            nAtPos = i;
+            break;
+        }
+    }
+
+    if (nAtPos < nAuthorityEnd && nAtPos > nPosit)
+    {
+        nTokenLen = (int)(nAtPos - nPosit);
         xstrncpys(pLink->sUser, sizeof(pLink->sUser), &pInput[nPosit], nTokenLen);
 
         int nUserLen = xstrnsrc(pLink->sUser, strlen(pLink->sUser), ":", 0);
-        if (nUserLen > 0)
+        if (nUserLen >= 0)
         {
             nUserLen++;
             if (nUserLen < nTokenLen)
@@ -174,7 +219,10 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
             pLink->sUser[nTermPos] = XSTR_NUL;
         }
 
-        nPosit += (size_t)nTokenLen + 1;
+        XLink_DecodeUrlComponent(pLink->sUser);
+        XLink_DecodeUrlComponent(pLink->sPass);
+
+        nPosit = nAtPos + 1;
     }
 
     char *pDst = &pLink->sUri[0];

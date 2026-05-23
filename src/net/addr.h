@@ -15,7 +15,7 @@
 #define XADDR_IFC_DEFAULT   "eth0"
 
 #define XLINK_PROTOCOL_MAX  32
-#define XLINK_INFO_MAX      32
+#define XLINK_INFO_MAX      256
 #define XLINK_ADDR_MAX      256
 #define XLINK_NAME_MAX      1024
 #define XLINK_URL_MAX       2048
