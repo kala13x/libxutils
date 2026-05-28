@@ -24,7 +24,7 @@ The library targets `Linux`, `Unix` and `Windows` and is released under the `MIT
 
 ## Core strength: networking
 
-The strongest side of `libxutils` is networking, although it is much more than a networking library. While networking is its most mature and feature-complete area, the library also provides a broad set of utilities commonly needed in C projects.
+The strongest side of `libxutils` is networking, although it is much more than a networking library. While networking is its most mature and feature-complete area, the library also provides data structures, cryptography, JSON/JWT processing, filesystem utilities, threading, resource monitoring, logging, and many other building blocks for native applications.
 
 Instead of combining separate libraries for sockets, event loops, HTTP, WebSocket, SSL and protocol glue, `libxutils` keeps them inside one library with shared conventions for buffers, callbacks, ownership, and runtime flow.
 
