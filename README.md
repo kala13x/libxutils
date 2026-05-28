@@ -10,7 +10,7 @@
 
 `libxutils` is a low-level cross-platform `C` library designed to eliminate the need for stitching together dozens of unrelated libraries.
 
-It provides a unified, event-driven runtime with consistent APIs for networking, data structures, cryptography and system utilities, optimized for performance-critical native applications.
+It provides a unified, event-driven runtime with consistent APIs for networking, data structures, cryptography, and system utilities, optimized for performance-critical native applications.
 
 The library targets `Linux`, `Unix` and `Windows` and is released under the `MIT` license.
 
@@ -24,9 +24,9 @@ The library targets `Linux`, `Unix` and `Windows` and is released under the `MIT
 
 ## Core strength: networking
 
-The strongest side of `libxutils` is networking.
+The strongest side of `libxutils` is networking, although it is much more than a networking library. While networking is its most mature and feature-complete area, the library also provides a broad set of utilities commonly needed in C projects.
 
-Instead of combining separate libraries for sockets, event loops, HTTP, WebSocket, SSL and protocol glue, `libxutils` keeps them inside one library with shared conventions for buffers, callbacks, ownership and runtime flow.
+Instead of combining separate libraries for sockets, event loops, HTTP, WebSocket, SSL and protocol glue, `libxutils` keeps them inside one library with shared conventions for buffers, callbacks, ownership, and runtime flow.
 
 Built-in networking pieces include:
 
@@ -36,6 +36,8 @@ Built-in networking pieces include:
 - `WebSocket`
 - `MDTP`
 - Cross-platform event loop integration
+
+All networking components support both client-side and server-side operation.
 
 HTTP, WebSocket and raw TCP share the same callback model, endpoint setup and event loop. Switch between protocols by changing a single enum — the rest of your code stays the same. More importantly, they can coexist: a single instance can serve an HTTP API on one port, a WebSocket feed on another and a raw TCP control channel on a third, all multiplexed through one service loop with no threading required.
 
