@@ -932,7 +932,7 @@ int XDir_Read(xdir_t *pDir, char *pFile, size_t nSize)
             continue;
 
         if (pFile != NULL && nSize > 0)
-            strncpy(pFile, pDir->pEntry->d_name, nSize);
+            xstrncpy(pFile, nSize, pDir->pEntry->d_name);
 
         pDir->pCurrEntry = pDir->pEntry->d_name;
         return XSTDOK;

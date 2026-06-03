@@ -1428,6 +1428,8 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
     if (xstrused(pCert->p12Path))
     {
         xsock_ssl_cert_t sslCert;
+        memset(&sslCert, 0, sizeof(xsock_ssl_cert_t));
+
         if (!XSock_LoadPKCS12(&sslCert, pCert->p12Path, pCert->p12Pass))
         {
             pSock->eStatus = XSOCK_ERR_PKCS12;
