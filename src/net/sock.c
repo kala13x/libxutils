@@ -1047,7 +1047,7 @@ XSTATUS XSock_AddrInfo(xsock_info_t *pAddr, xsock_family_t eFam, const char *pHo
             xstrncpy(pAddr->sName, sizeof(pAddr->sName), pHost);
 
         pAddr->nAddr = XSock_NetAddr(pAddr->sAddr);
-        pAddr->nAddrLen = rp->ai_addrlen;
+        pAddr->nAddrLen = (xsocklen_t)rp->ai_addrlen;
         pAddr->nPort = 0;
 
         nRetVal = XSOCK_SUCCESS;
