@@ -145,6 +145,7 @@ typedef struct XSocketInfo {
     char sAddr[XSOCK_ADDR_MAX];
     char sName[XSOCK_INFO_MAX];
     xsock_family_t eFamily;
+    xsocklen_t nAddrLen;
     uint32_t nAddr;
     uint16_t nPort;
 } xsock_info_t;
@@ -173,6 +174,7 @@ typedef union {
 
 /* XSocket */
 typedef struct XSocket {
+    char sName[XSOCK_INFO_MAX];
     xsock_status_t eStatus;
     xsock_addr_t sockAddr;
 
@@ -282,7 +284,7 @@ XSOCKET XSock_TimeOutS(xsock_t* pSock, int nSec, int nUsec);
 XSOCKET XSock_Linger(xsock_t* pSock, int nSec);
 XSOCKET XSock_Bind(xsock_t *pSock);
 
-XSOCKET XSock_CreateAdv(xsock_t* pSock, uint32_t nFlags, size_t nFdMax, const char* pAddr, uint16_t nPort);
+XSOCKET XSock_CreateAdv(xsock_t* pSock, uint32_t nFlags, size_t nFdMax, const char* pAddr, uint16_t nPort, const char* pName);
 XSOCKET XSock_Create(xsock_t* pSock, uint32_t nFlags, const char* pAddr, uint16_t nPort);
 XSOCKET XSock_Open(xsock_t* pSock, uint32_t nFlags, xsock_info_t* pAddr);
 XSOCKET XSock_Setup(xsock_t* pSock, uint32_t nFlags, const char* pAddr);

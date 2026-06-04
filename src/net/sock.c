@@ -494,6 +494,7 @@ XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
     XCHECK_NL((pSock != NULL), XSOCK_ERROR);
     memset(&pSock->sockAddr, 0, sizeof(pSock->sockAddr));
 
+    pSock->sName[0] = XSTR_NUL;
     pSock->pPrivate = NULL;
     pSock->nDomain = 0;
     pSock->nProto = 0;
@@ -994,54 +995,63 @@ size_t XSock_IPAddr(const xsock_t *pSock, char *pAddr, size_t nSize)
 
 XSTATUS XSock_AddrInfo(xsock_info_t *pAddr, xsock_family_t eFam, const char *pHost)
 {
-    struct addrinfo hints, *rp, *res = NULL;
+    struct addrinfo hints;
+    struct addrinfo *res = NULL;
+    struct addrinfo *rp = NULL;
     int nRetVal = XSOCK_ERROR;
-    void *ptr = NULL;
+    int nErr = 0;
 
-    memset(&hints, 0, sizeof (hints));
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_family = PF_UNSPEC;
-    hints.ai_flags |= AI_CANONNAME;
-    hints.ai_canonname = NULL;
-    hints.ai_addr = NULL;
-    hints.ai_next = NULL;
+    if (pAddr == NULL || !xstrused(pHost))
+        return XSOCK_ERROR;
 
-    if (getaddrinfo(pHost, NULL, &hints, &res)) return nRetVal;
+    memset(pAddr, 0, sizeof(*pAddr));
     pAddr->eFamily = XF_UNDEF;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_flags = AI_CANONNAME;
+
+    nErr = getaddrinfo(pHost, NULL, &hints, &res);
+    if (nErr != 0) return XSOCK_ERROR;
 
     for (rp = res; rp != NULL; rp = rp->ai_next)
     {
-        inet_ntop(res->ai_family, res->ai_addr->sa_data, pAddr->sAddr, sizeof(pAddr->sAddr));
-        if (xstrused(pAddr->sAddr)) nRetVal = XSOCK_NONE;
+        void *pRawAddr = NULL;
 
         if (eFam == XF_IPV4 && rp->ai_family == AF_INET)
         {
-            ptr = &((struct sockaddr_in*) res->ai_addr)->sin_addr;
+            struct sockaddr_in *pSin = (struct sockaddr_in *)rp->ai_addr;
+            pRawAddr = &pSin->sin_addr;
             pAddr->eFamily = XF_IPV4;
         }
 #ifndef _WIN32
         else if (eFam == XF_IPV6 && rp->ai_family == AF_INET6)
         {
-            ptr = &((struct sockaddr_in6*)res->ai_addr)->sin6_addr;
+            struct sockaddr_in6 *pSin6 = (struct sockaddr_in6 *)rp->ai_addr;
+            pRawAddr = &pSin6->sin6_addr;
             pAddr->eFamily = XF_IPV6;
         }
 #endif
-
-        if (ptr != NULL)
+        else
         {
-            if (inet_ntop(res->ai_family, ptr, pAddr->sAddr, sizeof(pAddr->sAddr)) == NULL)
-            {
-                freeaddrinfo(res);
-                return nRetVal;
-            }
-
-            xstrncpy(pAddr->sName, sizeof(pAddr->sName), res->ai_canonname);
-            pAddr->nAddr = XSock_NetAddr(pAddr->sAddr);
-            pAddr->nPort = 0;
-
-            nRetVal = XSOCK_SUCCESS;
-            break;
+            continue;
         }
+
+        if (inet_ntop(rp->ai_family, pRawAddr, pAddr->sAddr, sizeof(pAddr->sAddr)) == NULL)
+            continue;
+
+        if (rp->ai_canonname != NULL && rp->ai_canonname[0] != '\0')
+            xstrncpy(pAddr->sName, sizeof(pAddr->sName), rp->ai_canonname);
+        else
+            xstrncpy(pAddr->sName, sizeof(pAddr->sName), pHost);
+
+        pAddr->nAddr = XSock_NetAddr(pAddr->sAddr);
+        pAddr->nAddrLen = rp->ai_addrlen;
+        pAddr->nPort = 0;
+
+        nRetVal = XSOCK_SUCCESS;
+        break;
     }
 
     freeaddrinfo(res);
@@ -1054,6 +1064,7 @@ void XSock_InitInfo(xsock_info_t *pAddr)
     pAddr->sAddr[0] = XSTR_NUL;
     pAddr->nAddr = XSTDNON;
     pAddr->nPort = XSTDNON;
+    pAddr->nAddrLen = XSTDNON;
     pAddr->eFamily = XF_UNDEF;
 }
 
@@ -1703,7 +1714,7 @@ static XSOCKET XSock_SetupStream(xsock_t *pSock, const char *pAddr, size_t nFdMa
         }
 
         if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSL))
-            XSock_InitSSLClient(pSock, pAddr);
+            XSock_InitSSLClient(pSock, pSock->sName);
     }
 
     return pSock->nFD;
@@ -1785,7 +1796,7 @@ static int XSock_SetupAddr(xsock_t *pSock, const char *pAddr, uint16_t nPort)
     return XSTDOK;
 }
 
-XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const char *pAddr, uint16_t nPort)
+XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const char *pAddr, uint16_t nPort, const char *pName)
 {
     XSTATUS nStatus = XSock_Init(pSock, nFlags, XSOCK_INVALID);
     if (nStatus == XSOCK_ERROR) return XSOCK_INVALID;
@@ -1815,7 +1826,9 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
         return XSOCK_INVALID;
     }
 
+    if (pName != NULL) xstrncpy(pSock->sName, sizeof(pSock->sName), pName);
     xbool_t bReuseAddr = XFLAGS_CHECK(pSock->nFlags, XSOCK_REUSEADDR);
+
     if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock, pAddr, nFdMax);
     else if (pSock->nType == SOCK_DGRAM) XSock_SetupDgram(pSock, bReuseAddr);
 
@@ -1827,7 +1840,7 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
 
 XSOCKET XSock_Create(xsock_t *pSock, uint32_t nFlags, const char *pAddr, uint16_t nPort)
 {
-    return XSock_CreateAdv(pSock, nFlags, 0, pAddr, nPort);
+    return XSock_CreateAdv(pSock, nFlags, 0, pAddr, nPort, NULL);
 }
 
 XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_info_t *pAddr)
@@ -1839,7 +1852,7 @@ XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_info_t *pAddr)
         return XSOCK_INVALID;
     }
 
-    return XSock_Create(pSock, nFlags, pAddr->sAddr, pAddr->nPort);
+    return XSock_CreateAdv(pSock, nFlags, 0, pAddr->sAddr, pAddr->nPort, pAddr->sName);
 }
 
 XSOCKET XSock_Setup(xsock_t *pSock, uint32_t nFlags, const char *pAddr)
