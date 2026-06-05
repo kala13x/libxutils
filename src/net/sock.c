@@ -966,7 +966,7 @@ XSTATUS XSock_MsgPeek(xsock_t *pSock)
 
 uint32_t XSock_NetAddr(const char *pAddr)
 {
-    if (pAddr == NULL) return htonl(INADDR_ANY);
+    if (!xstrused(pAddr)) return htonl(INADDR_ANY);
     struct in_addr addr;
     int nStatus = inet_pton(AF_INET, pAddr, &addr);
     return (nStatus <= 0) ? 0 : (uint32_t)addr.s_addr;
@@ -1010,7 +1010,6 @@ XSTATUS XSock_AddrInfo(xsock_info_t *pAddr, xsock_family_t eFam, const char *pHo
     memset(&hints, 0, sizeof(hints));
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_family = AF_UNSPEC;
-    hints.ai_flags = AI_CANONNAME;
 
     nErr = getaddrinfo(pHost, NULL, &hints, &res);
     if (nErr != 0) return XSOCK_ERROR;
@@ -1041,10 +1040,11 @@ XSTATUS XSock_AddrInfo(xsock_info_t *pAddr, xsock_family_t eFam, const char *pHo
         if (inet_ntop(rp->ai_family, pRawAddr, pAddr->sAddr, sizeof(pAddr->sAddr)) == NULL)
             continue;
 
-        if (rp->ai_canonname != NULL && rp->ai_canonname[0] != '\0')
-            xstrncpy(pAddr->sName, sizeof(pAddr->sName), rp->ai_canonname);
-        else
-            xstrncpy(pAddr->sName, sizeof(pAddr->sName), pHost);
+        /* Bind the resolved record to the literal host the caller requested,
+           not the DNS-supplied canonical name. Using ai_canonname here would let
+           an attacker who can spoof DNS steer TLS hostname verification onto a
+           name they hold a valid certificate for. */
+        xstrncpy(pAddr->sName, sizeof(pAddr->sName), pHost);
 
         pAddr->nAddr = XSock_NetAddr(pAddr->sAddr);
         pAddr->nAddrLen = (xsocklen_t)rp->ai_addrlen;
@@ -1660,13 +1660,17 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
     SSL_set_fd(pSSL, (int)pSock->nFD);
 
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-    if (xstrused(pAddr) && SSL_set_tlsext_host_name(pSSL, pAddr) != 1)
+    if (xstrused(pAddr))
     {
-        pSock->eStatus = XSOCK_ERR_SSLCNT;
-        SSL_free(pSSL);
-        SSL_CTX_free(pSSLCtx);
-        XSock_Close(pSock);
-        return XSOCK_INVALID;
+        xbool_t bIsIPAddr = XSock_NetAddr(pAddr) > 0 ? XTRUE : XFALSE;
+        if (!bIsIPAddr && SSL_set_tlsext_host_name(pSSL, pAddr) != 1)
+        {
+            pSock->eStatus = XSOCK_ERR_SSLCNT;
+            SSL_free(pSSL);
+            SSL_CTX_free(pSSLCtx);
+            XSock_Close(pSock);
+            return XSOCK_INVALID;
+        }
     }
 #endif
 
@@ -1861,7 +1865,7 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
         return XSOCK_INVALID;
     }
 
-    if (pName != NULL) xstrncpy(pSock->sName, sizeof(pSock->sName), pName);
+    if (xstrused(pName)) xstrncpy(pSock->sName, sizeof(pSock->sName), pName);
     xbool_t bReuseAddr = XFLAGS_CHECK(pSock->nFlags, XSOCK_REUSEADDR);
 
     if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock, pAddr, nFdMax);
