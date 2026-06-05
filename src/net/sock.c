@@ -1637,9 +1637,17 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
         return XSOCK_INVALID;
     }
 
+#ifdef SSL_VERIFY_PEER
+    /* Verify the server certificate chain against the system trust store.
+       Guarded by SSL_VERIFY_PEER so prehistoric OpenSSL builds that lack the
+       flag still compile, falling back to the old unverified behaviour. */
+    SSL_CTX_set_default_verify_paths(pSSLCtx);
+    SSL_CTX_set_verify(pSSLCtx, SSL_VERIFY_PEER, NULL);
+#else
     SSL_CTX_set_verify(pSSLCtx, SSL_VERIFY_NONE, NULL);
-    SSL *pSSL = SSL_new(pSSLCtx);
+#endif
 
+    SSL *pSSL = SSL_new(pSSLCtx);
     if (pSSL == NULL)
     {
         pSock->eStatus = XSOCK_ERR_SSLNEW;
@@ -1659,6 +1667,33 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
         SSL_CTX_free(pSSLCtx);
         XSock_Close(pSock);
         return XSOCK_INVALID;
+    }
+#endif
+
+#if defined(SSL_VERIFY_PEER) && OPENSSL_VERSION_NUMBER >= 0x10002000L
+    /* Bind verification to the host we actually dialed, so a certificate that
+       is validly signed but issued for a different domain is still rejected.
+       Without this, SSL_VERIFY_PEER alone does not stop a MITM that holds any
+       CA-trusted cert. set1_host needs OpenSSL >= 1.0.2; older toolchains keep
+       chain-only verification. */
+    if (xstrused(pAddr))
+    {
+        X509_VERIFY_PARAM *pParam = SSL_get0_param(pSSL);
+        if (pParam != NULL)
+        {
+            int nHostOk = (XSock_NetAddr(pAddr) > 0) ?
+                X509_VERIFY_PARAM_set1_ip_asc(pParam, pAddr) :
+                X509_VERIFY_PARAM_set1_host(pParam, pAddr, 0);
+
+            if (nHostOk != 1)
+            {
+                pSock->eStatus = XSOCK_ERR_SSLCNT;
+                SSL_free(pSSL);
+                SSL_CTX_free(pSSLCtx);
+                XSock_Close(pSock);
+                return XSOCK_INVALID;
+            }
+        }
     }
 #endif
 
