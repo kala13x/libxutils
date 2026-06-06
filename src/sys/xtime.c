@@ -23,6 +23,26 @@ void XTime_Init(xtime_t *pTime)
     pTime->nFraq = 0;
 }
 
+static int XTime_SetParsed(xtime_t *pTime, int nParsed, int nExpected,
+                           unsigned int nYear, unsigned int nMonth,
+                           unsigned int nDay, unsigned int nHour,
+                           unsigned int nMin, unsigned int nSec,
+                           unsigned int nFraq)
+{
+    if (nParsed != nExpected || !nYear || nYear > UINT16_MAX || !nMonth || nMonth > 12 || !nDay ||
+        nDay > (unsigned int)XTime_GetMonthDays((int)nYear, (int)nMonth) ||
+        nHour > 23 || nMin > 59 || nSec > 59 || nFraq > UINT8_MAX) return 0;
+
+    pTime->nYear = (uint16_t)nYear;
+    pTime->nMonth = (uint8_t)nMonth;
+    pTime->nDay = (uint8_t)nDay;
+    pTime->nHour = (uint8_t)nHour;
+    pTime->nMin = (uint8_t)nMin;
+    pTime->nSec = (uint8_t)nSec;
+    pTime->nFraq = (uint8_t)nFraq;
+    return nParsed;
+}
+
 void XTime_FromTm(xtime_t *pTime, const struct tm *pTm)
 {
     pTime->nYear = (uint16_t)pTm->tm_year+1900;
@@ -36,83 +56,89 @@ void XTime_FromTm(xtime_t *pTime, const struct tm *pTm)
 
 int XTime_FromStr(xtime_t *pTime, const char *pStr)
 {
-    XCHECK(xstrused(pStr), 0);
+    XCHECK((pTime != NULL && xstrused(pStr)), 0);
     XTime_Init(pTime);
+
+    unsigned int nYear = 0, nMonth = 0, nDay = 0;
+    unsigned int nHour = 0, nMin = 0, nSec = 0, nFraq = 0;
 #ifdef _WIN32
-    return sscanf_s(pStr, "%04d%02d%02d%02d%02d%02d%02d",
-        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
-        (int*)&pTime->nFraq);
+    int nParsed = sscanf_s(pStr, "%04u%02u%02u%02u%02u%02u%02u",
+        &nYear, &nMonth, &nDay, &nHour, &nMin, &nSec, &nFraq);
 #else
-    return sscanf(pStr, "%04d%02d%02d%02d%02d%02d%02d",
-        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
-        (int*)&pTime->nFraq);
+    int nParsed = sscanf(pStr, "%04u%02u%02u%02u%02u%02u%02u",
+        &nYear, &nMonth, &nDay, &nHour, &nMin, &nSec, &nFraq);
 #endif
+
+    return XTime_SetParsed(pTime, nParsed, 7, nYear, nMonth, nDay, nHour, nMin, nSec, nFraq);
 }
 
 int XTime_FromHStr(xtime_t *pTime, const char *pStr)
 {
-    XCHECK(xstrused(pStr), 0);
+    XCHECK((pTime != NULL && xstrused(pStr)), 0);
     XTime_Init(pTime);
+    unsigned int nYear = 0, nMonth = 0, nDay = 0;
+    unsigned int nHour = 0, nMin = 0, nSec = 0, nFraq = 0;
 #ifdef _WIN32
-    return sscanf_s(pStr, "%04d.%02d.%02d-%02d:%02d:%02d.%02d",
-        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
-        (int*)&pTime->nFraq);
+    int nParsed = sscanf_s(pStr, "%04u.%02u.%02u-%02u:%02u:%02u.%02u",
+        &nYear, &nMonth, &nDay, &nHour, &nMin, &nSec, &nFraq);
 #else
-    return sscanf(pStr, "%04d.%02d.%02d-%02d:%02d:%02d.%02d",
-        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
-        (int*)&pTime->nFraq);
+    int nParsed = sscanf(pStr, "%04u.%02u.%02u-%02u:%02u:%02u.%02u",
+        &nYear, &nMonth, &nDay, &nHour, &nMin, &nSec, &nFraq);
 #endif
+
+    return XTime_SetParsed(pTime, nParsed, 7, nYear, nMonth, nDay, nHour, nMin, nSec, nFraq);
 }
 
 int XTime_FromLstr(xtime_t *pTime, const char *pStr)
 {
-    XCHECK(xstrused(pStr), 0);
+    XCHECK((pTime != NULL && xstrused(pStr)), 0);
     XTime_Init(pTime);
+
+    unsigned int nYear = 0, nMonth = 0, nDay = 0;
+    unsigned int nHour = 0, nMin = 0, nSec = 0;
 #ifdef _WIN32
-    return sscanf_s(pStr, "%04d/%02d/%02d/%02d/%02d/%02d",
-        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec);
+    int nParsed = sscanf_s(pStr, "%04u/%02u/%02u/%02u/%02u/%02u",
+        &nYear, &nMonth, &nDay, &nHour, &nMin, &nSec);
 #else
-    return sscanf(pStr, "%04d/%02d/%02d/%02d/%02d/%02d",
-        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec);
+    int nParsed = sscanf(pStr, "%04u/%02u/%02u/%02u/%02u/%02u",
+        &nYear, &nMonth, &nDay, &nHour, &nMin, &nSec);
 #endif
+
+    return XTime_SetParsed(pTime, nParsed, 6, nYear, nMonth, nDay, nHour, nMin, nSec, 0);
 }
 
 int XTime_FromRstr(xtime_t *pTime, const char *pStr)
 {
-    XCHECK(xstrused(pStr), 0);
+    XCHECK((pTime != NULL && xstrused(pStr)), 0);
     XTime_Init(pTime);
+    unsigned int nYear = 0, nMonth = 0, nDay = 0;
+    unsigned int nHour = 0, nMin = 0, nSec = 0, nFraq = 0;
 #ifdef _WIN32
-    return sscanf_s(pStr, "%02d/%02d/%04d %02d:%02d:%02d.%02d",
-        (int*)&pTime->nMonth, (int*)&pTime->nDay, (int*)&pTime->nYear,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
-        (int*)&pTime->nFraq);
+    int nParsed = sscanf_s(pStr, "%02u/%02u/%04u %02u:%02u:%02u.%02u",
+        &nMonth, &nDay, &nYear, &nHour, &nMin, &nSec, &nFraq);
 #else
-    return sscanf(pStr, "%02d/%02d/%04d %02d:%02d:%02d.%02d",
-        (int*)&pTime->nMonth, (int*)&pTime->nDay, (int*)&pTime->nYear,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec,
-        (int*)&pTime->nFraq);
+    int nParsed = sscanf(pStr, "%02u/%02u/%04u %02u:%02u:%02u.%02u",
+        &nMonth, &nDay, &nYear, &nHour, &nMin, &nSec, &nFraq);
 #endif
+
+    return XTime_SetParsed(pTime, nParsed, 7, nYear, nMonth, nDay, nHour, nMin, nSec, nFraq);
 }
 
 int XTime_FromISO(xtime_t *pTime, const char *pStr)
 {
-    XCHECK(xstrused(pStr), 0);
+    XCHECK((pTime != NULL && xstrused(pStr)), 0);
     XTime_Init(pTime);
+    unsigned int nYear = 0, nMonth = 0, nDay = 0;
+    unsigned int nHour = 0, nMin = 0, nSec = 0;
 #ifdef _WIN32
-    return sscanf_s(pStr, "%04d-%02d-%02dT%02d:%02d:%02d",
-        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec);
+    int nParsed = sscanf_s(pStr, "%04u-%02u-%02uT%02u:%02u:%02u",
+        &nYear, &nMonth, &nDay, &nHour, &nMin, &nSec);
 #else
-    return sscanf(pStr, "%04d-%02d-%02dT%02d:%02d:%02d",
-        (int*)&pTime->nYear, (int*)&pTime->nMonth, (int*)&pTime->nDay,
-        (int*)&pTime->nHour, (int*)&pTime->nMin, (int*)&pTime->nSec);
+    int nParsed = sscanf(pStr, "%04u-%02u-%02uT%02u:%02u:%02u",
+        &nYear, &nMonth, &nDay, &nHour, &nMin, &nSec);
 #endif
+
+    return XTime_SetParsed(pTime, nParsed, 6, nYear, nMonth, nDay, nHour, nMin, nSec, 0);
 }
 
 void XTime_FromEpoch(xtime_t *pTime, const time_t nTime)
@@ -287,7 +313,7 @@ int XTime_GetLeapYear(int nYear)
 int XTime_GetMonthDays(int nYear, int nMonth)
 {
     int nLeap = XTime_GetLeapYear(nYear);
-    if (nMonth == 2) return nLeap ? 28 : 29;
+    if (nMonth == 2) return nLeap ? 29 : 28;
 
     if (nMonth == 4 ||
         nMonth == 6 ||
