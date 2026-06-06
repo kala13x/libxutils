@@ -410,20 +410,21 @@ size_t xstrxcpyf(char **pDst, const char *pFmt, ...)
 #ifdef _XUTILS_USE_GNU
     va_list args;
     int nBytes = 0;
+    if (!pDst || !pFmt) return 0;
 
     va_start(args, pFmt);
     nBytes = vasprintf(pDst, pFmt, args);
     va_end(args);
 
-    if (nBytes <= 0 && pDst)
+    if (nBytes < 0)
     {
-        free(pDst);
-        pDst = NULL;
+        free(*pDst);
+        *pDst = NULL;
         return 0;
     }
 
-    pDst[nBytes] = XSTR_NUL;
-    return nBytes;
+    (*pDst)[nBytes] = XSTR_NUL;
+    return (size_t)nBytes;
 #endif
     (void)pDst;
     (void)pFmt;
