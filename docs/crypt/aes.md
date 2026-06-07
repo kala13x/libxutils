@@ -2,11 +2,15 @@
 
 ## Purpose
 
-AES helper layer with three modes:
+AES helper layer with four modes:
 
 - CBC with PKCS#7 padding
 - XBC, a custom CBC-based framing mode with random prefix
 - SIV, deterministic authenticated encryption using CMAC/S2V + CTR
+- SIVN, nonce-based (non-deterministic) AES-SIV: same as SIV but folds a
+  caller-supplied nonce into S2V as the single associated-data string, so
+  identical plaintexts produce distinct ciphertext. Set the nonce with
+  `XAES_SetSIVNonce()` after `XAES_Init()`.
 
 ## Types
 
@@ -49,14 +53,28 @@ AES helper layer with three modes:
 - Arguments:
   - `pAES`: destination AES runtime object.
   - `pKey`: previously prepared key struct.
-  - `eMode`: `XAES_MODE_CBC`, `XAES_MODE_XBC` or `XAES_MODE_SIV`.
+  - `eMode`: `XAES_MODE_CBC`, `XAES_MODE_XBC`, `XAES_MODE_SIV` or `XAES_MODE_SIV_NONCE`.
 - Does:
   - validates key size.
   - expands encryption round keys.
-  - for SIV, expands both CMAC and CTR contexts.
+  - for SIV/SIVN, expands both CMAC and CTR contexts.
 - Returns:
   - `XSTDOK` on success.
   - `XSTDINV`/`XSTDERR` style negative status on invalid key size or init failure.
+
+### `void XAES_SetSIVNonce(xaes_t *pAES, const uint8_t *pNonce, size_t nNonceLen)`
+
+- Arguments:
+  - `pAES`: initialized runtime object (must be `XAES_MODE_SIV_NONCE`).
+  - `pNonce`: nonce bytes.
+  - `nNonceLen`: must equal `XAES_BLOCK_SIZE` (16).
+- Does:
+  - records the nonce (in the per-context IV slot) for the next
+    `XAES_Encrypt`/`XAES_Decrypt`; S2V consumes it as the associated-data string.
+  - the caller owns nonce uniqueness/randomness; a repeated nonce only degrades
+    to deterministic output (nonce-misuse resistant), never keystream reuse.
+- Returns:
+  - no return value.
 
 ### `void XAES_ECB_Crypt(const xaes_t *pAES, uint8_t *pBuffer)`
 

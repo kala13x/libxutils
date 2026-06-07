@@ -232,7 +232,7 @@ int XAES_Init(xaes_t *pAES, const xaes_key_t *pKey, xaes_mode_t eMode)
     pAES->mode = eMode;
     pAES->key = *pKey;
 
-    if (pAES->mode == XAES_MODE_SIV)
+    if (pAES->mode == XAES_MODE_SIV || pAES->mode == XAES_MODE_SIV_NONCE)
     {
         xaes_ctx_t cmacCtx;
         memset(&cmacCtx, 0, sizeof(cmacCtx));
@@ -255,6 +255,17 @@ int XAES_Init(xaes_t *pAES, const xaes_key_t *pKey, xaes_mode_t eMode)
     }
 
     return XSTDOK;
+}
+
+void XAES_SetSIVNonce(xaes_t *pAES, const uint8_t *pNonce, size_t nNonceLen)
+{
+    XCHECK_VOID((pAES != NULL));
+    XCHECK_VOID((pNonce != NULL));
+    XCHECK_VOID((nNonceLen == XAES_BLOCK_SIZE));
+
+    /* The nonce reuses the per-context IV slot (unused by SIV/SIVN otherwise)
+       and is consumed by S2V as the associated-data string. */
+    memcpy(pAES->key.IV, pNonce, XAES_BLOCK_SIZE);
 }
 
 static void XAES_AddRoundKey(uint8_t nNB, uint8_t nRound, xaes_state_t* pState, const uint8_t* pRoundKey)
@@ -539,7 +550,10 @@ static void XAES_CMAC(const xaes_t *pAES, const uint8_t *pData, size_t nLength, 
     memcpy(pTag, X, XAES_BLOCK_SIZE);
 }
 
-/* S2V: Compute synthetic IV from plaintext (RFC 5297, Section 2.4, no AD) */
+/* S2V: Compute synthetic IV from plaintext (RFC 5297, Section 2.4).
+ * XAES_MODE_SIV uses no associated data. XAES_MODE_SIV_NONCE folds
+ * in a single associated-data string (the nonce in pAES->key.IV)
+ * so identical plaintexts produce distinct synthetic IVs. */
 static int XAES_S2V(const xaes_t *pAES, const uint8_t *pPlain, size_t nLength, uint8_t *pSIV)
 {
     uint8_t D[XAES_BLOCK_SIZE];
@@ -548,6 +562,16 @@ static int XAES_S2V(const xaes_t *pAES, const uint8_t *pPlain, size_t nLength, u
 
     /* D = CMAC(K, 0^128) */
     XAES_CMAC(pAES, zeroBlock, XAES_BLOCK_SIZE, D);
+
+    /* Process the lone associated-data string (the nonce) for nonce-based SIV:
+     * D = dbl(D) XOR CMAC(K, nonce). RFC 5297, Section 2.4. */
+    if (pAES->mode == XAES_MODE_SIV_NONCE)
+    {
+        uint8_t macNonce[XAES_BLOCK_SIZE];
+        XAES_CMAC(pAES, pAES->key.IV, XAES_BLOCK_SIZE, macNonce);
+        XAES_DBL(D);
+        XAES_ApplyXOR(D, macNonce);
+    }
 
     if (nLength >= XAES_BLOCK_SIZE)
     {
@@ -979,7 +1003,8 @@ uint8_t* XAES_Encrypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
     XCHECK((pInput != NULL), NULL);
     XCHECK((pLength != NULL), NULL);
 
-    if (pAES->mode == XAES_MODE_SIV)
+    if (pAES->mode == XAES_MODE_SIV ||
+        pAES->mode == XAES_MODE_SIV_NONCE)
         return XAES_SIV_Crypt(pAES, pInput, pLength);
 
     if (pAES->mode == XAES_MODE_XBC)
@@ -994,7 +1019,8 @@ uint8_t* XAES_Decrypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
     XCHECK((pInput != NULL), NULL);
     XCHECK((pLength != NULL), NULL);
 
-    if (pAES->mode == XAES_MODE_SIV)
+    if (pAES->mode == XAES_MODE_SIV ||
+        pAES->mode == XAES_MODE_SIV_NONCE)
         return XAES_SIV_Decrypt(pAES, pInput, pLength);
 
     if (pAES->mode == XAES_MODE_XBC)
