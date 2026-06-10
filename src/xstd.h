@@ -60,6 +60,7 @@
 #include <windows.h>
 #include <afunix.h>
 #include <direct.h>
+#include <share.h>
 #include <io.h>
 #endif
 

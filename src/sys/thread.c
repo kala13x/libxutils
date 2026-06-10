@@ -12,10 +12,22 @@
 #include "thread.h"
 
 #ifdef _WIN32
+/* The trampoline owns a heap copy of the callback and its argument:
+   reading them from the caller's xthread_t inside the new thread would
+   race with the caller freeing or reusing that struct (detached use). */
+typedef struct XThreadStartup {
+    xthread_cb_t functionCb;
+    void *pArgument;
+} xthread_startup_t;
+
 static DWORD WINAPI XThread_WinThread(void* pArg)
 {
-    xthread_t *pThread = (xthread_t*)pArg;
-    pThread->functionCb(pThread->pArgument);
+    xthread_startup_t *pStartup = (xthread_startup_t*)pArg;
+    xthread_cb_t functionCb = pStartup->functionCb;
+    void *pArgument = pStartup->pArgument;
+
+    free(pStartup);
+    functionCb(pArgument);
     return 0;
 }
 #endif
@@ -35,8 +47,19 @@ int XThread_Run(xthread_t *pThread)
     pThread->nStatus = XTHREAD_FAIL;
 
 #ifdef _WIN32
-    pThread->threadId = CreateThread(NULL, pThread->nStackSize, XThread_WinThread, pThread, 0, NULL);
-    if (pThread->threadId == NULL) return XSTDERR;
+    xthread_startup_t *pStartup = (xthread_startup_t*)malloc(sizeof(xthread_startup_t));
+    if (pStartup == NULL) return XSTDERR;
+
+    pStartup->functionCb = pThread->functionCb;
+    pStartup->pArgument = pThread->pArgument;
+
+    pThread->threadId = CreateThread(NULL, pThread->nStackSize, XThread_WinThread, pStartup, 0, NULL);
+    if (pThread->threadId == NULL)
+    {
+        free(pStartup);
+        return XSTDERR;
+    }
+
     if (pThread->nDetached) CloseHandle(pThread->threadId);
 #else
     pthread_attr_t attr;

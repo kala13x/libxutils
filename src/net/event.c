@@ -739,12 +739,33 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
 #if defined(_XEVENTS_USE_EPOLL)
     nCount = epoll_wait(pEvents->nEventFd, pEvents->pEventArray, pEvents->nEventMax, nTimeout);
 #elif defined(_XEVENTS_USE_WSAPOLL)
+    /* WSAPoll() rejects an empty descriptor set with WSAEINVAL instead of
+       sleeping like poll(); emulate the poll() timeout behavior to avoid
+       turning an idle event loop into a busy spin. */
+    if (!pEvents->nEventCount)
+    {
+        if (nTimeout > 0) Sleep((DWORD)nTimeout);
+        return XEVENTS_SUCCESS;
+    }
+
     nCount = WSAPoll(pEvents->pEventArray, pEvents->nEventCount, nTimeout);
 #elif defined(_XEVENTS_USE_POLL)
     nCount = poll(pEvents->pEventArray, pEvents->nEventCount, nTimeout);
 #endif
 
-    if (errno == EINTR) return XEvents_InterruptCb(pEvents);
+    /* Consult the error state only on actual failure: errno (or the WSA
+       error) is not reset on success, so checking a stale value here would
+       fire spurious interrupt callbacks. Winsock reports the interrupt
+       through WSAGetLastError() rather than errno. */
+    if (nCount < 0)
+    {
+#if defined(_XEVENTS_USE_WSAPOLL)
+        if (WSAGetLastError() == WSAEINTR) return XEvents_InterruptCb(pEvents);
+#else
+        if (errno == EINTR) return XEvents_InterruptCb(pEvents);
+#endif
+    }
+
     if (!nCount) return XEVENTS_SUCCESS;
 
     XCHECK((nCount > 0), XEVENTS_EWAIT);

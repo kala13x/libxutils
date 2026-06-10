@@ -230,6 +230,16 @@ xbool_t XSock_IsNB(const xsock_t *pSock);
 int xclosesock(XSOCKET nFd);
 void XSock_Close(xsock_t* pSock);
 
+#ifdef _WIN32
+/* Thread-safe, one-time WSAStartup(). Called lazily by the library itself,
+   exposed for code that uses raw Winsock calls before any xsock_t exists. */
+xbool_t XSock_WinsockInit(void);
+#endif
+
+/* Create a pair of connected stream sockets (POSIX: socketpair(),
+   Windows: loopback emulation). Usable with XEvents on all platforms. */
+XSTATUS XSock_CreatePair(XSOCKET aPair[2]);
+
 XSTATUS XSock_MsgPeek(xsock_t* pSock);
 XSTATUS XSock_IsOpen(xsock_t* pSock);
 XSTATUS XSock_Check(xsock_t* pSock);

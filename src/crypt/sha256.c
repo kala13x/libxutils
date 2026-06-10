@@ -12,7 +12,9 @@
 #include "str.h"
 
 #ifdef _WIN32
+#if defined(_MSC_VER)
 #pragma warning(disable : 4146)
+#endif
 #define htobe32(x) _byteswap_ulong(x)
 #define be32toh(x) _byteswap_ulong(x)
 #elif defined(__APPLE__)

@@ -148,6 +148,14 @@ int XFile_ParseFlags(const char *pFlags)
     }
 #endif
 
+#ifdef _WIN32
+    /* The Windows CRT opens files in text mode by default, silently
+       translating LF<->CRLF and treating Ctrl-Z as EOF. That corrupts any
+       binary payload, so every file is opened in binary mode: callers that
+       need text semantics handle line endings themselves. */
+    if (nFlags) nFlags |= _O_BINARY;
+#endif
+
     return nFlags;
 }
 
@@ -860,8 +868,27 @@ int XDir_Open(xdir_t *pDir, const char *pPath)
     if (pPath == NULL) return XSTDERR;
 
 #ifdef _WIN32
-    pDir->pDirectory = FindFirstFile(pPath, &pDir->entry);
-    if (pDir->pDirectory == INVALID_HANDLE_VALUE) return XSTDERR;
+    /* FindFirstFile() enumerates a directory only when given a wildcard
+       pattern; the bare directory path would match the directory itself
+       as a single entry. INVALID_HANDLE_VALUE with ERROR_FILE_NOT_FOUND
+       means the pattern matched nothing: for an existing directory that
+       is simply an empty listing, which XDir_Read reports as exhausted. */
+    char sPattern[XPATH_MAX];
+    size_t nLen = strlen(pPath);
+    if (!nLen || nLen + 3 > sizeof(sPattern)) return XSTDERR;
+
+    xbool_t bHasSep = (pPath[nLen - 1] == '/' || pPath[nLen - 1] == '\\');
+    int nPrinted = snprintf(sPattern, sizeof(sPattern), bHasSep ? "%s*" : "%s\\*", pPath);
+    if (nPrinted <= 0 || (size_t)nPrinted >= sizeof(sPattern)) return XSTDERR;
+
+    pDir->pDirectory = FindFirstFile(sPattern, &pDir->entry);
+    if (pDir->pDirectory == INVALID_HANDLE_VALUE)
+    {
+        if (GetLastError() != ERROR_FILE_NOT_FOUND || !XDir_Valid(pPath)) return XSTDERR;
+        pDir->nOpen = 1; /* Open but already exhausted: empty directory */
+        return XSTDOK;
+    }
+
     pDir->nFirstFile = 1;
 #else
     pDir->pDirectory = opendir(pPath);
@@ -895,6 +922,10 @@ int XDir_Read(xdir_t *pDir, char *pFile, size_t nSize)
     if (!pDir || !pDir->nOpen) return XSTDERR;
 
 #ifdef _WIN32
+    /* Opened but exhausted (e.g. an empty listing without a find handle) */
+    if (pDir->pDirectory == NULL ||
+        pDir->pDirectory == INVALID_HANDLE_VALUE) return XSTDNON;
+
     if (pDir->nFirstFile)
     {
         pDir->nFirstFile = 0;

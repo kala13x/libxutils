@@ -11,7 +11,9 @@
 #include "ws.h"
 
 #ifdef _WIN32
+#if defined(_MSC_VER)
 #pragma warning(disable : 4146)
+#endif
 #define htobe64(x) _byteswap_uint64(x)
 #define be64toh(x) _byteswap_uint64(x)
 #elif defined(__APPLE__)
