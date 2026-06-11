@@ -656,6 +656,8 @@ xjson_error_t XJSON_AddNull(xjson_obj_t *pObject, const char *pName)
 /* Forward declararions */
 int XJSON_ParseObject(xjson_t *pJson, xjson_obj_t *pObj);
 int XJSON_ParseArray(xjson_t *pJson, xjson_obj_t *pObj);
+static int XJSON_ParseObjectNext(xjson_t *pJson, xjson_obj_t *pObj, int bAllowEnd);
+static int XJSON_ParseArrayNext(xjson_t *pJson, xjson_obj_t *pObj, int bAllowEnd);
 
 static int XJSON_ParseNewObject(xjson_t *pJson, xjson_obj_t *pObj, const char *pName)
 {
@@ -775,13 +777,13 @@ static int XJSON_PutItem(xjson_t *pJson, xjson_obj_t *pObj, const char *pName)
     return XJSON_SUCCESS;
 }
 
-int XJSON_ParseArray(xjson_t *pJson, xjson_obj_t *pObj)
+static int XJSON_ParseArrayNext(xjson_t *pJson, xjson_obj_t *pObj, int bAllowEnd)
 {
     xjson_token_t *pToken = &pJson->lastToken;
     XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
 
     if (pToken->nType == XJSON_TOKEN_RSQUARE)
-        return XJSON_UndoLastToken(pJson);
+        return bAllowEnd ? XJSON_UndoLastToken(pJson) : XJSON_UnexpectedToken(pJson);
     else if (XJSON_TokenIsItem(pToken))
         { XCHECK(XJSON_PutItem(pJson, pObj, NULL), XJSON_FAILURE); }
     else if (pToken->nType == XJSON_TOKEN_LCURLY)
@@ -793,11 +795,16 @@ int XJSON_ParseArray(xjson_t *pJson, xjson_obj_t *pObj)
     XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
 
     if (pToken->nType == XJSON_TOKEN_COMMA)
-        return XJSON_ParseArray(pJson, pObj);
+        return XJSON_ParseArrayNext(pJson, pObj, XFALSE);
     else if (pToken->nType != XJSON_TOKEN_RSQUARE)
         return XJSON_UnexpectedToken(pJson);
 
     return XJSON_UndoLastToken(pJson);
+}
+
+int XJSON_ParseArray(xjson_t *pJson, xjson_obj_t *pObj)
+{
+    return XJSON_ParseArrayNext(pJson, pObj, XTRUE);
 }
 
 static int XJSON_ParsePair(xjson_t* pJson, xjson_obj_t* pObj)
@@ -856,37 +863,52 @@ static int XJSON_ParsePair(xjson_t* pJson, xjson_obj_t* pObj)
     XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
 
     if (pToken->nType == XJSON_TOKEN_COMMA)
-        return XJSON_ParseObject(pJson, pObj);
+        return XJSON_ParseObjectNext(pJson, pObj, XFALSE);
     else if (pToken->nType != XJSON_TOKEN_RCURLY)
         return XJSON_UnexpectedToken(pJson);
 
     return XJSON_UndoLastToken(pJson);
 }
 
-int XJSON_ParseObject(xjson_t *pJson, xjson_obj_t *pObj)
+static int XJSON_ParseObjectNext(xjson_t *pJson, xjson_obj_t *pObj, int bAllowEnd)
 {
     xjson_token_t *pToken = &pJson->lastToken;
     XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
 
-    if (pToken->nType == XJSON_TOKEN_RCURLY) return XJSON_UndoLastToken(pJson);
+    if (pToken->nType == XJSON_TOKEN_RCURLY)
+        return bAllowEnd ? XJSON_UndoLastToken(pJson) : XJSON_UnexpectedToken(pJson);
     else if (pToken->nType == XJSON_TOKEN_QUOTE) return XJSON_ParsePair(pJson, pObj);
-    else if (pToken->nType == XJSON_TOKEN_COMMA) return XJSON_ParseObject(pJson, pObj);
     else if (pToken->nType == XJSON_TOKEN_EOF) return XJSON_FAILURE;
 
     return XJSON_UnexpectedToken(pJson);
 }
 
+int XJSON_ParseObject(xjson_t *pJson, xjson_obj_t *pObj)
+{
+    return XJSON_ParseObjectNext(pJson, pObj, XTRUE);
+}
+
 int XJSON_Parse(xjson_t *pJson, xpool_t *pPool, const char *pData, size_t nSize)
 {
+    XCHECK_NL((pJson != NULL), XJSON_FAILURE);
+    XJSON_Init(pJson);
+
     pJson->nError = XJSON_ERR_NONE;
     pJson->nDataSize = nSize;
     pJson->pData = pData;
     pJson->nOffset = 0;
     pJson->pPool = pPool;
 
+    if (pData == NULL && nSize)
+    {
+        pJson->nError = XJSON_ERR_INVALID;
+        return XJSON_FAILURE;
+    }
+
     xjson_token_t *pToken = &pJson->lastToken;
     XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
 
+    int nStatus = XJSON_FAILURE;
     if (pToken->nType == XJSON_TOKEN_LCURLY)
     {
         pJson->pRootObj = XJSON_NewObject(pPool, NULL, 0);
@@ -896,8 +918,8 @@ int XJSON_Parse(xjson_t *pJson, xpool_t *pPool, const char *pData, size_t nSize)
             return XJSON_FAILURE;
         }
 
-        XCHECK(XJSON_ParseObject(pJson, pJson->pRootObj), XJSON_FAILURE);
-        return XJSON_Expect(pJson, XJSON_TOKEN_RCURLY);
+        nStatus = XJSON_ParseObject(pJson, pJson->pRootObj) &&
+            XJSON_Expect(pJson, XJSON_TOKEN_RCURLY);
     }
     else if (pToken->nType == XJSON_TOKEN_LSQUARE)
     {
@@ -908,11 +930,18 @@ int XJSON_Parse(xjson_t *pJson, xpool_t *pPool, const char *pData, size_t nSize)
             return XJSON_FAILURE;
         }
 
-        XCHECK(XJSON_ParseArray(pJson, pJson->pRootObj), XJSON_FAILURE);
-        return XJSON_Expect(pJson, XJSON_TOKEN_RSQUARE);
+        nStatus = XJSON_ParseArray(pJson, pJson->pRootObj) &&
+            XJSON_Expect(pJson, XJSON_TOKEN_RSQUARE);
+    }
+    else nStatus = XJSON_UnexpectedToken(pJson);
+
+    if (!nStatus)
+    {
+        XJSON_FreeObject(pJson->pRootObj);
+        pJson->pRootObj = NULL;
     }
 
-    return XJSON_UnexpectedToken(pJson);
+    return nStatus;
 }
 
 xjson_obj_t *XJSON_FromStr(xpool_t *pPool, const char *pFmt, ...)

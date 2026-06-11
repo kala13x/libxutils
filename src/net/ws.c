@@ -535,7 +535,7 @@ xws_status_t XWebFrame_AppendData(xws_frame_t *pFrame, uint8_t* pData, size_t nS
 xws_status_t XWebFrame_TryParse(xws_frame_t *pFrame, uint8_t* pData, size_t nSize)
 {
     xws_status_t nStatus = XWebFrame_AppendData(pFrame, pData, nSize);
-    return (nStatus > 0) ? XWebFrame_Parse(pFrame) : nStatus;
+    return (nStatus == XWS_ERR_NONE) ? XWebFrame_Parse(pFrame) : nStatus;
 }
 
 xws_status_t XWebFrame_ParseData(xws_frame_t *pFrame, uint8_t* pData, size_t nSize)
