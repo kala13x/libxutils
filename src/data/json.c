@@ -92,6 +92,7 @@ static int XJSON_NextChar(xjson_t *pJson, char *pChar)
     /* Skip space and new line characters */
     while (nCharacter == ' ' ||
            nCharacter == '\n' ||
+           nCharacter == '\r' ||
            nCharacter == '\t')
     {
         XCHECK(XJSON_CheckBounds(pJson), XJSON_FAILURE);
@@ -104,29 +105,53 @@ static int XJSON_NextChar(xjson_t *pJson, char *pChar)
 
 static int XJSON_ParseDigit(xjson_t *pJson, char nCharacter)
 {
+    (void)nCharacter;
     xjson_token_t *pToken = &pJson->lastToken;
     pToken->nType = XJSON_TOKEN_INVALID;
-    size_t nPosition = pJson->nOffset;
-    uint8_t nPoint = 0;
+    size_t nStart = pJson->nOffset - 1;
+    size_t i = nStart;
+    xbool_t bFloat = XFALSE;
 
-    if (nCharacter == '-') nCharacter = pJson->pData[pJson->nOffset];
-
-    while (isdigit(nCharacter) || (nPoint < 2 && nCharacter == '.'))
+    if (pJson->pData[i] == '-')
     {
-        XCHECK(XJSON_CheckBounds(pJson), XJSON_FAILURE);
-        nCharacter = pJson->pData[pJson->nOffset++];
-
-        if (nCharacter == '.' && ++nPoint == 2)
-        {
-            pToken->nLength = pJson->nOffset - nPosition;
-            return XJSON_UnexpectedToken(pJson);
-        }
+        i++;
+        if (i >= pJson->nDataSize) return XJSON_UnexpectedToken(pJson);
     }
 
-    pToken->nLength = pJson->nOffset - nPosition;
-    pToken->nType = nPoint ? XJSON_TOKEN_FLOAT : XJSON_TOKEN_INTEGER;
-    pToken->pData = &pJson->pData[nPosition - 1];
-    pJson->nOffset--;
+    if (pJson->pData[i] == '0')
+    {
+        i++;
+        if (i < pJson->nDataSize && isdigit((unsigned char)pJson->pData[i])) return XJSON_UnexpectedToken(pJson);
+    }
+    else if (pJson->pData[i] >= '1' && pJson->pData[i] <= '9')
+    {
+        while (i < pJson->nDataSize && isdigit((unsigned char)pJson->pData[i])) i++;
+    }
+    else return XJSON_UnexpectedToken(pJson);
+
+    if (i < pJson->nDataSize && pJson->pData[i] == '.')
+    {
+        bFloat = XTRUE;
+        i++;
+
+        if (i >= pJson->nDataSize || !isdigit((unsigned char)pJson->pData[i])) return XJSON_UnexpectedToken(pJson);
+        while (i < pJson->nDataSize && isdigit((unsigned char)pJson->pData[i])) i++;
+    }
+
+    if (i < pJson->nDataSize && (pJson->pData[i] == 'e' || pJson->pData[i] == 'E'))
+    {
+        bFloat = XTRUE;
+        i++;
+
+        if (i < pJson->nDataSize && (pJson->pData[i] == '+' || pJson->pData[i] == '-')) i++;
+        if (i >= pJson->nDataSize || !isdigit((unsigned char)pJson->pData[i])) return XJSON_UnexpectedToken(pJson);
+        while (i < pJson->nDataSize && isdigit((unsigned char)pJson->pData[i])) i++;
+    }
+
+    pToken->nLength = i - nStart;
+    pToken->nType = bFloat ? XJSON_TOKEN_FLOAT : XJSON_TOKEN_INTEGER;
+    pToken->pData = &pJson->pData[nStart];
+    pJson->nOffset = i;
 
     return XJSON_SUCCESS;
 }
@@ -138,22 +163,37 @@ static int XJSON_ParseQuote(xjson_t *pJson)
     XCHECK(XJSON_CheckBounds(pJson), XJSON_FAILURE);
 
     size_t nStart = pJson->nOffset;
-    char nCurr = 0, nPrev = 0;
-
-    for (;;)
+    while (pJson->nOffset < pJson->nDataSize)
     {
-        if (nCurr == '"' && nPrev != '\\') break;
-        XCHECK(XJSON_CheckBounds(pJson), XJSON_FAILURE);
+        unsigned char c = (unsigned char)pJson->pData[pJson->nOffset++];
+        if (c == '"')
+        {
+            pToken->nLength = pJson->nOffset - nStart - 1;
+            pToken->pData = &pJson->pData[nStart];
+            pToken->nType = XJSON_TOKEN_QUOTE;
+            return XJSON_SUCCESS;
+        }
 
-        nPrev = pJson->pData[pJson->nOffset-1];
-        nCurr = pJson->pData[pJson->nOffset++];
+        if (c < 0x20) return XJSON_UnexpectedToken(pJson);
+        if (c != '\\') continue;
+        if (pJson->nOffset >= pJson->nDataSize)
+            return XJSON_UnexpectedToken(pJson);
+
+        c = (unsigned char)pJson->pData[pJson->nOffset++];
+        if (c == 'u')
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                if (pJson->nOffset >= pJson->nDataSize ||
+                    !isxdigit((unsigned char)pJson->pData[pJson->nOffset++]))
+                    return XJSON_UnexpectedToken(pJson);
+            }
+        }
+        else if (strchr("\"\\/bfnrt", c) == NULL)
+            return XJSON_UnexpectedToken(pJson);
     }
 
-    pToken->nLength = pJson->nOffset - nStart - 1;
-    pToken->pData = &pJson->pData[nStart];
-    pToken->nType = XJSON_TOKEN_QUOTE;
-
-    return XJSON_SUCCESS;
+    return XJSON_UnexpectedToken(pJson);
 }
 
 static int XJSON_IsAlphabet(char nChar)
@@ -179,14 +219,14 @@ static int XJSON_ParseAlphabet(xjson_t *pJson, char nCharacter)
     pToken->pData = &pJson->pData[nPosition - 1];
     pJson->nOffset--;
 
-    if (!strncmp((char*)pToken->pData, "null", 4))
+    if (pToken->nLength == 4 && !strncmp((char*)pToken->pData, "null", 4))
     {
         pToken->nType = XJSON_TOKEN_NULL;
         return XJSON_SUCCESS;
     }
 
-    if (!strncmp((char*)pToken->pData, "true", 4) ||
-        !strncmp((char*)pToken->pData, "false", 5))
+    if ((pToken->nLength == 4 && !strncmp((char*)pToken->pData, "true", 4)) ||
+        (pToken->nLength == 5 && !strncmp((char*)pToken->pData, "false", 5)))
     {
         pToken->nType = XJSON_TOKEN_BOOL;
         return XJSON_SUCCESS;
@@ -935,6 +975,18 @@ int XJSON_Parse(xjson_t *pJson, xpool_t *pPool, const char *pData, size_t nSize)
     }
     else nStatus = XJSON_UnexpectedToken(pJson);
 
+    if (nStatus)
+    {
+        int nNext = XJSON_GetNextToken(pJson);
+        if (pJson->lastToken.nType == XJSON_TOKEN_EOF)
+        {
+            pJson->nError = XJSON_ERR_NONE;
+            nStatus = XJSON_SUCCESS;
+        }
+        else if (nNext) nStatus = XJSON_UnexpectedToken(pJson);
+        else nStatus = XJSON_FAILURE;
+    }
+
     if (!nStatus)
     {
         XJSON_FreeObject(pJson->pRootObj);
@@ -1078,9 +1130,11 @@ int XJSON_RemoveArrayItem(xjson_obj_t *pObj, size_t nIndex)
     xjson_obj_t *pTmp = XJSON_GetArrayItem(pObj, nIndex);
     if (pTmp != NULL)
     {
-        XArray_Remove((xarray_t*)pObj->pData, nIndex);
+        xarray_data_t *pRemoved = XArray_Remove((xarray_t*)pObj->pData, nIndex);
         XJSON_FreeObject(pTmp);
+        XArray_FreeData(pRemoved);
     }
+
     return 0;
 }
 
