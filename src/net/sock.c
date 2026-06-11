@@ -1792,6 +1792,41 @@ XSOCKET XSock_InitSSLServer(xsock_t *pSock, int nVerifyFlags)
     return XSOCK_INVALID;
 }
 
+#if defined(_WIN32) && defined(XSOCK_USE_SSL)
+/*
+    OpenSSL ships no trust anchors on Windows and its compiled-in
+    OPENSSLDIR points at the build prefix, so set_default_verify_paths()
+    loads an empty store and SSL_VERIFY_PEER rejects every connection.
+    Import the system roots from the Windows certificate store instead,
+    so verification uses the same trust the operating system itself does.
+*/
+static void XSock_LoadWinRootCerts(SSL_CTX *pSSLCtx)
+{
+    HCERTSTORE hStore = CertOpenSystemStoreA(0, "ROOT");
+    if (hStore == NULL) return;
+
+    X509_STORE *pStore = SSL_CTX_get_cert_store(pSSLCtx);
+    PCCERT_CONTEXT pWinCert = NULL;
+
+    if (pStore != NULL)
+    {
+        while ((pWinCert = CertEnumCertificatesInStore(hStore, pWinCert)) != NULL)
+        {
+            const unsigned char *pEncoded = pWinCert->pbCertEncoded;
+            X509 *pCert = d2i_X509(NULL, &pEncoded, (long)pWinCert->cbCertEncoded);
+
+            if (pCert != NULL)
+            {
+                X509_STORE_add_cert(pStore, pCert);
+                X509_free(pCert);
+            }
+        }
+    }
+
+    CertCloseStore(hStore, 0);
+}
+#endif /* _WIN32 && XSOCK_USE_SSL */
+
 XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
 {
 #ifdef XSOCK_USE_SSL
@@ -1816,6 +1851,9 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
        Guarded by SSL_VERIFY_PEER so prehistoric OpenSSL builds that lack the
        flag still compile, falling back to the old unverified behaviour. */
     SSL_CTX_set_default_verify_paths(pSSLCtx);
+#ifdef _WIN32
+    XSock_LoadWinRootCerts(pSSLCtx);
+#endif
     SSL_CTX_set_verify(pSSLCtx, SSL_VERIFY_PEER, NULL);
 #else
     SSL_CTX_set_verify(pSSLCtx, SSL_VERIFY_NONE, NULL);

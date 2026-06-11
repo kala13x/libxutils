@@ -58,6 +58,7 @@
 #include <ws2tcpip.h>
 #include <winsock2.h>
 #include <windows.h>
+#include <wincrypt.h>
 #include <afunix.h>
 #include <direct.h>
 #include <share.h>

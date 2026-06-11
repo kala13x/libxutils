@@ -19,6 +19,7 @@
 #define XCLI_WINDOW_COLUMNS_DEFAULT 80
 #define XCLI_WINDOW_ROWS_DEFAULT 24
 
+#ifndef _WIN32
 static size_t XCLI_GetWindowSizeFallback(const char *pValue, size_t nDefault)
 {
     if (!xstrused(pValue)) return nDefault;
@@ -31,6 +32,7 @@ static size_t XCLI_GetWindowSizeFallback(const char *pValue, size_t nDefault)
 
     return (size_t)nParsed;
 }
+#endif
 
 XSTATUS XCLI_SetInputMode(void *pAttributes)
 {
