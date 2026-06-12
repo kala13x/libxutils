@@ -696,6 +696,7 @@ int XPath_ModeToPerm(char *pOutput, size_t nSize, xmode_t nMode)
 #else
     pOutput[0] = (nMode & _S_IREAD) ? 'r' : '-';
     pOutput[1] = (nMode & _S_IWRITE) ? 'w' : '-';
+    memset(&pOutput[2], '-', XPERM_LEN - 2);
 #endif
 
     pOutput[XPERM_LEN] = 0;
@@ -705,7 +706,7 @@ int XPath_ModeToPerm(char *pOutput, size_t nSize, xmode_t nMode)
 int XPath_SetPerm(const char *pPath, const char *pPerm)
 {
     xmode_t nMode = 0;
-    if (!XPath_PermToMode(pPerm, &nMode)) return XSTDERR;
+    if (XPath_PermToMode(pPerm, &nMode) != XSTDOK) return XSTDERR;
     return (xchmod(pPath, nMode) < 0) ? XSTDERR : XSTDOK;
 }
 
