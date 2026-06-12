@@ -338,40 +338,132 @@ int xclosesock(XSOCKET nFd)
 #endif
 }
 
-XSTATUS XSock_CreatePair(XSOCKET aPair[2])
+#ifdef _WIN32
+/*
+    AF_UNIX stream sockets exist on Windows since 10 1803 (build 17134).
+    Unlike the loopback TCP emulation, an AF_UNIX pair is not addressable
+    from the network stack at all and its bind node lives in the calling
+    user's private temp directory. There is still no socketpair(), so the
+    listener/connect/accept dance remains, and the accepted endpoint is
+    verified: SIO_AF_UNIX_GETPEERPID must report the current process,
+    otherwise the pair is rejected. Any failure (pre-1803 system, temp
+    path too deep for sun_path, hijacked accept) makes the caller fall
+    back to the TCP emulation below.
+*/
+static XSTATUS XSock_CreatePairUnix(XSOCKET aPair[2])
 {
-    XCHECK_NL((aPair != NULL), XSTDERR);
-    aPair[0] = aPair[1] = XSOCK_INVALID;
+    XSOCKET nListener = XSOCK_INVALID;
+    XSOCKET nClient = XSOCK_INVALID;
+    XSOCKET nAccepted = XSOCK_INVALID;
 
-#ifndef _WIN32
-    int nFds[2] = { XSOCK_INVALID, XSOCK_INVALID };
+    struct sockaddr_un addr;
+    char sTempDir[MAX_PATH];
+    xbool_t bBound = XFALSE;
+    int nAttempt = 0;
 
-#if defined(SOCK_CLOEXEC)
-    int nStatus = socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, nFds);
-#else
-    int nStatus = socketpair(AF_UNIX, SOCK_STREAM, 0, nFds);
-#endif
-    XCHECK_NL((nStatus == 0), XSTDERR);
+    nListener = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (nListener == XSOCK_INVALID) return XSTDERR;
 
-#if !defined(SOCK_CLOEXEC) && defined(FD_CLOEXEC)
-    fcntl(nFds[0], F_SETFD, FD_CLOEXEC);
-    fcntl(nFds[1], F_SETFD, FD_CLOEXEC);
-#endif
+    DWORD nDirLen = GetTempPathA(sizeof(sTempDir), sTempDir);
+    if (nDirLen == 0 || nDirLen >= sizeof(sTempDir))
+    {
+        closesocket(nListener);
+        return XSTDERR;
+    }
 
-    aPair[0] = nFds[0];
-    aPair[1] = nFds[1];
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+
+    /* The name only needs to be unique, not secret: a squatted path makes
+       bind() fail with WSAEADDRINUSE and a fresh suffix is tried. */
+    for (nAttempt = 0; nAttempt < 16; nAttempt++)
+    {
+        LARGE_INTEGER perfCnt;
+        QueryPerformanceCounter(&perfCnt);
+
+        int nPathLen = snprintf(addr.sun_path, sizeof(addr.sun_path),
+            "%sxsp-%lx-%llx-%x.sock", sTempDir,
+            (unsigned long)GetCurrentProcessId(),
+            (unsigned long long)perfCnt.QuadPart,
+            (unsigned)nAttempt);
+
+        /* Temp directory too deep for sun_path: AF_UNIX unusable here */
+        if (nPathLen <= 0 || (size_t)nPathLen >= sizeof(addr.sun_path))
+        {
+            closesocket(nListener);
+            return XSTDERR;
+        }
+
+        if (bind(nListener, (struct sockaddr*)&addr, (int)sizeof(addr)) == 0)
+        {
+            bBound = XTRUE;
+            break;
+        }
+
+        if (WSAGetLastError() != WSAEADDRINUSE) break;
+    }
+
+    if (!bBound || listen(nListener, 1) != 0)
+    {
+        closesocket(nListener);
+        if (bBound) DeleteFileA(addr.sun_path);
+        return XSTDERR;
+    }
+
+    nClient = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (nClient == XSOCK_INVALID ||
+        connect(nClient, (struct sockaddr*)&addr, (int)sizeof(addr)) != 0)
+    {
+        if (nClient != XSOCK_INVALID) closesocket(nClient);
+        closesocket(nListener);
+        DeleteFileA(addr.sun_path);
+        return XSTDERR;
+    }
+
+    nAccepted = accept(nListener, NULL, NULL);
+    closesocket(nListener);
+
+    /* One-shot node: remove it before anyone else can dial it */
+    DeleteFileA(addr.sun_path);
+
+    if (nAccepted == XSOCK_INVALID)
+    {
+        closesocket(nClient);
+        return XSTDERR;
+    }
+
+    /* Anti-hijack: the accepted endpoint must belong to this process */
+    DWORD nPeerPid = 0;
+    DWORD nIoBytes = 0;
+
+    if (WSAIoctl(nAccepted, SIO_AF_UNIX_GETPEERPID, NULL, 0,
+            &nPeerPid, sizeof(nPeerPid), &nIoBytes, NULL, NULL) != 0 ||
+        nPeerPid != GetCurrentProcessId())
+    {
+        closesocket(nClient);
+        closesocket(nAccepted);
+        return XSTDERR;
+    }
+
+    /* Keep the pair private: never inherited by child processes */
+    SetHandleInformation((HANDLE)nClient, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation((HANDLE)nAccepted, HANDLE_FLAG_INHERIT, 0);
+
+    aPair[0] = nClient;
+    aPair[1] = nAccepted;
     return XSTDOK;
-#else
-    /*
-        Windows has no socketpair(): emulate it with a one-shot listener on
-        the loopback interface. The pair must be safe against a local
-        port-hijack race (another process connecting to our listener first),
-        so after accept() the endpoints are cross-checked: the address the
-        client socket was auto-bound to must be exactly the peer address of
-        the accepted socket. On mismatch the pair is rejected.
-    */
-    XCHECK_NL(XSock_WinsockInit(), XSTDERR);
+}
 
+/*
+    Loopback TCP fallback for systems without AF_UNIX support. The pair
+    must be safe against a local port-hijack race (another process
+    connecting to our listener first), so after accept() the endpoints
+    are cross-checked: the address the client socket was auto-bound to
+    must be exactly the peer address of the accepted socket. On mismatch
+    the pair is rejected.
+*/
+static XSTATUS XSock_CreatePairInet(XSOCKET aPair[2])
+{
     XSOCKET nListener = XSOCK_INVALID;
     XSOCKET nClient = XSOCK_INVALID;
     XSOCKET nAccepted = XSOCK_INVALID;
@@ -453,6 +545,42 @@ XSTATUS XSock_CreatePair(XSOCKET aPair[2])
     aPair[0] = nClient;
     aPair[1] = nAccepted;
     return XSTDOK;
+}
+#endif /* _WIN32 */
+
+XSTATUS XSock_CreatePair(XSOCKET aPair[2])
+{
+    XCHECK_NL((aPair != NULL), XSTDERR);
+    aPair[0] = aPair[1] = XSOCK_INVALID;
+
+#ifndef _WIN32
+    int nFds[2] = { XSOCK_INVALID, XSOCK_INVALID };
+
+#if defined(SOCK_CLOEXEC)
+    int nStatus = socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, nFds);
+#else
+    int nStatus = socketpair(AF_UNIX, SOCK_STREAM, 0, nFds);
+#endif
+    XCHECK_NL((nStatus == 0), XSTDERR);
+
+#if !defined(SOCK_CLOEXEC) && defined(FD_CLOEXEC)
+    fcntl(nFds[0], F_SETFD, FD_CLOEXEC);
+    fcntl(nFds[1], F_SETFD, FD_CLOEXEC);
+#endif
+
+    aPair[0] = nFds[0];
+    aPair[1] = nFds[1];
+    return XSTDOK;
+#else
+    XCHECK_NL(XSock_WinsockInit(), XSTDERR);
+
+    /* AF_UNIX first: the pair is never addressable from the network
+       stack. Falls back to the loopback TCP emulation on pre-1803
+       systems or when the temp path does not fit in sun_path. */
+    if (XSock_CreatePairUnix(aPair) == XSTDOK) return XSTDOK;
+
+    aPair[0] = aPair[1] = XSOCK_INVALID;
+    return XSock_CreatePairInet(aPair);
 #endif
 }
 
@@ -2060,8 +2188,14 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
     }
 
     int nType = pSock->nType;
-#ifndef _WIN32
-    nType |= FD_CLOEXEC;
+
+    /* Close-on-exec from the first instant: SOCK_CLOEXEC is a type flag
+       (Linux/BSD); FD_CLOEXEC is an fcntl() flag and must NOT be OR-ed
+       into the socket type (it would turn SOCK_DGRAM into SOCK_RAW).
+       Platforms without SOCK_CLOEXEC (macOS) fall back to fcntl() right
+       after creation, same as XSock_CreatePair above. */
+#if !defined(_WIN32) && defined(SOCK_CLOEXEC)
+    nType |= SOCK_CLOEXEC;
 #endif
 
     pSock->nFD = socket(pSock->nDomain, nType, pSock->nProto);
@@ -2070,6 +2204,10 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
         pSock->eStatus = XSOCK_ERR_CREATE;
         return XSOCK_INVALID;
     }
+
+#if !defined(_WIN32) && !defined(SOCK_CLOEXEC) && defined(FD_CLOEXEC)
+    fcntl(pSock->nFD, F_SETFD, FD_CLOEXEC);
+#endif
 
     if (XSock_SetupAddr(pSock, pAddr, nPort) < 0)
     {

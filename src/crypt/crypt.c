@@ -96,16 +96,20 @@ uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
     XByteBuffer_Init(&buffer, *pLength, 0);
     if (!buffer.nSize) return NULL;
 
-    uint8_t nVal = 0;
+    /* %x stores a full unsigned int: the target must be one, not a
+       uint8_t, or sscanf corrupts the 3 bytes next to it on the stack.
+       The %02x width caps the parsed value at 0xFF, so the narrowing
+       cast below is always lossless. */
+    unsigned int nVal = 0;
     int nOffset = 0;
 
 #ifdef _WIN32
-    while (sscanf_s(pData, pFmt, (unsigned int*)&nVal, &nOffset) == 1)
+    while (sscanf_s(pData, pFmt, &nVal, &nOffset) == 1)
 #else
-    while (sscanf(pData, pFmt, (unsigned int*)&nVal, &nOffset) == 1)
+    while (sscanf(pData, pFmt, &nVal, &nOffset) == 1)
 #endif
     {
-        if (XByteBuffer_AddByte(&buffer, nVal) <= 0)
+        if (XByteBuffer_AddByte(&buffer, (uint8_t)nVal) <= 0)
         {
             XByteBuffer_Clear(&buffer);
             *pLength = 0;
