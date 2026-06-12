@@ -669,8 +669,17 @@ int XPath_ModeToChmod(char *pOutput, size_t nSize, xmode_t nMode)
     nOthers += (nMode & S_IWOTH) ? 2 : 0;
     nOthers += (nMode & S_IXOTH) ? 1 : 0;
 #else
-    nOwner = (nMode & _S_IREAD) ? 4 : 0;
-    nOwner += (nMode & _S_IWRITE) ? 2 : 0;
+    xbool_t bDirectory = S_ISDIR(nMode);
+    xbool_t bRead = bDirectory || (nMode & _S_IREAD);
+    xbool_t bWrite = bDirectory || (nMode & _S_IWRITE);
+    xbool_t bExec = bDirectory || (nMode & _S_IEXEC);
+
+    nOwner = bRead ? 4 : 0;
+    nOwner += bWrite ? 2 : 0;
+    nOwner += bExec ? 1 : 0;
+
+    nGroup = 0;
+    nOthers = 0;
 #endif
 
     return (int)xstrncpyf(pOutput, nSize, "%d%d%d", nOwner, nGroup, nOthers);
@@ -694,9 +703,22 @@ int XPath_ModeToPerm(char *pOutput, size_t nSize, xmode_t nMode)
     pOutput[7] = (nMode & S_IWOTH) ? 'w' : '-';
     pOutput[8] = (nMode & S_IXOTH) ? 'x' : '-';
 #else
-    pOutput[0] = (nMode & _S_IREAD) ? 'r' : '-';
-    pOutput[1] = (nMode & _S_IWRITE) ? 'w' : '-';
-    memset(&pOutput[2], '-', XPERM_LEN - 2);
+    xbool_t bDirectory = S_ISDIR(nMode);
+    xbool_t bRead = bDirectory || (nMode & _S_IREAD);
+    xbool_t bWrite = bDirectory || (nMode & _S_IWRITE);
+    xbool_t bExec = bDirectory || (nMode & _S_IEXEC);
+
+    pOutput[0] = bRead ? 'r' : '-';
+    pOutput[1] = bWrite ? 'w' : '-';
+    pOutput[2] = bExec ? 'x' : '-';
+
+    pOutput[3] = '-';
+    pOutput[4] = '-';
+    pOutput[5] = '-';
+
+    pOutput[6] = '-';
+    pOutput[7] = '-';
+    pOutput[8] = '-';
 #endif
 
     pOutput[XPERM_LEN] = 0;
