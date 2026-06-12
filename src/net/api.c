@@ -33,10 +33,13 @@ typedef struct XAPIWorkerEvents {
 } xapi_worker_events_t;
 
 static void XAPI_CloseEventBackend(xevents_t *pEvents);
-static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID);
 XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex);
 XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers);
 XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal);
+
+#ifndef _WIN32
+static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID);
+#endif
 
 const char* XAPI_GetStatusStr(xapi_status_t eStatus)
 {
@@ -527,6 +530,7 @@ xevent_status_t XAPI_RebuildWorkerEvents(xapi_t *pApi)
     return XEVENTS_SUCCESS;
 }
 
+#ifndef _WIN32
 static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID)
 {
     XCHECK_NL((pApi != NULL), XSTDERR);
@@ -541,6 +545,7 @@ static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID)
 
     return XSTDERR;
 }
+#endif
 
 XSTATUS XAPI_InitWorkerDeathSignal(void)
 {

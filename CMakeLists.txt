@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(libxutils LANGUAGES C)
 
-if (WIN32)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Od /W3")
+if (MSVC)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /O2 /W3")
+elseif(WIN32)
+    # MinGW (gcc or llvm-mingw clang) targeting Windows
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall")
 elseif(APPLE)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -Wall")
 else()

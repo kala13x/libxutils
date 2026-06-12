@@ -148,6 +148,14 @@ int XFile_ParseFlags(const char *pFlags)
     }
 #endif
 
+#ifdef _WIN32
+    /* The Windows CRT opens files in text mode by default, silently
+       translating LF<->CRLF and treating Ctrl-Z as EOF. That corrupts any
+       binary payload, so every file is opened in binary mode: callers that
+       need text semantics handle line endings themselves. */
+    if (nFlags) nFlags |= _O_BINARY;
+#endif
+
     return nFlags;
 }
 
@@ -661,8 +669,17 @@ int XPath_ModeToChmod(char *pOutput, size_t nSize, xmode_t nMode)
     nOthers += (nMode & S_IWOTH) ? 2 : 0;
     nOthers += (nMode & S_IXOTH) ? 1 : 0;
 #else
-    nOwner = (nMode & _S_IREAD) ? 4 : 0;
-    nOwner += (nMode & _S_IWRITE) ? 2 : 0;
+    xbool_t bDirectory = S_ISDIR(nMode);
+    xbool_t bRead = bDirectory || (nMode & _S_IREAD);
+    xbool_t bWrite = bDirectory || (nMode & _S_IWRITE);
+    xbool_t bExec = bDirectory || (nMode & _S_IEXEC);
+
+    nOwner = bRead ? 4 : 0;
+    nOwner += bWrite ? 2 : 0;
+    nOwner += bExec ? 1 : 0;
+
+    nGroup = 0;
+    nOthers = 0;
 #endif
 
     return (int)xstrncpyf(pOutput, nSize, "%d%d%d", nOwner, nGroup, nOthers);
@@ -686,8 +703,22 @@ int XPath_ModeToPerm(char *pOutput, size_t nSize, xmode_t nMode)
     pOutput[7] = (nMode & S_IWOTH) ? 'w' : '-';
     pOutput[8] = (nMode & S_IXOTH) ? 'x' : '-';
 #else
-    pOutput[0] = (nMode & _S_IREAD) ? 'r' : '-';
-    pOutput[1] = (nMode & _S_IWRITE) ? 'w' : '-';
+    xbool_t bDirectory = S_ISDIR(nMode);
+    xbool_t bRead = bDirectory || (nMode & _S_IREAD);
+    xbool_t bWrite = bDirectory || (nMode & _S_IWRITE);
+    xbool_t bExec = bDirectory || (nMode & _S_IEXEC);
+
+    pOutput[0] = bRead ? 'r' : '-';
+    pOutput[1] = bWrite ? 'w' : '-';
+    pOutput[2] = bExec ? 'x' : '-';
+
+    pOutput[3] = '-';
+    pOutput[4] = '-';
+    pOutput[5] = '-';
+
+    pOutput[6] = '-';
+    pOutput[7] = '-';
+    pOutput[8] = '-';
 #endif
 
     pOutput[XPERM_LEN] = 0;
@@ -697,7 +728,7 @@ int XPath_ModeToPerm(char *pOutput, size_t nSize, xmode_t nMode)
 int XPath_SetPerm(const char *pPath, const char *pPerm)
 {
     xmode_t nMode = 0;
-    if (!XPath_PermToMode(pPerm, &nMode)) return XSTDERR;
+    if (XPath_PermToMode(pPerm, &nMode) != XSTDOK) return XSTDERR;
     return (xchmod(pPath, nMode) < 0) ? XSTDERR : XSTDOK;
 }
 
@@ -860,8 +891,27 @@ int XDir_Open(xdir_t *pDir, const char *pPath)
     if (pPath == NULL) return XSTDERR;
 
 #ifdef _WIN32
-    pDir->pDirectory = FindFirstFile(pPath, &pDir->entry);
-    if (pDir->pDirectory == INVALID_HANDLE_VALUE) return XSTDERR;
+    /* FindFirstFile() enumerates a directory only when given a wildcard
+       pattern; the bare directory path would match the directory itself
+       as a single entry. INVALID_HANDLE_VALUE with ERROR_FILE_NOT_FOUND
+       means the pattern matched nothing: for an existing directory that
+       is simply an empty listing, which XDir_Read reports as exhausted. */
+    char sPattern[XPATH_MAX];
+    size_t nLen = strlen(pPath);
+    if (!nLen || nLen + 3 > sizeof(sPattern)) return XSTDERR;
+
+    xbool_t bHasSep = (pPath[nLen - 1] == '/' || pPath[nLen - 1] == '\\');
+    int nPrinted = snprintf(sPattern, sizeof(sPattern), bHasSep ? "%s*" : "%s\\*", pPath);
+    if (nPrinted <= 0 || (size_t)nPrinted >= sizeof(sPattern)) return XSTDERR;
+
+    pDir->pDirectory = FindFirstFile(sPattern, &pDir->entry);
+    if (pDir->pDirectory == INVALID_HANDLE_VALUE)
+    {
+        if (GetLastError() != ERROR_FILE_NOT_FOUND || !XDir_Valid(pPath)) return XSTDERR;
+        pDir->nOpen = 1; /* Open but already exhausted: empty directory */
+        return XSTDOK;
+    }
+
     pDir->nFirstFile = 1;
 #else
     pDir->pDirectory = opendir(pPath);
@@ -895,6 +945,10 @@ int XDir_Read(xdir_t *pDir, char *pFile, size_t nSize)
     if (!pDir || !pDir->nOpen) return XSTDERR;
 
 #ifdef _WIN32
+    /* Opened but exhausted (e.g. an empty listing without a find handle) */
+    if (pDir->pDirectory == NULL ||
+        pDir->pDirectory == INVALID_HANDLE_VALUE) return XSTDNON;
+
     if (pDir->nFirstFile)
     {
         pDir->nFirstFile = 0;

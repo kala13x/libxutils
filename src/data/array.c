@@ -244,7 +244,8 @@ size_t XArray_CheckSpace(xarray_t *pArr)
     }
     else if (pArr->nUsed >= pArr->nSize)
     {
-        return XArray_Realloc(pArr);
+        if (!XArray_Realloc(pArr) || pArr->nUsed >= pArr->nSize)
+            return 0;
     }
 
     return pArr->pData == NULL ? 0 : 1;

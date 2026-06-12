@@ -28,12 +28,50 @@ typedef SSIZE_T ssize_t;
     Library already have safer implementation of getaddrinfo()
     but also supporting old implementation for legacy devices.
 */
-#ifdef _WIN32
+#if defined(_MSC_VER)
 #pragma warning(disable : 4996)
 #endif
 
 #define XSOCK_MIN(a,b) (((a)<(b))?(a):(b))
+
+/*
+    Winsock does not report errors through errno: every failed socket call
+    must be checked with WSAGetLastError() instead. XSOCK_ERRNO() abstracts
+    that so the shared logic below stays identical on both platforms.
+*/
+#ifdef _WIN32
+#define XSOCK_ERRNO() WSAGetLastError()
+#define XSOCK_WOULDBLOCK(err) (err == WSAEWOULDBLOCK || err == WSAECONNABORTED)
+#else
+#define XSOCK_ERRNO() errno
 #define XSOCK_WOULDBLOCK(err) (err == EAGAIN || err == EWOULDBLOCK || err == ECONNABORTED)
+#endif
+
+#ifdef _WIN32
+/*
+    Winsock requires a successful WSAStartup() call before any socket or
+    name resolution function is used. It is invoked lazily (and exactly
+    once, thread-safe) from every libxutils entry point that first touches
+    the socket API. WSACleanup() is intentionally not called: the library
+    keeps Winsock alive for the whole process lifetime and the OS releases
+    it at process exit.
+*/
+static BOOL CALLBACK XSock_WinsockInitCb(PINIT_ONCE pInitOnce, PVOID pParam, PVOID *ppContext)
+{
+    (void)pInitOnce;
+    (void)pParam;
+    (void)ppContext;
+
+    WSADATA wsaData;
+    return (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0) ? TRUE : FALSE;
+}
+
+xbool_t XSock_WinsockInit(void)
+{
+    static INIT_ONCE winsockInitOnce = INIT_ONCE_STATIC_INIT;
+    return InitOnceExecuteOnce(&winsockInitOnce, XSock_WinsockInitCb, NULL, NULL) ? XTRUE : XFALSE;
+}
+#endif
 
 xsock_addr_t* XSock_InAddr(xsock_t *pSock) { return &pSock->sockAddr; }
 xsock_status_t XSock_Status(const xsock_t *pSock) { return pSock->eStatus; }
@@ -300,6 +338,124 @@ int xclosesock(XSOCKET nFd)
 #endif
 }
 
+XSTATUS XSock_CreatePair(XSOCKET aPair[2])
+{
+    XCHECK_NL((aPair != NULL), XSTDERR);
+    aPair[0] = aPair[1] = XSOCK_INVALID;
+
+#ifndef _WIN32
+    int nFds[2] = { XSOCK_INVALID, XSOCK_INVALID };
+
+#if defined(SOCK_CLOEXEC)
+    int nStatus = socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, nFds);
+#else
+    int nStatus = socketpair(AF_UNIX, SOCK_STREAM, 0, nFds);
+#endif
+    XCHECK_NL((nStatus == 0), XSTDERR);
+
+#if !defined(SOCK_CLOEXEC) && defined(FD_CLOEXEC)
+    fcntl(nFds[0], F_SETFD, FD_CLOEXEC);
+    fcntl(nFds[1], F_SETFD, FD_CLOEXEC);
+#endif
+
+    aPair[0] = nFds[0];
+    aPair[1] = nFds[1];
+    return XSTDOK;
+#else
+    /*
+        Windows has no socketpair(): emulate it with a one-shot listener on
+        the loopback interface. The pair must be safe against a local
+        port-hijack race (another process connecting to our listener first),
+        so after accept() the endpoints are cross-checked: the address the
+        client socket was auto-bound to must be exactly the peer address of
+        the accepted socket. On mismatch the pair is rejected.
+    */
+    XCHECK_NL(XSock_WinsockInit(), XSTDERR);
+
+    XSOCKET nListener = XSOCK_INVALID;
+    XSOCKET nClient = XSOCK_INVALID;
+    XSOCKET nAccepted = XSOCK_INVALID;
+
+    struct sockaddr_in listenAddr, clientAddr, peerAddr;
+    int nAddrLen = (int)sizeof(struct sockaddr_in);
+    int nOpt = 1;
+
+    nListener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (nListener == XSOCK_INVALID) return XSTDERR;
+
+    /* Refuse to share the port with any other local socket */
+    setsockopt(nListener, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&nOpt, sizeof(nOpt));
+
+    memset(&listenAddr, 0, sizeof(listenAddr));
+    listenAddr.sin_family = AF_INET;
+    listenAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    listenAddr.sin_port = 0;
+
+    if (bind(nListener, (struct sockaddr*)&listenAddr, sizeof(listenAddr)) != 0 ||
+        getsockname(nListener, (struct sockaddr*)&listenAddr, &nAddrLen) != 0 ||
+        listen(nListener, 1) != 0)
+    {
+        closesocket(nListener);
+        return XSTDERR;
+    }
+
+    nClient = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (nClient == XSOCK_INVALID)
+    {
+        closesocket(nListener);
+        return XSTDERR;
+    }
+
+    if (connect(nClient, (struct sockaddr*)&listenAddr, sizeof(listenAddr)) != 0)
+    {
+        closesocket(nListener);
+        closesocket(nClient);
+        return XSTDERR;
+    }
+
+    nAddrLen = (int)sizeof(clientAddr);
+    if (getsockname(nClient, (struct sockaddr*)&clientAddr, &nAddrLen) != 0)
+    {
+        closesocket(nListener);
+        closesocket(nClient);
+        return XSTDERR;
+    }
+
+    nAddrLen = (int)sizeof(peerAddr);
+    nAccepted = accept(nListener, (struct sockaddr*)&peerAddr, &nAddrLen);
+    closesocket(nListener);
+
+    if (nAccepted == XSOCK_INVALID)
+    {
+        closesocket(nClient);
+        return XSTDERR;
+    }
+
+    /* Anti-hijack: the accepted peer must be our own client socket */
+    if (peerAddr.sin_family != AF_INET ||
+        peerAddr.sin_addr.s_addr != htonl(INADDR_LOOPBACK) ||
+        clientAddr.sin_addr.s_addr != htonl(INADDR_LOOPBACK) ||
+        peerAddr.sin_port != clientAddr.sin_port)
+    {
+        closesocket(nClient);
+        closesocket(nAccepted);
+        return XSTDERR;
+    }
+
+    /* Keep the pair private: never inherited by child processes */
+    SetHandleInformation((HANDLE)nClient, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation((HANDLE)nAccepted, HANDLE_FLAG_INHERIT, 0);
+
+    /* Notification channels carry single bytes: latency over batching */
+    setsockopt(nClient, IPPROTO_TCP, TCP_NODELAY, (const char*)&nOpt, sizeof(nOpt));
+    setsockopt(nAccepted, IPPROTO_TCP, TCP_NODELAY, (const char*)&nOpt, sizeof(nOpt));
+
+    aPair[0] = nClient;
+    aPair[1] = nAccepted;
+    return XSTDOK;
+#endif
+}
+
 const char* XSock_GetStatusStr(xsock_status_t eStatus)
 {
     switch(eStatus)
@@ -492,6 +648,16 @@ static XSTATUS XSock_SetFlags(xsock_t *pSock, uint32_t nFlags)
 XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
 {
     XCHECK_NL((pSock != NULL), XSOCK_ERROR);
+
+#ifdef _WIN32
+    if (!XSock_WinsockInit())
+    {
+        pSock->eStatus = XSOCK_ERR_CREATE;
+        pSock->nFD = XSOCK_INVALID;
+        return XSOCK_ERROR;
+    }
+#endif
+
     memset(&pSock->sockAddr, 0, sizeof(pSock->sockAddr));
 
     pSock->sName[0] = XSTR_NUL;
@@ -713,7 +879,7 @@ int XSock_RecvChunk(xsock_t *pSock, void* pData, size_t nSize)
     while((size_t)nReceived < nSize)
     {
         int nChunk = XSOCK_MIN((int)nSize - nReceived, XSOCK_CHUNK_MAX);
-        int nRecvSize = recv(pSock->nFD, &pBuff[nReceived], nChunk, XMSG_NOSIGNAL);
+        int nRecvSize = recv(pSock->nFD, (char*)&pBuff[nReceived], nChunk, XMSG_NOSIGNAL);
 
         if (nRecvSize <= 0)
         {
@@ -774,7 +940,7 @@ int XSock_SendChunk(xsock_t *pSock, void *pData, size_t nLength)
     while((size_t)nDone < nLength)
     {
         int nChunk = XSOCK_MIN((int)nLength - nDone, XSOCK_CHUNK_MAX);
-        int nSent = send(pSock->nFD, &pBuff[nDone], nChunk, XMSG_NOSIGNAL);
+        int nSent = send(pSock->nFD, (const char*)&pBuff[nDone], nChunk, XMSG_NOSIGNAL);
 
         if (nSent <= 0)
         {
@@ -847,7 +1013,7 @@ int XSock_Write(xsock_t *pSock, const void *pData, size_t nLength)
     if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSL))
         return XSock_SSLWrite(pSock, pData, nLength);
 
-    else if (!XSock_Check(pSock)) return XSOCK_INVALID;
+    else if (!XSock_Check(pSock)) return XSOCK_ERROR;
     else if (!nLength || pData == NULL) return XSOCK_NONE;
     int nBytes = 0;
 
@@ -895,7 +1061,7 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
     pNewSock->nFD = accept(pSock->nFD, pSockAddr, &nAddrLen);
     if (pNewSock->nFD == XSOCK_INVALID)
     {
-        if (XSOCK_WOULDBLOCK(errno)) pSock->eStatus = XSOCK_WANT_READ;
+        if (XSOCK_WOULDBLOCK(XSOCK_ERRNO())) pSock->eStatus = XSOCK_WANT_READ;
         else pSock->eStatus = XSOCK_ERR_ACCEPT;
 
         XSock_Close(pNewSock);
@@ -944,7 +1110,7 @@ XSOCKET XSock_AcceptNB(xsock_t *pSock)
     XSOCKET nFD = accept4(pSock->nFD, pSockAddr, &nAddrLen, 1);
     if (nFD < 0)
     {
-        if (XSOCK_WOULDBLOCK(errno)) pSock->eStatus = XSOCK_WANT_READ;
+        if (XSOCK_WOULDBLOCK(XSOCK_ERRNO())) pSock->eStatus = XSOCK_WANT_READ;
         else pSock->eStatus = XSOCK_ERR_ACCEPT;
     }
 
@@ -960,12 +1126,16 @@ XSTATUS XSock_MsgPeek(xsock_t *pSock)
     if (!XSock_Check(pSock)) return XSOCK_ERROR;
     unsigned char buf;
     int nFlags = MSG_PEEK | XMSG_DONTWAIT;
-    int nByte = recv(pSock->nFD, &buf, 1, nFlags);
+    int nByte = recv(pSock->nFD, (char*)&buf, 1, nFlags);
     return nByte < 0 ? XSOCK_NONE : XSOCK_SUCCESS;
 }
 
 uint32_t XSock_NetAddr(const char *pAddr)
 {
+#ifdef _WIN32
+    if (!XSock_WinsockInit()) return 0;
+#endif
+
     if (!xstrused(pAddr)) return htonl(INADDR_ANY);
     struct in_addr addr;
     int nStatus = inet_pton(AF_INET, pAddr, &addr);
@@ -1003,6 +1173,10 @@ XSTATUS XSock_AddrInfo(xsock_info_t *pAddr, xsock_family_t eFam, const char *pHo
 
     if (pAddr == NULL || !xstrused(pHost))
         return XSOCK_ERROR;
+
+#ifdef _WIN32
+    if (!XSock_WinsockInit()) return XSOCK_ERROR;
+#endif
 
     memset(pAddr, 0, sizeof(*pAddr));
     pAddr->eFamily = XF_UNDEF;
@@ -1618,6 +1792,41 @@ XSOCKET XSock_InitSSLServer(xsock_t *pSock, int nVerifyFlags)
     return XSOCK_INVALID;
 }
 
+#if defined(_WIN32) && defined(XSOCK_USE_SSL)
+/*
+    OpenSSL ships no trust anchors on Windows and its compiled-in
+    OPENSSLDIR points at the build prefix, so set_default_verify_paths()
+    loads an empty store and SSL_VERIFY_PEER rejects every connection.
+    Import the system roots from the Windows certificate store instead,
+    so verification uses the same trust the operating system itself does.
+*/
+static void XSock_LoadWinRootCerts(SSL_CTX *pSSLCtx)
+{
+    HCERTSTORE hStore = CertOpenSystemStoreA(0, "ROOT");
+    if (hStore == NULL) return;
+
+    X509_STORE *pStore = SSL_CTX_get_cert_store(pSSLCtx);
+    PCCERT_CONTEXT pWinCert = NULL;
+
+    if (pStore != NULL)
+    {
+        while ((pWinCert = CertEnumCertificatesInStore(hStore, pWinCert)) != NULL)
+        {
+            const unsigned char *pEncoded = pWinCert->pbCertEncoded;
+            X509 *pCert = d2i_X509(NULL, &pEncoded, (long)pWinCert->cbCertEncoded);
+
+            if (pCert != NULL)
+            {
+                X509_STORE_add_cert(pStore, pCert);
+                X509_free(pCert);
+            }
+        }
+    }
+
+    CertCloseStore(hStore, 0);
+}
+#endif /* _WIN32 && XSOCK_USE_SSL */
+
 XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
 {
 #ifdef XSOCK_USE_SSL
@@ -1642,6 +1851,9 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
        Guarded by SSL_VERIFY_PEER so prehistoric OpenSSL builds that lack the
        flag still compile, falling back to the old unverified behaviour. */
     SSL_CTX_set_default_verify_paths(pSSLCtx);
+#ifdef _WIN32
+    XSock_LoadWinRootCerts(pSSLCtx);
+#endif
     SSL_CTX_set_verify(pSSLCtx, SSL_VERIFY_PEER, NULL);
 #else
     SSL_CTX_set_verify(pSSLCtx, SSL_VERIFY_NONE, NULL);

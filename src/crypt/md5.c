@@ -43,7 +43,7 @@ static const uint32_t g_radians[] =
 XSTATUS XMD5_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
     XCHECK((nSize >= XMD5_DIGEST_SIZE &&
-        nLength && pOutput && pInput), XSTDINV);
+        pOutput && (pInput || !nLength)), XSTDINV);
 
     uint32_t hash0 = 0x67452301;
     uint32_t hash1 = 0xefcdab89;
@@ -58,7 +58,7 @@ XSTATUS XMD5_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size
     uint8_t *pMessage = (uint8_t*)calloc(nNewLen + 64, 1);
     XCHECK(pMessage, XSTDERR);
 
-    memcpy(pMessage, pInput, nLength);
+    if (nLength) memcpy(pMessage, pInput, nLength);
     pMessage[nLength] = 128;
 
     uint32_t nBitsLen = 8 * (uint32_t)nLength;
