@@ -1696,7 +1696,7 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
         return XSOCK_INVALID;
     }
 
-    SSL_CTX_set_ecdh_auto(pSSLCtx, 1);
+    (void)SSL_CTX_set_ecdh_auto(pSSLCtx, 1);
     if (pCert->nVerifyFlags > 0) SSL_CTX_set_verify(pSSLCtx, pCert->nVerifyFlags, NULL);
 
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
