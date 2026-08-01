@@ -854,6 +854,51 @@ void XSock_Close(xsock_t *pSock)
     }
 }
 
+#ifdef XSOCK_USE_SSL
+/* Non-blocking senders queue outbound bytes in a growable buffer and retry the
+   write when the socket becomes writable again. By default OpenSSL forbids
+   exactly that: after SSL_write() reports WANT_WRITE, the retry must repeat the
+   *identical* pointer and length, or the call fails with SSL_R_BAD_WRITE_RETRY
+   and the connection is torn down. Since more data can be appended (and the
+   buffer reallocated) between the two calls, that failure is a matter of
+   timing, not of anything being wrong on the wire.
+
+   ACCEPT_MOVING_WRITE_BUFFER permits the retry to point somewhere else as long
+   as the pending prefix is unchanged, and ENABLE_PARTIAL_WRITE lets a large
+   record drain in pieces rather than all-or-nothing. Together they make the
+   buffered non-blocking write loop legal. */
+static void XSock_ApplySSLModes(SSL *pSSL)
+{
+    if (pSSL == NULL) return;
+
+    long nModes = 0;
+#ifdef SSL_MODE_ENABLE_PARTIAL_WRITE
+    nModes |= SSL_MODE_ENABLE_PARTIAL_WRITE;
+#endif
+#ifdef SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER
+    nModes |= SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER;
+#endif
+    if (nModes) SSL_set_mode(pSSL, nModes);
+}
+#endif
+
+size_t XSock_Pending(xsock_t *pSock)
+{
+#ifdef XSOCK_USE_SSL
+    if (pSock == NULL || !XSock_IsSSL(pSock)) return XSTDNON;
+    if (pSock->nFD == XSOCK_INVALID) return XSTDNON;
+
+    SSL *pSSL = XSock_GetSSL(pSock);
+    if (pSSL == NULL) return XSTDNON;
+
+    int nPending = SSL_pending(pSSL);
+    return nPending > 0 ? (size_t)nPending : XSTDNON;
+#else
+    (void)pSock;
+    return XSTDNON;
+#endif
+}
+
 int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
 {
     if (!XSock_Check(pSock)) return XSOCK_ERROR;
@@ -967,10 +1012,14 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
                 if (!XSock_IsNB(pSock)) continue;
                 break;
             }
-            else if (nError == SSL_ERROR_SSL ||
-                     nError == SSL_ERROR_SYSCALL)
+            else if (nError == SSL_ERROR_SYSCALL)
             {
                 pSock->eStatus = XSOCK_ERR_SYSCALL;
+                XSock_SSLConnected(pSock, XFALSE);
+            }
+            else if (nError == SSL_ERROR_SSL)
+            {
+                pSock->eStatus = XSOCK_ERR_SSLERR;
                 XSock_SSLConnected(pSock, XFALSE);
             }
 
@@ -1210,6 +1259,7 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
 
         SSL_set_accept_state(pSSL);
         SSL_set_fd(pSSL, (int)pNewSock->nFD);
+        XSock_ApplySSLModes(pSSL);
 
         XSOCKET nFD = XSock_SetSSL(pNewSock, pSSL);
         XCHECK((nFD != XSOCK_INVALID), XSOCK_INVALID);
@@ -1998,6 +2048,7 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
 
     SSL_set_connect_state(pSSL);
     SSL_set_fd(pSSL, (int)pSock->nFD);
+    XSock_ApplySSLModes(pSSL);
 
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
     if (xstrused(pAddr))

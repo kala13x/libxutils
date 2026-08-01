@@ -227,6 +227,18 @@ XSOCKET XSock_GetFD(const xsock_t *pSock);
 xbool_t XSock_IsSSL(const xsock_t *pSock);
 xbool_t XSock_IsNB(const xsock_t *pSock);
 
+/*!
+ * @brief Bytes already decrypted by TLS and waiting inside the SSL object.
+ *
+ * A TLS record holds up to 16 KiB, so one read of a smaller buffer routinely
+ * leaves the remainder here rather than in the kernel. Those bytes are
+ * invisible to poll()/epoll(): the descriptor is not readable, yet the data
+ * is there. Callers must drain this before waiting for the next event.
+ *
+ * @return Pending plaintext byte count, 0 for a plain socket or no SSL data.
+ */
+size_t XSock_Pending(xsock_t *pSock);
+
 int xclosesock(XSOCKET nFd);
 void XSock_Close(xsock_t* pSock);
 

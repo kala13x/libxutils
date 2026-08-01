@@ -23,8 +23,9 @@
 #include <sys/prctl.h>
 #endif
 
-#define XAPI_RX_MAX     (5000 * 1024)
-#define XAPI_RX_SIZE    4096
+#define XAPI_RX_MAX         (5000 * 1024)
+#define XAPI_RX_SIZE        4096
+#define XAPI_SSL_DRAIN_MAX  64
 
 typedef struct XAPIWorkerEvents {
     xevent_data_t **ppEvents;
@@ -1620,7 +1621,7 @@ static int XAPI_HandleRAW(xapi_t *pApi, xapi_session_t *pSession)
     return nRetVal;
 }
 
-static int XAPI_Read(xapi_t *pApi, xapi_session_t *pSession)
+static int XAPI_ReadOnce(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pSession != NULL), XEVENTS_DISCONNECT);
     xsock_t *pSock = (xsock_t*)&pSession->sock;
@@ -1670,6 +1671,34 @@ static int XAPI_Read(xapi_t *pApi, xapi_session_t *pSession)
     }
 
     return XEVENTS_DISCONNECT;
+}
+
+/* One TLS record carries up to 16 KiB of plaintext, so a single read into the
+   XAPI_RX_SIZE buffer routinely leaves the rest sitting inside OpenSSL. Those
+   bytes are already off the socket: with level-triggered polling the descriptor
+   goes quiet and nothing wakes the loop again until the peer happens to send
+   more. The tail then waits for the next inbound packet, which on an otherwise
+   idle link is the far side's next keepalive - long enough for a session to
+   look dead and be dropped. Drain what TLS is holding before handing control
+   back to the poller.
+
+   XAPI_SSL_DRAIN_MAX only exists so one very busy session cannot monopolise the
+   loop; OpenSSL decrypts a single record per read, so four passes already clear
+   the largest possible one and the limit is never reached in practice. */
+static int XAPI_Read(xapi_t *pApi, xapi_session_t *pSession)
+{
+    XCHECK((pSession != NULL), XEVENTS_DISCONNECT);
+
+    int nStatus = XAPI_ReadOnce(pApi, pSession);
+    unsigned int nRounds = 0;
+
+    while (nStatus == XEVENTS_CONTINUE &&
+           pSession->bCancel == XFALSE &&
+           ++nRounds < XAPI_SSL_DRAIN_MAX &&
+           XSock_Pending(&pSession->sock) > 0)
+        nStatus = XAPI_ReadOnce(pApi, pSession);
+
+    return nStatus;
 }
 
 static int XAPI_Accept(xapi_t *pApi, xapi_session_t *pSession)
