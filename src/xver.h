@@ -12,8 +12,8 @@
 
 #define XUTILS_VERSION_MAX      2
 #define XUTILS_VERSION_MIN      8
-#define XUTILS_BUILD_NUMBER     27
-#define XUTILS_RELEASE_DATE     "01Aug2026"
+#define XUTILS_BUILD_NUMBER     28
+#define XUTILS_RELEASE_DATE     "03Aug2026"
 
 #ifdef __cplusplus
 extern "C" {

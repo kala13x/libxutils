@@ -1027,8 +1027,19 @@ int XDir_Create(const char *pDir, xmode_t nMode)
 
     if (sDir[nLen-1] == '/') sDir[nLen-1] = 0;
     char *pOffset = NULL;
+    char *pRoot = sDir;
 
-    for (pOffset = sDir + 1; *pOffset; pOffset++)
+#ifdef _WIN32
+    /* A drive prefix is a root, not a directory. Left in the walk, "C:" is
+     * handed to mkdir as if it were a component to create, and the failure
+     * stops the whole path from being created. */
+    if (nLen > 2 && sDir[1] == ':' &&
+        ((sDir[0] >= 'A' && sDir[0] <= 'Z') ||
+         (sDir[0] >= 'a' && sDir[0] <= 'z')))
+            pRoot = sDir + 2;
+#endif
+
+    for (pOffset = pRoot + 1; *pOffset; pOffset++)
     {
         if (*pOffset == '/')
         {
