@@ -27,7 +27,7 @@ void xusleep(uint32_t nUsecs)
 #endif
 }
 
-void XSync_Init(xsync_mutex_t *pSync)
+void XSync_InitRecursive(xsync_mutex_t *pSync)
 {
 #ifndef _WIN32
     pthread_mutexattr_t mutexAttr;
@@ -35,6 +35,23 @@ void XSync_Init(xsync_mutex_t *pSync)
         pthread_mutexattr_settype(&mutexAttr, PTHREAD_MUTEX_RECURSIVE) ||
         pthread_mutex_init(&pSync->mutex, &mutexAttr) ||
         pthread_mutexattr_destroy(&mutexAttr))
+    {
+        fprintf(stderr, "<%s:%d> %s: Can not initialize recursive mutex: %d\n",
+            __FILE__, __LINE__, __FUNCTION__, errno);
+
+        exit(EXIT_FAILURE);
+    }
+#else
+    InitializeCriticalSection(&pSync->mutex);
+#endif
+
+    pSync->bEnabled = XTRUE;
+}
+
+void XSync_Init(xsync_mutex_t *pSync)
+{
+#ifndef _WIN32
+    if (pthread_mutex_init(&pSync->mutex, NULL))
     {
         fprintf(stderr, "<%s:%d> %s: Can not initialize mutex: %d\n",
             __FILE__, __LINE__, __FUNCTION__, errno);
@@ -46,6 +63,41 @@ void XSync_Init(xsync_mutex_t *pSync)
 #endif
 
     pSync->bEnabled = XTRUE;
+}
+
+XSTATUS XSync_InitAdv(xsync_mutex_t *pSync, xbool_t bRecursive)
+{
+#ifndef _WIN32
+    if (bRecursive)
+    {
+        pthread_mutexattr_t mutexAttr;
+        if (pthread_mutexattr_init(&mutexAttr) ||
+            pthread_mutexattr_settype(&mutexAttr, PTHREAD_MUTEX_RECURSIVE) ||
+            pthread_mutex_init(&pSync->mutex, &mutexAttr) ||
+            pthread_mutexattr_destroy(&mutexAttr))
+        {
+            fprintf(stderr, "<%s:%d> %s: Can not initialize recursive mutex: %d\n",
+                __FILE__, __LINE__, __FUNCTION__, errno);
+
+            return XSTDERR;
+        }
+    }
+    else
+    {
+        if (pthread_mutex_init(&pSync->mutex, NULL))
+        {
+            fprintf(stderr, "<%s:%d> %s: Can not initialize mutex: %d\n",
+                __FILE__, __LINE__, __FUNCTION__, errno);
+
+            return XSTDERR;
+        }
+    }
+#else
+    InitializeCriticalSection(&pSync->mutex);
+#endif
+
+    pSync->bEnabled = XTRUE;
+    return XSTDOK;
 }
 
 void XSync_Destroy(xsync_mutex_t *pSync)

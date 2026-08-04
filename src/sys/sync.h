@@ -56,6 +56,8 @@ typedef struct XSyncBar {
 
 void xusleep(uint32_t nUsecs);
 
+XSTATUS XSync_InitAdv(xsync_mutex_t *pSync, xbool_t bRecursive);
+void XSync_InitRecursive(xsync_mutex_t *pSync);
 void XSync_Init(xsync_mutex_t *pSync);
 void XSync_Destroy(xsync_mutex_t *pSync);
 void XSync_Lock(xsync_mutex_t *pSync);
