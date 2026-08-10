@@ -419,52 +419,97 @@ void XHTTP_Free(xhttp_t **pHttp)
     }
 }
 
-int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
+static int XHTTP_PutHeader(xhttp_t *pHttp, const char *pHeader, const char *pValue, size_t nLength)
 {
-    char sOption[XHTTP_OPTION_MAX];
-    size_t nLength = 0;
+    xmap_pair_t *pPair = XMap_GetPair(&pHttp->headerMap, pHeader);
     int nStatus = 0;
 
-    va_list args;
-    va_start(args, pStr);
-    nLength = xstrncpyarg(sOption, sizeof(sOption), pStr, args);
-    va_end(args);
-
-    if (nLength)
+    if (pPair != NULL)
     {
-        xmap_pair_t *pPair = XMap_GetPair(&pHttp->headerMap, pHeader);
-        if (pPair != NULL)
+        /* Setting a header to the value it already holds changes nothing,
+           so it succeeds without needing update permission. Anything else
+           is a real overwrite and stays behind nAllowUpdate. */
+        size_t nCurrent = strlen((const char*)pPair->pData);
+        if (xstrncmpn((const char*)pPair->pData, nCurrent, pValue, nLength))
         {
-            if (!xstrncmp(pPair->pData, sOption, nLength))
-            {
-                nStatus = (int)pHttp->headerMap.nCount;
-                return nStatus > 0 ? nStatus : XSTDERR;
-            }
-
-            XCHECK(pHttp->nAllowUpdate, XSTDEXC);
-            free(pPair->pData);
-
-            pPair->pData = xstrdup(sOption);
-            XCHECK(pPair->pData, XSTDERR);
+            nStatus = (int)pHttp->headerMap.nCount;
+            return nStatus > 0 ? nStatus : XSTDERR;
         }
-        else
+
+        XCHECK(pHttp->nAllowUpdate, XSTDEXC);
+        char *pUpdated = xstrdup(pValue);
+        XCHECK(pUpdated, XSTDERR);
+
+        free(pPair->pData);
+        pPair->pData = pUpdated;
+    }
+    else
+    {
+        char *pCopy = xstrdup(pValue);
+        XCHECK(pCopy, XSTDERR);
+
+        char *pKey = xstrdup(pHeader);
+        XCHECK_CALL(pKey, free, pCopy, XSTDERR);
+
+        nStatus = XMap_Put(&pHttp->headerMap, pKey, pCopy);
+        if (nStatus != XMAP_OK)
         {
-            char *pValue = xstrdup(sOption);
-            XCHECK(pValue, XSTDERR);
-
-            char *pKey = xstrdup(pHeader);
-            XCHECK_CALL(pKey, free, pValue, XSTDERR);
-
-            nStatus = XMap_Put(&pHttp->headerMap, pKey, pValue);
-            if (nStatus != XMAP_OK)
-            {
-                free(pValue);
-                free(pKey);
-                return XSTDERR;
-            }
+            free(pCopy);
+            free(pKey);
+            return XSTDERR;
         }
     }
 
+    return XSTDOK;
+}
+
+int XHTTP_AddHeader(xhttp_t *pHttp, const char *pHeader, const char *pStr, ...)
+{
+    char sOption[XHTTP_OPTION_MAX];
+    const char *pOption = sOption;
+    char *pAllocated = NULL;
+    size_t nLength = 0;
+    int nStatus = 0;
+
+    va_list args, argsCopy;
+    va_start(args, pStr);
+    va_copy(argsCopy, args);
+    nLength = xstrncpyarg(sOption, sizeof(sOption), pStr, args);
+    va_end(args);
+
+    /*
+        vsnprintf() truncates instead of failing, so a value that filled the
+        stack buffer is formatted again into an allocation. Header values are
+        short in the common case and never leave the buffer; the ones that do
+        are the ones that matter, since an asymmetrically signed bearer token
+        runs past a kilobyte and a clipped Authorization header reaches the
+        server as a corrupt credential rather than a reportable error.
+    */
+    if (nLength >= sizeof(sOption) - 1)
+    {
+        size_t nFullLength = 0;
+        pAllocated = xstracpyargs(pStr, argsCopy, &nFullLength);
+
+        if (pAllocated != NULL)
+        {
+            pOption = pAllocated;
+            nLength = nFullLength;
+        }
+    }
+
+    va_end(argsCopy);
+
+    if (nLength)
+    {
+        nStatus = XHTTP_PutHeader(pHttp, pHeader, pOption, nLength);
+        if (nStatus < 0)
+        {
+            free(pAllocated);
+            return nStatus;
+        }
+    }
+
+    free(pAllocated);
     nStatus = (int)pHttp->headerMap.nCount;
     XCHECK_NL((nStatus > 0), XSTDERR);
 
