@@ -9,6 +9,11 @@
 
 #include "buf.h"
 #include "xstd.h"
+
+#ifdef _WIN32
+#include <conio.h>   /* _getch: console input without echo */
+#include <io.h>      /* _isatty */
+#endif
 #include "cli.h"
 #include "str.h"
 #include "xtime.h"
@@ -146,12 +151,44 @@ XSTATUS XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
         fflush(stdout);
     }
 
-    char *pRet = fgets(pPass, (int)nSize, stdin);
-    if (pRet != NULL)
+    /*
+        Read the console directly instead of using fgets: stdio echoes every
+        keystroke, which put the typed password on screen on Windows while
+        the POSIX branch above hid it. Falls back to fgets when stdin is not
+        a console (a pipe or a file), where there is nothing to echo anyway.
+    */
+    if (_isatty(_fileno(stdin)))
     {
-        nLength = strlen(pPass);
-        if (nLength > 0 && pPass[nLength - 1] == '\n')
-            pPass[--nLength] = '\0';
+        int nChar = 0;
+
+        while ((nChar = _getch()) != '\r' && nChar != '\n')
+        {
+            if (nChar == 3) return XSTDERR;                  /* Ctrl-C */
+            if (nChar == 0 || nChar == 0xE0) { _getch(); continue; }
+
+            if (nChar == '\b' || nChar == 127)
+            {
+                if (nChar == '\b' && nLength) nLength--;
+                else if (nLength) nLength--;
+                continue;
+            }
+
+            if (nChar == 27) { nLength = 0; continue; }      /* Escape clears */
+            if (nLength + 1 < nSize) pPass[nLength++] = (char)nChar;
+        }
+
+        printf("\n");
+        fflush(stdout);
+    }
+    else
+    {
+        char *pRet = fgets(pPass, (int)nSize, stdin);
+        if (pRet != NULL)
+        {
+            nLength = strlen(pPass);
+            if (nLength > 0 && pPass[nLength - 1] == '\n')
+                pPass[--nLength] = '\0';
+        }
     }
 #endif
 
