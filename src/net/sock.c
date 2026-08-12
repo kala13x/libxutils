@@ -1505,18 +1505,22 @@ XSOCKET XSock_NonBlock(xsock_t *pSock, xbool_t nNonBlock)
     return pSock->nFD;
 }
 
-XSOCKET XSock_TimeOutR(xsock_t *pSock, int nSec, int nUsec)
-{
-    if (!XSock_Check(pSock)) return XSOCK_INVALID;
-    struct timeval tmout;
-    tmout.tv_sec = nSec;
-    tmout.tv_usec = nUsec;
-
+/*
+    Winsock and POSIX disagree on the shape of this option: Windows expects a
+    DWORD of milliseconds while POSIX expects a struct timeval. Handing
+    Windows the struct makes it read tv_sec as a millisecond count, so a
+    20 second timeout silently becomes 20 ms and every recv fails at once.
+*/
 #ifdef _WIN32
-    if (setsockopt(pSock->nFD, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tmout, sizeof(tmout)) < 0)
-#else
-    if (setsockopt(pSock->nFD, SOL_SOCKET, SO_RCVTIMEO, (struct timeval*)&tmout, sizeof(tmout)) < 0)
-#endif
+static XSOCKET XSock_SetTimeOut(xsock_t *pSock, int nOption, int nSec, int nUsec)
+{
+    DWORD nMilliseconds = (DWORD)nSec * 1000 + (DWORD)(nUsec / 1000);
+
+    /* A sub-millisecond request must not round down to "block forever" */
+    if (!nMilliseconds && (nSec > 0 || nUsec > 0)) nMilliseconds = 1;
+
+    if (setsockopt(pSock->nFD, SOL_SOCKET, nOption,
+            (const char*)&nMilliseconds, sizeof(nMilliseconds)) < 0)
     {
         pSock->eStatus = XSOCK_ERR_SETOPT;
         XSock_Close(pSock);
@@ -1524,25 +1528,33 @@ XSOCKET XSock_TimeOutR(xsock_t *pSock, int nSec, int nUsec)
 
     return pSock->nFD;
 }
-
-XSOCKET XSock_TimeOutS(xsock_t *pSock, int nSec, int nUsec)
+#else
+static XSOCKET XSock_SetTimeOut(xsock_t *pSock, int nOption, int nSec, int nUsec)
 {
-    if (!XSock_Check(pSock)) return XSOCK_INVALID;
     struct timeval tmout;
     tmout.tv_sec = nSec;
     tmout.tv_usec = nUsec;
 
-#ifdef _WIN32
-    if (setsockopt(pSock->nFD, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tmout, sizeof(tmout)) < 0)
-#else
-    if (setsockopt(pSock->nFD, SOL_SOCKET, SO_SNDTIMEO, (struct timeval*)&tmout, sizeof(tmout)) < 0)
-#endif
+    if (setsockopt(pSock->nFD, SOL_SOCKET, nOption, &tmout, sizeof(tmout)) < 0)
     {
         pSock->eStatus = XSOCK_ERR_SETOPT;
         XSock_Close(pSock);
     }
 
     return pSock->nFD;
+}
+#endif
+
+XSOCKET XSock_TimeOutR(xsock_t *pSock, int nSec, int nUsec)
+{
+    if (!XSock_Check(pSock)) return XSOCK_INVALID;
+    return XSock_SetTimeOut(pSock, SO_RCVTIMEO, nSec, nUsec);
+}
+
+XSOCKET XSock_TimeOutS(xsock_t *pSock, int nSec, int nUsec)
+{
+    if (!XSock_Check(pSock)) return XSOCK_INVALID;
+    return XSock_SetTimeOut(pSock, SO_SNDTIMEO, nSec, nUsec);
 }
 
 XSOCKET XSock_ReuseAddr(xsock_t *pSock, xbool_t nEnabled)
