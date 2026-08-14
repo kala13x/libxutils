@@ -22,6 +22,9 @@
 #define be64toh(x) OSSwapBigToHostInt64(x)
 #endif
 
+/* Biggest possible frame header: 2 bytes + 8 byte length + 4 byte mask key */
+#define XWS_MAX_HEADER_SIZE 14
+
 typedef struct xws_frame_code_ {
     const xws_frame_type_t eType;
     const uint8_t nOpCode;
@@ -378,6 +381,10 @@ size_t XWebFrame_GetFrameLength(xws_frame_t *pFrame)
         pFrame->nHeaderSize), XSTDNON);
 
     size_t nFrameSize = pFrame->nHeaderSize + pFrame->nPayloadLength;
+
+    /* Payload length is attacker controlled, refuse an integer overflow */
+    XCHECK_NL((nFrameSize >= pFrame->nHeaderSize), XSTDNON);
+
     if (pFrame->buffer.nUsed < nFrameSize) return pFrame->buffer.nUsed;
 
     pFrame->bComplete = XTRUE;
@@ -433,6 +440,9 @@ xws_status_t XWebFrame_Mask(xws_frame_t *pFrame)
     uint8_t *pPayload = pFrame->buffer.pData + pFrame->nHeaderSize;
     size_t i, nPayloadLen = pFrame->nPayloadLength;
 
+    /* Never mask more bytes than the buffer actually holds */
+    XCHECK_NL((pFrame->buffer.nUsed - pFrame->nHeaderSize >= nPayloadLen), XWS_FRAME_INCOMPLETE);
+
     for (i = 0; i < nPayloadLen; i++)
         pPayload[i] ^= pMaskKey[i % 4];
 
@@ -441,7 +451,10 @@ xws_status_t XWebFrame_Mask(xws_frame_t *pFrame)
 
 xws_status_t XWebFrame_Unmask(xws_frame_t *pFrame)
 {
+    XCHECK(pFrame, XWS_INVALID_ARGS);
     XCHECK_NL(pFrame->bMask, XWS_ERR_NONE);
+
+    XCHECK((pFrame->buffer.pData != NULL), XWS_INVALID_ARGS);
     XCHECK_NL((pFrame->buffer.nUsed >= pFrame->nHeaderSize), XWS_FRAME_INCOMPLETE);
     size_t i, nPayloadLen = pFrame->nPayloadLength;
 
@@ -450,6 +463,9 @@ xws_status_t XWebFrame_Unmask(xws_frame_t *pFrame)
         pFrame->bMask = XFALSE;
         return XWS_ERR_NONE;
     }
+
+    /* Never unmask more bytes than the buffer actually holds */
+    XCHECK_NL((pFrame->buffer.nUsed - pFrame->nHeaderSize >= nPayloadLen), XWS_FRAME_INCOMPLETE);
 
     uint8_t *pPayload = pFrame->buffer.pData + pFrame->nHeaderSize;
     uint8_t *pMaskKey = (uint8_t*)&pFrame->nMaskKey;
@@ -501,8 +517,17 @@ xws_status_t XWebFrame_Parse(xws_frame_t *pFrame)
         if (nSize < 10) return XWS_FRAME_INCOMPLETE;
         uint64_t nLength64 = 0;
         memcpy(&nLength64, pData + 2, 8);
+        nLength64 = be64toh(nLength64);
 
-        pFrame->nPayloadLength = be64toh(nLength64);
+        /* RFC 6455: the most significant bit of the 64 bit length MUST be 0 */
+        XCHECK((!(nLength64 & 0x8000000000000000ULL)), XWS_FRAME_INVALID);
+
+        /* Refuse lengths we can neither represent nor address on this platform,
+         * otherwise header size + payload length silently wraps around and the
+         * frame is treated as complete while the buffer is only a few bytes. */
+        XCHECK((nLength64 <= (uint64_t)(SIZE_MAX - XWS_MAX_HEADER_SIZE)), XWS_FRAME_TOOBIG);
+
+        pFrame->nPayloadLength = (size_t)nLength64;
         pFrame->nHeaderSize = 10;
     }
 
