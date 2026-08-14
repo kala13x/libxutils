@@ -289,11 +289,11 @@ typedef volatile xatomic_t  xvolatile_t;
 #endif /* XUTILS_BACKTRACE_SIZE */
 
 #ifndef XSTD_MIN
-#define XSTD_MIN(a,b)(a<b?a:b)
+#define XSTD_MIN(a,b)((a)<(b)?(a):(b))
 #endif
 
 #ifndef XSTD_MAX
-#define XSTD_MAX(a,b)(a>b?a:b)
+#define XSTD_MAX(a,b)((a)>(b)?(a):(b))
 #endif
 
 #ifndef XSTD_FIRSTOF

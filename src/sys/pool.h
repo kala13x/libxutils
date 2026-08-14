@@ -18,8 +18,17 @@ extern "C" {
 
 #define XPOOL_DEFAULT_SIZE  4096
 
+/* Every block handed out by the pool starts at this boundary, so raw
+   byte buffers and structures can be mixed in the same pool without
+   producing misaligned pointers. Sizes passed to XPool_Free() and
+   XPool_Realloc() are rounded up the same way, therefore the caller
+   may keep using the unaligned size it asked for. */
+#define XPOOL_ALIGNMENT     8
+#define XPOOL_ALIGN(size)   (((size) + (XPOOL_ALIGNMENT - 1)) & ~(size_t)(XPOOL_ALIGNMENT - 1))
+
 typedef struct XPool {
     struct XPool *pNext;
+    struct XPool *pTail;
     uint8_t *pData;
     size_t nUsed;
     size_t nSize;

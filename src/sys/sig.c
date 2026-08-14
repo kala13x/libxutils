@@ -148,8 +148,10 @@ int XSig_Register(int *pSignals, size_t nCount, xsig_cb_t callback)
     sact.sa_handler = callback;
 
     for (i = 0; i < nCount; i++)
+    {
         if (sigaction(pSignals[i], &sact, NULL))
             return pSignals[i];
+    }
 #endif
 
     return 0;

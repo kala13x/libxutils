@@ -39,7 +39,7 @@ Built-in networking pieces include:
 
 All networking components support both client-side and server-side operation.
 
-HTTP, WebSocket and raw TCP share the same callback model, endpoint setup and event loop. Switch between protocols by changing a single enum — the rest of your code stays the same. More importantly, they can coexist: a single instance can serve an HTTP API on one port, a WebSocket feed on another and a raw TCP control channel on a third, all multiplexed through one service loop with no threading required.
+HTTP, WebSocket and raw TCP share the same callback model, endpoint setup and event loop. Switch between protocols by changing a single enum, the rest of your code stays the same. More importantly, they can coexist: a single instance can serve an HTTP API on one port, a WebSocket feed on another and a raw TCP control channel on a third, all multiplexed through one service loop with no threading required.
 
 ## Typical use cases
 
@@ -53,7 +53,7 @@ HTTP, WebSocket and raw TCP share the same callback model, endpoint setup and ev
 
 libxutils started as a personal utility library in 2015 and has evolved over years of real-world use into a focused, production-tested stack.
 
-The library is designed around predictable performance and explicit resource control. There are no hidden allocations, no implicit threading and no garbage-collected layers — memory ownership is always visible at the call site.
+The library is designed around predictable performance and explicit resource control. There are no hidden allocations, no implicit threading and no garbage-collected layers, memory ownership is always visible at the call site.
 
 Every commit is tested against Valgrind as part of the CI pipeline to catch leaks, invalid reads and use-after-free errors before they reach a release. Combined with CodeQL static analysis running on every push, the codebase is continuously checked for memory safety and overall quality.
 
