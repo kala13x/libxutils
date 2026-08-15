@@ -12,7 +12,7 @@
 #include "xfs.h"
 #include "xtime.h"
 
-#define XLOG_FILE_PATH_MAX XLOG_PATH_MAX + XLOG_NAME_MAX + XLOG_TIME_MAX
+#define XLOG_FILE_PATH_MAX (XLOG_PATH_MAX + XLOG_NAME_MAX + XLOG_TIME_MAX)
 
 typedef struct XLogFile {
     char sFilePath[XLOG_FILE_PATH_MAX];
@@ -135,7 +135,14 @@ static void XLog_RotateFile(xlog_file_t *pFile, const xlog_cfg_t *pCfg)
         size_t nLen = xstrncpyf(sRotatedPath, sizeof(sRotatedPath), "%s/%s-%04d-%02d-%02d.log",
             pCfg->sFilePath, pCfg->sFileName, pFile->nCurrYear, pFile->nCurrMonth, pFile->nCurrDay);
 
-        if (nLen > 0) rename(pFile->sFilePath, sRotatedPath);
+        if (nLen > 0)
+        {
+#ifdef _WIN32
+            /* Unlike POSIX, rename() on Windows fails if the destination already exists */
+            xunlink(sRotatedPath);
+#endif
+            rename(pFile->sFilePath, sRotatedPath);
+        }
     }
 }
 
@@ -255,8 +262,12 @@ static void XLog_DisplayMessage(const xlog_ctx_t *pCtx, const char *pInfo, size_
     if (!pCfg->bToFile || nCbVal < 0) return;
     const xtime_t *pTime = &pCtx->time;
 
-    if (pFile->nCurrDay != pTime->nDay && pCfg->bRotate)
+    if (pCfg->bRotate &&
+       (pFile->nCurrDay != pTime->nDay ||
+        pFile->nCurrMonth != pTime->nMonth ||
+        pFile->nCurrYear != pTime->nYear))
     {
+        /* Zero day means we did not open the log file yet, nothing to archive */
         if (!pFile->nCurrDay) XLog_CloseFile(pFile);
         else XLog_RotateFile(pFile, pCfg);
     }
@@ -465,7 +476,9 @@ void XLog_FlagDisable(xlog_flag_t eFlag)
     XCHECK_VOID_NL(g_bInit);
     XSync_Lock(&g_xlog.lock);
 
-    if (XLOG_FLAGS_CHECK(g_xlog.config.nFlags, eFlag))
+    if (eFlag == XLOG_ALL)
+        g_xlog.config.nFlags = XSTDNON;
+    else if (XLOG_FLAGS_CHECK(g_xlog.config.nFlags, eFlag))
         g_xlog.config.nFlags &= ~eFlag;
 
     XSync_Unlock(&g_xlog.lock);
@@ -591,13 +604,19 @@ uint16_t XLog_FlagsGet(void)
 size_t XLog_PathSet(const char *pPath)
 {
     XCHECK_NL(g_bInit, XSTDNON);
+    XCHECK_NL(pPath, XSTDNON);
     XSync_Lock(&g_xlog.lock);
 
     xlog_file_t *pFile = &g_xlog.fileCtx;
     xlog_cfg_t *pCfg = &g_xlog.config;
     size_t nLength = 0;
 
-    if (strncmp(pCfg->sFilePath, pPath, strlen(pCfg->sFilePath))) XLog_CloseFile(pFile);
+    if (strncmp(pCfg->sFilePath, pPath, sizeof(pCfg->sFilePath)))
+    {
+        XLog_CloseFile(pFile); /* Log function will open it again if required */
+        pFile->sFilePath[0] = XSTR_NUL;
+    }
+
     nLength = xstrncpy(pCfg->sFilePath, sizeof(pCfg->sFilePath), pPath);
 
     XSync_Unlock(&g_xlog.lock);
@@ -607,13 +626,19 @@ size_t XLog_PathSet(const char *pPath)
 size_t XLog_NameSet(const char *pName)
 {
     XCHECK_NL(g_bInit, XSTDNON);
+    XCHECK_NL(pName, XSTDNON);
     XSync_Lock(&g_xlog.lock);
 
     xlog_file_t *pFile = &g_xlog.fileCtx;
     xlog_cfg_t *pCfg = &g_xlog.config;
     size_t nLength = 0;
 
-    if (strncmp(pCfg->sFileName, pName, sizeof(pCfg->sFileName))) XLog_CloseFile(pFile);
+    if (strncmp(pCfg->sFileName, pName, sizeof(pCfg->sFileName)))
+    {
+        XLog_CloseFile(pFile); /* Log function will open it again if required */
+        pFile->sFilePath[0] = XSTR_NUL;
+    }
+
     nLength = xstrncpy(pCfg->sFileName, sizeof(pCfg->sFileName), pName);
 
     XSync_Unlock(&g_xlog.lock);
