@@ -414,6 +414,14 @@ int XFile_Copy(xfile_t *pIn, xfile_t *pOut)
     XCHECK((XFile_IsOpen(pOut)), XSTDERR);
 
     size_t nBufferSize = XSTD_MAX(pIn->nBlockSize, (size_t)XFILE_COPY_BUF_SIZE);
+
+    /* A file smaller than the buffer only needs a buffer its own size. It
+       matters for a tree of small files: an allocation this large goes
+       straight to mmap, and paying that per file would cost more than the
+       syscalls it saves. */
+    if (pIn->nSize > 0 && pIn->nSize < nBufferSize)
+        nBufferSize = XSTD_MAX(pIn->nSize, pIn->nBlockSize);
+
     uint8_t *pBlock = (uint8_t*)malloc(nBufferSize);
 
     if (pBlock == NULL && nBufferSize > pIn->nBlockSize)
