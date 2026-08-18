@@ -12,12 +12,16 @@ File, path and directory helpers on top of POSIX/CRT primitives.
 - `c`: create
 - `d`: non-delay
 - `e`: exclusive
+- `i`: not inherited by child processes (`O_CLOEXEC` / `_O_NOINHERIT`)
 - `n`: non-blocking
 - `r`: read only
 - `t`: truncate
 - `s`: sync
 - `w`: write only
 - `x`: read/write
+
+Unknown characters are ignored, and every file is opened in binary mode on
+Windows regardless of the flags.
 
 ## API Reference
 
@@ -179,10 +183,14 @@ File, path and directory helpers on top of POSIX/CRT primitives.
 - Arguments:
   - source and destination open files.
 - Does:
-  - copies in `nBlockSize` chunks from input to output.
+  - copies the input into the output, finishing partial writes and stopping at
+    the first read or write error.
 - Returns:
-  - total written bytes.
-  - `XSTDERR` on setup failure.
+  - total written bytes, saturated at `INT_MAX` for copies larger than that.
+  - `XSTDERR` on setup failure, on a read error, or on a write that could not
+    be completed (a full disk, for instance).
+- Note:
+  - an empty source is copied successfully and returns `0`.
 
 #### `int XFile_GetLine(xfile_t *pFile, char *pLine, size_t nSize)`
 
@@ -313,10 +321,15 @@ File, path and directory helpers on top of POSIX/CRT primitives.
 - Arguments:
   - source and destination paths.
 - Does:
-  - opens both files and copies the source into the destination using create/write/truncate flags.
+  - copies the source into the destination using create/write/truncate flags.
+  - refuses a source that is not a regular file, without blocking on a FIFO.
+  - gives a destination it created the source permissions; a destination that
+    already existed keeps its own.
+  - removes a destination it created if the copy fails.
 - Returns:
-  - total copied bytes.
-  - `XSTDERR` on open/copy failure.
+  - total copied bytes (see `XFile_Copy()` for the `INT_MAX` saturation).
+  - `XSTDERR` on open/copy failure, with `errno` set (`EINVAL` for a source
+    that is not a regular file).
 
 #### `int XPath_Read(const char *pPath, uint8_t *pBuffer, size_t nSize)`
 

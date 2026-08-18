@@ -16,6 +16,10 @@
 #define XFILE_DEFAULT_PERM  "rw-r--r--"
 #define XPATH_DIR_MODE      0755
 
+/* Copying is the one operation where the filesystem block size is the wrong
+   unit: it costs a read and a write syscall per few kilobytes. */
+#define XFILE_COPY_BUF_SIZE (256 * 1024)
+
 int xchmod(const char* pPath, xmode_t nMode)
 {
 #ifdef _WIN32
@@ -116,6 +120,15 @@ int XFile_ParseFlags(const char *pFlags)
 #ifdef O_EXCL
             case 'e': { nFlags |= O_EXCL; break; }
 #endif
+            /* Not inherited by a child process: O_CLOEXEC and _O_NOINHERIT
+               are the same guarantee spelled differently. */
+#ifdef _WIN32
+#ifdef _O_NOINHERIT
+            case 'i': { nFlags |= _O_NOINHERIT; break; }
+#endif
+#elif defined(O_CLOEXEC)
+            case 'i': { nFlags |= O_CLOEXEC; break; }
+#endif
 #ifdef O_NONBLOCK
             case 'n': { nFlags |= O_NONBLOCK; break; }
 #endif
@@ -148,21 +161,31 @@ int XFile_ParseFlags(const char *pFlags)
     }
 #endif
 
-#ifdef _WIN32
-    /* The Windows CRT opens files in text mode by default, silently
-       translating LF<->CRLF and treating Ctrl-Z as EOF. That corrupts any
-       binary payload, so every file is opened in binary mode: callers that
-       need text semantics handle line endings themselves. */
-    if (nFlags) nFlags |= _O_BINARY;
-#endif
-
     return nFlags;
+}
+
+/* The Windows CRT opens files in text mode by default, silently translating
+   LF<->CRLF and treating Ctrl-Z as end of file. That corrupts any binary
+   payload, so every file goes through this: callers that need text semantics
+   handle line endings themselves.
+
+   It lives here rather than in the flag parser because a read-only open parses
+   to no bits at all - _O_RDONLY is zero - so the parser cannot tell "read
+   only" from "no flags given", and both used to end up in text mode. Reading
+   a binary file that way stops at the first 0x1A byte. */
+static int XFile_BinaryFlags(int nFlags)
+{
+#ifdef _O_BINARY
+    return nFlags | _O_BINARY;
+#else
+    return nFlags;
+#endif
 }
 
 int XFile_OpenM(xfile_t *pFile, const char *pPath, const char *pFlags, xmode_t nMode)
 {
     if (pFile == NULL || pPath == NULL) return XSTDERR;
-    pFile->nFlags = XFile_ParseFlags(pFlags);
+    pFile->nFlags = XFile_BinaryFlags(XFile_ParseFlags(pFlags));
     pFile->nBlockSize = XFILE_BUF_SIZE;
     pFile->nMode = nMode;
     pFile->bEOF = XFALSE;
@@ -182,7 +205,7 @@ int XFile_OpenM(xfile_t *pFile, const char *pPath, const char *pFlags, xmode_t n
 int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char *pPerms)
 {
     if (pFile == NULL || pPath == NULL) return XSTDERR;
-    pFile->nFlags = XFile_ParseFlags(pFlags);
+    pFile->nFlags = XFile_BinaryFlags(XFile_ParseFlags(pFlags));
     pFile->nBlockSize = XFILE_BUF_SIZE;
     pFile->bEOF = XFALSE;
     pFile->nSize = 0;
@@ -385,24 +408,64 @@ uint8_t* XFile_Load(xfile_t *pFile, size_t *pSize)
 
 int XFile_Copy(xfile_t *pIn, xfile_t *pOut)
 {
-    XCHECK((XFile_GetStats(pIn) > 0), XSTDERR);
+    /* An empty source is a valid copy, not a failure: XFile_GetStats() answers
+       XSTDNON for a zero-length file and only XSTDERR for a broken one. */
+    XCHECK((XFile_GetStats(pIn) >= 0), XSTDERR);
     XCHECK((XFile_IsOpen(pOut)), XSTDERR);
 
-    uint8_t *pBlock = (uint8_t*)malloc(pIn->nBlockSize);
-    if (pBlock == NULL) return XSTDERR;
+    size_t nBufferSize = XSTD_MAX(pIn->nBlockSize, (size_t)XFILE_COPY_BUF_SIZE);
+    uint8_t *pBlock = (uint8_t*)malloc(nBufferSize);
 
-    int nTotalBytes = 0;
-    int nRBytes = 0;
-
-    while ((nRBytes = XFile_Read(pIn, pBlock, pIn->nBlockSize)) > 0)
+    if (pBlock == NULL && nBufferSize > pIn->nBlockSize)
     {
-        int nWBytes = XFile_Write(pOut, pBlock, nRBytes);
-        if (nWBytes != nRBytes) break;
-        nTotalBytes += nWBytes;
+        /* Under memory pressure a block-sized copy is still better than none. */
+        nBufferSize = pIn->nBlockSize;
+        pBlock = (uint8_t*)malloc(nBufferSize);
     }
 
+    if (pBlock == NULL) return XSTDERR;
+
+    uint64_t nTotalBytes = 0;
+    int nStatus = XSTDOK;
+    int nRBytes = 0;
+
+    while ((nRBytes = XFile_Read(pIn, pBlock, nBufferSize)) > 0)
+    {
+        int nOffset = 0;
+
+        /* write() is allowed to accept less than it was handed. Treating that
+           as the end of the copy and reporting the bytes that did land turned
+           a full disk into a silently truncated file that looked successful,
+           so a partial write is finished here and a real one fails the copy. */
+        while (nOffset < nRBytes)
+        {
+            int nWBytes = XFile_Write(pOut, pBlock + nOffset, (size_t)(nRBytes - nOffset));
+
+            if (nWBytes <= 0)
+            {
+                if (nWBytes < 0 && errno == EINTR) continue;
+                nStatus = XSTDERR;
+                break;
+            }
+
+            nOffset += nWBytes;
+        }
+
+        if (nStatus < 0) break;
+        nTotalBytes += (uint64_t)nRBytes;
+    }
+
+    /* Zero is end of file and a negative value is a read error; a copy that
+       stopped because the source could not be read has not copied the file. */
+    if (nRBytes < 0) nStatus = XSTDERR;
+
     free(pBlock);
-    return nTotalBytes;
+    if (nStatus < 0) return XSTDERR;
+
+    /* The byte count is reported through an int for compatibility. Counting in
+       one would overflow past 2 GB and land on a negative value the caller
+       reads as failure, so the total is tracked in 64 bits and saturates. */
+    return nTotalBytes > (uint64_t)INT_MAX ? INT_MAX : (int)nTotalBytes;
 }
 
 int XFile_GetLine(xfile_t *pFile, char* pLine, size_t nSize)
@@ -757,24 +820,66 @@ long XPath_GetSize(const char *pPath)
 
 int XPath_CopyFile(const char *pSrc, const char *pDst)
 {
+    XCHECK((xstrused(pSrc) && xstrused(pDst)), XSTDERR);
+
+    /* Opened non-blocking so a FIFO cannot park the caller inside open()
+       until someone writes to it, then validated through the descriptor
+       rather than the path: the check and the reads then apply to the same
+       object, and anything that is not a regular file has no content to copy. */
     xfile_t srcFile;
+    if (XFile_Open(&srcFile, pSrc, "rn", NULL) < 0) return XSTDERR;
 
-    if (XFile_Open(&srcFile, pSrc, NULL, NULL) >= 0)
+    if (XFile_GetStats(&srcFile) < 0 || !S_ISREG(srcFile.nMode))
     {
-        int nRet = XSTDERR;
-        xfile_t dstFile;
-
-        if (XFile_Open(&dstFile, pDst, "cwt", NULL) >= 0)
-        {
-            nRet = XFile_Copy(&srcFile, &dstFile);
-            XFile_Close(&dstFile);
-        }
-
+        int nSavedErrno = S_ISREG(srcFile.nMode) ? errno : EINVAL;
         XFile_Close(&srcFile);
-        return nRet;
+        errno = nSavedErrno;
+        return XSTDERR;
     }
 
-    return XSTDERR;
+    /* Whether the destination is ours decides what happens to its permissions
+       below, and it has to be answered before the file is created. */
+    xbool_t bExisted = XPath_Exists(pDst);
+    xmode_t nMode = srcFile.nMode;
+
+    xfile_t dstFile;
+    if (XFile_OpenM(&dstFile, pDst, "cwt", nMode & 0777) < 0)
+    {
+        int nSavedErrno = errno;
+        XFile_Close(&srcFile);
+        errno = nSavedErrno;
+        return XSTDERR;
+    }
+
+    int nRet = XFile_Copy(&srcFile, &dstFile);
+    int nSavedErrno = errno;
+
+    XFile_Close(&dstFile);
+    XFile_Close(&srcFile);
+
+    if (nRet < 0)
+    {
+        /* A failed copy leaves no half-written file behind - but only when
+           this call is what created it. */
+        if (!bExisted) xunlink(pDst);
+        errno = nSavedErrno;
+        return XSTDERR;
+    }
+
+    /* A new destination carries the source permissions. The creation mode
+       alone does not get there: open() filters it through the umask, so an
+       executable would stop being executable and a private file could end up
+       readable by anyone. An existing destination keeps its own permissions,
+       the way a file being overwritten normally does. */
+    if (!bExisted)
+    {
+        char sPerm[XPERM_LEN + 1];
+
+        if (XPath_ModeToPerm(sPerm, sizeof(sPerm), nMode) == XPERM_LEN)
+            XPath_SetPerm(pDst, sPerm);
+    }
+
+    return nRet;
 }
 
 int XPath_Read(const char *pPath, uint8_t *pBuffer, size_t nSize)
