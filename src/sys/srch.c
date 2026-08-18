@@ -543,10 +543,16 @@ int XSearch(xsearch_t *pSearch, const char *pDirectory)
             return XSTDERR;
         }
 
-        /* Recursive search */
-        if (pSearch->bRecursive &&
-            S_ISDIR(statbuf.st_mode) &&
-            XSearch(pSearch, sFullPath) < 0)
+        /* Recursive search. A link is never descended into: on POSIX the
+           lstat above already reports one as a link, and on Windows stat()
+           follows it, so a junction pointing back up the tree would recurse
+           until the path stops growing and then never stop at all. */
+        xbool_t bDescend = pSearch->bRecursive && S_ISDIR(statbuf.st_mode);
+#ifdef _WIN32
+        if (bDescend && XPath_IsLink(sFullPath)) bDescend = XFALSE;
+#endif
+
+        if (bDescend && XSearch(pSearch, sFullPath) < 0)
         {
             XDir_Close(&dirHandle);
             return XSTDERR;

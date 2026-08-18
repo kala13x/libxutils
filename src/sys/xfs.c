@@ -1166,16 +1166,46 @@ int XDir_Create(const char *pDir, xmode_t nMode)
     return XDir_Make(sDir, nMode);
 }
 
+xbool_t XPath_IsLink(const char *pPath)
+{
+    XCHECK_NL((xstrused(pPath)), XFALSE);
+
+#ifdef _WIN32
+    /* stat() follows a reparse point and the CRT has no S_IFLNK, so the
+       attribute is the only way to tell a link from what it points at. Every
+       recursive walker needs that answer: descending into one leaves the tree
+       it was asked about. */
+    DWORD nAttrs = GetFileAttributesA(pPath);
+    if (nAttrs == INVALID_FILE_ATTRIBUTES) return XFALSE;
+    return (nAttrs & FILE_ATTRIBUTE_REPARSE_POINT) ? XTRUE : XFALSE;
+#else
+    xstat_t st;
+    if (xstat(pPath, &st) != XSTDOK) return XFALSE;
+    return S_ISLNK(st.st_mode) ? XTRUE : XFALSE;
+#endif
+}
+
 int XPath_Remove(const char *pPath)
 {
     xstat_t statbuf;
-    if (xstat(pPath, &statbuf) == XSTDOK)
-    {
-        return (S_ISDIR(statbuf.st_mode)) ?
-            XDir_Remove(pPath) : xunlink(pPath);
-    }
+    if (xstat(pPath, &statbuf) != XSTDOK) return XSTDERR;
 
-    return XSTDERR;
+#ifdef _WIN32
+    /* A link is removed, never walked into: everything behind it lives outside
+       the tree the caller asked to remove. The lstat below already says so on
+       POSIX; here stat() followed the link, so the attribute has to be asked
+       for - and a directory link is unmade with rmdir, which takes the link
+       and leaves its target alone. */
+    if (XPath_IsLink(pPath))
+    {
+        int nStatus = S_ISDIR(statbuf.st_mode) ? xrmdir(pPath) : xunlink(pPath);
+        return nStatus == 0 ? XSTDOK : XSTDERR;
+    }
+#endif
+
+    /* xstat() is an lstat on POSIX, so a link is never S_ISDIR here. */
+    return (S_ISDIR(statbuf.st_mode)) ?
+        XDir_Remove(pPath) : xunlink(pPath);
 }
 
 int XDir_Remove(const char *pPath)

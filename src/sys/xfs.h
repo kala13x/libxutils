@@ -115,6 +115,8 @@ uint8_t* XFile_Load(xfile_t *pFile, size_t *pSize);
 uint8_t* XFile_LoadSize(xfile_t *pFile, size_t nMaxSize, size_t *pSize);
 
 xbool_t XPath_Exists(const char *pPath);
+xbool_t XPath_IsLink(const char *pPath);
+
 char XPath_GetType(xmode_t nMode);
 int XPath_Parse(xpath_t *pPath, const char *pPathStr, xbool_t bStat);
 int XPath_SetPerm(const char *pPath, const char *pPerm);
