@@ -17,6 +17,7 @@
 #include "buf.h"
 #include "xfs.h"
 #include "sha1.h"
+#include "hash.h"
 #include "base64.h"
 
 #ifdef __linux__
@@ -595,6 +596,14 @@ XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex)
 
     if (!nPID)
     {
+        /* A failed child must never kill/reap the parent's other workers. */
+        free(pApi->pWorkerPIDs);
+        pApi->pWorkerPIDs = NULL;
+        pApi->nWorkerCount = XSTDNON;
+        pApi->nWorkerIndex = (int)nIndex;
+        pApi->nWorkerPID = getpid();
+        pApi->bIsWorker = XTRUE;
+
         if (XAPI_InitWorkerDeathSignal() < 0)
         {
             XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_SUPPORT);
@@ -606,13 +615,6 @@ XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex)
             XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_SUPPORT);
             return XSTDERR;
         }
-
-        free(pApi->pWorkerPIDs);
-        pApi->pWorkerPIDs = NULL;
-        pApi->nWorkerCount = XSTDNON;
-        pApi->nWorkerIndex = (int)nIndex;
-        pApi->nWorkerPID = getpid();
-        pApi->bIsWorker = XTRUE;
 
         xevent_status_t eStatus = XAPI_RebuildWorkerEvents(pApi);
         if (eStatus != XEVENTS_SUCCESS)
@@ -2117,6 +2119,7 @@ XSTATUS XAPI_InitWorkers(xapi_t *pApi, size_t nWorkers, xbool_t bSetAffinity)
         XSTATUS nStatus = XAPI_SpawnWorker(pApi, i);
         if (nStatus == XSTDERR)
         {
+            if (pApi->bIsWorker) return XSTDERR;
             XAPI_StopWorkerPIDs(pWorkerPIDs, i, SIGTERM);
             XAPI_WaitWorkerPIDs(pWorkerPIDs, i);
 

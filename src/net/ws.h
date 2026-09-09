@@ -37,7 +37,8 @@ typedef enum {
     XWS_FRAME_PARSED,
     XWS_FRAME_INVALID,
     XWS_FRAME_COMPLETE,
-    XWS_FRAME_INCOMPLETE
+    XWS_FRAME_INCOMPLETE,
+    XWS_ERR_RANDOM
 } xws_status_t;
 
 typedef enum {

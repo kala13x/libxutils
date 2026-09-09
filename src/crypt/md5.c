@@ -43,33 +43,35 @@ static const uint32_t g_radians[] =
 XSTATUS XMD5_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
     XCHECK((nSize >= XMD5_DIGEST_SIZE &&
-        pOutput && (pInput || !nLength)), XSTDINV);
+        pOutput && (pInput || !nLength) && nLength <= SIZE_MAX - 72), XSTDINV);
 
     uint32_t hash0 = 0x67452301;
     uint32_t hash1 = 0xefcdab89;
     uint32_t hash2 = 0x98badcfe;
     uint32_t hash3 = 0x10325476;
-    size_t nNewLen = 0;
-
-    for (nNewLen = (nLength * 8 + 1);
-        (nNewLen % 512) != 448; nNewLen++);
-
-    nNewLen /= 8;
-    uint8_t *pMessage = (uint8_t*)calloc(nNewLen + 64, 1);
+    size_t nNewLen = nLength + (119 - nLength % 64) % 64 + 1;
+    uint8_t *pMessage = (uint8_t*)calloc(nNewLen + 8, 1);
     XCHECK(pMessage, XSTDERR);
 
     if (nLength) memcpy(pMessage, pInput, nLength);
     pMessage[nLength] = 128;
 
-    uint32_t nBitsLen = 8 * (uint32_t)nLength;
-    memcpy(pMessage + nNewLen, &nBitsLen, 4);
+    uint64_t nBitsLen = (uint64_t)nLength * 8;
+    for (unsigned i = 0; i < 8; i++) pMessage[nNewLen + i] = (uint8_t)(nBitsLen >> (8 * i));
 
     uint32_t i, f, g;
-    int nOffset = 0;
+    size_t nOffset = 0;
 
     for (nOffset = 0; (size_t)nOffset < nNewLen; nOffset += (512 / 8))
     {
-        uint32_t *w = (uint32_t*)(pMessage + nOffset);
+        uint32_t w[16];
+        for (unsigned j = 0; j < 16; j++)
+        {
+            const uint8_t *p = pMessage + nOffset + j * 4;
+            w[j] = (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+                ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+        }
+
         uint32_t a = hash0;
         uint32_t b = hash1;
         uint32_t c = hash2;
@@ -113,10 +115,10 @@ XSTATUS XMD5_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size
         hash3 += d;
     }
 
-    for (i = 0; i < 4; i ++) pOutput[i] = ((uint8_t *)&hash0)[i];
-    for (i = 0; i < 4; i ++) pOutput[i + 4] = ((uint8_t *)&hash1)[i];
-    for (i = 0; i < 4; i ++) pOutput[i + 8] = ((uint8_t *)&hash2)[i];
-    for (i = 0; i < 4; i ++) pOutput[i + 12] = ((uint8_t *)&hash3)[i];
+    for (i = 0; i < 4; i++) pOutput[i] = (uint8_t)(hash0 >> (8 * i));
+    for (i = 0; i < 4; i++) pOutput[i + 4] = (uint8_t)(hash1 >> (8 * i));
+    for (i = 0; i < 4; i++) pOutput[i + 8] = (uint8_t)(hash2 >> (8 * i));
+    for (i = 0; i < 4; i++) pOutput[i + 12] = (uint8_t)(hash3 >> (8 * i));
 
     free(pMessage);
     return XSTDOK;
@@ -129,7 +131,11 @@ char* XMD5_Sum(const uint8_t *pInput, size_t nLength)
     XCHECK(pOutput, NULL);
 
     uint8_t digest[XMD5_DIGEST_SIZE];
-    XMD5_Compute(digest, sizeof(digest), pInput, nLength);
+    if (XMD5_Compute(digest, sizeof(digest), pInput, nLength) != XSTDOK)
+    {
+        free(pOutput);
+        return NULL;
+    }
 
     xstrncpyf(pOutput, nHashSize,
         "%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x"
@@ -148,8 +154,12 @@ uint8_t* XMD5_Encrypt(const uint8_t *pInput, size_t nLength)
     uint8_t *pOutput = (uint8_t*)malloc(nDigestSize);
     XCHECK(pOutput, NULL);
 
-    XMD5_Compute(pOutput, nDigestSize, pInput, nLength);
-    pOutput[XMD5_DIGEST_SIZE] = '\0';
+    if (XMD5_Compute(pOutput, nDigestSize, pInput, nLength) != XSTDOK)
+    {
+        free(pOutput);
+        return NULL;
+    }
 
+    pOutput[XMD5_DIGEST_SIZE] = '\0';
     return pOutput;
 }

@@ -330,7 +330,7 @@ char* xstracpyargs(const char *pFmt, va_list args, size_t *nDstLength)
     if (pDest == NULL) return NULL;
 
     size_t nLength = xstrncpyarg(pDest, nArgLength, pFmt, args);
-    if (nLength <= 0 && pDest)
+    if (nLength <= 0 || pDest == NULL)
     {
         free(pDest);
         return NULL;
@@ -350,7 +350,7 @@ char* xstrpcpyargs(xpool_t *pPool, const char *pFmt, va_list args, size_t *nDstL
     if (pDest == NULL) return NULL;
 
     size_t nLength = xstrncpyarg(pDest, nArgLength, pFmt, args);
-    if (nLength <= 0 && pDest)
+    if (nLength <= 0 || pDest == NULL)
     {
         xfree(pPool, pDest);
         return NULL;
@@ -392,7 +392,7 @@ char* xstrxcpy(const char *pFmt, ...)
     nLength = vasprintf(&pDest, pFmt, args);
     va_end(args);
 
-    if (nLength <= 0 && pDest)
+    if (nLength <= 0 || pDest == NULL)
     {
         free(pDest);
         return NULL;
@@ -1713,7 +1713,22 @@ xarray_t* XString_SplitStr(xstring_t *pString, const char *pDlmt)
 
     while ((nNext = XString_Token(pString, pToken, nNext, pDlmt)) >= 0)
     {
-        XArray_AddData(pArray, pToken, 0);
+        xarray_data_t *pItem = XArray_NewData(pArray, pToken, 0, 0);
+        if (pItem == NULL)
+        {
+            XString_Clear(pToken);
+            XArray_Destroy(pArray);
+            return NULL;
+        }
+
+        /* XArray_Add releases pItem (and its string) on failure. */
+        if (XArray_Add(pArray, pItem) < 0)
+        {
+            XArray_Destroy(pArray);
+            return NULL;
+        }
+
+        pToken = NULL;
         if (!nNext) break;
 
         pToken = XString_New(XSTR_MID, 0);
@@ -1723,6 +1738,8 @@ xarray_t* XString_SplitStr(xstring_t *pString, const char *pDlmt)
             return NULL;
         }
     }
+
+    XString_Clear(pToken);
 
     if (!pArray->nUsed)
     {

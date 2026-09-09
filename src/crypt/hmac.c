@@ -17,8 +17,7 @@
 XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
 {
     XCHECK((nSize >= XSHA256_DIGEST_SIZE &&
-             nLength && nKeyLen && pOutput &&
-             pData && pKey), XSTDINV);
+            pOutput && (pData || !nLength) && (pKey || !nKeyLen)), XSTDINV);
 
     uint8_t i, digest[XSHA256_DIGEST_SIZE];
     uint8_t kIpad[XSHA256_BLOCK_SIZE] = {0};
@@ -31,13 +30,13 @@ XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pData, size_
         uint8_t key[XSHA256_DIGEST_SIZE] = {0};
         XSHA256_Compute(key, sizeof(key), pKey, nKeyLen);
 
-        memcpy(kIpad, pKey, XSHA256_DIGEST_SIZE);
-        memcpy(kOpad, pKey, XSHA256_DIGEST_SIZE);
+        memcpy(kIpad, key, XSHA256_DIGEST_SIZE);
+        memcpy(kOpad, key, XSHA256_DIGEST_SIZE);
     }
     else
     {
-        memcpy(kIpad, pKey, nKeyLen);
-        memcpy(kOpad, pKey, nKeyLen);
+        if (nKeyLen) memcpy(kIpad, pKey, nKeyLen);
+        if (nKeyLen) memcpy(kOpad, pKey, nKeyLen);
     }
 
     /* XOR key with ipad and opad values */
@@ -50,7 +49,7 @@ XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pData, size_
     /* Perform inner SHA256 */
     XSHA256_Init(&xsha);
     XSHA256_Update(&xsha, kIpad, sizeof(kIpad));
-    XSHA256_Update(&xsha, pData, nLength);
+    if (nLength) XSHA256_Update(&xsha, pData, nLength);
     XSHA256_Final(&xsha, digest);
 
     /* Perform outer SHA256 */
@@ -68,7 +67,12 @@ XSTATUS XHMAC_SHA256_HEX(char *pOutput, size_t nSize, const uint8_t *pData, size
         return XSTDERR;
     uint8_t i, hash[XSHA256_DIGEST_SIZE];
 
-    XHMAC_SHA256(hash, sizeof(hash), pData, nLength, pKey, nKeyLen);
+    if (XHMAC_SHA256(hash, sizeof(hash), pData, nLength, pKey, nKeyLen) != XSTDOK)
+    {
+        pOutput[0] = '\0';
+        return XSTDERR;
+    }
+
     for (i = 0; i < sizeof(hash); i++)
         xstrncpyf(pOutput + i * 2, 3, "%02x", (unsigned int)hash[i]);
 
@@ -79,9 +83,12 @@ XSTATUS XHMAC_SHA256_HEX(char *pOutput, size_t nSize, const uint8_t *pData, size
 char *XHMAC_SHA256_B64(const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen, size_t *pOutLen)
 {
     uint8_t hash[XSHA256_DIGEST_SIZE];
+    if (pOutLen == NULL) return NULL;
+    *pOutLen = 0;
+
+    if (XHMAC_SHA256(hash, sizeof(hash), pData, nLength, pKey, nKeyLen) != XSTDOK) return NULL;
     *pOutLen = sizeof(hash);
 
-    XHMAC_SHA256(hash, sizeof(hash), pData, nLength, pKey, nKeyLen);
     return XBase64_UrlEncrypt(hash, pOutLen);
 }
 
@@ -89,19 +96,22 @@ char *XHMAC_SHA256_NEW(const uint8_t *pData, size_t nLength, const uint8_t *pKey
 {
     size_t nSize = XSHA256_LENGTH + 1;
     char *pOutput = (char *)malloc(nSize);
-    if (pOutput == NULL)
-        return NULL;
+    if (pOutput == NULL) return NULL;
 
-    XHMAC_SHA256_HEX(pOutput, nSize, pData, nLength, pKey, nKeyLen);
+    if (XHMAC_SHA256_HEX(pOutput, nSize, pData, nLength, pKey, nKeyLen) != XSTDOK)
+    {
+        free(pOutput);
+        return NULL;
+    }
+
     return pOutput;
 }
 
 XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
 {
     XCHECK((nSize >= XMD5_LENGTH + 1 &&
-             nLength && nKeyLen && pOutput &&
-             pData && pKey),
-            XSTDINV);
+            pOutput && (pData || !nLength) && (pKey || !nKeyLen) &&
+            nLength <= SIZE_MAX - XMD5_BLOCK_SIZE - 72), XSTDINV);
 
     uint8_t i, digest[XMD5_DIGEST_SIZE];
     uint8_t hash[XMD5_DIGEST_SIZE] = {0};
@@ -112,15 +122,15 @@ XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLen
     if (nKeyLen > XMD5_BLOCK_SIZE)
     {
         uint8_t key[XMD5_DIGEST_SIZE] = {0};
-        XMD5_Compute(key, sizeof(key), pKey, nKeyLen);
+        if (XMD5_Compute(key, sizeof(key), pKey, nKeyLen) != XSTDOK) return XSTDERR;
 
-        memcpy(kIpad, pKey, XMD5_DIGEST_SIZE);
-        memcpy(kOpad, pKey, XMD5_DIGEST_SIZE);
+        memcpy(kIpad, key, XMD5_DIGEST_SIZE);
+        memcpy(kOpad, key, XMD5_DIGEST_SIZE);
     }
     else
     {
-        memcpy(kIpad, pKey, nKeyLen);
-        memcpy(kOpad, pKey, nKeyLen);
+        if (nKeyLen) memcpy(kIpad, pKey, nKeyLen);
+        if (nKeyLen) memcpy(kOpad, pKey, nKeyLen);
     }
 
     /* XOR key with ipad and opad values */
@@ -136,10 +146,11 @@ XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLen
     XCHECK(pPadBuf, XSTDERR);
 
     memcpy(pPadBuf, kIpad, sizeof(kIpad));
-    memcpy(&pPadBuf[sizeof(kIpad)], pData, nLength);
+    if (nLength) memcpy(&pPadBuf[sizeof(kIpad)], pData, nLength);
 
-    XMD5_Compute(digest, sizeof(digest), pPadBuf, nBufLen);
+    int status = XMD5_Compute(digest, sizeof(digest), pPadBuf, nBufLen);
     free(pPadBuf);
+    if (status != XSTDOK) return XSTDERR;
 
     /* Perform outer MD5 */
     nBufLen = sizeof(kOpad) + sizeof(digest);
@@ -149,8 +160,9 @@ XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLen
     memcpy(pPadBuf, kOpad, sizeof(kOpad));
     memcpy(&pPadBuf[sizeof(kOpad)], digest, sizeof(digest));
 
-    XMD5_Compute(hash, sizeof(hash), pPadBuf, nBufLen);
+    status = XMD5_Compute(hash, sizeof(hash), pPadBuf, nBufLen);
     free(pPadBuf);
+    if (status != XSTDOK) return XSTDERR;
 
     xstrncpyf(pOutput, nSize,
               "%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x"
@@ -171,6 +183,11 @@ char *XHMAC_MD5_NEW(const uint8_t *pData, size_t nLength, const uint8_t *pKey, s
     if (pOutput == NULL)
         return NULL;
 
-    XHMAC_MD5(pOutput, nSize, pData, nLength, pKey, nKeyLen);
+    if (XHMAC_MD5(pOutput, nSize, pData, nLength, pKey, nKeyLen) != XSTDOK)
+    {
+        free(pOutput);
+        return NULL;
+    }
+
     return pOutput;
 }

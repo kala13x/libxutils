@@ -63,13 +63,21 @@ int XThread_Run(xthread_t *pThread)
     if (pThread->nDetached) CloseHandle(pThread->threadId);
 #else
     pthread_attr_t attr;
-    if (pthread_attr_init(&attr) ||
-        pthread_attr_setstacksize(&attr, pThread->nStackSize))
+    int nAttrStatus = pthread_attr_init(&attr);
+    if (nAttrStatus != 0)
+    {
+        errno = nAttrStatus;
+        return XSTDERR; /* attr is uninitialized and must not be destroyed. */
+    }
+
+    nAttrStatus = pthread_attr_setstacksize(&attr, pThread->nStackSize);
+    if (nAttrStatus != 0)
     {
         fprintf(stderr, "<%s:%d> %s: Can not initialize pthread attribute: %d\n",
-            __FILE__, __LINE__, __FUNCTION__, errno);
+            __FILE__, __LINE__, __FUNCTION__, nAttrStatus);
 
         pthread_attr_destroy(&attr);
+        errno = nAttrStatus;
         return XSTDERR;
     }
 

@@ -73,8 +73,11 @@ typedef enum {
     XJSON_ERR_INVALID,
     XJSON_ERR_BOUNDS,
     XJSON_ERR_EXITS,
-    XJSON_ERR_ALLOC
+    XJSON_ERR_ALLOC,
+    XJSON_ERR_DEPTH
 } xjson_error_t;
+
+#define XJSON_MAX_DEPTH 128U
 
 xjson_obj_t *XJSON_FromStr(xpool_t *pPool, const char *pFmt, ...);
 xjson_obj_t* XJSON_CreateObject(xpool_t *pPool, const char *pName, void *pValue, xjson_type_t nType);
@@ -109,6 +112,7 @@ typedef struct xjson_ {
     xpool_t *pPool;
     size_t nDataSize;
     size_t nOffset;
+    size_t nDepth;
 } xjson_t;
 
 size_t XJSON_GetErrorStr(xjson_t *pJson, char *pOutput, size_t nSize);

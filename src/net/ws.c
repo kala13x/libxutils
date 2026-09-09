@@ -10,6 +10,10 @@
 
 #include "ws.h"
 
+#ifdef _XUTILS_USE_SSL
+#include <openssl/rand.h>
+#endif
+
 #ifdef _WIN32
 #if defined(_MSC_VER)
 #pragma warning(disable : 4146)
@@ -68,6 +72,8 @@ const char* XWebSock_GetStatusStr(xws_status_t eStatus)
             return "Failed to allocate memory for web socket frame";
         case XWS_ERR_SIZE:
             return "Failed web socket frame size calculation";
+        case XWS_ERR_RANDOM:
+            return "Failed to obtain web socket masking entropy";
         case XWS_FRAME_TOOBIG:
             return "Receiving web socket frame bigger than limit";
         case XWS_FRAME_INCOMPLETE:
@@ -154,35 +160,47 @@ uint8_t XWS_OpCode(xws_frame_type_t eType)
     return 0;
 }
 
-static uint32_t XWS_GenerateMaskKey(void)
+static xbool_t XWS_GenerateMaskKey(uint32_t *pKey)
 {
-    static xbool_t bSeeded = XFALSE;
+#ifdef _XUTILS_USE_SSL
+    return RAND_bytes((unsigned char*)pKey, sizeof(*pKey)) == 1;
+#elif defined(_WIN32)
+    HCRYPTPROV provider;
+    if (!CryptAcquireContext(&provider, NULL, NULL, PROV_RSA_FULL,
+        CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) return XFALSE;
 
-    if (!bSeeded)
-    {
-        unsigned int nSeed = (unsigned int)time(NULL);
-#ifdef _WIN32
-        nSeed ^= (unsigned int)GetCurrentProcessId();
+    BOOL ok = CryptGenRandom(provider, sizeof(*pKey), (BYTE*)pKey);
+    CryptReleaseContext(provider, 0);
+    return ok ? XTRUE : XFALSE;
 #else
-        nSeed ^= (unsigned int)getpid();
+    int flags = O_RDONLY;
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
 #endif
-        nSeed ^= (unsigned int)clock();
+    int fd = open("/dev/urandom", flags);
+    if (fd < 0) return XFALSE;
+    size_t offset = 0;
 
-        srand(nSeed);
-        bSeeded = XTRUE;
+    while (offset < sizeof(*pKey))
+    {
+        ssize_t count = read(fd, (unsigned char*)pKey + offset, sizeof(*pKey) - offset);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) break;
+        offset += (size_t)count;
     }
 
-    uint32_t nMaskKey = ((uint32_t)(rand() & 0xFF) << 24) |
-                        ((uint32_t)(rand() & 0xFF) << 16) |
-                        ((uint32_t)(rand() & 0xFF) << 8) |
-                        ((uint32_t)(rand() & 0xFF));
-
-    return nMaskKey ? nMaskKey : 0xA5A5A5A5;
+    close(fd);
+    return offset == sizeof(*pKey);
+#endif
 }
 
 uint8_t* XWS_CreateFrame(const uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize)
 {
     if (pFrameSize != NULL) *pFrameSize = 0;
+    if ((!pPayload && nLength) || nLength > SIZE_MAX - XWS_MAX_HEADER_SIZE - 1 ||
+        (uint64_t)nLength > INT64_MAX || nOpCode > 0x0F ||
+        (nOpCode >= 8 && (!bFin || nLength > 125))) return NULL;
+
     uint8_t nFIN = bFin ? XSTDOK : XSTDNON;
     uint8_t nStartByte = (nFIN << 7) | nOpCode;
 
@@ -238,10 +256,8 @@ void XWebFrame_Init(xws_frame_t *pFrame)
 
     pFrame->nPayloadLength = XSTDNON;
     pFrame->nHeaderSize = XSTDNON;
-
     pFrame->nMaskKey = XSTDNON;
     pFrame->nOpCode = XSTDNON;
-
     pFrame->bComplete = XFALSE;
     pFrame->bAlloc = XFALSE;
     pFrame->bMask = XFALSE;
@@ -302,7 +318,12 @@ xws_status_t XWebFrame_Create(xws_frame_t *pFrame, const uint8_t *pPayload, size
     pFrame->nPayloadLength = nLength;
 
     // RFC 6455: The client should always mask the frame
-    if (bMask) return XWebFrame_Mask(pFrame);
+    if (bMask)
+    {
+        xws_status_t status = XWebFrame_Mask(pFrame);
+        if (status != XWS_ERR_NONE) XWebFrame_Clear(pFrame);
+        return status;
+    }
 
     return XWS_ERR_NONE;
 }
@@ -427,7 +448,9 @@ xws_status_t XWebFrame_Mask(xws_frame_t *pFrame)
     XCHECK_NL((pFrame->buffer.nUsed >= pFrame->nHeaderSize), XWS_FRAME_INCOMPLETE);
     XCHECK_NL((!pFrame->bMask && !(pFrame->buffer.pData[1] & 0x80)), XWS_ERR_NONE);
 
-    pFrame->nMaskKey = XWS_GenerateMaskKey();
+    XCHECK_NL((pFrame->buffer.nUsed - pFrame->nHeaderSize >= pFrame->nPayloadLength), XWS_FRAME_INCOMPLETE);
+    XCHECK_NL((pFrame->buffer.nUsed <= SIZE_MAX - 5), XWS_ERR_SIZE);
+    XCHECK_NL(XWS_GenerateMaskKey(&pFrame->nMaskKey), XWS_ERR_RANDOM);
     uint8_t *pMaskKey = (uint8_t*)&pFrame->nMaskKey;
 
     int nStatus = XByteBuffer_Insert(&pFrame->buffer, pFrame->nHeaderSize, pMaskKey, 4);

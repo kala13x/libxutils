@@ -44,6 +44,8 @@ size_t XJSON_GetErrorStr(xjson_t *pJson, char *pOutput, size_t nSize)
             return xstrncpyf(pOutput, nSize, "Unexpected EOF at posit(%zu)", pJson->nOffset);
         case XJSON_ERR_ALLOC:
             return xstrncpyf(pOutput, nSize, "Can not allocate memory for object at posit(%zu)", pJson->nOffset);
+        case XJSON_ERR_DEPTH:
+            return xstrncpyf(pOutput, nSize, "JSON nesting exceeds %u at posit(%zu)", XJSON_MAX_DEPTH, pJson->nOffset);
         case XJSON_ERR_UNEXPECTED:
             if (pJson->pData == NULL || pJson->nOffset >= pJson->nDataSize)
                 return xstrncpyf(pOutput, nSize, "Unexpected EOF at posit(%zu)", pJson->nOffset);
@@ -857,31 +859,47 @@ static int XJSON_PutItem(xjson_t *pJson, xjson_obj_t *pObj, const char *pName)
 static int XJSON_ParseArrayNext(xjson_t *pJson, xjson_obj_t *pObj, int bAllowEnd)
 {
     xjson_token_t *pToken = &pJson->lastToken;
-    XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
+    for (;;)
+    {
+        XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
 
-    if (pToken->nType == XJSON_TOKEN_RSQUARE)
-        return bAllowEnd ? XJSON_UndoLastToken(pJson) : XJSON_UnexpectedToken(pJson);
-    else if (XJSON_TokenIsItem(pToken))
-        { XCHECK(XJSON_PutItem(pJson, pObj, NULL), XJSON_FAILURE); }
-    else if (pToken->nType == XJSON_TOKEN_LCURLY)
-        { XCHECK(XJSON_ParseNewObject(pJson, pObj, NULL), XJSON_FAILURE); }
-    else if (pToken->nType == XJSON_TOKEN_LSQUARE)
-        { XCHECK(XJSON_ParseNewArray(pJson, pObj, NULL), XJSON_FAILURE); }
-    else return XJSON_UnexpectedToken(pJson);
+        if (pToken->nType == XJSON_TOKEN_RSQUARE)
+            return bAllowEnd ? XJSON_UndoLastToken(pJson) : XJSON_UnexpectedToken(pJson);
+        else if (XJSON_TokenIsItem(pToken))
+            { XCHECK(XJSON_PutItem(pJson, pObj, NULL), XJSON_FAILURE); }
+        else if (pToken->nType == XJSON_TOKEN_LCURLY)
+            { XCHECK(XJSON_ParseNewObject(pJson, pObj, NULL), XJSON_FAILURE); }
+        else if (pToken->nType == XJSON_TOKEN_LSQUARE)
+            { XCHECK(XJSON_ParseNewArray(pJson, pObj, NULL), XJSON_FAILURE); }
+        else return XJSON_UnexpectedToken(pJson);
 
-    XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
+        XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
 
-    if (pToken->nType == XJSON_TOKEN_COMMA)
-        return XJSON_ParseArrayNext(pJson, pObj, XFALSE);
-    else if (pToken->nType != XJSON_TOKEN_RSQUARE)
-        return XJSON_UnexpectedToken(pJson);
+        if (pToken->nType == XJSON_TOKEN_COMMA)
+        {
+            bAllowEnd = XFALSE;
+            continue;
+        }
+        else if (pToken->nType != XJSON_TOKEN_RSQUARE)
+            return XJSON_UnexpectedToken(pJson);
 
-    return XJSON_UndoLastToken(pJson);
+        return XJSON_UndoLastToken(pJson);
+    }
 }
 
 int XJSON_ParseArray(xjson_t *pJson, xjson_obj_t *pObj)
 {
-    return XJSON_ParseArrayNext(pJson, pObj, XTRUE);
+    if (pJson->nDepth >= XJSON_MAX_DEPTH)
+    {
+        pJson->nError = XJSON_ERR_DEPTH;
+        return XJSON_FAILURE;
+    }
+
+    pJson->nDepth++;
+    int nStatus = XJSON_ParseArrayNext(pJson, pObj, XTRUE);
+    pJson->nDepth--;
+
+    return nStatus;
 }
 
 static int XJSON_ParsePair(xjson_t* pJson, xjson_obj_t* pObj)
@@ -937,32 +955,52 @@ static int XJSON_ParsePair(xjson_t* pJson, xjson_obj_t* pObj)
     }
 
     xfree(pPool, pPairName);
-    XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
-
-    if (pToken->nType == XJSON_TOKEN_COMMA)
-        return XJSON_ParseObjectNext(pJson, pObj, XFALSE);
-    else if (pToken->nType != XJSON_TOKEN_RCURLY)
-        return XJSON_UnexpectedToken(pJson);
-
-    return XJSON_UndoLastToken(pJson);
+    return XJSON_SUCCESS;
 }
 
 static int XJSON_ParseObjectNext(xjson_t *pJson, xjson_obj_t *pObj, int bAllowEnd)
 {
     xjson_token_t *pToken = &pJson->lastToken;
-    XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
+    for (;;)
+    {
+        XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
 
-    if (pToken->nType == XJSON_TOKEN_RCURLY)
-        return bAllowEnd ? XJSON_UndoLastToken(pJson) : XJSON_UnexpectedToken(pJson);
-    else if (pToken->nType == XJSON_TOKEN_QUOTE) return XJSON_ParsePair(pJson, pObj);
-    else if (pToken->nType == XJSON_TOKEN_EOF) return XJSON_FAILURE;
+        if (pToken->nType == XJSON_TOKEN_RCURLY)
+            return bAllowEnd ? XJSON_UndoLastToken(pJson) :
+                               XJSON_UnexpectedToken(pJson);
 
-    return XJSON_UnexpectedToken(pJson);
+        if (pToken->nType != XJSON_TOKEN_QUOTE)
+            return XJSON_UnexpectedToken(pJson);
+
+        XCHECK(XJSON_ParsePair(pJson, pObj), XJSON_FAILURE);
+        XCHECK(XJSON_GetNextToken(pJson), XJSON_FAILURE);
+
+        if (pToken->nType == XJSON_TOKEN_COMMA)
+        {
+            bAllowEnd = XFALSE;
+            continue;
+        }
+    
+        if (pToken->nType != XJSON_TOKEN_RCURLY)
+            return XJSON_UnexpectedToken(pJson);
+
+        return XJSON_UndoLastToken(pJson);
+    }
 }
 
 int XJSON_ParseObject(xjson_t *pJson, xjson_obj_t *pObj)
 {
-    return XJSON_ParseObjectNext(pJson, pObj, XTRUE);
+    if (pJson->nDepth >= XJSON_MAX_DEPTH)
+    {
+        pJson->nError = XJSON_ERR_DEPTH;
+        return XJSON_FAILURE;
+    }
+
+    pJson->nDepth++;
+    int nStatus = XJSON_ParseObjectNext(pJson, pObj, XTRUE);
+    pJson->nDepth--;
+
+    return nStatus;
 }
 
 int XJSON_Parse(xjson_t *pJson, xpool_t *pPool, const char *pData, size_t nSize)
@@ -974,6 +1012,7 @@ int XJSON_Parse(xjson_t *pJson, xpool_t *pPool, const char *pData, size_t nSize)
     pJson->nDataSize = nSize;
     pJson->pData = pData;
     pJson->nOffset = 0;
+    pJson->nDepth = 0;
     pJson->pPool = pPool;
 
     if (pData == NULL && nSize)
@@ -1072,6 +1111,7 @@ void XJSON_Init(xjson_t *pJson)
     pJson->nError = XJSON_ERR_NONE;
     pJson->nDataSize = 0;
     pJson->nOffset = 0;
+    pJson->nDepth = 0;
 
     pJson->lastToken.nType = XJSON_TOKEN_INVALID;
     pJson->lastToken.pData = NULL;
@@ -1201,7 +1241,13 @@ size_t XJSON_GetArrayLength(xjson_obj_t *pObj)
 int XJSON_GetInt(xjson_obj_t *pObj)
 {
     if (!XJSON_CheckObject(pObj, XJSON_TYPE_NUMBER)) return 0;
-    return atoi((const char*)pObj->pData);
+    int nSavedErrno = errno;
+    errno = 0;
+    char *pEnd;
+    long long nValue = strtoll((const char*)pObj->pData, &pEnd, 10);
+    int nResult = errno == 0 && *pEnd == '\0' && nValue >= INT_MIN && nValue <= INT_MAX ? (int)nValue : 0;
+    errno = nSavedErrno;
+    return nResult;
 }
 
 double XJSON_GetFloat(xjson_obj_t *pObj)
@@ -1212,20 +1258,28 @@ double XJSON_GetFloat(xjson_obj_t *pObj)
 
 uint16_t XJSON_GetU16(xjson_obj_t *pObj)
 {
-    if (!XJSON_CheckObject(pObj, XJSON_TYPE_NUMBER)) return 0;
-    return (uint16_t)atol((const char*)pObj->pData);
+    uint64_t nValue = XJSON_GetU64(pObj);
+    return nValue <= UINT16_MAX ? (uint16_t)nValue : 0;
 }
 
 uint32_t XJSON_GetU32(xjson_obj_t *pObj)
 {
-    if (!XJSON_CheckObject(pObj, XJSON_TYPE_NUMBER)) return 0;
-    return (uint32_t)atol((const char*)pObj->pData);
+    uint64_t nValue = XJSON_GetU64(pObj);
+    return nValue <= UINT32_MAX ? (uint32_t)nValue : 0;
 }
 
 uint64_t XJSON_GetU64(xjson_obj_t *pObj)
 {
     if (!XJSON_CheckObject(pObj, XJSON_TYPE_NUMBER)) return 0;
-    return strtoull((const char*)pObj->pData, NULL, 0);
+    const char *pText = (const char*)pObj->pData;
+    if (*pText == '-' || !*pText) return 0;
+    int nSavedErrno = errno;
+    errno = 0;
+    char *pEnd;
+    unsigned long long nValue = strtoull(pText, &pEnd, 10);
+    uint64_t nResult = errno == 0 && *pEnd == '\0' ? (uint64_t)nValue : 0;
+    errno = nSavedErrno;
+    return nResult;
 }
 
 uint8_t XJSON_GetBool(xjson_obj_t *pObj)
