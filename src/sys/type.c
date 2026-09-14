@@ -11,21 +11,18 @@
 #include "type.h"
 #include "str.h"
 
-union {
-    float fValue;
-    uint32_t u32;
-} XTypeConvert;
-
 uint32_t XFloatToU32(float fValue)
 {
-    XTypeConvert.fValue = fValue;
-    return XTypeConvert.u32;
+    uint32_t nValue;
+    memcpy(&nValue, &fValue, sizeof(nValue));
+    return nValue;
 }
 
 float XU32ToFloat(uint32_t nValue)
 {
-    XTypeConvert.u32 = nValue;
-    return XTypeConvert.fValue;
+    float fValue;
+    memcpy(&fValue, &nValue, sizeof(fValue));
+    return fValue;
 }
 
 xbool_t XTypeIsPrint(const uint8_t *pData, size_t nSize)

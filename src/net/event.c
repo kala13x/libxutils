@@ -401,6 +401,14 @@ static int XEvents_ServiceCb(xevents_t *pEvents, xevent_data_t *pData, XSOCKET n
     }
 #endif
 
+    /* A peer can close immediately after its final write. Drain readable bytes
+       first; later reads observe EOF after all queued input has been delivered. */
+    if ((nEvents & XPOLLIN) && (nEvents & (XPOLLHUP | XPOLLERR)))
+    {
+        nRetVal = XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_READ);
+        return XEVENTS_RETURN_VALUE(nRetVal);
+    }
+
     if (nEvents & XPOLLHUP)
     {
         nRetVal = XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_HUNGED);
@@ -675,6 +683,9 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
     if (pData->nFD >= 0)
     {
         nStatus = epoll_ctl(pEvents->nEventFd, EPOLL_CTL_DEL, pData->nFD, NULL);
+        /* Socket EOF may already have closed the descriptor and removed it
+           from epoll. It still owns one entry in our event map/count. */
+        if (nStatus < 0 && (errno == EBADF || errno == ENOENT)) nStatus = XSTDNON;
         if (nStatus >= 0 && pEvents->nEventCount) pEvents->nEventCount--;
     }
 #else

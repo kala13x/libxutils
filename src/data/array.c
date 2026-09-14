@@ -356,6 +356,8 @@ xarray_data_t* XArray_Remove(xarray_t *pArr, size_t nIndex)
 
 void XArray_Delete(xarray_t *pArr, size_t nIndex)
 {
+    if (pArr == NULL || nIndex >= pArr->nUsed) return;
+
     xarray_data_t *pData = XArray_Get(pArr, nIndex);
     if (pData != NULL) XArray_ClearData(pArr, pData);
 
@@ -397,7 +399,14 @@ xarray_data_t* XArray_SetData(xarray_t *pArr, size_t nIndex, void *pData, size_t
 
 xarray_data_t* XArray_Insert(xarray_t *pArr, size_t nIndex, xarray_data_t *pData)
 {
+    if (pArr == NULL || pData == NULL || nIndex > pArr->nUsed) return NULL;
     if (!XArray_CheckSpace(pArr)) return NULL;
+
+    if (nIndex == pArr->nUsed)
+    {
+        pArr->pData[pArr->nUsed++] = pData;
+        return pData;
+    }
 
     xarray_data_t *pOldData = XArray_Set(pArr, nIndex, pData);
     if (pOldData == NULL) return NULL;
@@ -413,7 +422,7 @@ xarray_data_t* XArray_Insert(xarray_t *pArr, size_t nIndex, xarray_data_t *pData
 
 xarray_data_t* XArray_InsertData(xarray_t *pArr, size_t nIndex, void *pData, size_t nSize)
 {
-    if (!XArray_CheckSpace(pArr)) return NULL;
+    if (pArr == NULL || nIndex > pArr->nUsed || !XArray_CheckSpace(pArr)) return NULL;
 
     xarray_data_t *pNewData = XArray_NewData(pArr, pData, nSize, 0);
     if (pNewData == NULL)
@@ -422,7 +431,10 @@ xarray_data_t* XArray_InsertData(xarray_t *pArr, size_t nIndex, void *pData, siz
         return NULL;
     }
 
-    return XArray_Insert(pArr, nIndex, pNewData);
+    xarray_data_t *pResult = XArray_Insert(pArr, nIndex, pNewData);
+    if (pResult == NULL) XArray_ClearData(pArr, pNewData);
+
+    return pResult;
 }
 
 void XArray_Swap(xarray_t *pArr, size_t nIndex1, size_t nIndex2)

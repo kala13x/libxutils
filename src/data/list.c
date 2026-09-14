@@ -90,6 +90,9 @@ xlist_t* XList_Unlink(xlist_t *pList)
     xlist_t *pPrev = pList->pPrev;
     xlist_t *pNext = pList->pNext;
 
+    if (pNext == pList) pNext = NULL;
+    if (pPrev == pList) pPrev = NULL;
+
     XList_Detach(pList);
     XList_Free(pList);
 

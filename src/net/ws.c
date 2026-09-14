@@ -518,6 +518,11 @@ xws_status_t XWebFrame_Parse(xws_frame_t *pFrame)
     pFrame->bMask = (nNextByte & 0x80) >> 7;
     pFrame->nOpCode = nStartByte & 0x0F;
 
+    /* No extensions are negotiated: reserved bits and opcodes are invalid. */
+    XCHECK_NL(((nStartByte & 0x70) == 0), XWS_FRAME_INVALID);
+    XCHECK_NL((pFrame->nOpCode <= 2 || (pFrame->nOpCode >= 8 && pFrame->nOpCode <= 10)), XWS_INVALID_TYPE);
+    XCHECK_NL((pFrame->nOpCode < 8 || (pFrame->bFin && nLengthByte <= 125)), XWS_FRAME_INVALID);
+
     pFrame->eType = XWS_FrameType(pFrame->nOpCode);
     XCHECK((pFrame->eType != XWS_INVALID), XWS_INVALID_TYPE);
 

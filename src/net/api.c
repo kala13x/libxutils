@@ -735,7 +735,7 @@ static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
 
 size_t XAPI_GetEventCount(xapi_t *pApi)
 {
-    XCHECK_NL((pApi != NULL), XSTDNON);
+    XCHECK_NL((pApi != NULL && pApi->bHaveEvents), XSTDNON);
     xevents_t *pEvents = &pApi->events;
     return pEvents->nEventCount;
 }
@@ -882,8 +882,7 @@ XSTATUS XAPI_PutTxBuff(xapi_session_t *pSession, xbyte_buffer_t *pBuffer)
     XCHECK((pBuffer != NULL), XSTDINV);
     XCHECK_NL(pBuffer->nUsed, XSTDNON);
 
-    XByteBuffer_AddBuff(&pSession->txBuffer, pBuffer);
-    if (!pSession->txBuffer.nUsed)
+    if (XByteBuffer_AddBuff(&pSession->txBuffer, pBuffer) <= 0)
     {
         XAPI_ErrorCb(pSession->pApi, pSession, XAPI_SELF, XAPI_ERR_ALLOC);
         return XSTDERR;
@@ -974,6 +973,17 @@ XSTATUS XAPI_RespondHTTP(xapi_session_t *pSession, int nCode, xapi_status_t eSta
     return XAPI_StatusToEvent(pApi, nStatus);
 }
 
+static xbool_t XAPI_MatchCredential(const char *pProvided, const char *pExpected, size_t nLength)
+{
+    if (strlen(pProvided) != nLength) return XFALSE;
+
+    volatile uint8_t nDifference = 0;
+    for (size_t i = 0; i < nLength; i++)
+        nDifference |= (uint8_t)pProvided[i] ^ (uint8_t)pExpected[i];
+
+    return nDifference == 0 ? XTRUE : XFALSE;
+}
+
 XSTATUS XAPI_AuthorizeHTTP(xapi_session_t *pSession, const char *pToken, const char *pKey)
 {
     XCHECK((pSession != NULL), XSTDINV);
@@ -988,18 +998,19 @@ XSTATUS XAPI_AuthorizeHTTP(xapi_session_t *pSession, const char *pToken, const c
     {
         const char *pXKey = XHTTP_GetHeader(pHandle, "X-API-KEY");
         if (!xstrused(pXKey)) return XAPI_RespondHTTP(pSession, 401, XAPI_MISSING_KEY);
-        if (strncmp(pXKey, pKey, nKeyLength)) return XAPI_RespondHTTP(pSession, 401, XAPI_INVALID_KEY);
+        if (!XAPI_MatchCredential(pXKey, pKey, nKeyLength)) return XAPI_RespondHTTP(pSession, 401, XAPI_INVALID_KEY);
     }
 
     if (nTokenLength)
     {
         const char *pAuth = XHTTP_GetHeader(pHandle, "Authorization");
         if (!xstrused(pAuth)) return XAPI_RespondHTTP(pSession, 401, XAPI_MISSING_TOKEN);
+        if (!xstrncasecmp(pAuth, "Basic ", 6)) return XAPI_RespondHTTP(pSession, 401, XAPI_MISSING_TOKEN);
 
-        int nPosit = xstrsrc(pAuth, "Basic");
-        if (nPosit < 0) return XAPI_RespondHTTP(pSession, 401, XAPI_MISSING_TOKEN);
+        const char *pProvided = pAuth + 6;
+        while (*pProvided == ' ') pProvided++;
 
-        if (strncmp(&pAuth[nPosit + 6], pToken, nTokenLength))
+        if (!XAPI_MatchCredential(pProvided, pToken, nTokenLength))
             return XAPI_RespondHTTP(pSession, 401, XAPI_INVALID_TOKEN);
     }
 
@@ -1623,6 +1634,28 @@ static int XAPI_HandleRAW(xapi_t *pApi, xapi_session_t *pSession)
     return nRetVal;
 }
 
+static int XAPI_DispatchBuffer(xapi_t *pApi, xapi_session_t *pSession)
+{
+    switch (pSession->eType)
+    {
+        case XAPI_HTTP: return XAPI_HandleHTTP(pApi, pSession);
+        case XAPI_MDTP: return XAPI_HandleMDTP(pApi, pSession);
+        case XAPI_SOCK: return XAPI_HandleRAW(pApi, pSession);
+        case XAPI_WS: return XAPI_HandleWS(pApi, pSession);
+        default: return XEVENTS_DISCONNECT;
+    }
+}
+
+XSTATUS XAPI_ProcessBuffered(xapi_session_t *pSession)
+{
+    XCHECK_NL((pSession != NULL && pSession->pApi != NULL && !pSession->bCancel), XAPI_DISCONNECT);
+    if (!pSession->rxBuffer.nUsed) return XAPI_CONTINUE;
+
+    int nStatus = XAPI_DispatchBuffer(pSession->pApi, pSession);
+    if (nStatus == XEVENTS_RELOOP) return XAPI_RELOOP;
+    return nStatus == XEVENTS_CONTINUE ? XAPI_CONTINUE : XAPI_DISCONNECT;
+}
+
 static int XAPI_ReadOnce(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pSession != NULL), XEVENTS_DISCONNECT);
@@ -1663,16 +1696,7 @@ static int XAPI_ReadOnce(xapi_t *pApi, xapi_session_t *pSession)
         return XEVENTS_DISCONNECT;
     }
 
-    switch (pSession->eType)
-    {
-        case XAPI_HTTP: return XAPI_HandleHTTP(pApi, pSession);
-        case XAPI_MDTP: return XAPI_HandleMDTP(pApi, pSession);
-        case XAPI_SOCK: return XAPI_HandleRAW(pApi, pSession);
-        case XAPI_WS: return XAPI_HandleWS(pApi, pSession);
-        default: break;
-    }
-
-    return XEVENTS_DISCONNECT;
+    return XAPI_DispatchBuffer(pApi, pSession);
 }
 
 /* One TLS record carries up to 16 KiB of plaintext, so a single read into the
@@ -1685,8 +1709,8 @@ static int XAPI_ReadOnce(xapi_t *pApi, xapi_session_t *pSession)
    back to the poller.
 
    XAPI_SSL_DRAIN_MAX only exists so one very busy session cannot monopolise the
-   loop; OpenSSL decrypts a single record per read, so four passes already clear
-   the largest possible one and the limit is never reached in practice. */
+   loop. OpenSSL decrypts a single record per read, so four passes already clear
+   the largest possible one and the limit is actually never reached in practice. */
 static int XAPI_Read(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pSession != NULL), XEVENTS_DISCONNECT);
@@ -1821,6 +1845,9 @@ static int XAPI_Write(xapi_t *pApi, xapi_session_t *pSession)
         {
             pSession->bHandshakeStart = XFALSE;
             pSession->bHandshakeDone = XTRUE;
+
+            /* An upgrade and its first frame can arrive in the same read. */
+            if (pSession->rxBuffer.nUsed) nStatus = XAPI_ProcessBuffered(pSession);
         }
     }
 
@@ -2320,7 +2347,6 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     if (XAPI_ServiceCb(pApi, pSession, XAPI_CB_LISTENING) < 0)
     {
         XEvents_Delete(pEvents, pSession->pEvData);
-        pSession->pEvData = NULL;
         return XSTDERR;
     }
 
@@ -2400,7 +2426,6 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     if (XAPI_ServiceCb(pApi, pSession, XAPI_CB_CONNECTED) < 0)
     {
         XEvents_Delete(pEvents, pSession->pEvData);
-        pSession->pEvData = NULL;
         return XSTDERR;
     }
 
@@ -2417,6 +2442,7 @@ XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     xapi_session_t *pSession = XAPI_NewData(pApi, pEndpt->eType);
     if (pSession == NULL)
     {
+        xclosesock(pEndpt->nFD);
         XAPI_ErrorCb(pApi, NULL, XAPI_SELF, XAPI_ERR_ALLOC);
         return XSTDERR;
     }
@@ -2430,6 +2456,7 @@ XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     pSession->eRole = pEndpt->eRole;
 
     uint32_t nFlags = XSOCK_EVENT | XSOCK_NB;
+    if (pEndpt->eRole == XAPI_SERVER) nFlags |= XSOCK_SERVER;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
     if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
     else nFlags |= XSOCK_TCP;
@@ -2460,7 +2487,6 @@ XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     if (XAPI_ServiceCb(pApi, pSession, XAPI_CB_REGISTERED) < 0)
     {
         XEvents_Delete(pEvents, pSession->pEvData);
-        pSession->pEvData = NULL;
         return XSTDERR;
     }
 

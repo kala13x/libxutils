@@ -134,13 +134,14 @@ int XLink_ParseUnix(xlink_t *pLink, const char *pInput)
         nSockLen++;
     }
 
-    if (!nSockLen) return XSTDERR;
+    if (!nSockLen || nSockLen >= sizeof(pLink->sHost) || nSockLen >= sizeof(pLink->sAddr)) return XSTDERR;
     xstrncpys(pLink->sHost, sizeof(pLink->sHost), pPath, nSockLen);
     xstrncpys(pLink->sAddr, sizeof(pLink->sAddr), pPath, nSockLen);
 
     if (nUriPos > 0)
     {
         size_t nLeft = strlen(&pPath[nUriPos]);
+        if (nLeft >= sizeof(pLink->sUri)) return XSTDERR;
         if (nLeft > 0) xstrncpys(pLink->sUri, sizeof(pLink->sUri), &pPath[nUriPos], nLeft);
     }
 
@@ -182,6 +183,7 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
     int nTokenLen = xstrsrc(pInput, "://");
     if (nTokenLen > 0)
     {
+        if ((size_t)nTokenLen >= sizeof(pLink->sProtocol)) return XSTDERR;
         xstrncpys(pLink->sProtocol, sizeof(pLink->sProtocol), pInput, nTokenLen);
         xstrcase(pLink->sProtocol, XSTR_LOWER);
         nPosit += (size_t)nTokenLen + 3;
@@ -202,22 +204,18 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
 
     if (nAtPos < nAuthorityEnd && nAtPos > nPosit)
     {
-        nTokenLen = (int)(nAtPos - nPosit);
-        xstrncpys(pLink->sUser, sizeof(pLink->sUser), &pInput[nPosit], nTokenLen);
-
-        int nUserLen = xstrnsrc(pLink->sUser, strlen(pLink->sUser), ":", 0);
-        if (nUserLen >= 0)
+        size_t nUserLen = nAtPos - nPosit;
+        const char *pColon = memchr(pInput + nPosit, ':', nUserLen);
+        if (pColon != NULL)
         {
-            nUserLen++;
-            if (nUserLen < nTokenLen)
-            {
-                size_t nPassLen = (size_t)nTokenLen - (size_t)nUserLen;
-                xstrncpys(pLink->sPass, sizeof(pLink->sPass), &pLink->sUser[nUserLen], nPassLen);
-            }
-
-            size_t nTermPos = XSTD_MIN(nUserLen - 1, nTokenLen);
-            pLink->sUser[nTermPos] = XSTR_NUL;
+            nUserLen = (size_t)(pColon - pInput) - nPosit;
+            size_t nPassLen = nAtPos - (size_t)(pColon - pInput) - 1;
+            if (nPassLen >= sizeof(pLink->sPass)) return XSTDERR;
+            xstrncpys(pLink->sPass, sizeof(pLink->sPass), pColon + 1, nPassLen);
         }
+
+        if (nUserLen >= sizeof(pLink->sUser)) return XSTDERR;
+        xstrncpys(pLink->sUser, sizeof(pLink->sUser), pInput + nPosit, nUserLen);
 
         XLink_DecodeUrlComponent(pLink->sUser);
         XLink_DecodeUrlComponent(pLink->sPass);
@@ -232,6 +230,7 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
     nTokenLen = xstrnsrc(pInput, nLength, "/", nPosit);
     if (nTokenLen > 0)
     {
+        if ((size_t)nTokenLen >= sizeof(pLink->sHost)) return XSTDERR;
         xstrncpys(pLink->sHost, sizeof(pLink->sHost), &pInput[nPosit], nTokenLen);
         nPosit += nTokenLen;
     }
@@ -242,6 +241,7 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
     }
 
     size_t nLeft = (nPosit < nLength) ? (nLength - nPosit) : 0;
+    if (nLeft >= nDstSize) return XSTDERR;
     if (nLeft > 0) xstrncpys(pDst, nDstSize, &pInput[nPosit], nLeft);
 
     size_t nAddrLen = strlen(pLink->sHost);
@@ -249,12 +249,22 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
 
     if (nTokenLen > 0)
     {
-        nTokenLen++;
-        if (nTokenLen < (int)nAddrLen) pLink->nPort = atoi(&pLink->sHost[nTokenLen]);
-        nAddrLen = XSTD_MIN(nAddrLen, (size_t)nTokenLen - 1);
+        const char *pPort = pLink->sHost + nTokenLen + 1;
+        if (*pPort == XSTR_NUL) return XSTDERR;
+
+        unsigned int nPort = 0;
+        for (const char *pDigit = pPort; *pDigit != XSTR_NUL; pDigit++)
+        {
+            if (*pDigit < '0' || *pDigit > '9') return XSTDERR;
+            nPort = nPort * 10 + (unsigned int)(*pDigit - '0');
+            if (nPort > UINT16_MAX) return XSTDERR;
+        }
+
+        pLink->nPort = (int)nPort;
+        nAddrLen = (size_t)nTokenLen;
     }
 
-    if (!pLink->nPort)
+    if (nTokenLen <= 0)
     {
         int nPort = XAddr_GetDefaultPort(pLink->sProtocol);
         if (nPort > 0)

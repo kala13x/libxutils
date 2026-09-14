@@ -233,6 +233,9 @@ XSTATUS XAPI_EnableEvent(xapi_session_t *pData, int nEvent);
 XSTATUS XAPI_SetEvents(xapi_session_t *pData, int nEvents);
 size_t XAPI_GetEventCount(xapi_t *pApi);
 
+/* Dispatch already buffered input after selecting/changing its protocol. No socket read.
+   Returns XAPI_CONTINUE, XAPI_RELOOP or XAPI_DISCONNECT; the caller owns disconnection. */
+XSTATUS XAPI_ProcessBuffered(xapi_session_t *pSession);
 XSTATUS XAPI_RespondHTTP(xapi_session_t *pSession, int nCode, xapi_status_t eStatus);
 XSTATUS XAPI_AuthorizeHTTP(xapi_session_t *pSession, const char *pToken, const char *pKey);
 

@@ -405,8 +405,16 @@ xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc)
         if (pSrc->pName != NULL) return XJSON_ERR_INVALID;
 
         xarray_t *pArray = (xarray_t*)pDst->pData;
-        int nStatus = XArray_AddData(pArray, (void*)pSrc, 0);
-        return nStatus < 0 ? XJSON_ERR_ALLOC : XJSON_ERR_NONE;
+
+        /* XArray_Add clears its item on failure. Transfer the JSON child only
+           after insertion succeeds, so failed additions remain caller-owned. */
+        xarray_data_t *pItem = XArray_NewData(pArray, NULL, 0, 0);
+        if (pItem == NULL) return XJSON_ERR_ALLOC;
+
+        if (XArray_Add(pArray, pItem) < 0) return XJSON_ERR_ALLOC;
+        pItem->pData = pSrc;
+
+        return XJSON_ERR_NONE;
     }
 
     return XJSON_ERR_INVALID;

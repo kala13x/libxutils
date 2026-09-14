@@ -443,10 +443,9 @@ size_t xstrncpy(char *pDst, size_t nSize, const char* pSrc)
 
 size_t xstrncpys(char *pDst, size_t nDstSize, const char *pSrc, size_t nSrcLen)
 {
-    xstrnul(pDst);
-    if (pDst == NULL || pSrc == NULL || !nDstSize) return 0;
-    size_t nCopySize = XSTD_MIN(nSrcLen, nDstSize - 1);
-    if (nCopySize) memcpy(pDst, pSrc, nCopySize);
+    if (pDst == NULL || !nDstSize) return 0;
+    size_t nCopySize = pSrc != NULL ? XSTD_MIN(nSrcLen, nDstSize - 1) : 0;
+    if (nCopySize) memmove(pDst, pSrc, nCopySize);
     pDst[nCopySize] = XSTR_NUL;
     return nCopySize;
 }
@@ -790,7 +789,17 @@ int xstrnsrc(const char *pStr, size_t nLen, const char *pSrc, size_t nPos)
 {
     if (pStr == NULL || pSrc == NULL ||
         nPos >= nLen) return XSTDERR;
-    return xstrsrc(&pStr[nPos], pSrc);
+
+    size_t nSearch = strlen(pSrc);
+    if (nSearch > nLen - nPos) return XSTDERR;
+
+    for (size_t i = nPos; i <= nLen - nSearch; i++)
+    {
+        if (memcmp(pStr + i, pSrc, nSearch) == 0)
+            return (int)(i - nPos);
+    }
+
+    return XSTDERR;
 }
 
 int xstrsrcb(const char *pStr, size_t nLength, const char *pSrc)
@@ -1276,13 +1285,22 @@ int XString_Set(xstring_t *pString, char *pData, size_t nLength)
 
 int XString_Add(xstring_t *pString, const char *pData, size_t nLength)
 {
+    if (pString == NULL || (pData == NULL && nLength)) return XSTDERR;
     if (!nLength) return (int)pString->nLength;
-    else if (XString_Increase(pString, nLength + 1) <= 0) return XSTDERR;
-    size_t nLeft = XSTD_MIN(nLength, pString->nSize - pString->nLength);
+    if (nLength >= INT_MAX || pString->nLength > INT_MAX - nLength - 1) return XSTDERR;
 
-    memcpy(&pString->pData[pString->nLength], pData, nLeft);
-    pString->nLength += nLeft;
+    uintptr_t nSource = (uintptr_t)pData, nBase = (uintptr_t)pString->pData;
+    xbool_t bAlias = pString->pData && nSource >= nBase && nSource - nBase <= pString->nLength;
+    size_t nOffset = bAlias ? (size_t)(nSource - nBase) : 0;
+
+    if (bAlias && nLength > pString->nLength - nOffset) return XSTDERR;
+    if (XString_Increase(pString, nLength + 1) <= 0) return XSTDERR;
+    if (bAlias) pData = pString->pData + nOffset;
+
+    memmove(pString->pData + pString->nLength, pData, nLength);
+    pString->nLength += nLength;
     pString->pData[pString->nLength] = XSTR_NUL;
+
     return (int)pString->nLength;
 }
 
@@ -1325,17 +1343,36 @@ int XString_Copy(xstring_t *pString, xstring_t *pSrc)
 
 int XString_Insert(xstring_t *pString, size_t nPosit, const char *pData, size_t nLength)
 {
+    if (pString == NULL || (pData == NULL && nLength)) return XSTDERR;
     if (nPosit >= pString->nLength) return XString_Add(pString, pData, nLength);
-    else if (XString_Increase(pString, nLength + 1) <= 0) return XSTDERR;
 
-    char *pOffset = &pString->pData[nPosit];
-    size_t nTailSize = pString->nLength - nPosit + 1;
+    if (!nLength) return (int)pString->nLength;
+    if (nLength >= INT_MAX || pString->nLength > INT_MAX - nLength - 1) return XSTDERR;
 
-    memmove(pOffset + nLength, pOffset, nTailSize);
+    char *pCopy = NULL;
+    uintptr_t nSource = (uintptr_t)pData, nBase = (uintptr_t)pString->pData;
+    if (pString->pData && nSource >= nBase && nSource - nBase <= pString->nLength)
+    {
+        if (nLength > pString->nLength - (size_t)(nSource - nBase)) return XSTDERR;
+        pCopy = (char*)malloc(nLength);
+        if (pCopy == NULL) return XSTDERR;
+
+        memcpy(pCopy, pData, nLength);
+        pData = pCopy;
+    }
+
+    if (XString_Increase(pString, nLength + 1) <= 0)
+    {
+        free(pCopy);
+        return XSTDERR;
+    }
+
+    char *pOffset = pString->pData + nPosit;
+    memmove(pOffset + nLength, pOffset, pString->nLength - nPosit + 1);
     memcpy(pOffset, pData, nLength);
+    free(pCopy);
 
     pString->nLength += nLength;
-    pString->pData[pString->nLength] = XSTR_NUL;
     return (int)pString->nLength;
 }
 
@@ -1507,15 +1544,21 @@ int XString_Token(xstring_t *pString, xstring_t *pDst, size_t nPosit, const char
 
 int XString_Replace(xstring_t *pString, const char *pRep, const char *pWith)
 {
-    if (pString == NULL || !pString->nLength) return XSTDERR;
+    if (pString == NULL || !pString->nLength || !xstrused(pRep) || pWith == NULL) return XSTDERR;
+
     size_t nWithLen = strlen(pWith);
     size_t nRepLen = strlen(pRep);
     int nPos = 0;
 
-    while ((nPos = XString_Search(pString, nPos, pRep)) >= 0)
+    int nOffset;
+    while ((nOffset = XString_Search(pString, nPos, pRep)) >= 0)
     {
+        nPos += nOffset;
         XString_Remove(pString, nPos, nRepLen);
-        XString_Insert(pString, nPos, pWith, nWithLen);
+
+        if (XString_Insert(pString, nPos, pWith, nWithLen) < 0)
+            return XSTDERR;
+
         nPos += (int)nWithLen;
     }
 

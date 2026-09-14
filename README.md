@@ -328,3 +328,13 @@ After building the sources in `tools/`, run `sudo make install` to install:
 - `xsrc` - advanced file search CLI tool
 
 Run each tool with `-h` to see usage and version information.
+
+## Standalone regression tests
+
+Build and run the library regression suite without installing the library or building an application:
+
+```sh
+./tests/run-regressions.sh native
+./tests/run-regressions.sh asan
+./tests/run-regressions.sh valgrind
+```

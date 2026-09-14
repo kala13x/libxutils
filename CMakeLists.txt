@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(libxutils LANGUAGES C)
 
+option(XUTILS_BUILD_TESTS "Build libxutils regression tests" OFF)
+option(XUTILS_BUILD_FUZZERS "Build the Clang libFuzzer parser target (requires tests)" OFF)
+option(XUTILS_TEST_COVERAGE "Build regression coverage without optimization" OFF)
+
 if (MSVC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /O2 /W3")
 elseif(WIN32)
@@ -87,6 +91,22 @@ add_library(xutils STATIC
     ./src/sys/srch.c
     ./src/sys/xtime.c
 )
+
+if(XUTILS_BUILD_TESTS)
+    include(CTest)
+    enable_testing()
+    if(XUTILS_TEST_COVERAGE AND NOT MSVC)
+        target_compile_options(xutils PRIVATE -O0)
+    endif()
+    target_link_libraries(xutils PUBLIC Threads::Threads)
+    if(OpenSSL_FOUND)
+        target_link_libraries(xutils PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    endif()
+    if(UNIX)
+        target_link_libraries(xutils PUBLIC m)
+    endif()
+    add_subdirectory(tests)
+endif()
 
 install(TARGETS xutils DESTINATION lib)
 

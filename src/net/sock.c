@@ -848,7 +848,9 @@ void XSock_Close(xsock_t *pSock)
 
     if (pSock && pSock->nFD != XSOCK_INVALID)
     {
-        shutdown(pSock->nFD, XSHUT_RDWR);
+        /* A listening socket can be inherited by other worker processes. Closing
+           this descriptor must not shut down their shared listening socket. */
+        if (!XFLAGS_CHECK(pSock->nFlags, XSOCK_SERVER)) shutdown(pSock->nFD, XSHUT_RDWR);
         xclosesock(pSock->nFD);
         pSock->nFD = XSOCK_INVALID;
     }
@@ -1093,6 +1095,12 @@ int XSock_Recv(xsock_t *pSock, void* pData, size_t nSize)
     if (pSock->nType != SOCK_DGRAM) nRecvSize = recv(pSock->nFD, pData, (int)nSize, XMSG_NOSIGNAL);
     else nRecvSize = recvfrom(pSock->nFD, pData, (int)nSize, 0, pSockAddr, &nSockAddrLen);
 
+    if (nRecvSize < 0 && XSock_IsNB(pSock) && XSOCK_WOULDBLOCK(XSOCK_ERRNO()))
+    {
+        pSock->eStatus = XSOCK_WANT_READ;
+        return nRecvSize;
+    }
+
     if (nRecvSize <= 0)
     {
         if (!nRecvSize) pSock->eStatus = XSOCK_EOF;
@@ -1147,6 +1155,12 @@ int XSock_Send(xsock_t *pSock, const void *pData, size_t nLength)
     if (pSock->nType != SOCK_DGRAM) nSent = send(pSock->nFD, pData, (int)nLength, XMSG_NOSIGNAL);
     else nSent = sendto(pSock->nFD, pData, (int)nLength, XMSG_NOSIGNAL, pSockAddr, nAddrLen);
 
+    if (nSent < 0 && XSock_IsNB(pSock) && XSOCK_WOULDBLOCK(XSOCK_ERRNO()))
+    {
+        pSock->eStatus = XSOCK_WANT_WRITE;
+        return nSent;
+    }
+
     if (nSent <= 0)
     {
         pSock->eStatus = XSOCK_ERR_SEND;
@@ -1175,6 +1189,12 @@ int XSock_Read(xsock_t *pSock, void *pData, size_t nSize)
     nReadSize = read(pSock->nFD, pData, nSize);
 #endif
 
+    if (nReadSize < 0 && XSock_IsNB(pSock) && XSOCK_WOULDBLOCK(XSOCK_ERRNO()))
+    {
+        pSock->eStatus = XSOCK_WANT_READ;
+        return nReadSize;
+    }
+
     if (nReadSize <= 0)
     {
         if (!nReadSize) pSock->eStatus = XSOCK_EOF;
@@ -1198,6 +1218,12 @@ int XSock_Write(xsock_t *pSock, const void *pData, size_t nLength)
     nBytes = XSock_Send(pSock, pData, nLength);
 #else
     nBytes = write(pSock->nFD, pData, nLength);
+    if (nBytes < 0 && XSock_IsNB(pSock) && XSOCK_WOULDBLOCK(XSOCK_ERRNO()))
+    {
+        pSock->eStatus = XSOCK_WANT_WRITE;
+        return nBytes;
+    }
+
     if (nBytes <= 0)
     {
         pSock->eStatus = XSOCK_ERR_WRITE;
@@ -1244,6 +1270,10 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
         XSock_Close(pNewSock);
         return XSOCK_INVALID;
     }
+
+    /* TLS negotiation must obey a nonblocking listener before SSL_accept reads
+       any ClientHello bytes; otherwise one stalled client stops the worker. */
+    if (XSock_IsNB(pSock) && XSock_NonBlock(pNewSock, XTRUE) == XSOCK_INVALID) return XSOCK_INVALID;
 
 #ifdef XSOCK_USE_SSL
     SSL_CTX* pSSLCtx = XSock_GetSSLCTX(pSock);
@@ -2280,6 +2310,11 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
 
     if (xstrused(pName)) xstrncpy(pSock->sName, sizeof(pSock->sName), pName);
     xbool_t bReuseAddr = XFLAGS_CHECK(pSock->nFlags, XSOCK_REUSEADDR);
+
+    /* A full Unix accept queue must fail promptly instead of blocking connect.
+       Internet client connection setup retains its existing behavior. */
+    if (XFLAGS_CHECK(nFlags, XSOCK_UNIX) && XFLAGS_CHECK(nFlags, XSOCK_NB) &&
+        XSock_NonBlock(pSock, XTRUE) == XSOCK_INVALID) return XSOCK_INVALID;
 
     if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock, pAddr, nFdMax);
     else if (pSock->nType == SOCK_DGRAM) XSock_SetupDgram(pSock, bReuseAddr);

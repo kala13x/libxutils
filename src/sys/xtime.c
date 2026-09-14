@@ -245,7 +245,7 @@ size_t XTime_ToHTTP(const xtime_t *pTime, char *pStr, size_t nSize)
 #else
     gmtime_r(&rawTime, &timeinfo);
 #endif
-    return strftime(pStr, nSize, "%a, %d %b %G %H:%M:%S GMT", &timeinfo);
+    return strftime(pStr, nSize, "%a, %d %b %Y %H:%M:%S GMT", &timeinfo);
 }
 
 size_t XTime_ToISO(const xtime_t *pTime, char *pStr, size_t nSize)

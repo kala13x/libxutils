@@ -38,9 +38,9 @@ xjwt_alg_t XJWT_GetAlg(const char *pAlgStr)
 {
     XCHECK(pAlgStr, XJWT_ALG_INVALID);
 #ifdef XCRYPT_USE_SSL
-    if (!strncmp(pAlgStr, "RS256", 5)) return XJWT_ALG_RS256;
+    if (!strcmp(pAlgStr, "RS256")) return XJWT_ALG_RS256;
 #endif
-    if (!strncmp(pAlgStr, "HS256", 5)) return XJWT_ALG_HS256;
+    if (!strcmp(pAlgStr, "HS256")) return XJWT_ALG_HS256;
     return XJWT_ALG_INVALID;
 }
 
@@ -106,7 +106,7 @@ XSTATUS XJWT_AddPayload(xjwt_t *pJWT, const char *pPayload, size_t nPayloadLen, 
     if (bIsEncoded)
     {
         pJWT->pPayload = (char*)malloc(nPayloadLen + 1);
-        XCHECK(pPayload, XSTDERR);
+        XCHECK(pJWT->pPayload, XSTDERR);
 
         memcpy(pJWT->pPayload, pPayload, nPayloadLen);
         pJWT->pPayload[nPayloadLen] = '\0';
@@ -304,7 +304,7 @@ XSTATUS XJWT_CreateSignature(xjwt_t *pJWT, const uint8_t *pSecret, size_t nSecre
 
     char *pJointData = XJWT_CreateJoint(pJWT, &nJointLength);
     XCHECK((pJointData && nJointLength), XSTDERR);
-    XCHECK((XJWT_GetAlgorithm(pJWT) != XJWT_ALG_INVALID), XSTDERR);
+    XCHECK_FREE((XJWT_GetAlgorithm(pJWT) != XJWT_ALG_INVALID), pJointData, XSTDERR);
 
     size_t nOutLen = XJWT_HASH_LENGTH;
     uint8_t hash[XJWT_HASH_LENGTH];
@@ -391,7 +391,13 @@ XSTATUS XJWT_VerifyHS256(xjwt_t *pJWT, const char *pSignature, size_t nSignature
 
     XCHECK((pSignature && nSignatureLen &&  pSecret && nSecretLen), XSTDINV);
     XCHECK(XJWT_GetSignature(pJWT, pSecret, nSecretLen, XFALSE, NULL), XSTDERR);
-    pJWT->bVerified = !strncmp(pJWT->pSignature, pSignature, pJWT->nSignatureLen);
+    XCHECK((nSignatureLen == pJWT->nSignatureLen), XSTDNON);
+    volatile uint8_t nDifference = 0;
+
+    for (size_t i = 0; i < nSignatureLen; i++)
+        nDifference |= (uint8_t)pJWT->pSignature[i] ^ (uint8_t)pSignature[i];
+
+    pJWT->bVerified = nDifference == 0 ? XTRUE : XFALSE;
     return pJWT->bVerified ? XSTDOK : XSTDNON;
 }
 
@@ -440,31 +446,33 @@ XSTATUS XJWT_Parse(xjwt_t *pJWT, const char *pJWTStr, size_t nLength, const uint
     XJWT_Init(pJWT, XJWT_ALG_INVALID);
     XCHECK((pJWTStr && nLength), XSTDINV);
 
-    xarray_t *pArray = xstrsplit(pJWTStr, ".");
-    XCHECK(pArray, XSTDERR);
+    /* Compact JWTs have exactly three nonempty base64url segments. Parse the
+       supplied slice, without requiring or searching past a NUL terminator. */
+    size_t nDots[2], nDotCount = 0;
+    for (size_t i = 0; i < nLength; i++)
+    {
+        unsigned char cByte = (unsigned char)pJWTStr[i];
+        if (cByte == '.')
+        {
+            XCHECK((nDotCount < 2), XSTDERR);
+            nDots[nDotCount++] = i;
+        }
+        else if (!((cByte >= 'a' && cByte <= 'z') || (cByte >= 'A' && cByte <= 'Z') ||
+                   (cByte >= '0' && cByte <= '9') || cByte == '-' || cByte == '_')) return XSTDERR;
+    }
 
-    const char *pHeader = (const char *)XArray_GetData(pArray, 0);
-    const char *pPayload = (const char *)XArray_GetData(pArray, 1);
-    const char *pSignature = (const char *)XArray_GetData(pArray, 2);
-    XCHECK_CALL((pHeader && pPayload && pSignature), XArray_Destroy, pArray, XSTDERR);
+    XCHECK((nDotCount == 2 && nDots[0] > 0 && nDots[1] > nDots[0] + 1 && nDots[1] < nLength - 1), XSTDERR);
+    XSTATUS nStatus = XJWT_AddHeader(pJWT, pJWTStr, nDots[0], XTRUE);
+    XCHECK((nStatus == XSTDOK), XSTDERR);
 
-    XSTATUS nStatus = XJWT_AddHeader(pJWT, pHeader, strlen(pHeader), XTRUE);
-    XCHECK_CALL((nStatus == XSTDOK), XArray_Destroy, pArray, XSTDERR);
-
-    nStatus = XJWT_AddPayload(pJWT, pPayload, strlen(pPayload), XTRUE);
-    XCHECK_CALL((nStatus == XSTDOK), XArray_Destroy, pArray, XSTDERR);
-
-    XCHECK_CALL((XJWT_GetHeader(pJWT, XFALSE, NULL)), XArray_Destroy, pArray, XSTDERR);
-    XCHECK_CALL((XJWT_GetPayload(pJWT, XFALSE, NULL)), XArray_Destroy, pArray, XSTDERR);
-    XCHECK_CALL((XJWT_GetAlgorithm(pJWT) != XJWT_ALG_INVALID), XArray_Destroy, pArray, XSTDERR);
+    nStatus = XJWT_AddPayload(pJWT, pJWTStr + nDots[0] + 1, nDots[1] - nDots[0] - 1, XTRUE);
+    XCHECK((nStatus == XSTDOK), XSTDERR);
+    XCHECK((XJWT_GetAlgorithm(pJWT) != XJWT_ALG_INVALID), XSTDERR);
 
     if (pSecret != NULL && nSecretLen > 0)
     {
-        size_t nSignatureSize = XArray_GetSize(pArray, 2);
-        XCHECK_CALL(nSignatureSize, XArray_Destroy, pArray, XSTDERR);
-        nStatus = XJWT_Verify(pJWT, pSignature, nSignatureSize, pSecret, nSecretLen);
+        nStatus = XJWT_Verify(pJWT, pJWTStr + nDots[1] + 1, nLength - nDots[1] - 1, pSecret, nSecretLen);
     }
 
-    XArray_Destroy(pArray);
     return nStatus;
 }

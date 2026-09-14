@@ -1,0 +1,57 @@
+name: Library regressions
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: native
+            compiler: gcc
+          - mode: native
+            compiler: clang
+          - mode: no-ssl
+            compiler: gcc
+          - mode: asan
+            compiler: clang
+          - mode: valgrind
+            compiler: gcc
+          - mode: tsan
+            compiler: clang
+          - mode: fuzz
+            compiler: clang
+          - mode: coverage
+            compiler: gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake gcc clang libssl-dev valgrind python3
+      - name: Run standalone library regressions
+        env:
+          CC: ${{ matrix.compiler }}
+          FUZZ_TIME: 60
+        run: ./tests/run-regressions.sh "${{ matrix.mode }}"
+      - name: Report line and branch coverage
+        if: matrix.mode == 'coverage'
+        run: ./tests/report-coverage.py
+      - name: Keep coverage report
+        if: matrix.mode == 'coverage' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: library-coverage
+          path: build/regressions-coverage/coverage-report/
+      - name: Keep failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regressions-${{ matrix.mode }}-${{ matrix.compiler }}
+          path: |
+            build/regressions-*/Testing/Temporary/
+            build/regressions-*/artifacts/
+          if-no-files-found: ignore
