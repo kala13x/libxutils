@@ -42,8 +42,8 @@ case "$MODE" in
         ;;
     tsan) ctest --test-dir "$TEST_BUILD" --output-on-failure -R '(thread|type)_regression' "$@" ;;
     fuzz)
-        mkdir -p "$TEST_BUILD/corpus" "$TEST_BUILD/artifacts"
-        cp "$TEST_ROOT/tests/fuzz-corpus/"* "$TEST_BUILD/corpus/"
+        mkdir -p "$TEST_BUILD/artifacts"
+        "$TEST_BUILD/tests/fuzz_corpus" "$TEST_BUILD/corpus"
         "$TEST_BUILD/tests/fuzz_parsers" "$TEST_BUILD/corpus" -max_total_time="${FUZZ_TIME:-60}" \
             -max_len=65536 -timeout=5 -rss_limit_mb=2048 -artifact_prefix="$TEST_BUILD/artifacts/" "$@"
         ;;

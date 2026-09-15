@@ -69,5 +69,3 @@ vgcore.*
 .vscode/
 .idea/
 
-# Tests
-./tests/fuzz-corpus

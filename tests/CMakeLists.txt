@@ -84,6 +84,10 @@ if(XUTILS_BUILD_FUZZERS)
     add_executable(fuzz_parsers fuzz_parsers.c)
     target_link_libraries(fuzz_parsers PRIVATE xutils)
     target_link_options(fuzz_parsers PRIVATE -fsanitize=fuzzer,address,undefined)
+    # Seeds are generated from source instead of being checked in, so the fuzz
+    # run has a corpus on a clean tree and the selector bytes stay in sync.
+    add_executable(fuzz_corpus fuzz_corpus.c)
+    target_link_libraries(fuzz_corpus PRIVATE xutils)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     xutils_regression(allocation_regression allocation json_cleanup http_header buffer_preservation endpoint_ownership)
