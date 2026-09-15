@@ -14,6 +14,11 @@ endfunction()
 xutils_regression(jwt_regression data roundtrip wrong_secret tampering boundaries malformed
     algorithms segments rs256)
 
+# rs256 generates RSA keys, so how long it takes is probabilistic in the same
+# way the rsa_regression cases are. The limit is there for the tail, not the
+# mean: under valgrind on a shared runner the search can run long.
+set_tests_properties(jwt_regression.rs256 PROPERTIES TIMEOUT 300)
+
 if(UNIX)
     add_executable(api_regression api_regression.c)
     target_link_libraries(api_regression PRIVATE xutils)

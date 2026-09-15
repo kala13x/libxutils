@@ -389,8 +389,12 @@ static int XTest_rs256(void)
         return 77;
     }
 
+    /* 1024 bits, not 2048: what is under test is the RS256 plumbing, and
+       key generation is a probabilistic prime search whose tail dominates
+       the runtime of this case - badly so under valgrind on a shared
+       runner. The same reason the RSA cases were shrunk. */
     xrsa_ctx_t key;
-    if (XRSA_GenerateKeys(&key, 2048, 65537) != XSTDOK)
+    if (XRSA_GenerateKeys(&key, 1024, 65537) != XSTDOK)
     {
         XRSA_Destroy(&key);
         printf("No RSA key could be generated, skipping\n");
@@ -430,7 +434,7 @@ static int XTest_rs256(void)
 
     /* A different key must not verify the same token. */
     xrsa_ctx_t other;
-    if (XRSA_GenerateKeys(&other, 2048, 65537) == XSTDOK)
+    if (XRSA_GenerateKeys(&other, 1024, 65537) == XSTDOK)
     {
         XJWT_Parse(&parsed, pToken, nTokenLen, (const uint8_t*)other.pPublicKey, other.nPubKeyLen);
         CHECK(parsed.bVerified == XFALSE, "Another key does not verify the token");

@@ -837,6 +837,21 @@ XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
  * handler the application installed and nothing is swallowed that was
  * already pending when the call started. The mask is per thread, so this
  * does not disturb anything running alongside. */
+#ifdef _WIN32
+/* Windows has no SIGPIPE at all: a send to a socket the peer has closed
+   comes back as an error, so there is nothing to suppress and the guard
+   compiles away. The type stays so the call sites need no conditionals. */
+typedef int xsock_nosigpipe_t;
+#define XSock_BlockSIGPIPE(pGuard)      ((void)(pGuard))
+#define XSock_RestoreSIGPIPE(pGuard)    ((void)(pGuard))
+#else
+
+/* sigtimedwait() is a POSIX realtime extension that Darwin does not ship,
+   so the drain below has a sigwait() path for it. */
+#if !defined(__APPLE__) && !defined(DARWIN)
+#define XSOCK_HAVE_SIGTIMEDWAIT 1
+#endif
+
 typedef struct {
     sigset_t oldSet;
     xbool_t bBlocked;
@@ -848,7 +863,6 @@ static void XSock_BlockSIGPIPE(xsock_nosigpipe_t *pGuard)
     pGuard->bBlocked = XFALSE;
     pGuard->bWasPending = XFALSE;
 
-#ifndef _WIN32
     sigset_t pipeSet, pending;
     sigemptyset(&pipeSet);
     sigaddset(&pipeSet, SIGPIPE);
@@ -859,12 +873,10 @@ static void XSock_BlockSIGPIPE(xsock_nosigpipe_t *pGuard)
 
     if (!pthread_sigmask(SIG_BLOCK, &pipeSet, &pGuard->oldSet))
         pGuard->bBlocked = XTRUE;
-#endif
 }
 
 static void XSock_RestoreSIGPIPE(xsock_nosigpipe_t *pGuard)
 {
-#ifndef _WIN32
     if (!pGuard->bBlocked) return;
 
     /* Only drain what this call raised: one that was already pending
@@ -878,19 +890,29 @@ static void XSock_RestoreSIGPIPE(xsock_nosigpipe_t *pGuard)
         sigemptyset(&pending);
         if (!sigpending(&pending) && sigismember(&pending, SIGPIPE))
         {
+#ifdef XSOCK_HAVE_SIGTIMEDWAIT
+            /* A zero timeout, so a signal another thread took first leaves
+               this returning EAGAIN rather than waiting for one that is
+               never coming. */
             struct timespec noWait;
             noWait.tv_sec = 0;
             noWait.tv_nsec = 0;
             while (sigtimedwait(&pipeSet, NULL, &noWait) < 0 && errno == EINTR);
+#else
+            /* Darwin has no sigtimedwait(). sigwait() is the portable stand
+               in here because the signal being drained was raised by this
+               thread's own write and is therefore pending on this thread,
+               with the signal blocked so nothing else can consume it. */
+            int nSignal = 0;
+            while (sigwait(&pipeSet, &nSignal) < 0 && errno == EINTR);
+#endif
         }
     }
 
     pthread_sigmask(SIG_SETMASK, &pGuard->oldSet, NULL);
-#else
-    (void)pGuard;
-#endif
 }
-#endif
+#endif /* _WIN32 */
+#endif /* XSOCK_USE_SSL */
 
 void XSock_Close(xsock_t *pSock)
 {
