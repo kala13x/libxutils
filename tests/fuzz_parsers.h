@@ -11,6 +11,8 @@ typedef enum {
     XFUZZ_TARGET_BASE64,
     XFUZZ_TARGET_JWT,
     XFUZZ_TARGET_URL,
+    XFUZZ_TARGET_MDTP,
+    XFUZZ_TARGET_RTP,
     XFUZZ_TARGET_COUNT
 } xfuzz_target_t;
 

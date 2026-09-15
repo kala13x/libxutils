@@ -82,4 +82,8 @@ static int XTest_siv_tampering(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(ecb_vector), XTEST_CASE(modes), XTEST_CASE(siv_tampering))
+XTEST_MAIN(
+    XTEST_CASE(ecb_vector),
+    XTEST_CASE(modes),
+    XTEST_CASE(siv_tampering)
+)

@@ -8,6 +8,8 @@
 #include "jwt.h"
 #include "base64.h"
 #include "addr.h"
+#include "mdtp.h"
+#include "rtp.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *pData, size_t nSize)
 {
@@ -58,6 +60,48 @@ int LLVMFuzzerTestOneInput(const uint8_t *pData, size_t nSize)
         XJWT_Init(&jwt, XJWT_ALG_HS256);
         XJWT_Parse(&jwt, (const char*)pData, nSize, NULL, 0);
         XJWT_Destroy(&jwt);
+    }
+    else if (nTarget == XFUZZ_TARGET_MDTP)
+    {
+        xpacket_t packet;
+        memset(&packet, 0, sizeof(packet));
+
+        if (XPacket_Parse(&packet, pData, nSize) == XPACKET_COMPLETE)
+        {
+            /* A completed parse must point its payload inside the input. */
+            const uint8_t *pPayload = packet.pPayload;
+            if (pPayload != NULL)
+            {
+                uintptr_t nOffset = (uintptr_t)pPayload - (uintptr_t)pData;
+                if (pPayload < pData || nOffset > nSize ||
+                    packet.header.nPayloadSize > nSize - nOffset) abort();
+            }
+        }
+
+        XPacket_Clear(&packet);
+    }
+    else if (nTarget == XFUZZ_TARGET_RTP)
+    {
+        xrtp_packet_t packet;
+        memset(&packet, 0, sizeof(packet));
+
+        int nParsed = XRTP_ParsePacket(&packet, (uint8_t*)pData, nSize);
+        if (nParsed > 0)
+        {
+            /* Everything the parser reports has to lie inside the input. */
+            if ((size_t)nParsed > nSize) abort();
+            if (packet.nPayloadSize < 0 || (size_t)packet.nPayloadSize > nSize) abort();
+            if (packet.nUnusedBytes < 0 || (size_t)packet.nUnusedBytes > nSize) abort();
+
+            if (packet.pPayload != NULL)
+            {
+                uintptr_t nOffset = (uintptr_t)packet.pPayload - (uintptr_t)pData;
+                if (packet.pPayload < pData || nOffset > nSize) abort();
+            }
+        }
+
+        xrtp_header_t header;
+        XRTP_ParseHeader(&header, pData, nSize);
     }
     else
     {

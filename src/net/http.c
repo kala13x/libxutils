@@ -233,9 +233,22 @@ static int XHTTP_HeaderWriteCb(xmap_pair_t *pPair, void *pContext)
 static int XHTTP_MapIt(xmap_pair_t *pPair, void *pContext)
 {
     xmap_t *pDstMap = (xmap_t*)pContext;
-    int nStatus = XMap_PutPair(pDstMap, pPair);
-    if (nStatus != XMAP_OK) return XMAP_STOP;
-    return nStatus;
+
+    /* The destination frees its own entries, so it has to own them. Storing
+       the source's pointers left the copy holding freed strings the moment
+       the source was cleared, and freed each of them twice after that. */
+    char *pKey = xstrdup((const char*)pPair->pKey);
+    char *pValue = xstrdup((const char*)pPair->pData);
+
+    if (pKey == NULL || pValue == NULL ||
+        XMap_Put(pDstMap, pKey, pValue) != XMAP_OK)
+    {
+        free(pValue);
+        free(pKey);
+        return XMAP_STOP;
+    }
+
+    return XMAP_OK;
 }
 
 int XHTTP_SetCallback(xhttp_t *pHttp, xhttp_cb_t callback, void *pCbCtx, uint16_t nCbTypes)
@@ -363,7 +376,7 @@ int XHTTP_Copy(xhttp_t *pDst, xhttp_t *pSrc)
     xbyte_buffer_t *pSrcBuff = &pSrc->rawData;
     xbyte_buffer_t *pDstBuff = &pDst->rawData;
 
-    if (XByteBuffer_Add(pDstBuff, pSrcBuff->pData, pSrcBuff->nUsed) < 0) return XSTDERR;
+    if (pSrcBuff->nUsed && XByteBuffer_Add(pDstBuff, pSrcBuff->pData, pSrcBuff->nUsed) < 0) return XSTDERR;
     xstrncpy(pDst->sUnixAddr, sizeof(pDst->sUnixAddr), pSrc->sUnixAddr);
     xstrncpy(pDst->sVersion, sizeof(pDst->sVersion), pSrc->sVersion);
     xstrncpy(pDst->sUri, sizeof(pDst->sUri), pSrc->sUri);
@@ -754,7 +767,22 @@ static size_t XHTTP_ParseVersion(xhttp_t *pHttp)
 {
     const char *pEndPos = (pHttp->eType == XHTTP_REQUEST) ? "\r" : " ";
     const char *pData = (const char *)pHttp->rawData.pData;
-    return xstrncuts(pHttp->sVersion, sizeof(pHttp->sVersion), pData, "HTTP/", pEndPos);
+
+    size_t nLength = xstrncuts(pHttp->sVersion, sizeof(pHttp->sVersion), pData, "HTTP/", pEndPos);
+    if (!nLength) return XSTDNON;
+
+    size_t i;
+    for (i = 0; i < nLength; i++)
+    {
+        char cByte = pHttp->sVersion[i];
+        if (cByte == '\r' || cByte == '\n' || cByte == ' ')
+        {
+            pHttp->sVersion[0] = XSTR_NUL;
+            return XSTDNON;
+        }
+    }
+
+    return nLength;
 }
 
 static uint16_t XHTTP_ParseCode(xhttp_t *pHttp)
@@ -776,7 +804,19 @@ static size_t XHTTP_ParseHeaderLength(const char *pHdrStr)
 static size_t XHTTP_GetContentLength(xhttp_t *pHttp)
 {
     const char *pHdr = XHTTP_GetHeader(pHttp, "Content-Length");
-    return (pHdr != NULL) ? atol(pHdr) : XSTDNON;
+    if (pHdr == NULL) return XSTDNON;
+
+    size_t i;
+    for (i = 0; pHdr[i] != XSTR_NUL; i++)
+        if (pHdr[i] < '0' || pHdr[i] > '9') return XSTDNON;
+
+    if (!i) return XSTDNON;
+
+    errno = 0;
+    unsigned long long nLength = strtoull(pHdr, NULL, 10);
+    if (errno == ERANGE) return XSTDNON;
+
+    return (size_t)nLength;
 }
 
 static xbool_t XHTTP_GetKeepAlive(xhttp_t *pHttp)
@@ -886,7 +926,12 @@ xhttp_status_t XHTTP_Parse(xhttp_t *pHttp)
         return XHTTP_StatusCb(pHttp, XHTTP_INVALID);
 
     if (pHttp->eType == XHTTP_RESPONSE)
+    {
         pHttp->nStatusCode = XHTTP_ParseCode(pHttp);
+        if (pHttp->nStatusCode < 100 ||
+            pHttp->nStatusCode > 599)
+            return XHTTP_StatusCb(pHttp, XHTTP_INVALID);
+    }
     else if (pHttp->eType == XHTTP_REQUEST)
         pHttp->eMethod = XHTTP_ParseMethod(pHttp);
 

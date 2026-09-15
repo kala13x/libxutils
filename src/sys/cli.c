@@ -24,16 +24,27 @@
 #define XCLI_WINDOW_COLUMNS_DEFAULT 80
 #define XCLI_WINDOW_ROWS_DEFAULT 24
 
+/* A terminal geometry is reported as a uint16 by the ioctl; anything
+   larger from the environment is garbage, not a very wide terminal. */
+#define XCLI_WINDOW_SIZE_MAX 65535
+
 #ifndef _WIN32
 static size_t XCLI_GetWindowSizeFallback(const char *pValue, size_t nDefault)
 {
     if (!xstrused(pValue)) return nDefault;
 
+    /* Only a plain decimal is accepted. strtoul() would otherwise wrap a
+       negative COLUMNS into a huge unsigned value, and that value becomes
+       a bar length and a fill loop bound further down. */
+    size_t i;
+    for (i = 0; pValue[i] != XSTR_NUL; i++)
+        if (pValue[i] < '0' || pValue[i] > '9') return nDefault;
+
     char *pEnd = NULL;
     unsigned long nParsed = strtoul(pValue, &pEnd, 10);
 
-    if (pEnd == pValue || (pEnd != NULL && *pEnd != XSTR_NUL) || !nParsed)
-        return nDefault;
+    if (pEnd == pValue || (pEnd != NULL && *pEnd != XSTR_NUL) ||
+        !nParsed || nParsed > XCLI_WINDOW_SIZE_MAX) return nDefault;
 
     return (size_t)nParsed;
 }
@@ -490,7 +501,11 @@ XSTATUS XCLIWin_Display(xcli_win_t *pWin)
             xarray_data_t *pData = XArray_Get(pLines, i);
             if (pData == NULL) continue;
 
+            /* RenderLine grows this buffer, so it has to start in a known
+               state the way the frame path below does. */
             xbyte_buffer_t lineBuff;
+            XByteBuffer_Init(&lineBuff, XSTDNON, XFALSE);
+
             if (XCLIWin_RenderLine(pWin, &lineBuff, pData) < 0)
             {
                 XArray_Clear(pLines);

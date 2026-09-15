@@ -82,4 +82,9 @@ static int XTest_nonregular_source(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(copy), XTEST_CASE(permissions), XTEST_CASE(directories), XTEST_CASE(nonregular_source))
+XTEST_MAIN(
+    XTEST_CASE(copy),
+    XTEST_CASE(permissions),
+    XTEST_CASE(directories),
+    XTEST_CASE(nonregular_source)
+)

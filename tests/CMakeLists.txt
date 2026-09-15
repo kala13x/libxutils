@@ -11,10 +11,8 @@ function(xutils_regression target category)
     endforeach()
 endfunction()
 
-add_executable(jwt_regression jwt_regression.c)
-target_link_libraries(jwt_regression PRIVATE xutils)
-add_test(NAME jwt_regression COMMAND jwt_regression)
-set_tests_properties(jwt_regression PROPERTIES TIMEOUT 120)
+xutils_regression(jwt_regression data roundtrip wrong_secret tampering boundaries malformed
+    algorithms segments)
 
 if(UNIX)
     add_executable(api_regression api_regression.c)
@@ -28,12 +26,19 @@ target_link_libraries(addr_regression PRIVATE xutils)
 add_test(NAME addr_regression COMMAND addr_regression)
 set_tests_properties(addr_regression PROPERTIES TIMEOUT 120)
 
-xutils_regression(event_regression net lifecycle modify callback_delete timers wakeup)
-xutils_regression(ws_regression net lengths partial coalesced invalid_wire creation_guards)
-xutils_regression(http_regression net partial pipeline headers basic_auth long_basic_auth reuse empty_body)
+xutils_regression(addr_url_regression net components scheme_case default_ports percent_decoding
+    parse_guards overlong unix_socket interfaces)
 
-xutils_regression(map_regression data lifecycle reference_model)
-xutils_regression(array_regression data lifecycle reference_model search_boundaries)
+xutils_regression(event_regression net lifecycle modify callback_delete timers wakeup status_strings
+    capacity lookup event_fd service_guards timer_lifecycle)
+xutils_regression(ws_regression net lengths partial coalesced invalid_wire creation_guards frame_types
+    masking control_frames extra_data allocation)
+xutils_regression(http_regression net partial pipeline headers basic_auth long_basic_auth reuse empty_body
+    code_strings content_length start_line assemble header_lookup limits callbacks lifecycle unix_and_auth)
+
+xutils_regression(map_regression data lifecycle reference_model operations iteration growth hashing)
+xutils_regression(array_regression data lifecycle reference_model search_boundaries sorting mutation
+    fixed_capacity search_agreement heap_array)
 xutils_regression(json_regression data
     parse_matrix parse_boundaries builders_and_writers generated_string_edges byte_boundaries error_states pool_and_stress root_array_and_api_boundaries)
 xutils_regression(json_limits_regression data boundaries)
@@ -44,28 +49,51 @@ if(OPENSSL_FOUND)
 endif()
 if(UNIX)
     xutils_regression(sock_timeout_regression net boundaries)
+    xutils_regression(sock_api_regression net address_conversion address_info status_strings
+        accessors buffers listener create_guards udp)
 endif()
 
-xutils_regression(hash_regression data collisions ownership)
-xutils_regression(list_regression data links rings stack_head)
+xutils_regression(hash_regression data collisions ownership operations distribution pairs)
+xutils_regression(list_regression data links rings stack_head push removal single_node insert_nodes ring_walk)
 xutils_regression(api_io_regression net partial_io callback_disconnect peer_eof websocket_fragments unexpected_continuation
     buffered_upgrade eof_with_data)
 xutils_regression(api_http_regression net http_partial http_pipeline auth_key auth_basic auth_short)
-xutils_regression(buf_regression data aliasing borrowed pointer_ownership ring_model)
+if(UNIX)
+    xutils_regression(api_ctl_regression net vocabulary init listen_connect endpoint_guards
+        timers workers buffers)
+endif()
+xutils_regression(buf_regression data aliasing borrowed pointer_ownership ring_model growth edit
+    accessors ownership_transfer heap_buffer data_buffer ring_boundaries)
 xutils_regression(str_regression data capacities dynamic split_replace)
+xutils_regression(xstring_regression data build edit transform substrings tokens construction colors)
+xutils_regression(str_ops_regression data split match compare search replace cut tokens
+    casing fill_and_trim duplicate concat colors random)
 xutils_regression(aes_regression crypt ecb_vector modes siv_tampering)
 if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "3.0")
     xutils_regression(aes_siv_regression crypt openssl_vectors)
 endif()
-xutils_regression(pool_regression sys alignment_growth reallocation overflow)
+xutils_regression(pool_regression sys alignment_growth reallocation overflow accounting exhaustion heap_pool)
 xutils_regression(thread_regression sys contention recursive invalid_start)
-xutils_regression(time_regression sys calendar serialization http_year)
-xutils_regression(crypt_regression crypt hex transforms dispatch)
+xutils_regression(sync_regression sys mutex recursive rwlock barrier task sleep atomics)
+xutils_regression(time_regression sys calendar serialization http_year formats parse_guards
+    conversions differences normalize clock)
+xutils_regression(crypt_regression crypt hex transforms dispatch cipher_names keyless_roundtrip
+    keyed_roundtrip digests casear multy hex_columns)
 if(OPENSSL_FOUND)
-    xutils_regression(rsa_regression crypt signatures encryption invalid_keys)
+    xutils_regression(rsa_regression crypt signatures encryption invalid_keys key_sizes cross_key
+        key_import key_files context size_limits)
 endif()
 if(UNIX)
     xutils_regression(xfs_regression sys copy permissions directories nonregular_source)
+    xutils_regression(xfs_ops_regression sys file_io handles lines load paths directories)
+    xutils_regression(srch_regression sys name_matching recursion criteria text_search callback entries guards)
+    xutils_regression(cli_regression sys window_size window_lines window_align window_display
+        progress_bounds progress_output progress_animation input terminal_modes)
+    xutils_regression(sig_regression sys register exit_handler errexit backtrace daemonize)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        xutils_regression(cpu_regression sys count affinity guards)
+        xutils_regression(mon_regression sys lifecycle sampling restart target_pid)
+    endif()
     xutils_regression(worker_sock_regression net listener_inheritance)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(NAME worker_sock_regression.unix_backlog COMMAND worker_sock_regression unix_backlog)
@@ -73,9 +101,15 @@ if(UNIX)
     endif()
 endif()
 
+if(UNIX)
+    xutils_regression(ntp_regression net request_reply no_reply zero_epoch guards)
+endif()
+xutils_regression(rtp_regression net header_fields header_guards csrc packet_blocks packet_guards assemble timestamp)
+xutils_regression(mdtp_regression net type_mapping assemble_parse parse_guards payload_size_lies header_fields create_guards lifecycle)
 xutils_regression(sock_regression net retry_read retry_write empty_and_eof)
-xutils_regression(log_regression sys filtering large_message)
-xutils_regression(type_regression sys float_bits concurrent)
+xutils_regression(log_regression sys filtering large_message severities flag_mask config
+    formatting file_output rotation throw callback_veto)
+xutils_regression(type_regression sys float_bits concurrent printable byte_units kb_units version)
 
 if(XUTILS_BUILD_FUZZERS)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

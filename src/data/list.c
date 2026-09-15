@@ -114,9 +114,15 @@ xlist_t* XList_RemoveTail(xlist_t *pList)
 xlist_t* XList_GetHead(xlist_t *pList)
 {
     if (pList == NULL) return NULL;
+    xlist_t *pStart = pList;
 
+    /* A ring has no head. Stop when the walk comes back to where it began
+       instead of following pPrev round it forever. */
     while (pList->pPrev != NULL)
+    {
         pList = pList->pPrev;
+        if (pList == pStart) return pStart;
+    }
 
     return pList;
 }
@@ -124,9 +130,14 @@ xlist_t* XList_GetHead(xlist_t *pList)
 xlist_t* XList_GetTail(xlist_t *pList)
 {
     if (pList == NULL) return NULL;
+    xlist_t *pStart = pList;
 
+    /* A ring has no tail, for the same reason XList_GetHead() has no head. */
     while (pList->pNext != NULL)
+    {
         pList = pList->pNext;
+        if (pList == pStart) return pStart;
+    }
 
     return pList;
 }

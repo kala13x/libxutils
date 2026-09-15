@@ -40,7 +40,7 @@ case "$MODE" in
         ctest --test-dir "$TEST_BUILD" -T memcheck --output-on-failure \
             --overwrite 'MemoryCheckCommandOptions=--leak-check=full --show-leak-kinds=definite,indirect --errors-for-leak-kinds=definite,indirect --track-origins=yes --error-exitcode=99' "$@"
         ;;
-    tsan) ctest --test-dir "$TEST_BUILD" --output-on-failure -R '(thread|type)_regression' "$@" ;;
+    tsan) ctest --test-dir "$TEST_BUILD" --output-on-failure -R '(thread|type|sync|mon)_regression' "$@" ;;
     fuzz)
         mkdir -p "$TEST_BUILD/artifacts"
         "$TEST_BUILD/tests/fuzz_corpus" "$TEST_BUILD/corpus"

@@ -1,4 +1,4 @@
-name: Library regressions
+name: Regression tests
 on:
   push:
   pull_request:
@@ -35,7 +35,7 @@ jobs:
       - name: Run standalone library regressions
         env:
           CC: ${{ matrix.compiler }}
-          FUZZ_TIME: 60
+          FUZZ_TIME: 300
         run: ./tests/run-regressions.sh "${{ matrix.mode }}"
       - name: Report line and branch coverage
         if: matrix.mode == 'coverage'

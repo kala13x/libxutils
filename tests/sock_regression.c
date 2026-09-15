@@ -69,4 +69,8 @@ static int XTest_empty_and_eof(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(retry_read), XTEST_CASE(retry_write), XTEST_CASE(empty_and_eof))
+XTEST_MAIN(
+    XTEST_CASE(retry_read),
+    XTEST_CASE(retry_write),
+    XTEST_CASE(empty_and_eof)
+)

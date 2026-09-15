@@ -1476,7 +1476,11 @@ XSTATUS XSock_GetAddr(xsock_info_t *pInfo, struct sockaddr_in *pAddr, size_t nSi
     XSock_InitInfo(pInfo);
     pInfo->eFamily = XF_IPV4;
 
-    struct hostent *pHostInfo = gethostbyaddr((char*)&pAddr->sin_addr.s_addr, (int)nSize, AF_INET);
+    /* gethostbyaddr() wants the length of the address itself, which for
+       AF_INET is four bytes. Handing it the size of the whole sockaddr made
+       every reverse lookup fail, so the name was never filled in. */
+    (void)nSize;
+    struct hostent *pHostInfo = gethostbyaddr((char*)&pAddr->sin_addr.s_addr, (int)sizeof(pAddr->sin_addr.s_addr), AF_INET);
     if (pHostInfo != NULL) xstrncpy(pInfo->sName, sizeof(pInfo->sName), pHostInfo->h_name);
 
     XSock_IPStr(pAddr->sin_addr.s_addr, pInfo->sAddr, sizeof(pInfo->sAddr));

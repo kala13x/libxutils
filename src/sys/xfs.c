@@ -678,6 +678,7 @@ int XPath_Parse(xpath_t *pPath, const char *pPathStr, xbool_t bStat)
 
     size_t i, nUsed = XArray_Used(pArr);
     size_t nAvail = sizeof(pPath->sPath);
+    int nStatus = XSTDNON;
 
     for (i = 0; i < nUsed; i++)
     {
@@ -690,10 +691,14 @@ int XPath_Parse(xpath_t *pPath, const char *pPathStr, xbool_t bStat)
             continue;
         }
 
-        return (int)xstrncpy(pPath->sFile, sizeof(pPath->sFile), pEntry);
+        nStatus = (int)xstrncpy(pPath->sFile, sizeof(pPath->sFile), pEntry);
+        break;
     }
 
-    return XSTDNON;
+    /* The split array owns a pool: returning out of the loop above leaked
+       both on every call that reached the file name. */
+    XArray_Destroy(pArr);
+    return nStatus;
 }
 
 int XPath_PermToMode(const char *pPerm, xmode_t *pMode)

@@ -587,6 +587,13 @@ static int XTest_root_array_and_api_boundaries(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(parse_matrix), XTEST_CASE(parse_boundaries), XTEST_CASE(builders_and_writers),
-    XTEST_CASE(generated_string_edges), XTEST_CASE(byte_boundaries), XTEST_CASE(error_states), XTEST_CASE(pool_and_stress),
-    XTEST_CASE(root_array_and_api_boundaries))
+XTEST_MAIN(
+    XTEST_CASE(parse_matrix),
+    XTEST_CASE(parse_boundaries),
+    XTEST_CASE(builders_and_writers),
+    XTEST_CASE(generated_string_edges),
+    XTEST_CASE(byte_boundaries),
+    XTEST_CASE(error_states),
+    XTEST_CASE(pool_and_stress),
+    XTEST_CASE(root_array_and_api_boundaries)
+)

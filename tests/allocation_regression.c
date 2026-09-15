@@ -122,4 +122,9 @@ static int XTest_endpoint_ownership(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(json_cleanup), XTEST_CASE(http_header), XTEST_CASE(buffer_preservation), XTEST_CASE(endpoint_ownership))
+XTEST_MAIN(
+    XTEST_CASE(json_cleanup),
+    XTEST_CASE(http_header),
+    XTEST_CASE(buffer_preservation),
+    XTEST_CASE(endpoint_ownership)
+)

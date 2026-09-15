@@ -261,5 +261,12 @@ static int XTest_eof_with_data(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(partial_io), XTEST_CASE(callback_disconnect), XTEST_CASE(peer_eof), XTEST_CASE(websocket_fragments),
-    XTEST_CASE(unexpected_continuation), XTEST_CASE(buffered_upgrade), XTEST_CASE(eof_with_data))
+XTEST_MAIN(
+    XTEST_CASE(partial_io),
+    XTEST_CASE(callback_disconnect),
+    XTEST_CASE(peer_eof),
+    XTEST_CASE(websocket_fragments),
+    XTEST_CASE(unexpected_continuation),
+    XTEST_CASE(buffered_upgrade),
+    XTEST_CASE(eof_with_data)
+)

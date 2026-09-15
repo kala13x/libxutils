@@ -145,6 +145,7 @@ char *XCrypt_Casear(const char *pInput, size_t nLength, size_t nKey)
 
     size_t nChars = sizeof(g_charMap);
     size_t i, x, nHalf = nChars / 2;
+    size_t nShift = nKey % nHalf;
 
     for (i = 0; i < nLength; i++)
     {
@@ -152,10 +153,13 @@ char *XCrypt_Casear(const char *pInput, size_t nLength, size_t nKey)
 
         for (x = 0; x < nChars; x++)
         {
-            size_t nStep = x + nKey;
-            if (x < nHalf) while (nStep >= nHalf) nStep -= nHalf;
-            else { nStep += nHalf; while (nStep >= nChars) nStep -= nHalf; }
-            if (pInput[i] == g_charMap[x]) { cByte = g_charMap[nStep]; break; }
+            if (pInput[i] != g_charMap[x]) continue;
+
+            /* The map holds the lower case alphabet followed by the upper
+               case one, so a letter is shifted inside its own half. */
+            size_t nBase = (x < nHalf) ? 0 : nHalf;
+            cByte = g_charMap[nBase + ((x - nBase) + nShift) % nHalf];
+            break;
         }
 
         pRetVal[i] = cByte;
@@ -173,6 +177,7 @@ char *XDecrypt_Casear(const char *pInput, size_t nLength, size_t nKey)
 
     size_t nChars = sizeof(g_charMap);
     size_t i, x, nHalf = nChars / 2;
+    size_t nShift = nKey % nHalf;
 
     for (i = 0; i < nLength; i++)
     {
@@ -180,12 +185,15 @@ char *XDecrypt_Casear(const char *pInput, size_t nLength, size_t nKey)
 
         for (x = 0; x < nChars; x++)
         {
-            size_t nStep = x - nKey;
-            while(nStep < XCHAR_MAP_SIZE) nStep += nHalf;
+            if (pInput[i] != g_charMap[x]) continue;
 
-            if (x < nHalf) while (nStep >= nHalf) nStep -= nHalf;
-            else { nStep += nHalf; while (nStep >= nChars) nStep -= nHalf; }
-            if (pInput[i] == g_charMap[x]) { cByte = g_charMap[nStep]; break; }
+            /* Shift back inside the letter's own half of the map. Adding a
+               whole alphabet first keeps the index from wrapping below zero,
+               which on a size_t used to turn the reduction into a near
+               endless loop for every letter ordered before the key. */
+            size_t nBase = (x < nHalf) ? 0 : nHalf;
+            cByte = g_charMap[nBase + ((x - nBase) + nHalf - nShift) % nHalf];
+            break;
         }
 
         pRetVal[i] = cByte;
@@ -228,8 +236,8 @@ xcrypt_chipher_t XCrypt_GetCipher(const char *pCipher)
     if (!strncmp(pCipher, "aes", 3)) return XC_AES;
     else if (!strncmp(pCipher, "hex", 3)) return XC_HEX;
     else if (!strncmp(pCipher, "xor", 3)) return XC_XOR;
-    else if (!strncmp(pCipher, "crc32", 5)) return XC_CRC32;
     else if (!strncmp(pCipher, "crc32b", 6)) return XC_CRC32B;
+    else if (!strncmp(pCipher, "crc32", 5)) return XC_CRC32;
     else if (!strncmp(pCipher, "casear", 6)) return XC_CASEAR;
     else if (!strncmp(pCipher, "b64url", 6)) return XC_B64URL;
     else if (!strncmp(pCipher, "base64", 6)) return XC_BASE64;
@@ -264,7 +272,7 @@ const char* XCrypt_GetCipherStr(xcrypt_chipher_t eCipher)
         case XC_B64URL: return "b64url";
         case XC_MD5: return "md5";
         case XC_SHA1: return "sha1";
-        case XC_HS256: return "h256";
+        case XC_HS256: return "hs256";
         case XC_SHA256: return "sha256";
         case XC_MD5_SUM: return "md5sum";
         case XC_MD5_HMAC: return "md5hmac";

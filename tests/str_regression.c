@@ -52,4 +52,8 @@ static int XTest_split_replace(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(capacities), XTEST_CASE(dynamic), XTEST_CASE(split_replace))
+XTEST_MAIN(
+    XTEST_CASE(capacities),
+    XTEST_CASE(dynamic),
+    XTEST_CASE(split_replace)
+)

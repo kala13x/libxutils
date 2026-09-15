@@ -257,7 +257,7 @@ xpacket_t *XPacket_New(uint8_t *pData, uint32_t nSize)
     XCHECK(pPacket, NULL);
 
     xpacket_status_t nStatus = XPacket_Init(pPacket, pData, nSize);
-    XCHECK_CALL((nStatus != XPACKET_ERR_NONE), free, pPacket, NULL);
+    XCHECK_CALL((nStatus == XPACKET_ERR_NONE), free, pPacket, NULL);
 
     pPacket->nAllocated = 1;
     return pPacket;
@@ -286,7 +286,7 @@ xpacket_status_t XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, si
 xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
 {
     xpacket_status_t nStatus = XPacket_UpdateHeader(pPacket);
-    XCHECK((nStatus != XPACKET_ERR_NONE), NULL);
+    XCHECK((nStatus == XPACKET_ERR_NONE), NULL);
 
     xpacket_header_t *pHeader = &pPacket->header;
     xjson_writer_t jsonWriter;

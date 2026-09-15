@@ -511,7 +511,7 @@ void XArray_BubbleSort(xarray_t *pArr, xarray_comparator_t compare, void *pCtx)
     {
         for (j = 0 ; j < pArr->nUsed-i-1; j++)
         {
-            if (compare((void*)pArr->pData[j], (void*)pArr->pData[j+1], pCtx))
+            if (compare((void*)pArr->pData[j], (void*)pArr->pData[j+1], pCtx) > 0)
             {
                 xarray_data_t *pData = pArr->pData[j];
                 pArr->pData[j] = pArr->pData[j+1];

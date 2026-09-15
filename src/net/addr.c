@@ -409,10 +409,14 @@ int XAddr_GetMAC(char *pAddr, int nSize)
         if (!(ifr.ifr_flags & IFF_LOOPBACK) &&
             !ioctl(sock, SIOCGIFHWADDR, &ifr))
         {
+            /* sa_data is a signed char array: passing a byte over 0x7f
+               straight to %02x sign extends it into eight hex digits and
+               the rendered address stops being a MAC address. */
+            const unsigned char *hwaddr = (const unsigned char*)ifr.ifr_hwaddr.sa_data;
+
             nLength = xstrncpyf(pAddr, nSize, "%02x:%02x:%02x:%02x:%02x:%02x",
-                ifr.ifr_hwaddr.sa_data[0], ifr.ifr_hwaddr.sa_data[1],
-                ifr.ifr_hwaddr.sa_data[2], ifr.ifr_hwaddr.sa_data[3],
-                ifr.ifr_hwaddr.sa_data[4], ifr.ifr_hwaddr.sa_data[5]);
+                hwaddr[0], hwaddr[1], hwaddr[2],
+                hwaddr[3], hwaddr[4], hwaddr[5]);
 
             break;
         }

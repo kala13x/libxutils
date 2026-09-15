@@ -18,6 +18,7 @@ extern "C" {
 #include "crypt.h"
 #include "json.h"
 #include "str.h"
+#include "rsa.h"
 
 typedef enum {
     XJWT_ALG_INVALID = 0,

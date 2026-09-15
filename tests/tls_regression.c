@@ -148,4 +148,8 @@ static int XTest_untrusted(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(pending_record), XTEST_CASE(wrong_hostname), XTEST_CASE(untrusted))
+XTEST_MAIN(
+    XTEST_CASE(pending_record),
+    XTEST_CASE(wrong_hostname),
+    XTEST_CASE(untrusted)
+)

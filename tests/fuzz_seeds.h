@@ -24,7 +24,17 @@ static const xfuzz_seed_t g_fuzzSeeds[] = {
     XFUZZ_SEED("ws", XFUZZ_TARGET_WS, "\x82\x03" "a\0b"),
     XFUZZ_SEED("base64", XFUZZ_TARGET_BASE64, "YWJj"),
     XFUZZ_SEED("jwt", XFUZZ_TARGET_JWT, "eyJhbGciOiJIUzI1NiJ9.e30.signature"),
-    XFUZZ_SEED("url", XFUZZ_TARGET_URL, "https://user:password@localhost:443/path?query=1")
+    XFUZZ_SEED("url", XFUZZ_TARGET_URL, "https://user:password@localhost:443/path?query=1"),
+    XFUZZ_SEED("mdtp", XFUZZ_TARGET_MDTP,
+        "\x24\x00\x00\x00" "{\"version\":\"1.0\",\"packetType\":\"data\"}"),
+    XFUZZ_SEED("mdtp-payload", XFUZZ_TARGET_MDTP,
+        "\x3a\x00\x00\x00" "{\"version\":\"1.0\",\"payload\":{\"payloadSize\":3}}" "abc"),
+    XFUZZ_SEED("rtp", XFUZZ_TARGET_RTP,
+        "\x80\x60\x00\x2a\x00\x00\x10\x00\x00\x00\x00\x07"
+        "\x12\x34\x56\xa1" "\x00\x03" "abc"),
+    XFUZZ_SEED("rtp-csrc", XFUZZ_TARGET_RTP,
+        "\x81\x60\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01"
+        "\x00\x00\x00\x09" "\x00\x00\x02\x00" "\x00\x02" "hi")
 };
 
 #endif

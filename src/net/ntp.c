@@ -63,9 +63,16 @@ int XNTP_SendRequest(xsock_t *pSock)
 uint32_t XNTP_ReceiveTime(xsock_t *pSock)
 {
     uint32_t buffer[XNTP_BUF_SIZE];
+    memset(buffer, 0, sizeof(buffer));
     XSock_TimeOutR(pSock, XNTP_TIMEO_SEC, 0);
-    XSock_Read(pSock, buffer, sizeof(buffer));
+
+    int nRead = XSock_Read(pSock, buffer, sizeof(buffer));
     if (XSock_Status(pSock) != XSOCK_ERR_NONE) return XSTDNON;
+
+    /* A datagram shorter than the header never filled the transmit
+       timestamp, so reading word ten would hand the caller whatever was
+       on the stack and call it the time. */
+    if (nRead < (int)sizeof(buffer)) return XSTDNON;
 
     time_t rawtime = ntohl((time_t)buffer[10]);
     return (uint32_t)rawtime - XNTP_TIME_GAP;

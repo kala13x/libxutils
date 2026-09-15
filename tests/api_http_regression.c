@@ -158,5 +158,10 @@ static int XTest_auth_short(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(http_partial), XTEST_CASE(http_pipeline), XTEST_CASE(auth_key), XTEST_CASE(auth_basic),
-    XTEST_CASE(auth_short))
+XTEST_MAIN(
+    XTEST_CASE(http_partial),
+    XTEST_CASE(http_pipeline),
+    XTEST_CASE(auth_key),
+    XTEST_CASE(auth_basic),
+    XTEST_CASE(auth_short)
+)

@@ -82,4 +82,8 @@ static int XTest_invalid_start(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(contention), XTEST_CASE(recursive), XTEST_CASE(invalid_start))
+XTEST_MAIN(
+    XTEST_CASE(contention),
+    XTEST_CASE(recursive),
+    XTEST_CASE(invalid_start)
+)

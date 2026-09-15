@@ -301,7 +301,7 @@ char *xstrfill(size_t nLength, char cFill)
     xstrnul(sRetVal);
 
     nLen = XSTD_MIN(nLength, sizeof(sRetVal) - 1);
-    for (i = 0; i < nLen; i++) sRetVal[i] = ' ';
+    for (i = 0; i < nLen; i++) sRetVal[i] = cFill;
 
     sRetVal[i] = '\0';
     return sRetVal;
@@ -462,6 +462,9 @@ size_t xstrncpyf(char *pDst, size_t nSize, const char *pFmt, ...)
 
 size_t xstrncpyfl(char *pDst, size_t nSize, size_t nFLen, char cFChar, const char* pFmt, ...)
 {
+    if (pDst == NULL || !nSize) return 0;
+    if (nFLen > nSize) nFLen = nSize - 1;
+
     size_t nBytes = 0;
     va_list args;
 
@@ -469,11 +472,11 @@ size_t xstrncpyfl(char *pDst, size_t nSize, size_t nFLen, char cFChar, const cha
     nBytes = xstrncpyarg(pDst, nSize, pFmt, args);
     va_end(args);
 
-    nSize -= nBytes;
-    nFLen -= nBytes;
-    pDst += nBytes;
-    nBytes += xstrnfill(pDst, nSize, nFLen, cFChar);
+    /* The formatted text already fills the field. Subtracting it from the
+       field length would wrap and pad out the whole destination buffer. */
+    if (nBytes >= nFLen) return nBytes;
 
+    nBytes += xstrnfill(&pDst[nBytes], nSize - nBytes, nFLen - nBytes, cFChar);
     return nBytes;
 }
 
@@ -599,7 +602,6 @@ size_t xstrextra(const char *pStr, size_t nLength, size_t nMaxChars, size_t *pCh
 
     for (nPosit = 0; nPosit < nLength; nPosit++)
     {
-        if (pPosit != NULL) *pPosit = nPosit;
         if (nMaxChars && nChars >= nMaxChars) break;
         const char *pOffset = &pStr[nPosit];
 
@@ -617,6 +619,10 @@ size_t xstrextra(const char *pStr, size_t nLength, size_t nMaxChars, size_t *pCh
         nChars++;
     }
 
+    /* The position is where scanning stopped: the first byte past the
+       character limit, or the end of the string when it fits. Reporting it
+       from inside the loop left it one byte short of a string that fits. */
+    if (pPosit != NULL) *pPosit = nPosit;
     if (pChars != NULL) *pChars = nChars;
     return nExtra;
 }
@@ -697,7 +703,7 @@ size_t xstrnclr(char *pDst, size_t nSize, const char* pClr, const char* pStr, ..
 
 size_t xstrcase(char *pSrc, xstr_case_t eCase)
 {
-    if (xstrused(pSrc)) return 0;
+    if (!xstrused(pSrc)) return 0;
     size_t i, nCopyLength = strlen(pSrc);
     if (!nCopyLength) return 0;
 
@@ -961,6 +967,7 @@ size_t xstrnrm(char *pStr, size_t nPosit, size_t nSize)
 
 char *xstrrep(const char *pOrig, const char *pRep, const char *pWith)
 {
+    XCHECK_NL((pOrig && pRep && pWith), NULL);
     size_t nOrigLen = strlen(pOrig);
     size_t nWithLen = strlen(pWith);
     size_t nRepLen = strlen(pRep);
@@ -998,6 +1005,7 @@ char *xstrrep(const char *pOrig, const char *pRep, const char *pWith)
 int xstrnrep(char *pDst, size_t nSize, const char *pOrig, const char *pRep, const char *pWith)
 {
     XCHECK(pDst, XSTDINV);
+    XCHECK_NL((pOrig && pRep && pWith), XSTDINV);
     char *pOffset = pDst;
 
     size_t nOrigLen = strlen(pOrig);
@@ -1331,8 +1339,18 @@ int XString_AddString(xstring_t *pString, xstring_t *pSrc)
 
 int XString_Copy(xstring_t *pString, xstring_t *pSrc)
 {
-    if (pSrc->pData == NULL) return XSTDERR;
+    if (pString == NULL || pSrc == NULL || pSrc->pData == NULL) return XSTDERR;
+
+    /* XString_Init() below drops the destination's pointer without
+       releasing it, and clears the flag that says the object itself is heap
+       allocated. Release the old buffer and put the flag back, or a copy
+       into a string that already held one leaks it. */
+    if (pString->nSize > 0 && pString->pData != NULL) free(pString->pData);
+    xbool_t nAlloc = pString->nAlloc;
+
     XString_Init(pString, pSrc->nSize, pSrc->nFast);
+    pString->nAlloc = nAlloc;
+
     if (pString->nStatus == XSTDERR) return XSTDERR;
 
     memcpy(pString->pData, pSrc->pData, pSrc->nSize);
@@ -1524,8 +1542,11 @@ int XString_Tokenize(xstring_t *pString, char *pDst, size_t nSize, size_t nPosit
 
 int XString_Token(xstring_t *pString, xstring_t *pDst, size_t nPosit, const char *pDlmt)
 {
-    if (pString == NULL || !pString->nLength) return XSTDERR;
-    pDst->pData[0] = XSTR_NUL;
+    if (pString == NULL || pDst == NULL || !pString->nLength) return XSTDERR;
+
+    /* The destination is reset rather than initialized, and a string that
+       was initialized with no capacity owns no buffer to reset. */
+    if (pDst->pData != NULL) pDst->pData[0] = XSTR_NUL;
     pDst->nLength = 0;
 
     if (nPosit >= pString->nLength) return XSTDERR;
@@ -1584,7 +1605,9 @@ int XString_SubStr(xstring_t *pString, xstring_t *pSub, size_t nPos, size_t nSiz
     int nLength = XString_Sub(pString, pSub->pData, pSub->nSize, nPos, nSize);
     if (nLength <= 0)
     {
-        XString_Clear(pString);
+        /* Release the substring that was just initialized here, not the
+           caller's source string: a failed cut used to destroy the input. */
+        XString_Clear(pSub);
         return XSTDERR;
     }
 

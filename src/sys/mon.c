@@ -241,8 +241,14 @@ static void XMon_UpdateNetworkStats(xmon_stats_t *pStats)
                         continue;
                     }
 
-                if (!strncmp(pIfaceEntry->d_name, "slave_", 6) || !strncmp(pIfaceEntry->d_name, "upper_", 6))
+                /* The member list is a fixed array: a bridge or bond with more
+                   members than it holds must stop filling it, not run past it. */
+                if ((!strncmp(pIfaceEntry->d_name, "slave_", 6) ||
+                     !strncmp(pIfaceEntry->d_name, "upper_", 6)) &&
+                     netIface.nMemberCount < XMEMBERS_MAX)
+                {
                     xstrncpy(netIface.sMembers[netIface.nMemberCount++], XNAME_MAX, &pIfaceEntry->d_name[6]);
+                }
 
                 pIfaceEntry = readdir(pIfaceDir);
             }

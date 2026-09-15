@@ -988,7 +988,7 @@ static int XJSON_ParseObjectNext(xjson_t *pJson, xjson_obj_t *pObj, int bAllowEn
             bAllowEnd = XFALSE;
             continue;
         }
-    
+
         if (pToken->nType != XJSON_TOKEN_RCURLY)
             return XJSON_UnexpectedToken(pJson);
 

@@ -121,7 +121,10 @@ int XTime_FromRstr(xtime_t *pTime, const char *pStr)
         &nMonth, &nDay, &nYear, &nHour, &nMin, &nSec, &nFraq);
 #endif
 
-    return XTime_SetParsed(pTime, nParsed, 7, nYear, nMonth, nDay, nHour, nMin, nSec, nFraq);
+    /* XTime_ToRstr() emits no fraction, so six fields is a complete date
+       here. Demanding all seven made this reject its own output. */
+    return XTime_SetParsed(pTime, nParsed, nParsed == 7 ? 7 : 6,
+        nYear, nMonth, nDay, nHour, nMin, nSec, nFraq);
 }
 
 int XTime_FromISO(xtime_t *pTime, const char *pStr)
