@@ -274,11 +274,82 @@ static int XTest_hashing(void)
     return 0;
 }
 
+
+static int XTest_pair_transfer(void)
+{
+    /* A pair taken out of one map can be put straight into another. That is
+     * how a map is copied or split, so the pair the second map ends up with
+     * has to be an equal entry rather than an alias of the first map's
+     * storage: clearing either one must leave the other usable. */
+    xmap_t source, target;
+    CHECK(XMap_Init(&source, NULL, 16) == XMAP_OK, "The source map initializes");
+    CHECK(XMap_Init(&target, NULL, 16) == XMAP_OK, "The target map initializes");
+
+    char sKeys[4][8];
+    int nValues[4] = {10, 20, 30, 40};
+
+    for (int i = 0; i < 4; i++)
+    {
+        snprintf(sKeys[i], sizeof(sKeys[i]), "k%d", i);
+        CHECK(XMap_Put(&source, sKeys[i], &nValues[i]) == XMAP_OK, "An entry goes into the source");
+    }
+
+    /* Move every pair across through the pair form. */
+    for (int i = 0; i < 4; i++)
+    {
+        xmap_pair_t *pPair = XMap_GetPair(&source, sKeys[i]);
+        CHECK(pPair != NULL, "The pair is found in the source");
+        CHECK(XMap_PutPair(&target, pPair) == XMAP_OK, "The pair goes into the target");
+    }
+
+    CHECK(target.nCount == 4, "Every pair reached the target");
+    CHECK(source.nCount == 4, "The source still holds its own entries");
+
+    for (int i = 0; i < 4; i++)
+    {
+        int *pFromTarget = (int*)XMap_Get(&target, sKeys[i]);
+        CHECK(pFromTarget != NULL, "The value is reachable in the target");
+        CHECK(pFromTarget == NULL || *pFromTarget == nValues[i], "It is the value that was stored");
+    }
+
+    /* Destroying the source leaves the target's entries intact. */
+    XMap_Destroy(&source);
+
+    for (int i = 0; i < 4; i++)
+    {
+        int *pFromTarget = (int*)XMap_Get(&target, sKeys[i]);
+        CHECK(pFromTarget != NULL, "The target survives the source being destroyed");
+        CHECK(pFromTarget == NULL || *pFromTarget == nValues[i], "And still holds the right value");
+    }
+
+    XMap_Destroy(&target);
+
+    /* Both arguments are checked. */
+    xmap_t map;
+    CHECK(XMap_Init(&map, NULL, 8) == XMAP_OK, "A map initializes");
+
+    xmap_pair_t pair;
+    pair.eStatus = XMAP_PAIR_USED;
+    pair.pKey = (char*)"solo";
+    pair.pData = &nValues[0];
+
+    CHECK(XMap_PutPair(NULL, &pair) == XMAP_OINV, "A missing map is rejected");
+    CHECK(XMap_PutPair(&map, NULL) == XMAP_OINV, "A missing pair is rejected");
+    CHECK(map.nCount == 0, "A rejected put stored nothing");
+
+    CHECK(XMap_PutPair(&map, &pair) == XMAP_OK, "A hand built pair is accepted");
+    CHECK(XMap_Get(&map, "solo") == &nValues[0], "It is retrievable by its key");
+
+    XMap_Destroy(&map);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(lifecycle),
     XTEST_CASE(reference_model),
     XTEST_CASE(operations),
     XTEST_CASE(iteration),
     XTEST_CASE(growth),
-    XTEST_CASE(hashing)
+    XTEST_CASE(hashing),
+    XTEST_CASE(pair_transfer)
 )

@@ -76,6 +76,57 @@ static int XTest_formats(void)
     CHECK(XTime_ToHstr(&original, sDate, sizeof(sDate)) == 22, "The human form has a fixed width");
     CHECK(strcmp(sDate, "2024.03.15-14:30:45.25") == 0, "The human form carries the fraction");
 
+    /* The human form is the one this library writes into its own log lines
+     * and file names, so it has to be readable back: without the round trip
+     * a timestamp it produced could not be parsed by anything using it. */
+    memset(&parsed, 0, sizeof(parsed));
+    CHECK(XTime_FromHstr(&parsed, sDate) == 7, "The human form parses all seven fields");
+    CHECK(parsed.nYear == 2024 && parsed.nMonth == 3 && parsed.nDay == 15, "The human date round trips");
+    CHECK(parsed.nHour == 14 && parsed.nMin == 30 && parsed.nSec == 45, "The human time round trips");
+    CHECK(parsed.nFraq == 25, "The human fraction round trips");
+
+    /* Unlike the american form, this one requires the fraction: XTime_ToHstr
+     * always writes it, so anything short of all seven fields did not come
+     * out of this library and is refused rather than silently zero filled. */
+    memset(&parsed, 0, sizeof(parsed));
+    CHECK(XTime_FromHstr(&parsed, "2024.03.15-14:30:45") == 0, "The human form requires its fraction");
+    CHECK(XTime_FromHstr(&parsed, "2024.03.15") == 0, "A bare date is not a human timestamp");
+
+    /* Every field the writer produces survives, including the extremes. */
+    const xtime_t edges[] = {
+        {2024,  1,  1,  0,  0,  0,   0},
+        {2024, 12, 31, 23, 59, 59, XTIME_FRAQ_MAX},
+        {2024,  2, 29, 12,  0,  0,  99},   /* a leap day */
+        {1970,  1,  1,  0,  0,  0,   0}
+    };
+
+    for (size_t i = 0; i < sizeof(edges) / sizeof(*edges); i++)
+    {
+        char sEdge[64];
+        CHECK(XTime_ToHstr(&edges[i], sEdge, sizeof(sEdge)) > 0, "The edge timestamp is written");
+
+        xtime_t back;
+        memset(&back, 0, sizeof(back));
+        CHECK(XTime_FromHstr(&back, sEdge) == 7, "The edge timestamp parses back");
+        CHECK(back.nYear == edges[i].nYear && back.nMonth == edges[i].nMonth &&
+              back.nDay == edges[i].nDay && back.nHour == edges[i].nHour &&
+              back.nMin == edges[i].nMin && back.nSec == edges[i].nSec &&
+              back.nFraq == edges[i].nFraq, "Every field of the edge timestamp round trips");
+    }
+
+    /* A non-leap year has no twenty ninth of February. */
+    CHECK(XTime_FromHstr(&parsed, "2023.02.29-00:00:00.00") == 0, "A leap day outside a leap year is rejected");
+    CHECK(XTime_FromHstr(&parsed, "2024.02.29-00:00:00.00") == 7, "A leap day inside one is accepted");
+
+    /* And the parser rejects what it cannot make a date out of. */
+    CHECK(XTime_FromHstr(&parsed, "not a timestamp") == 0, "Text is not a human timestamp");
+    CHECK(XTime_FromHstr(&parsed, "2024.13.15-14:30:45") == 0, "A thirteenth month is rejected");
+    CHECK(XTime_FromHstr(&parsed, "2024.03.32-14:30:45") == 0, "A thirty second day is rejected");
+    CHECK(XTime_FromHstr(&parsed, "2024.03.15-25:30:45") == 0, "A twenty fifth hour is rejected");
+    CHECK(XTime_FromHstr(&parsed, "") == 0, "An empty string is rejected");
+    CHECK(XTime_FromHstr(&parsed, NULL) == 0, "A missing string is rejected");
+    CHECK(XTime_FromHstr(NULL, sDate) == 0, "A missing destination is rejected");
+
     CHECK(XTime_ToISO(&original, sDate, sizeof(sDate)) == 19, "The ISO form has a fixed width");
     CHECK(strcmp(sDate, "2024-03-15T14:30:45") == 0, "The ISO form uses the T separator");
     CHECK(XTime_FromISO(&parsed, sDate) == 6, "The ISO form parses its six fields");
@@ -310,6 +361,114 @@ static int XTest_clock(void)
     return 0;
 }
 
+
+static int XTest_fraction_bounds(void)
+{
+    /* The fraction is hundredths of a second and every string format writes
+     * it as two digits. A packed timestamp arrives over the wire with eight
+     * raw bits in that field, so a peer can put 255 there: the formats then
+     * ran past their documented widths and the value read back as a
+     * different time. The domain is enforced where the value enters. */
+    xtime_t now;
+    XTime_Get(&now);
+    CHECK(now.nFraq <= XTIME_FRAQ_MAX, "The clock never produces an out of range fraction");
+
+    /* Straight off the wire, with the fraction field maxed out. */
+    uint64_t nWire = ((uint64_t)2024 << 48) | ((uint64_t)3 << 40) | ((uint64_t)15 << 32) |
+                     ((uint64_t)14 << 24) | ((uint64_t)30 << 16) | ((uint64_t)45 << 8) | 255;
+
+    xtime_t wire;
+    memset(&wire, 0, sizeof(wire));
+    XTime_Deserialize(&wire, nWire);
+
+    CHECK(wire.nFraq <= XTIME_FRAQ_MAX, "A hostile fraction is bounded on deserialize");
+    CHECK(wire.nYear == 2024 && wire.nMonth == 3 && wire.nDay == 15, "The rest of the timestamp survives");
+    CHECK(wire.nHour == 14 && wire.nMin == 30 && wire.nSec == 45, "Including the time of day");
+
+    /* Which means the documented widths hold for anything off the wire. */
+    char sCompact[64], sHuman[64];
+    size_t nCompact = XTime_ToStr(&wire, sCompact, sizeof(sCompact));
+    size_t nHuman = XTime_ToHstr(&wire, sHuman, sizeof(sHuman));
+
+    CHECK(nCompact == 16, "The compact form stays sixteen characters");
+    CHECK(nHuman == 22, "The human form stays twenty two characters");
+
+    /* And it round trips to itself rather than to something else. */
+    xtime_t back;
+    memset(&back, 0, sizeof(back));
+    int nParsed = XTime_FromStr(&back, sCompact);
+
+    CHECK(nParsed == 7, "The compact form parses back");
+    CHECK(back.nFraq == wire.nFraq, "The fraction survives the round trip");
+    CHECK(back.nSec == wire.nSec && back.nMin == wire.nMin, "So does the rest of it");
+
+    /* Every fraction the domain allows survives both string forms. */
+    for (unsigned nFraq = 0; nFraq <= XTIME_FRAQ_MAX; nFraq++)
+    {
+        xtime_t one = {2024, 3, 15, 14, 30, 45, (uint8_t)nFraq};
+        char sOne[64];
+
+        CHECK(XTime_ToStr(&one, sOne, sizeof(sOne)) == 16, "Every fraction writes a fixed width");
+
+        xtime_t parsedOne;
+        memset(&parsedOne, 0, sizeof(parsedOne));
+        CHECK(XTime_FromStr(&parsedOne, sOne) == 7, "Every fraction parses back");
+        CHECK(parsedOne.nFraq == nFraq, "Every fraction round trips to itself");
+
+        char sTwo[64];
+        CHECK(XTime_ToHstr(&one, sTwo, sizeof(sTwo)) == 22, "The human form is fixed width too");
+
+        memset(&parsedOne, 0, sizeof(parsedOne));
+        CHECK(XTime_FromHstr(&parsedOne, sTwo) == 7, "And parses back");
+        CHECK(parsedOne.nFraq == nFraq, "To the same fraction");
+    }
+
+    /* A written fraction of three digits is not a timestamp this library
+     * produces, so the parsers do not have to accept it - what they must
+     * not do is read it as a different, plausible looking time. */
+    xtime_t wide;
+    memset(&wide, 0, sizeof(wide));
+    XTime_FromStr(&wide, "20240315143045100");
+    CHECK(wide.nFraq <= XTIME_FRAQ_MAX, "Whatever is made of an overlong fraction stays in range");
+
+    /* The serialize and deserialize pair agree with each other for every
+     * value the domain allows. */
+    for (unsigned nFraq = 0; nFraq <= XTIME_FRAQ_MAX; nFraq += 7)
+    {
+        xtime_t one = {2024, 3, 15, 14, 30, 45, (uint8_t)nFraq};
+        /* Serialize is the packed bit form Deserialize reads. ToU64/FromU64
+         * are a separate pair: a raw reinterpret of the struct's bytes,
+         * which is why they are not mixed with these two. */
+        uint64_t nPacked = XTime_Serialize(&one);
+
+        xtime_t two;
+        memset(&two, 0, sizeof(two));
+        XTime_Deserialize(&two, nPacked);
+
+        CHECK(two.nYear == one.nYear && two.nMonth == one.nMonth && two.nDay == one.nDay &&
+              two.nHour == one.nHour && two.nMin == one.nMin && two.nSec == one.nSec &&
+              two.nFraq == one.nFraq, "The packed form round trips every field");
+    }
+
+    /* The union pair round trips a struct through raw bytes, which is a
+     * different contract: it copies whatever is there rather than packing
+     * fields, so it must be given a timestamp this library made and never
+     * bytes off the wire. It still has to round trip its own output. */
+    xtime_t source = {2024, 6, 1, 8, 15, 30, 42};
+    uint64_t nRaw = XTime_ToU64(&source);
+
+    xtime_t raw;
+    memset(&raw, 0, sizeof(raw));
+    XTime_FromU64(&raw, nRaw);
+
+    CHECK(raw.nYear == source.nYear && raw.nMonth == source.nMonth && raw.nDay == source.nDay &&
+          raw.nHour == source.nHour && raw.nMin == source.nMin && raw.nSec == source.nSec &&
+          raw.nFraq == source.nFraq, "The raw pair round trips its own output");
+    CHECK(XTime_ToU64(NULL) == 0, "A missing timestamp has no raw form");
+
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(calendar),
     XTEST_CASE(serialization),
@@ -319,5 +478,6 @@ XTEST_MAIN(
     XTEST_CASE(conversions),
     XTEST_CASE(differences),
     XTEST_CASE(normalize),
-    XTEST_CASE(clock)
+    XTEST_CASE(clock),
+    XTEST_CASE(fraction_bounds)
 )

@@ -349,6 +349,113 @@ static int XTest_interfaces(void)
     return 0;
 }
 
+
+static int XTest_url_shapes(void)
+{
+    /* Every shape a URL can take, because the parser splits on the first
+     * occurrence of each delimiter and the combinations are what decide
+     * where one field ends and the next begins. A server that trusts the
+     * host it parsed out of a redirect target depends on all of this. */
+    struct {
+        const char *pUrl;
+        const char *pProto;
+        const char *pUser;
+        const char *pPass;
+        const char *pAddr;
+        uint16_t nPort;
+        const char *pUri;
+    } cases[] = {
+        {"http://host/",                  "http",  "",     "",     "host",      80,   "/"},
+        {"https://host/",                 "https", "",     "",     "host",      443,  "/"},
+        {"http://host:8080/",             "http",  "",     "",     "host",      8080, "/"},
+        {"http://host:8080/a/b?c=1",      "http",  "",     "",     "host",      8080, "/a/b?c=1"},
+        {"http://u@host/",                "http",  "u",    "",     "host",      80,   "/"},
+        {"http://u:p@host/",              "http",  "u",    "p",    "host",      80,   "/"},
+        {"http://u:p@host:99/x",          "http",  "u",    "p",    "host",      99,   "/x"},
+        {"host/",                         "",      "",     "",     "host",      0,    "/"},
+        {"host:1234/path",                "",      "",     "",     "host",      1234, "/path"},
+        {"http://127.0.0.1:8080/",        "http",  "",     "",     "127.0.0.1", 8080, "/"},
+        {"ws://host/socket",              "ws",    "",     "",     "host",      80,   "/socket"},
+        {"wss://host/socket",             "wss",   "",     "",     "host",      443,  "/socket"}
+    };
+
+    size_t nCount = sizeof(cases) / sizeof(*cases);
+
+    for (size_t i = 0; i < nCount; i++)
+    {
+        xlink_t link;
+        CHECK(XLink_Parse(&link, cases[i].pUrl) == XSTDOK, "Every shape parses");
+
+        CHECK(strcmp(link.sAddr, cases[i].pAddr) == 0, "The address is the host alone");
+        CHECK(strcmp(link.sUri, cases[i].pUri) == 0, "The path keeps its query string");
+
+        if (cases[i].pProto[0])
+            CHECK(strcmp(link.sProtocol, cases[i].pProto) == 0, "The scheme is recorded");
+
+        if (cases[i].nPort)
+            CHECK(link.nPort == cases[i].nPort, "The port is the explicit or default one");
+
+        CHECK(strcmp(link.sUser, cases[i].pUser) == 0, "The user is only what was given");
+        CHECK(strcmp(link.sPass, cases[i].pPass) == 0, "The password is only what was given");
+
+        /* Nothing the parser fills may run past its own field. */
+        CHECK(strnlen(link.sAddr, sizeof(link.sAddr)) < sizeof(link.sAddr), "The address fits its field");
+        CHECK(strnlen(link.sHost, sizeof(link.sHost)) < sizeof(link.sHost), "The host fits its field");
+        CHECK(strnlen(link.sUri, sizeof(link.sUri)) < sizeof(link.sUri), "The path fits its field");
+        CHECK(strnlen(link.sUser, sizeof(link.sUser)) < sizeof(link.sUser), "The user fits its field");
+        CHECK(strnlen(link.sPass, sizeof(link.sPass)) < sizeof(link.sPass), "The password fits its field");
+    }
+
+    /* A URL with no host is refused. It used to parse as success with an
+     * empty address, and the address is the field every caller dials: a
+     * redirect to "http://" would have been followed to whatever an empty
+     * host resolves to on the machine doing the fetching. */
+    const char *pRejected[] = {
+        "", "://", "http://", "http://:8080/", "https://:443/"
+    };
+
+    for (size_t i = 0; i < sizeof(pRejected) / sizeof(*pRejected); i++)
+    {
+        xlink_t link;
+        CHECK(XLink_Parse(&link, pRejected[i]) == XSTDERR, "A URL with no host is refused");
+    }
+
+    /* Anything that does name a host is still accepted, whatever else is
+     * missing around it. */
+    const char *pAccepted[] = {
+        "host", "host/", "http://host", "http://host/", "//host/", "host:1/"
+    };
+
+    for (size_t i = 0; i < sizeof(pAccepted) / sizeof(*pAccepted); i++)
+    {
+        xlink_t link;
+        if (XLink_Parse(&link, pAccepted[i]) == XSTDOK)
+            CHECK(xstrused(link.sAddr), "An accepted URL always has an address");
+    }
+
+    CHECK(XLink_Parse(NULL, "http://host/") == XSTDERR, "A missing destination is rejected");
+
+    xlink_t link;
+    CHECK(XLink_Parse(&link, NULL) == XSTDERR, "A missing URL is rejected");
+
+    /* A password holding the delimiters it is separated by has to arrive
+     * percent encoded, which is what RFC 3986 requires: the raw form is
+     * ambiguous and the parser splits it at the first delimiter, which is
+     * the only thing it can do. Both halves of that are pinned here. */
+    CHECK(XLink_Parse(&link, "redis://user:p%40ss%3Aword@host:6379/0") == XSTDOK,
+        "An encoded password parses");
+    CHECK(strcmp(link.sPass, "p@ss:word") == 0, "And is decoded back to its own characters");
+    CHECK(strcmp(link.sAddr, "host") == 0, "The host is still the host");
+    CHECK(link.nPort == 6379, "The port is still the port");
+
+    /* The raw form is not a valid URL, so what matters is that it is not
+     * silently read as a different host. */
+    if (XLink_Parse(&link, "redis://user:p@ss:word@host:6379/0") == XSTDOK)
+        CHECK(strcmp(link.sAddr, "host") != 0, "A raw delimiter does not resolve to the intended host");
+
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(components),
     XTEST_CASE(scheme_case),
@@ -358,5 +465,6 @@ XTEST_MAIN(
     XTEST_CASE(overlong),
     XTEST_CASE(unix_socket),
     XTEST_CASE(interfaces),
-    XTEST_CASE(local_ip)
+    XTEST_CASE(local_ip),
+    XTEST_CASE(url_shapes)
 )

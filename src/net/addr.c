@@ -276,6 +276,7 @@ int XLink_Parse(xlink_t *pLink, const char *pInput)
     }
 
     xstrncpys(pLink->sAddr, sizeof(pLink->sAddr), pLink->sHost, nAddrLen);
+    XCHECK_NL((xstrused(pLink->sAddr) && pLink->sAddr[0] != ':'), XSTDERR);
     if (!xstrused(pLink->sUri)) xstrncpy(pLink->sUri, sizeof(pLink->sUri), "/");
 
     size_t nUrlLength = strlen(pLink->sUri);

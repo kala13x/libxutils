@@ -1,6 +1,9 @@
 /* libxutils: aliasing, fixed storage, pointer ownership and queue wraparound. */
 #include "test.h"
 #include "buf.h"
+#include "str.h"
+#include <unistd.h>
+#include <fcntl.h>
 
 static int XTest_aliasing(void)
 {
@@ -434,6 +437,110 @@ static int XTest_ring_boundaries(void)
     return 0;
 }
 
+
+static int XTest_string_and_stdin(void)
+{
+    /* A byte buffer can be filled from an xstring_t, which carries its own
+     * length rather than relying on a terminator. That matters because the
+     * two types are mixed on the HTTP and WebSocket paths, where a body may
+     * legitimately contain a zero byte. */
+    xstring_t str;
+    XString_Init(&str, 0, 0);
+    CHECK(XString_Append(&str, "%s", "head") > 0, "The string is built");
+
+    xbyte_buffer_t buffer;
+    XByteBuffer_Init(&buffer, 0, 0);
+
+    CHECK(XByteBuffer_AddStr(&buffer, &str) > 0, "The string is appended");
+    CHECK(buffer.nUsed == str.nLength, "The whole string went in");
+    CHECK(memcmp(buffer.pData, "head", 4) == 0, "The bytes are the string's own");
+
+    /* Appending again accumulates rather than replacing. */
+    CHECK(XByteBuffer_AddStr(&buffer, &str) > 0, "The string is appended again");
+    CHECK(buffer.nUsed == str.nLength * 2, "Both copies are in the buffer");
+
+    /* A string holding a zero byte keeps its whole length: the buffer is
+     * binary, so the terminator is data like any other. */
+    xstring_t binary;
+    XString_Init(&binary, 0, 0);
+    CHECK(XString_Add(&binary, "a\0b", 3) > 0, "A string with an embedded zero is built");
+
+    xbyte_buffer_t binBuffer;
+    XByteBuffer_Init(&binBuffer, 0, 0);
+    CHECK(XByteBuffer_AddStr(&binBuffer, &binary) > 0, "It is appended");
+    CHECK(binBuffer.nUsed == 3, "All three bytes went in, the zero included");
+    CHECK(memcmp(binBuffer.pData, "a\0b", 3) == 0, "The embedded zero survived");
+
+    XByteBuffer_Clear(&binBuffer);
+    XString_Clear(&binary);
+
+    /* An empty string appends nothing and is not an error state. */
+    xstring_t empty;
+    XString_Init(&empty, 0, 0);
+    size_t nBefore = buffer.nUsed;
+    XByteBuffer_AddStr(&buffer, &empty);
+    CHECK(buffer.nUsed == nBefore, "An empty string adds nothing");
+    XString_Clear(&empty);
+
+    XByteBuffer_Clear(&buffer);
+    XString_Clear(&str);
+    return 0;
+}
+
+static int XTest_read_stdin(void)
+{
+    /* Reading standard input to the end is how the command line tools take
+     * piped data. It has to take the bytes whole, including zeroes, and it
+     * has to stop at the end rather than spinning. */
+    char sPath[128];
+    snprintf(sPath, sizeof(sPath), "/tmp/xutils-stdin-%d.bin", (int)getpid());
+
+    const uint8_t sPayload[] = {'p','i','p','e','d',0x00,0xff,'\n','t','a','i','l'};
+
+    FILE *pFile = fopen(sPath, "wb");
+    if (pFile == NULL)
+    {
+        printf("No temporary file, skipping\n");
+        return 77;
+    }
+
+    size_t nWritten = fwrite(sPayload, 1, sizeof(sPayload), pFile);
+    fclose(pFile);
+    CHECK(nWritten == sizeof(sPayload), "The fixture is written");
+
+    int nSaved = dup(STDIN_FILENO);
+    CHECK(nSaved >= 0, "Standard input can be saved");
+
+    int nFile = open(sPath, O_RDONLY);
+    CHECK(nFile >= 0, "The fixture opens");
+
+    xbyte_buffer_t buffer;
+    XByteBuffer_Init(&buffer, 0, 0);
+
+    int nRead = XSTDERR;
+    if (dup2(nFile, STDIN_FILENO) >= 0)
+    {
+        clearerr(stdin);
+        nRead = XByteBuffer_ReadStdin(&buffer);
+    }
+
+    close(nFile);
+    dup2(nSaved, STDIN_FILENO);
+    close(nSaved);
+    clearerr(stdin);
+    unlink(sPath);
+
+    CHECK(nRead == (int)sizeof(sPayload), "Every byte of the input was read");
+    CHECK(buffer.nUsed == sizeof(sPayload), "The buffer holds every byte");
+    CHECK(memcmp(buffer.pData, sPayload, sizeof(sPayload)) == 0,
+        "The bytes arrived unchanged, the zero and the high byte included");
+
+    XByteBuffer_Clear(&buffer);
+
+    CHECK(XByteBuffer_ReadStdin(NULL) == XSTDERR, "Reading into nothing is rejected");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(aliasing),
     XTEST_CASE(borrowed),
@@ -445,5 +552,7 @@ XTEST_MAIN(
     XTEST_CASE(ownership_transfer),
     XTEST_CASE(heap_buffer),
     XTEST_CASE(data_buffer),
-    XTEST_CASE(ring_boundaries)
+    XTEST_CASE(ring_boundaries),
+    XTEST_CASE(string_and_stdin),
+    XTEST_CASE(read_stdin)
 )

@@ -91,13 +91,20 @@ void* XArray_Init(xarray_t *pArr, xpool_t *pPool, size_t nSize, uint8_t nFixed)
 
 void* XArray_InitPool(xarray_t *pArr, size_t nPoolSize, size_t nSize, uint8_t nFixed)
 {
+    XCHECK((pArr != NULL), NULL);
+
     xpool_t *pPool = XPool_Create(nPoolSize);
-    if (pPool == NULL) return NULL;
+    if (pPool == NULL)
+    {
+        XArray_Init(pArr, NULL, XSTDNON, nFixed);
+        return NULL;
+    }
 
     void *pData = XArray_Init(pArr, pPool, nSize, nFixed);
     if (nSize && pData == NULL)
     {
         XPool_Destroy(pPool);
+        XArray_Init(pArr, NULL, XSTDNON, nFixed);
         return NULL;
     }
 
@@ -468,7 +475,9 @@ static int XArray_CompareKey(const void *pData1, const void *pData2, void *pCtx)
 
 int XArray_Partitioning(xarray_t *pArr, xarray_comparator_t compare, void *pCtx, int nStart, int nFinish)
 {
+    XCHECK((compare != NULL), nStart);
     int nPivot = nStart;
+
     while(1)
     {
         while (compare((void*)pArr->pData[nStart], (void*)pArr->pData[nPivot], pCtx) < 0) nStart++;
@@ -483,6 +492,8 @@ int XArray_Partitioning(xarray_t *pArr, xarray_comparator_t compare, void *pCtx,
 
 void XArray_QuickSort(xarray_t *pArr, xarray_comparator_t compare, void *pCtx, int nStart, int nFinish)
 {
+    XCHECK_VOID_NL((pArr != NULL && compare != NULL));
+
     if (nStart < nFinish)
     {
         int nPartitioning = XArray_Partitioning(pArr, compare, pCtx, nStart, nFinish);
@@ -493,7 +504,7 @@ void XArray_QuickSort(xarray_t *pArr, xarray_comparator_t compare, void *pCtx, i
 
 void XArray_Sort(xarray_t *pArr, xarray_comparator_t compare, void *pCtx)
 {
-    if (pArr == NULL || !pArr->nUsed) return;
+    if (pArr == NULL || compare == NULL || !pArr->nUsed) return;
     XArray_QuickSort(pArr, compare, pCtx, 0, (int)pArr->nUsed-1);
 }
 
@@ -507,6 +518,8 @@ void XArray_SortBy(xarray_t *pArr, int nSortBy)
 
 void XArray_BubbleSort(xarray_t *pArr, xarray_comparator_t compare, void *pCtx)
 {
+    XCHECK_VOID_NL((pArr != NULL && compare != NULL));
+
     if (pArr == NULL || !pArr->nUsed) return;
     size_t i, j;
 

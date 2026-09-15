@@ -44,14 +44,35 @@ xjwt_alg_t XJWT_GetAlg(const char *pAlgStr)
     return XJWT_ALG_INVALID;
 }
 
+static int XJWT_AddHeaderMember(xjson_obj_t *pJson, const char *pName, const char *pValue)
+{
+    xjson_obj_t *pChild = XJSON_NewString(NULL, pName, pValue);
+    XCHECK_NL((pChild != NULL), XSTDERR);
+
+    if (XJSON_AddObject(pJson, pChild) != XJSON_ERR_NONE)
+    {
+        XJSON_FreeObject(pChild);
+        return XSTDERR;
+    }
+
+    return XSTDOK;
+}
+
 xjson_obj_t* XJWT_CreateHeaderObj(xjwt_alg_t eAlg)
 {
     const char *pAlgo = XJWT_GetAlgStr(eAlg);
     XCHECK(pAlgo, NULL);
 
     xjson_obj_t *pJson = XJSON_NewObject(NULL, NULL, XFALSE);
-    XJSON_AddObject(pJson, XJSON_NewString(NULL, "alg", pAlgo));
-    XJSON_AddObject(pJson, XJSON_NewString(NULL, "typ", "JWT"));
+    XCHECK(pJson, NULL);
+
+    if (XJWT_AddHeaderMember(pJson, "alg", pAlgo) != XSTDOK ||
+        XJWT_AddHeaderMember(pJson, "typ", "JWT") != XSTDOK)
+    {
+        XJSON_FreeObject(pJson);
+        return NULL;
+    }
+
     return pJson;
 }
 
@@ -207,7 +228,14 @@ char* XJWT_GetHeader(xjwt_t *pJWT, xbool_t bDecode, size_t *pHeaderLen)
             size_t nRawHeaderLen = 0;
             pJWT->pHeaderObj = XJWT_CreateHeaderObj(pJWT->eAlgorithm);
             char *pHeaderRaw = XJSON_DumpObj(pJWT->pHeaderObj, XFALSE, &nRawHeaderLen);
-            XCHECK((pHeaderRaw && nRawHeaderLen), NULL);
+
+            /* A dump that produced a buffer but no length is still a
+               buffer, so it is released rather than dropped here. */
+            if (pHeaderRaw == NULL || !nRawHeaderLen)
+            {
+                free(pHeaderRaw);
+                return NULL;
+            }
 
             pJWT->nHeaderLen = nRawHeaderLen;
             pJWT->pHeader = XBase64_UrlEncrypt((const uint8_t*)pHeaderRaw, &pJWT->nHeaderLen);

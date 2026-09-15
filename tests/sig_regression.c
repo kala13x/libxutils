@@ -70,9 +70,24 @@ static void sig_body_segv_signal(void)
 static void sig_body_daemonize(void)
 {
     /* daemon() forks: this process exits from inside the call and the
-     * detached child returns here, so both ends must exit quietly. */
+     * detached child returns here, so both ends must exit quietly.
+     *
+     * The detached end leaves through exit() rather than _exit() so that a
+     * coverage build records what it ran; the call itself is what the
+     * assertions below are about. */
+    pid_t nBefore = getpid();
+    pid_t nSession = getsid(0);
+
     int nStatus = XUtils_Daemonize(1, 1);
-    _exit(nStatus == 0 ? 0 : 45);
+    if (nStatus != 0) _exit(45);
+
+    /* The detached process is a different one, in a session of its own,
+     * which is the whole point of daemonizing. */
+    if (getpid() == nBefore) _exit(46);
+    if (getsid(0) == nSession) _exit(47);
+    if (getsid(0) != getpid()) _exit(48);
+
+    exit(0);
 }
 
 static int XTest_register(void)
@@ -138,9 +153,32 @@ static int XTest_backtrace(void)
     return 0;
 }
 
+/* The same, but letting daemon() change the working directory to root,
+ * which is the other half of what the flags control. */
+static void sig_body_daemonize_chdir(void)
+{
+    char sBefore[512];
+    if (getcwd(sBefore, sizeof(sBefore)) == NULL) _exit(49);
+
+    if (XUtils_Daemonize(0, 1) != 0) _exit(45);
+
+    char sAfter[512];
+    if (getcwd(sAfter, sizeof(sAfter)) == NULL) _exit(50);
+    if (strcmp(sAfter, "/") != 0) _exit(51);
+
+    exit(0);
+}
+
 static int XTest_daemonize(void)
 {
+    /* The intermediate process exits from inside daemon(), so this is what
+     * the parent waits on; the detached one carries the assertions and is
+     * reaped by init. */
     CHECK(sig_run_child(sig_body_daemonize) == 0, "Daemonizing detaches without an error");
+
+    /* Detaching again from an already detached process is still valid, and
+     * the no-chdir and no-close flags are honoured rather than ignored. */
+    CHECK(sig_run_child(sig_body_daemonize_chdir) == 0, "Daemonizing with a directory change succeeds");
     return 0;
 }
 

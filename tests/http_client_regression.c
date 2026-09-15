@@ -25,6 +25,7 @@ typedef struct {
     xbool_t bDropRequest;   /* Close without answering at all */
     xbool_t bHalfAnswer;    /* Send a header with no body it promised */
     xbool_t bStream;        /* Answer with no length and end by closing */
+    xbool_t bWithLength;    /* Announce the generated body's length */
     size_t nFillBody;       /* Answer with this many generated body bytes */
     int nRequests;          /* How many requests to serve before exiting */
 
@@ -123,6 +124,34 @@ static void *http_serve(void *pContext)
         char sResponse[1024];
         size_t nBodyLen = pServer->pBody ? strlen(pServer->pBody) : 0;
         int nLength;
+
+        if (pServer->nFillBody && pServer->bWithLength)
+        {
+            /* The length delimited form: the reader knows in advance how
+             * much body to expect, which is a different loop in the client
+             * from the one that reads until the connection ends. */
+            nLength = snprintf(sResponse, sizeof(sResponse),
+                "HTTP/1.1 %d %s\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n"
+                "X-Served-By: regression\r\nConnection: close\r\n\r\n",
+                pServer->nStatusCode, XHTTP_GetCodeStr(pServer->nStatusCode), pServer->nFillBody);
+
+            if (nLength > 0) send(nPeer, sResponse, (size_t)nLength, MSG_NOSIGNAL);
+
+            char sChunk[1024];
+            memset(sChunk, 'L', sizeof(sChunk));
+
+            size_t nLeft = pServer->nFillBody;
+            while (nLeft > 0)
+            {
+                size_t nSend = nLeft < sizeof(sChunk) ? nLeft : sizeof(sChunk);
+                if (send(nPeer, sChunk, nSend, MSG_NOSIGNAL) <= 0) break;
+                nLeft -= nSend;
+            }
+
+            XSYNC_ATOMIC_ADD(&pServer->nServed, 1);
+            close(nPeer);
+            continue;
+        }
 
         if (pServer->bStream || pServer->nFillBody)
         {
@@ -768,6 +797,154 @@ static int XTest_callback_guards(void)
     return 0;
 }
 
+
+/* Drives one length delimited download with the given callback answer, and
+ * reports what the exchange came back as. */
+static xhttp_status_t http_length_body(http_cb_t *pCb, int nAnswer, size_t nBody,
+                                       size_t nContentMax, size_t *pBuffered)
+{
+    http_server_t server;
+    xthread_t thread;
+    if (http_start(&server, &thread, 1) != XSTDOK) return XHTTP_NONE;
+
+    server.nFillBody = nBody;
+    server.bWithLength = XTRUE;
+
+    char sUrl[128];
+    snprintf(sUrl, sizeof(sUrl), "http://127.0.0.1:%u/length", server.nPort);
+
+    memset(pCb, 0, sizeof(*pCb));
+    pCb->nAnswer = nAnswer;
+
+    xhttp_t http;
+    if (XHTTP_InitRequest(&http, XHTTP_GET, "/length", "1.1") <= 0)
+    {
+        XThread_Join(&thread);
+        return XHTTP_NONE;
+    }
+
+    XHTTP_SetCallback(&http, http_client_cb, pCb, XHTTP_READ_CNT | XHTTP_READ_HDR | XHTTP_STATUS);
+    if (nContentMax) http.nContentMax = nContentMax;
+
+    xhttp_status_t eStatus = XHTTP_EasyPerform(&http, sUrl, NULL, 0);
+    if (pBuffered != NULL) *pBuffered = XHTTP_GetBodySize(&http);
+
+    XHTTP_Clear(&http);
+    XThread_Join(&thread);
+    return eStatus;
+}
+
+static int XTest_length_stream(void)
+{
+    /* A body whose length is announced takes a different read loop from one
+     * that ends with the connection, and it is the one a real server uses.
+     * A callback that claims the bytes must still see all of them. */
+    http_cb_t cb;
+    size_t nBuffered = 0;
+    const size_t nBody = 40000;
+
+    xhttp_status_t eStatus = http_length_body(&cb, XSTDOK, nBody, 0, &nBuffered);
+    if (eStatus == XHTTP_NONE) { printf("No loopback listener, skipping\n"); return 77; }
+
+    CHECK(eStatus == XHTTP_COMPLETE, "The announced body completes");
+    CHECK(cb.nContentCbs > 0, "The content callback ran");
+    CHECK(cb.nStreamed == nBody, "Every announced byte reached the callback");
+    CHECK(nBuffered < nBody / 2, "A claimed body is not accumulated in the handle");
+    return 0;
+}
+
+static int XTest_length_buffered(void)
+{
+    /* The same download with an observing callback: the handle keeps the
+     * whole body, and its length is exactly what was announced. */
+    http_cb_t cb;
+    size_t nBuffered = 0;
+    const size_t nBody = 20000;
+
+    xhttp_status_t eStatus = http_length_body(&cb, XSTDUSR, nBody, 0, &nBuffered);
+    if (eStatus == XHTTP_NONE) { printf("No loopback listener, skipping\n"); return 77; }
+
+    CHECK(eStatus == XHTTP_COMPLETE, "The announced body completes");
+    CHECK(nBuffered == nBody, "The whole announced body is buffered");
+    CHECK(cb.nStreamed == nBody, "And the callback saw all of it too");
+    return 0;
+}
+
+static int XTest_length_stopped(void)
+{
+    /* A callback that says it has enough stops the download there, even
+     * though the announced length has not been reached. */
+    http_cb_t cb;
+    const size_t nBody = 200000;
+
+    xhttp_status_t eStatus = http_length_body(&cb, XSTDNON, nBody, 0, NULL);
+    if (eStatus == XHTTP_NONE) { printf("No loopback listener, skipping\n"); return 77; }
+
+    CHECK(eStatus == XHTTP_COMPLETE, "Stopping early still completes");
+    CHECK(cb.nContentCbs == 1, "It stopped on the first answer");
+    CHECK(cb.nStreamed < nBody, "Without reading the announced remainder");
+    return 0;
+}
+
+static int XTest_length_terminated(void)
+{
+    /* And one that refuses aborts the exchange. */
+    http_cb_t cb;
+    xhttp_status_t eStatus = http_length_body(&cb, XSTDERR, 200000, 0, NULL);
+    if (eStatus == XHTTP_NONE) { printf("No loopback listener, skipping\n"); return 77; }
+
+    CHECK(eStatus == XHTTP_TERMINATED, "A refusing callback terminates it");
+    CHECK(cb.nContentCbs == 1, "It stopped on the first answer");
+    return 0;
+}
+
+static int XTest_length_limit(void)
+{
+    /* An announced body larger than the caller's limit is refused while it
+     * is being read, not after: the point of the limit is that the memory
+     * is never allocated. */
+    http_cb_t cb;
+    size_t nBuffered = 0;
+
+    xhttp_status_t eStatus = http_length_body(&cb, XSTDUSR, 300000, 8192, &nBuffered);
+    if (eStatus == XHTTP_NONE) { printf("No loopback listener, skipping\n"); return 77; }
+
+    CHECK(eStatus == XHTTP_BIGCNT, "An announced body past the limit is refused");
+    CHECK(nBuffered < 300000, "The whole body was never buffered");
+    return 0;
+}
+
+static int XTest_length_truncated(void)
+{
+    /* A server that announces more than it sends and then goes away is a
+     * read error, not a complete message: accepting it would hand the
+     * caller a body shorter than the one it was promised. */
+    http_server_t server;
+    xthread_t thread;
+    if (http_start(&server, &thread, 1) != XSTDOK)
+    {
+        printf("No loopback listener, skipping\n");
+        return 77;
+    }
+
+    server.bHalfAnswer = XTRUE;
+    server.pBody = "short";
+
+    char sUrl[128];
+    snprintf(sUrl, sizeof(sUrl), "http://127.0.0.1:%u/truncated", server.nPort);
+
+    xhttp_t http;
+    CHECK(XHTTP_InitRequest(&http, XHTTP_GET, "/truncated", "1.1") > 0, "The request initializes");
+
+    xhttp_status_t eStatus = XHTTP_EasyPerform(&http, sUrl, NULL, 0);
+    CHECK(eStatus != XHTTP_COMPLETE, "A short answer is not reported as complete");
+    CHECK(XHTTP_GetStatusStr(eStatus) != NULL, "Whatever it is has a description");
+
+    XHTTP_Clear(&http);
+    XThread_Join(&thread);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(connect),
     XTEST_CASE(link_exchange),
@@ -782,5 +959,11 @@ XTEST_MAIN(
     XTEST_CASE(stopped_stream),
     XTEST_CASE(terminated_stream),
     XTEST_CASE(content_limit),
-    XTEST_CASE(callback_guards)
+    XTEST_CASE(callback_guards),
+    XTEST_CASE(length_stream),
+    XTEST_CASE(length_buffered),
+    XTEST_CASE(length_stopped),
+    XTEST_CASE(length_terminated),
+    XTEST_CASE(length_limit),
+    XTEST_CASE(length_truncated)
 )

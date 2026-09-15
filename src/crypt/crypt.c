@@ -510,7 +510,7 @@ uint8_t* XCrypt_Multy(xcrypt_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength
             return NULL;
         }
 
-        XArray_AddData(pCiphersArr, pCtx->pCiphers, strlen(pCtx->pCiphers));
+        XArray_AddData(pCiphersArr, pCtx->pCiphers, strlen(pCtx->pCiphers) + 1);
         if (!pCiphersArr->nUsed)
         {
             XCrypt_ErrorCallback(pCtx, "Can append cipher to the array");

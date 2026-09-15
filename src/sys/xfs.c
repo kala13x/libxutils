@@ -677,7 +677,6 @@ int XPath_Parse(xpath_t *pPath, const char *pPathStr, xbool_t bStat)
     }
 
     size_t i, nUsed = XArray_Used(pArr);
-    size_t nAvail = sizeof(pPath->sPath);
     int nStatus = XSTDNON;
 
     for (i = 0; i < nUsed; i++)
@@ -687,7 +686,7 @@ int XPath_Parse(xpath_t *pPath, const char *pPathStr, xbool_t bStat)
 
         if (i + 1 < nUsed)
         {
-            nAvail = xstrncatf(pPath->sPath, nAvail, "%s/", pEntry);
+            xstrncat(pPath->sPath, sizeof(pPath->sPath), "%s/", pEntry);
             continue;
         }
 

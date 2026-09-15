@@ -497,6 +497,99 @@ static int XTest_guards(void)
     return 0;
 }
 
+
+static int XTest_text_shapes(void)
+{
+    /* Searching inside files is line oriented, so the shape of the file
+     * decides which branches run: several matches in one file, a match on
+     * the first line, a match on a line with no terminator, a line longer
+     * than the line buffer, and a file with no newline at all. Each one is
+     * a different way to walk off the end of the buffer. */
+    srch_fixture_t fixture;
+    CHECK(srch_build(&fixture) == XSTDOK, "Build the search fixture");
+
+    /* A long line, so the copy into the fixed line buffer truncates. */
+    char *pLong = (char*)malloc(XSTR_MAX + 512);
+    CHECK(pLong != NULL, "The long line is allocated");
+
+    if (pLong != NULL)
+    {
+        size_t nAt = 0;
+        const char *pLead = "needle ";
+        memcpy(&pLong[nAt], pLead, strlen(pLead));
+        nAt += strlen(pLead);
+
+        while (nAt < XSTR_MAX + 400) pLong[nAt++] = 'x';
+        pLong[nAt++] = '\n';
+        pLong[nAt] = '\0';
+
+        CHECK(srch_write(&fixture, "long.txt", pLong, 0644) == XSTDOK, "The long line file is written");
+        free(pLong);
+    }
+
+    CHECK(srch_write(&fixture, "many.txt",
+        "needle one\nfiller\nneedle two\nfiller\nneedle three\n", 0644) == XSTDOK,
+        "The multi match file is written");
+
+    /* No trailing newline on the last line. */
+    CHECK(srch_write(&fixture, "tail.txt", "filler\nneedle at the very end", 0644) == XSTDOK,
+        "The unterminated file is written");
+
+    /* A single line with no newline at all. */
+    CHECK(srch_write(&fixture, "oneline.txt", "needle alone", 0644) == XSTDOK,
+        "The single line file is written");
+
+    /* And a file whose only content is newlines. */
+    CHECK(srch_write(&fixture, "blank.txt", "\n\n\n\n", 0644) == XSTDOK,
+        "The blank file is written");
+
+    g_callbackSeen = 0;
+    g_callbackErrors = 0;
+    g_callbackVerdict = XSTDOK;
+
+    xsearch_t search;
+    XSearch_Init(&search, "*.txt");
+    search.callback = srch_callback;
+    search.bRecursive = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "needle");
+
+    CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "The text search runs");
+    CHECK(g_callbackSeen > 0, "Matches were reported");
+    CHECK(g_callbackErrors == 0, "Nothing was reported as an error");
+
+    XSearch_Destroy(&search);
+
+    /* Text that appears nowhere produces no matches and no errors. */
+    g_callbackSeen = 0;
+    g_callbackErrors = 0;
+
+    XSearch_Init(&search, "*.txt");
+    search.callback = srch_callback;
+    search.bRecursive = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "no-such-text-anywhere");
+
+    CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "A search for absent text runs");
+    CHECK(g_callbackSeen == 0, "Nothing matched");
+    CHECK(g_callbackErrors == 0, "And nothing failed");
+
+    XSearch_Destroy(&search);
+
+    /* A search bounded to one match stops there. */
+    g_callbackSeen = 0;
+
+    XSearch_Init(&search, "*.txt");
+    search.callback = srch_callback;
+    search.bRecursive = XTRUE;
+    search.nLinkCount = 0;
+    xstrncpy(search.sText, sizeof(search.sText), "needle");
+
+    CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "The bounded search runs");
+    XSearch_Destroy(&search);
+
+    srch_destroy(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(name_matching),
     XTEST_CASE(recursion),
@@ -504,5 +597,6 @@ XTEST_MAIN(
     XTEST_CASE(text_search),
     XTEST_CASE(callback),
     XTEST_CASE(entries),
-    XTEST_CASE(guards)
+    XTEST_CASE(guards),
+    XTEST_CASE(text_shapes)
 )

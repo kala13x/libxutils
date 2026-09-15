@@ -616,6 +616,116 @@ static int XTest_append_remaining(void)
     return 0;
 }
 
+
+static int XTest_ansi_widths(void)
+{
+    /* Every escape the library can emit has to be recognised, and for its
+     * exact byte width. The visible length of a coloured string is computed
+     * by subtracting these, so one unrecognised sequence makes a progress
+     * bar or a table column render at the wrong width - and only for the
+     * colour nobody tested. */
+    typedef struct { const char *pName; const char *pSeq; size_t nWidth; } ansi_t;
+
+    const ansi_t escapes[] = {
+        {"light red",     XSTR_CLR_LIGHT_RED,     7},
+        {"light green",   XSTR_CLR_LIGHT_GREEN,   7},
+        {"light yellow",  XSTR_CLR_LIGHT_YELLOW,  7},
+        {"light blue",    XSTR_CLR_LIGHT_BLUE,    7},
+        {"light magenta", XSTR_CLR_LIGHT_MAGENTA, 7},
+        {"light cyan",    XSTR_CLR_LIGHT_CYAN,    7},
+        {"light white",   XSTR_CLR_LIGHT_WHITE,   7},
+
+        {"red",           XSTR_CLR_RED,           5},
+        {"green",         XSTR_CLR_GREEN,         5},
+        {"yellow",        XSTR_CLR_YELLOW,        5},
+        {"blue",          XSTR_CLR_BLUE,          5},
+        {"magenta",       XSTR_CLR_MAGENTA,       5},
+        {"cyan",          XSTR_CLR_CYAN,          5},
+        {"white",         XSTR_CLR_WHITE,         5},
+
+        {"back black",    XSTR_BACK_BLACK,        5},
+        {"back red",      XSTR_BACK_RED,          5},
+        {"back green",    XSTR_BACK_GREEN,        5},
+        {"back yellow",   XSTR_BACK_YELLOW,       5},
+        {"back blue",     XSTR_BACK_BLUE,         5},
+        {"back magenta",  XSTR_BACK_MAGENTA,      5},
+        {"back cyan",     XSTR_BACK_CYAN,         5},
+        {"back white",    XSTR_BACK_WHITE,        5},
+
+        {"bold",          XSTR_FMT_BOLD,          4},
+        {"dim",           XSTR_FMT_DIM,           4},
+        {"italic",        XSTR_FMT_ITALIC,        4},
+        {"underline",     XSTR_FMT_ULINE,         4},
+        {"flicker",       XSTR_FMT_FLICK,         4},
+        {"blink",         XSTR_FMT_BLINK,         4},
+        {"highlight",     XSTR_FMT_HIGHLITE,      4},
+        {"hide",          XSTR_FMT_HIDE,          4},
+        {"cross",         XSTR_FMT_CROSS,         4},
+        {"reset",         XSTR_FMT_RESET,         4},
+
+        {"degree",        XSTR_DEGREE_SYMBOL,     1}
+    };
+
+    size_t nCount = sizeof(escapes) / sizeof(*escapes);
+
+    for (size_t i = 0; i < nCount; i++)
+    {
+        size_t nFound = xstrisextra(escapes[i].pSeq);
+        CHECK(nFound == escapes[i].nWidth, "Every escape is recognised at its own width");
+
+        /* The degree symbol is two UTF-8 bytes rendering as one character,
+         * so it is reported as one extra byte rather than as a sequence
+         * that vanishes entirely. Everything else is pure escape. */
+        if (escapes[i].nWidth == 1) continue;
+
+        /* The visible length of text wrapped in it is the text alone. */
+        char sLine[128];
+        xstrncpyf(sLine, sizeof(sLine), "%svisible%s", escapes[i].pSeq, XSTR_FMT_RESET);
+
+        size_t nPosit = 0, nChars = 0;
+        size_t nExtra = xstrextra(sLine, strlen(sLine), 0, &nChars, &nPosit);
+
+        CHECK(nChars == strlen("visible"), "The visible length excludes the escapes");
+        CHECK(nExtra == strlen(sLine) - strlen("visible"), "Everything else is counted as escape bytes");
+    }
+
+    /* The degree symbol on its own: one visible character, two bytes. */
+    {
+        char sDegree[32];
+        xstrncpyf(sDegree, sizeof(sDegree), "21%sC", XSTR_DEGREE_SYMBOL);
+
+        size_t nPosit = 0, nChars = 0;
+        size_t nExtra = xstrextra(sDegree, strlen(sDegree), 0, &nChars, &nPosit);
+
+        CHECK(nExtra == 1, "The degree symbol counts as one extra byte");
+        CHECK(nChars + nExtra == strlen(sDegree), "Its bytes are all accounted for");
+    }
+
+    /* Anything that is not one of them is not an escape, including the
+     * prefixes that start like one. */
+    CHECK(xstrisextra("plain text") == 0, "Plain text is not an escape");
+    CHECK(xstrisextra("\x1B") == 0, "A lone escape byte is not a sequence");
+    CHECK(xstrisextra("\x1B[") == 0, "An unfinished sequence is not one");
+    CHECK(xstrisextra("\x1B[99m") == 0, "An unknown sequence is not recognised");
+    CHECK(xstrisextra("") == 0, "An empty string holds no escape");
+
+    /* Several in a row, which is how the library actually emits them. */
+    char sMixed[256];
+    xstrncpyf(sMixed, sizeof(sMixed), "%s%s%sboth%s",
+        XSTR_FMT_BOLD, XSTR_CLR_LIGHT_CYAN, XSTR_BACK_RED, XSTR_FMT_RESET);
+
+    size_t nPosit = 0, nChars = 0;
+    xstrextra(sMixed, strlen(sMixed), 0, &nChars, &nPosit);
+    CHECK(nChars == strlen("both"), "Stacked escapes all come off the visible length");
+
+    /* The character limit stops counting where it is told to. */
+    nPosit = 0; nChars = 0;
+    xstrextra(sMixed, strlen(sMixed), 2, &nChars, &nPosit);
+    CHECK(nChars == 2, "The character limit is honoured across escapes");
+    CHECK(nPosit <= strlen(sMixed), "The reported position stays inside the string");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(split),
     XTEST_CASE(match),
@@ -632,5 +742,6 @@ XTEST_MAIN(
     XTEST_CASE(random),
     XTEST_CASE(glob),
     XTEST_CASE(field_formatting),
-    XTEST_CASE(append_remaining)
+    XTEST_CASE(append_remaining),
+    XTEST_CASE(ansi_widths)
 )

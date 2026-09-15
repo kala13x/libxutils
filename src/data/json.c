@@ -1729,23 +1729,28 @@ int XJSON_InitWriter(xjson_writer_t *pWriter, xpool_t *pPool, char *pOutput, siz
     pWriter->nSize = nSize;
     pWriter->pPool = pPool;
     pWriter->nAlloc = 0;
+    pWriter->nTabSize = 0;
+    pWriter->nPretty = 0;
+    pWriter->nIndents = 0;
+    pWriter->nLength = 0;
 
     if (pWriter->pData == NULL && pWriter->nSize)
     {
         pWriter->pData = xalloc(pPool, pWriter->nSize);
-        if (pWriter->pData == NULL) return 0;
+        if (pWriter->pData == NULL)
+        {
+            pWriter->nAvail = 0;
+            pWriter->nSize = 0;
+            return XJSON_FAILURE;
+        }
+
         pWriter->nAlloc = 1;
     }
 
     if (pWriter->pData != NULL)
         pWriter->pData[0] = '\0';
 
-    pWriter->nTabSize = 0;
-    pWriter->nPretty = 0;
-    pWriter->nIndents = 0;
-    pWriter->nLength = 0;
-
-    return 1;
+    return XJSON_SUCCESS;
 }
 
 void XJSON_DestroyWriter(xjson_writer_t *pWriter)

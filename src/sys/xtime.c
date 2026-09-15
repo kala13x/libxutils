@@ -31,7 +31,7 @@ static int XTime_SetParsed(xtime_t *pTime, int nParsed, int nExpected,
 {
     if (nParsed != nExpected || !nYear || nYear > UINT16_MAX || !nMonth || nMonth > 12 || !nDay ||
         nDay > (unsigned int)XTime_GetMonthDays((int)nYear, (int)nMonth) ||
-        nHour > 23 || nMin > 59 || nSec > 59 || nFraq > UINT8_MAX) return 0;
+        nHour > 23 || nMin > 59 || nSec > 59 || nFraq > XTIME_FRAQ_MAX) return 0;
 
     pTime->nYear = (uint16_t)nYear;
     pTime->nMonth = (uint8_t)nMonth;
@@ -72,7 +72,7 @@ int XTime_FromStr(xtime_t *pTime, const char *pStr)
     return XTime_SetParsed(pTime, nParsed, 7, nYear, nMonth, nDay, nHour, nMin, nSec, nFraq);
 }
 
-int XTime_FromHStr(xtime_t *pTime, const char *pStr)
+int XTime_FromHstr(xtime_t *pTime, const char *pStr)
 {
     XCHECK((pTime != NULL && xstrused(pStr)), 0);
     XTime_Init(pTime);
@@ -164,7 +164,8 @@ void XTime_Deserialize(xtime_t *pTime, const uint64_t nTime)
     pTime->nHour = XTIME_U64_HOUR(nTime);
     pTime->nMin = XTIME_U64_MIN(nTime);
     pTime->nSec = XTIME_U64_SEC(nTime);
-    pTime->nFraq = XTIME_U64_FRAQ(nTime);
+    int nFraq = XTIME_U64_FRAQ(nTime);
+    pTime->nFraq = (uint8_t)(nFraq > XTIME_FRAQ_MAX ? XTIME_FRAQ_MAX : nFraq);
 }
 
 void XTime_FromU64(xtime_t *pTime, const uint64_t nTime)

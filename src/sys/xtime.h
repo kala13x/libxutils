@@ -29,6 +29,7 @@
 #define XSECS_IN_MIN        60
 
 #define XTIME_MAX           64
+#define XTIME_FRAQ_MAX      99
 
 typedef enum {
     XTIME_STR_SIMPLE = 0,

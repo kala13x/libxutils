@@ -8,6 +8,7 @@
 #include "test.h"
 #include "mdtp.h"
 #include "str.h"
+#include <string.h>
 
 static void mdtp_fill_header(xpacket_t *pPacket, const char *pType, uint32_t nPayloadSize)
 {
@@ -447,6 +448,125 @@ static int XTest_parse_into_stale(void)
     return 0;
 }
 
+
+static int XTest_header_combinations(void)
+{
+    /* The header is built field by field, and each optional one has its own
+     * branch. Every combination is assembled and parsed back, so a field
+     * that is written but not read - or read into the wrong place - shows
+     * up rather than waiting for the one deployment that sets it. */
+    const uint8_t sPayload[] = "combination payload";
+    const size_t nPayload = sizeof(sPayload) - 1;
+
+    for (unsigned nMask = 0; nMask < 64; nMask++)
+    {
+        xpacket_t packet;
+        CHECK(XPacket_Init(&packet, (uint8_t*)sPayload, (uint32_t)nPayload) == XPACKET_ERR_NONE,
+            "The packet initializes");
+
+        xpacket_header_t *pHeader = &packet.header;
+        pHeader->eType = XPACKET_TYPE_DATA;
+        xstrncpy(pHeader->sVersion, sizeof(pHeader->sVersion), XPACKET_VERSION_STR);
+
+        uint32_t nSession = (nMask & 1) ? 4242u : 0u;
+        uint32_t nStamp   = (nMask & 2) ? 1600000000u : 0u;
+        uint32_t nPacketID = (nMask & 4) ? 7u : 0u;
+
+        pHeader->nSessionID = nSession;
+        pHeader->nTimeStamp = nStamp;
+        pHeader->nPacketID = nPacketID;
+
+        if (nMask & 8) xstrncpy(pHeader->sPayloadType, sizeof(pHeader->sPayloadType), "text");
+        if (nMask & 16) xstrncpy(pHeader->sTime, sizeof(pHeader->sTime), "2024.03.15-14:30:45.25");
+        if (nMask & 32) xstrncpy(pHeader->sTZ, sizeof(pHeader->sTZ), "UTC");
+
+        xbyte_buffer_t *pWire = XPacket_Assemble(&packet);
+        CHECK(pWire != NULL, "Every combination assembles");
+
+        if (pWire != NULL)
+        {
+            xpacket_t parsed;
+            memset(&parsed, 0, sizeof(parsed));
+
+            CHECK(XPacket_Parse(&parsed, pWire->pData, pWire->nUsed) == XPACKET_COMPLETE,
+                "Every combination parses back");
+
+            CHECK(parsed.header.nSessionID == nSession, "The session id round trips");
+            CHECK(parsed.header.nTimeStamp == nStamp, "The time stamp round trips");
+            CHECK(parsed.header.nPacketID == nPacketID, "The packet id round trips");
+            CHECK(parsed.header.nPayloadSize == nPayload, "The payload size round trips");
+
+            if (nMask & 8)
+                CHECK(strcmp(parsed.header.sPayloadType, "text") == 0, "The payload type round trips");
+            if (nMask & 16)
+                CHECK(strcmp(parsed.header.sTime, "2024.03.15-14:30:45.25") == 0, "The time round trips");
+            if (nMask & 32)
+                CHECK(strcmp(parsed.header.sTZ, "UTC") == 0, "The time zone round trips");
+
+            const uint8_t *pBack = XPacket_GetPayload(&parsed);
+            CHECK(pBack != NULL, "The payload comes back");
+            CHECK(pBack == NULL || memcmp(pBack, sPayload, nPayload) == 0, "The payload is unchanged");
+
+            XPacket_Clear(&parsed);
+        }
+
+        XPacket_Clear(&packet);
+    }
+
+    return 0;
+}
+
+static int XTest_header_refusals(void)
+{
+    /* A header the assembler cannot describe is refused rather than written
+     * as something else. The error and invalid types are the two that have
+     * no wire form at all. */
+    const uint8_t sPayload[] = "x";
+
+    const xpacket_type_t refused[] = {XPACKET_TYPE_ERROR, XPACKET_TYPE_INVALID};
+    for (size_t i = 0; i < sizeof(refused) / sizeof(*refused); i++)
+    {
+        xpacket_t packet;
+        CHECK(XPacket_Init(&packet, (uint8_t*)sPayload, 1) == XPACKET_ERR_NONE, "The packet initializes");
+
+        packet.header.eType = refused[i];
+        xstrncpy(packet.header.sVersion, sizeof(packet.header.sVersion), XPACKET_VERSION_STR);
+
+        CHECK(XPacket_UpdateHeader(&packet) == XPACKET_INVALID, "An undescribable type is refused");
+        CHECK(XPacket_Assemble(&packet) == NULL, "And nothing is assembled from it");
+
+        XPacket_Clear(&packet);
+    }
+
+    /* The lite type deliberately carries no packetType field, which is what
+     * makes it lite: it still has to assemble and parse. */
+    xpacket_t lite;
+    CHECK(XPacket_Init(&lite, (uint8_t*)sPayload, 1) == XPACKET_ERR_NONE, "The lite packet initializes");
+
+    lite.header.eType = XPACKET_TYPE_LITE;
+    xstrncpy(lite.header.sVersion, sizeof(lite.header.sVersion), XPACKET_VERSION_STR);
+
+    xbyte_buffer_t *pWire = XPacket_Assemble(&lite);
+    CHECK(pWire != NULL, "A lite packet assembles");
+
+    if (pWire != NULL)
+    {
+        CHECK(memmem(pWire->pData, pWire->nUsed, "packetType", 10) == NULL,
+            "A lite packet carries no packet type");
+
+        xpacket_t parsed;
+        memset(&parsed, 0, sizeof(parsed));
+        CHECK(XPacket_Parse(&parsed, pWire->pData, pWire->nUsed) == XPACKET_COMPLETE,
+            "A lite packet parses back");
+        XPacket_Clear(&parsed);
+    }
+
+    XPacket_Clear(&lite);
+
+    CHECK(XPacket_UpdateHeader(NULL) == XPACKET_INVALID_ARGS, "A missing packet is rejected");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(type_mapping),
     XTEST_CASE(assemble_parse),
@@ -456,5 +576,7 @@ XTEST_MAIN(
     XTEST_CASE(create_guards),
     XTEST_CASE(lifecycle),
     XTEST_CASE(hostile_header),
-    XTEST_CASE(parse_into_stale)
+    XTEST_CASE(parse_into_stale),
+    XTEST_CASE(header_combinations),
+    XTEST_CASE(header_refusals)
 )

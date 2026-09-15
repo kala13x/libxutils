@@ -291,7 +291,7 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
     xpacket_header_t *pHeader = &pPacket->header;
     xjson_writer_t jsonWriter;
 
-    XJSON_InitWriter(&jsonWriter, NULL, NULL, XPACKET_HDR_INITIAL);
+    XCHECK((XJSON_InitWriter(&jsonWriter, NULL, NULL, XPACKET_HDR_INITIAL) == XJSON_SUCCESS), NULL);
     XByteBuffer_Reset(&pPacket->rawData);
 
     if (XJSON_WriteObject(pPacket->pHeaderObj, &jsonWriter))

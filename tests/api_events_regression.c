@@ -35,6 +35,7 @@ typedef struct {
     int nTicks;
     int nRegistered;
 
+    int nHandshakeAnswer;
     int nHunged;
     int nClosedStatus;
     int nInvalidRole;
@@ -83,6 +84,7 @@ static int api_ev_callback(xapi_ctx_t *pCtx, xapi_session_t *pSession)
         case XAPI_CB_CONNECTED: pTest->nConnected++; break;
         case XAPI_CB_REGISTERED: pTest->nRegistered++; break;
         case XAPI_CB_CLOSED: pTest->nClosedCb++; break;
+        case XAPI_CB_HANDSHAKE_ANSWER: pTest->nHandshakeAnswer++; break;
         case XAPI_CB_WRITE: pTest->nWrite++; break;
         case XAPI_CB_TIMER: pTest->nTimers++; break;
         default: break;
@@ -966,6 +968,82 @@ static int XTest_ws_bad_response(void)
     return 0;
 }
 
+
+static int XTest_ws_upgrade_tokens(void)
+{
+    /* The upgrade is decided by matching a token inside a comma separated
+     * header, case insensitively. That matcher is what stands between a
+     * real WebSocket client and anything else, so both halves matter: a
+     * value that does contain the token must be accepted whatever the
+     * spacing and casing around it, and one that only looks like it must
+     * not be. A prefix match here would upgrade "websocketish". */
+    struct { const char *pUpgrade; const char *pConnection; xbool_t bAccept; } cases[] = {
+        /* Accepted: the token is there, however it is written. */
+        {"websocket",            "Upgrade",                 XTRUE},
+        {"WebSocket",            "upgrade",                 XTRUE},
+        {"WEBSOCKET",            "UPGRADE",                 XTRUE},
+        {"  websocket  ",        "  Upgrade  ",             XTRUE},
+        {"h2c, websocket",       "keep-alive, Upgrade",     XTRUE},
+        {"websocket, h2c",       "Upgrade, keep-alive",     XTRUE},
+        {"a,  WebSocket  , b",   "x, UPGRADE, y",           XTRUE},
+        {",,websocket,,",        ",,Upgrade,,",             XTRUE},
+
+        /* Refused: it only looks like the token. */
+        {"websocketish",         "Upgrade",                 XFALSE},
+        {"notwebsocket",         "Upgrade",                 XFALSE},
+        {"web socket",           "Upgrade",                 XFALSE},
+        {"websocke",             "Upgrade",                 XFALSE},
+        {"h2c",                  "Upgrade",                 XFALSE},
+        {"",                     "Upgrade",                 XFALSE}
+    };
+
+    size_t nCount = sizeof(cases) / sizeof(*cases);
+
+    for (size_t i = 0; i < nCount; i++)
+    {
+        api_ev_t test;
+        int nFD = api_ev_proto(&test, XAPI_WS, XPOLLIN | XPOLLRDHUP);
+        if (nFD < 0) { printf("No loopback fixture, skipping\n"); return 77; }
+
+        char sRequest[512];
+        int nLength = snprintf(sRequest, sizeof(sRequest),
+            "GET /socket HTTP/1.1\r\n"
+            "Host: 127.0.0.1\r\n"
+            "Upgrade: %s\r\n"
+            "Connection: %s\r\n"
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+            "Sec-WebSocket-Version: 13\r\n"
+            "\r\n",
+            cases[i].pUpgrade, cases[i].pConnection);
+
+        CHECK(nLength > 0 && write(nFD, sRequest, (size_t)nLength) == nLength,
+            "The upgrade request reaches the server");
+
+        for (int n = 0; n < 100; n++)
+        {
+            XAPI_Service(&test.api, 10);
+            if (cases[i].bAccept && test.nHandshakeAnswer > 0) break;
+            if (!cases[i].bAccept && XAPI_GetEventCount(&test.api) <= 1) break;
+        }
+
+        if (cases[i].bAccept)
+        {
+            CHECK(test.nHandshakeAnswer >= 1, "A real upgrade is answered");
+            CHECK(XAPI_GetEventCount(&test.api) == 2, "And the peer stays in the loop");
+        }
+        else
+        {
+            CHECK(test.nHandshakeAnswer == 0, "A request that is not an upgrade is not answered");
+            CHECK(XAPI_GetEventCount(&test.api) == 1, "And the peer is dropped");
+        }
+
+        close(nFD);
+        XAPI_Destroy(&test.api);
+    }
+
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(peer_closed),
     XTEST_CASE(peer_hunged),
@@ -983,5 +1061,6 @@ XTEST_MAIN(
     XTEST_CASE(endpoint_guards),
     XTEST_CASE(ws_garbage_request),
     XTEST_CASE(ws_oversized_request),
-    XTEST_CASE(ws_bad_response)
+    XTEST_CASE(ws_bad_response),
+    XTEST_CASE(ws_upgrade_tokens)
 )

@@ -504,6 +504,100 @@ static int XTest_ownership(void)
     return 0;
 }
 
+
+static int XTest_path_bounds(void)
+{
+    /* A path longer than the field it is split into has to be truncated
+     * into it, terminated, and reported - not written one byte past the end
+     * with the terminator landing in the next member. A server that builds
+     * a path out of a request URI takes this straight from the network. */
+    xpath_t path;
+
+    /* Long enough that the accumulated directory part cannot fit. */
+    size_t nLong = sizeof(path.sPath) + 512;
+    char *pLong = (char*)malloc(nLong + 1);
+    CHECK(pLong != NULL, "The long path is allocated");
+
+    if (pLong == NULL) return 1;
+
+    /* "/dir/dir/.../file.txt", sized so the file name lands exactly at the
+     * end: stepping four at a time and then writing eight would overshoot
+     * the allocation, so the last stretch is filled one byte at a time. */
+    size_t nAt = 0;
+    pLong[nAt++] = '/';
+
+    while (nAt + 4 <= nLong - 8)
+    {
+        pLong[nAt++] = 'd';
+        pLong[nAt++] = 'i';
+        pLong[nAt++] = 'r';
+        pLong[nAt++] = '/';
+    }
+
+    while (nAt < nLong - 9) pLong[nAt++] = 'd';
+
+    /* A separator immediately before the name, so the last segment is
+     * exactly "file.txt" rather than the filler run plus it. */
+    pLong[nLong - 9] = '/';
+    memcpy(&pLong[nLong - 8], "file.txt", 8);
+    pLong[nLong] = '\0';
+
+    /* Poisoned, so an unterminated field is visible rather than lucky. */
+    memset(&path, 0x7f, sizeof(path));
+    XPath_Parse(&path, pLong, XFALSE);
+
+    CHECK(memchr(path.sPath, '\0', sizeof(path.sPath)) != NULL,
+        "The directory part is terminated inside its own field");
+    CHECK(memchr(path.sFile, '\0', sizeof(path.sFile)) != NULL,
+        "The file part is terminated inside its own field");
+    CHECK(strlen(path.sPath) < sizeof(path.sPath), "The directory part fits its field");
+    CHECK(strlen(path.sFile) < sizeof(path.sFile), "The file part fits its field");
+    CHECK(strcmp(path.sFile, "file.txt") == 0, "The file name is still the last segment");
+
+    /* Every length around the boundary, so an off by one cannot hide. */
+    for (size_t nLen = sizeof(path.sPath) - 8; nLen <= sizeof(path.sPath) + 8; nLen++)
+    {
+        char *pEdge = (char*)malloc(nLen + 1);
+        if (pEdge == NULL) continue;
+
+        memset(pEdge, 'a', nLen);
+        pEdge[0] = '/';
+        pEdge[nLen] = '\0';
+
+        /* Turn it into real segments so the accumulating branch is taken. */
+        for (size_t i = 8; i < nLen; i += 8) pEdge[i] = '/';
+
+        memset(&path, 0x7f, sizeof(path));
+        XPath_Parse(&path, pEdge, XFALSE);
+
+        CHECK(memchr(path.sPath, '\0', sizeof(path.sPath)) != NULL,
+            "Every length leaves the directory part terminated");
+        CHECK(memchr(path.sFile, '\0', sizeof(path.sFile)) != NULL,
+            "Every length leaves the file part terminated");
+
+        free(pEdge);
+    }
+
+    free(pLong);
+
+    /* A single segment longer than the file field is truncated into it. */
+    char sLongFile[1024];
+    memset(sLongFile, 'f', sizeof(sLongFile) - 1);
+    sLongFile[0] = '/';
+    sLongFile[sizeof(sLongFile) - 1] = '\0';
+
+    memset(&path, 0x7f, sizeof(path));
+    XPath_Parse(&path, sLongFile, XFALSE);
+
+    CHECK(strlen(path.sFile) < sizeof(path.sFile), "An overlong file name is truncated into its field");
+
+    /* And the guards. */
+    CHECK(XPath_Parse(NULL, "/a/b", XFALSE) == XSTDINV, "A missing destination is rejected");
+    CHECK(XPath_Parse(&path, NULL, XFALSE) == XSTDERR, "A missing path is rejected");
+    CHECK(XPath_Parse(&path, "", XFALSE) == XSTDERR, "An empty path is rejected");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(file_io),
     XTEST_CASE(handles),
@@ -511,5 +605,6 @@ XTEST_MAIN(
     XTEST_CASE(load),
     XTEST_CASE(paths),
     XTEST_CASE(directories),
-    XTEST_CASE(ownership)
+    XTEST_CASE(ownership),
+    XTEST_CASE(path_bounds)
 )

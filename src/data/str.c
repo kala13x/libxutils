@@ -1691,6 +1691,7 @@ int XString_InitFrom(xstring_t *pStr, const char *pFmt, ...)
     if (XString_Init(pStr, nBytes, 0) == XSTDERR ||
         XString_Add(pStr, pDest, nBytes) == XSTDERR)
     {
+        XString_Clear(pStr);
         free(pDest);
         return XSTDERR;
     }
