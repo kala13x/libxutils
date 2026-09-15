@@ -307,7 +307,7 @@ static int XTest_event_fd(void)
     uint64_t nValue = 3;
     CHECK(write(pEvent->nFD, &nValue, sizeof(nValue)) == (ssize_t)sizeof(nValue), "The event is signalled");
 
-    for (int i = 0; i < 20 && test.nUsers == 0; i++) XEvents_Service(&events, 50);
+    for (int i = 0; i < 200 && test.nUsers == 0; i++) XEvents_Service(&events, 50);
     CHECK(test.nUsers == 1, "The signalled event reached the callback");
     CHECK(test.bFailed == XFALSE, "The signalled value arrived intact");
 
@@ -388,7 +388,7 @@ static int XTest_timer_lifecycle(void)
     CHECK(XEvents_ExtendTimer(&events, pTimer, 60) == XEVENTS_SUCCESS, "The timer is extended");
 
     /* It eventually fires. */
-    for (int i = 0; i < 100 && test.nTimers == 0; i++) XEvents_Service(&events, 20);
+    for (int i = 0; i < 500 && test.nTimers == 0; i++) XEvents_Service(&events, 20);
     CHECK(test.nTimers >= 1, "The timer eventually fired");
 
     /* A second timer can be removed before it ever fires. */

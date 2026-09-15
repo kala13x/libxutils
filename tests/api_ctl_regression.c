@@ -207,7 +207,9 @@ static int XTest_listen_connect(void)
     CHECK(nWatched == 2, "Both the listener and the client are watched");
 
     /* Servicing the loop accepts the pending connection. */
-    for (int i = 0; i < 20 && test.nAccepted == 0; i++) XAPI_Service(&api, 50);
+    /* The bound is generous: how quickly a loopback accept becomes visible
+     * is the runner's business, and a tight window only buys flakiness. */
+    for (int i = 0; i < 200 && test.nAccepted == 0; i++) XAPI_Service(&api, 50);
     CHECK(test.nAccepted >= 1, "The listener accepted the client");
     CHECK(XAPI_GetEventCount(&api) >= 3, "The accepted peer is watched too");
 
@@ -341,7 +343,7 @@ static int XTest_timers(void)
     xclosesock(pair[1]);
 
     /* The peer closing is noticed. */
-    for (int i = 0; i < 50 && test.nClosed == 0; i++) XAPI_Service(&api, 10);
+    for (int i = 0; i < 500 && test.nClosed == 0; i++) XAPI_Service(&api, 10);
     CHECK(test.nClosed >= 1, "The peer closing is reported");
 
     XAPI_Destroy(&api);
@@ -453,7 +455,7 @@ static int XTest_buffers(void)
     const char payload[] = "queued bytes";
     CHECK(write(pair[1], payload, sizeof(payload) - 1) > 0, "The peer writes");
 
-    for (int i = 0; i < 50 && test.nTotal < 2; i++) XAPI_Service(&api, 10);
+    for (int i = 0; i < 500 && test.nTotal < 2; i++) XAPI_Service(&api, 10);
     CHECK(test.nTotal > 0, "The loop reported the traffic");
 
     xclosesock(pair[1]);

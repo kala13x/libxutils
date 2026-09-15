@@ -95,10 +95,12 @@ static int XTest_key_sizes(void)
 static int XTest_cross_key(void)
 {
     /* A signature only verifies under the key that made it: two keys of the
-     * same size must not be interchangeable. */
+     * same size must not be interchangeable. The size is irrelevant to that,
+     * and key generation is the slowest thing in this file, so this uses the
+     * smallest size the library will produce. */
     xrsa_ctx_t first, second;
-    CHECK(XRSA_GenerateKeys(&first, 2048, 65537) == XSTDOK, "The first key generates");
-    CHECK(XRSA_GenerateKeys(&second, 2048, 65537) == XSTDOK, "The second key generates");
+    CHECK(XRSA_GenerateKeys(&first, 1024, 65537) == XSTDOK, "The first key generates");
+    CHECK(XRSA_GenerateKeys(&second, 1024, 65537) == XSTDOK, "The second key generates");
     CHECK(strcmp(first.pPrivateKey, second.pPrivateKey) != 0, "Two generated keys differ");
 
     const uint8_t data[] = "signed by the first key";
@@ -127,7 +129,7 @@ static int XTest_key_import(void)
     /* A key exported as PEM has to come back in through the import path and
      * behave the same as the one it was exported from. */
     xrsa_ctx_t source;
-    CHECK(XRSA_GenerateKeys(&source, 2048, 65537) == XSTDOK, "The source key generates");
+    CHECK(XRSA_GenerateKeys(&source, 1024, 65537) == XSTDOK, "The source key generates");
 
     char *pPrivPem = strdup(source.pPrivateKey);
     char *pPubPem = strdup(source.pPublicKey);
@@ -174,7 +176,7 @@ static int XTest_key_files(void)
     snprintf(sPub, sizeof(sPub), "%s/public.pem", sDir);
 
     xrsa_ctx_t key;
-    CHECK(XRSA_GenerateKeys(&key, 2048, 65537) == XSTDOK, "The key generates");
+    CHECK(XRSA_GenerateKeys(&key, 1024, 65537) == XSTDOK, "The key generates");
 
     FILE *pFile = fopen(sPriv, "wb");
     CHECK(pFile != NULL, "The private key file opens");

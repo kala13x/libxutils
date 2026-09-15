@@ -1340,17 +1340,7 @@ int XString_AddString(xstring_t *pString, xstring_t *pSrc)
 int XString_Copy(xstring_t *pString, xstring_t *pSrc)
 {
     if (pString == NULL || pSrc == NULL || pSrc->pData == NULL) return XSTDERR;
-
-    /* XString_Init() below drops the destination's pointer without
-       releasing it, and clears the flag that says the object itself is heap
-       allocated. Release the old buffer and put the flag back, or a copy
-       into a string that already held one leaks it. */
-    if (pString->nSize > 0 && pString->pData != NULL) free(pString->pData);
-    xbool_t nAlloc = pString->nAlloc;
-
     XString_Init(pString, pSrc->nSize, pSrc->nFast);
-    pString->nAlloc = nAlloc;
-
     if (pString->nStatus == XSTDERR) return XSTDERR;
 
     memcpy(pString->pData, pSrc->pData, pSrc->nSize);

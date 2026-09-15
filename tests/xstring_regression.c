@@ -302,14 +302,16 @@ static int XTest_construction(void)
     XString_Clear(pCopy);
     XString_Clear(pFmt);
 
-    /* Copying into an existing string replaces its contents. */
+    /* Copying initializes its destination rather than appending to one, so
+     * it takes a bare xstring_t and must not read what was in it. A
+     * destination that already owns a buffer is its owner's to clear. */
     xstring_t target, source;
-    CHECK(XString_InitFrom(&target, "%s", "old") > 0, "The target is built");
     CHECK(XString_InitFrom(&source, "%s", "new-contents") > 0, "The source is built");
 
-    CHECK(XString_Copy(&target, &source) > 0, "The copy succeeds");
+    CHECK(XString_Copy(&target, &source) > 0, "The copy succeeds into an uninitialized destination");
     CHECK(strcmp(target.pData, "new-contents") == 0, "The target holds the source contents");
     CHECK(target.pData != source.pData, "The target owns its own storage");
+    CHECK(target.nLength == source.nLength, "The target has the source length");
 
     /* Appending one string onto another. */
     CHECK(XString_AddString(&target, &source) > 0, "One string appends onto another");

@@ -21,6 +21,41 @@ if(UNIX)
     set_tests_properties(api_regression PROPERTIES TIMEOUT 120)
 endif()
 
+# The shipped examples are the library's documented usage. They are built and
+# run here so a change that breaks one is caught by ctest rather than by a
+# reader: several of them verify their own output, and under the sanitizer and
+# memcheck modes every one of them becomes a memory regression test too.
+set(XUTILS_EXAMPLE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../examples")
+
+function(xutils_example target)
+    add_executable(example_${target} "${XUTILS_EXAMPLE_DIR}/${target}.c")
+    target_link_libraries(example_${target} PRIVATE xutils)
+    if(NOT MSVC)
+        # The examples log through non-literal format strings on purpose.
+        target_compile_options(example_${target} PRIVATE -Wall -Wno-format-security)
+    endif()
+
+    set(example_workdir "${CMAKE_CURRENT_BINARY_DIR}/example-run/${target}")
+    file(MAKE_DIRECTORY "${example_workdir}")
+
+    add_test(NAME "example.${target}" COMMAND example_${target} ${ARGN})
+    set_tests_properties("example.${target}" PROPERTIES
+        TIMEOUT 60 SKIP_RETURN_CODE 77 LABELS "example"
+        WORKING_DIRECTORY "${example_workdir}")
+endfunction()
+
+xutils_example(strings)
+xutils_example(array)
+xutils_example(list)
+xutils_example(map)
+xutils_example(files)
+xutils_example(thread)
+xutils_example(xlog)
+xutils_example(json "${XUTILS_EXAMPLE_DIR}/example.json")
+# The remaining examples reach the network (statcov fetches a live site, the
+# client and server pairs need a peer), so they are built by examples/ but not
+# run here: the suite stays hermetic.
+
 add_executable(addr_regression addr_regression.c)
 target_link_libraries(addr_regression PRIVATE xutils)
 add_test(NAME addr_regression COMMAND addr_regression)
@@ -82,6 +117,14 @@ xutils_regression(crypt_regression crypt hex transforms dispatch cipher_names ke
 if(OPENSSL_FOUND)
     xutils_regression(rsa_regression crypt signatures encryption invalid_keys key_sizes cross_key
         key_import key_files context size_limits)
+
+    # RSA key generation searches for primes, so how long it takes is
+    # probabilistic and on a shared runner the tail is long. These cases are
+    # fast in the common case; the limit is there for the tail, not the mean.
+    foreach(rsa_case signatures encryption invalid_keys key_sizes cross_key
+            key_import key_files context size_limits)
+        set_tests_properties("rsa_regression.${rsa_case}" PROPERTIES TIMEOUT 300)
+    endforeach()
 endif()
 if(UNIX)
     xutils_regression(xfs_regression sys copy permissions directories nonregular_source)

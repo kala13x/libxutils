@@ -13,17 +13,6 @@
             "emptyArrObj": [
                 {}
             ],
-            "testobj3": {
-                "testarray2": [
-                    true,
-                    69,
-                    69.900002
-                ],
-                "testbool2": true,
-                "teststr2": "example string 2"
-            },
-            "nullItem": null,
-            "emptyObject": {},
             "testarray1": [
                 {
                     "testint2": -67,
@@ -38,7 +27,18 @@
                     "testfloat2": 63.969690
                 }
             ],
-            "emptyArray": []
+            "emptyArray": [],
+            "testobj3": {
+                "testarray2": [
+                    true,
+                    69,
+                    69.900002
+                ],
+                "testbool2": true,
+                "teststr2": "example string 2"
+            },
+            "nullItem": null,
+            "emptyObject": {}
         }
     }
 ]

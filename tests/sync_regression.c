@@ -100,6 +100,7 @@ typedef struct {
     long nMirror;
     xatomic_t nTornReads;
     xatomic_t nReads;
+    xatomic_t nReadersUp;
 } sync_rw_test_t;
 
 /* Writers keep two fields in step; a torn read would see them differ. */
@@ -119,8 +120,18 @@ static void *sync_rw_writer(void *pContext)
 static void *sync_rw_reader(void *pContext)
 {
     sync_rw_test_t *pTest = (sync_rw_test_t*)pContext;
-    /* Readers spin until the writers are done. The short sleep keeps them
-     * from starving the writers when this runs under a memory checker. */
+    /* Take the lock once and announce it, so the writers only start when
+     * the readers are demonstrably running: whether a given thread gets
+     * scheduled in some window is the scheduler's business, not the lock's,
+     * and a test that depends on it fails on a busy machine for no reason. */
+    XRWSync_ReadLock(&pTest->lock);
+    if (pTest->nValue != pTest->nMirror) XSYNC_ATOMIC_ADD(&pTest->nTornReads, 1);
+    XRWSync_Unlock(&pTest->lock);
+    XSYNC_ATOMIC_ADD(&pTest->nReads, 1);
+    XSYNC_ATOMIC_ADD(&pTest->nReadersUp, 1);
+
+    /* Then keep reading until the writers are done. The short sleep keeps
+     * them from starving the writers when this runs under a memory checker. */
     while (!XSYNC_ATOMIC_GET(&pTest->nStop))
     {
         XRWSync_ReadLock(&pTest->lock);
@@ -142,6 +153,13 @@ static int XTest_rwlock(void)
     xthread_t writers[2], readers[2];
     for (int i = 0; i < 2; i++)
         CHECK(XThread_Create(&readers[i], sync_rw_reader, &test, XFALSE) == XSTDOK, "Start a reader");
+
+    /* Wait for both readers to have taken the lock before the writers
+     * start, so the contention the torn-read check depends on is real
+     * rather than a matter of timing. */
+    for (int i = 0; i < 20000 && XSYNC_ATOMIC_GET(&test.nReadersUp) < 2; i++) xusleep(500);
+    CHECK(XSYNC_ATOMIC_GET(&test.nReadersUp) == 2, "Both readers took the lock before the writes began");
+
     for (int i = 0; i < 2; i++)
         CHECK(XThread_Create(&writers[i], sync_rw_writer, &test, XFALSE) == XSTDOK, "Start a writer");
 
@@ -151,7 +169,7 @@ static int XTest_rwlock(void)
 
     CHECK(test.nValue == 2 * SYNC_ROUNDS, "Every write is accounted for");
     CHECK(test.nMirror == test.nValue, "The two fields end in step");
-    CHECK(XSYNC_ATOMIC_GET(&test.nReads) > 0, "The readers actually ran");
+    CHECK(XSYNC_ATOMIC_GET(&test.nReads) >= 2, "Every reader took the lock at least once");
     CHECK(XSYNC_ATOMIC_GET(&test.nTornReads) == 0, "No reader observed a half written update");
 
     /* Several readers can hold the lock at once. */
