@@ -35,7 +35,7 @@ jobs:
       - name: Run standalone library regressions
         env:
           CC: ${{ matrix.compiler }}
-          FUZZ_TIME: 300
+          FUZZ_TIME: 600
         run: ./tests/run-regressions.sh "${{ matrix.mode }}"
       - name: Report line and branch coverage
         if: matrix.mode == 'coverage'
