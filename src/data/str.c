@@ -259,28 +259,40 @@ xbool_t xstrregex(const char *pStr, size_t nLength, const char *pPattern)
     xarray_t *pTokens = xstrsplitd(pPattern, "*");
     size_t nUsed = XArray_Used(pTokens);
 
-    if (!nUsed) return xstrcmp(pStr, pPattern);
+    if (!nUsed)
+    {
+        XArray_Destroy(pTokens);
+        return xstrcmp(pStr, pPattern);
+    }
+
+    xbool_t bMatch = XTRUE;
     size_t i, nOffset = 0;
 
     for (i = 0; i < nUsed; i++)
     {
         const char *pTok = (const char*)XArray_GetData(pTokens, i);
-        if (xstrused(pTok) && !xstrcmp(pTok, "*"))
+        if (!xstrused(pTok) || xstrcmp(pTok, "*")) continue;
+
+        if (!i && !xstrncmp(pTok, pStr, strlen(pTok)))
         {
-            if (!i && !xstrncmp(pTok, pStr, strlen(pTok))) return XFALSE;
-            int nPosit = xstrnsrc(pStr, nLength, pTok, nOffset);
-            if (nPosit < 0) return XFALSE;
-
-            nOffset += nPosit;
-            if (nOffset >= nLength) return XFALSE;
-
-            const char *pOffset = (const char*)&pStr[nOffset];
-            if (i && i + 1 == nUsed && !xstrcmp(pTok, pOffset)) return XFALSE;
-            nOffset += strlen(pTok);
+            bMatch = XFALSE;
+            break;
         }
+
+        int nPosit = xstrnsrc(pStr, nLength, pTok, nOffset);
+        if (nPosit < 0) { bMatch = XFALSE; break; }
+
+        nOffset += nPosit;
+        if (nOffset >= nLength) { bMatch = XFALSE; break; }
+
+        const char *pOffset = (const char*)&pStr[nOffset];
+        if (i + 1 == nUsed && !xstrcmp(pTok, pOffset)) { bMatch = XFALSE; break; }
+
+        nOffset += strlen(pTok);
     }
 
-    return XTRUE;
+    XArray_Destroy(pTokens);
+    return bMatch;
 }
 
 size_t xstrnfill(char *pDst, size_t nSize, size_t nLength, char cFill)
@@ -499,7 +511,7 @@ size_t xstrnlcpyf(char *pDst, size_t nSize, size_t nFLen, char cFChar, const cha
     }
     else if (nBytes >= nFLen)
     {
-        nBytes = xstrncpyarg(pDst, nBytes, pFmt, args);
+        nBytes = xstrncpyarg(pDst, nSize, pFmt, args);
         va_end(args);
         return nBytes;
     }

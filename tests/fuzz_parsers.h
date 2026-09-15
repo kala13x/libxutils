@@ -13,6 +13,8 @@ typedef enum {
     XFUZZ_TARGET_URL,
     XFUZZ_TARGET_MDTP,
     XFUZZ_TARGET_RTP,
+    XFUZZ_TARGET_UNIX_URL,
+    XFUZZ_TARGET_GLOB,
     XFUZZ_TARGET_COUNT
 } xfuzz_target_t;
 

@@ -1,3 +1,9 @@
+/* posix_openpt() and the pty helpers around it are XSI, so the feature set
+ * has to be asked for before anything pulls in a system header. */
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 700
+#endif
+
 /* libxutils: CLI window rendering, progress bars and terminal input.
  *
  * Nothing here needs a real terminal. Standard output is redirected to a
@@ -11,6 +17,8 @@
 #include "str.h"
 #include <unistd.h>
 #include <fcntl.h>
+#include <termios.h>
+#include <stdlib.h>
 
 typedef struct {
     char sPath[64];
@@ -604,6 +612,168 @@ static int XTest_terminal_modes(void)
     return 0;
 }
 
+
+/* ---------------- with a real terminal ---------------- */
+
+typedef struct {
+    int nMaster;
+    int nSlave;
+    int nSavedFD;
+} cli_pty_t;
+
+/* Puts a pseudo terminal on standard input, so the branches that only run
+ * when stdin is a terminal are reachable. Everything else in this file
+ * deliberately runs without one. */
+static int pty_begin(cli_pty_t *pPTY)
+{
+    pPTY->nMaster = -1;
+    pPTY->nSlave = -1;
+    pPTY->nSavedFD = -1;
+
+    pPTY->nMaster = posix_openpt(O_RDWR | O_NOCTTY);
+    if (pPTY->nMaster < 0) return XSTDERR;
+
+    if (grantpt(pPTY->nMaster) != 0 || unlockpt(pPTY->nMaster) != 0)
+    {
+        close(pPTY->nMaster);
+        pPTY->nMaster = -1;
+        return XSTDERR;
+    }
+
+    const char *pName = ptsname(pPTY->nMaster);
+    if (pName == NULL)
+    {
+        close(pPTY->nMaster);
+        pPTY->nMaster = -1;
+        return XSTDERR;
+    }
+
+    pPTY->nSlave = open(pName, O_RDWR | O_NOCTTY);
+    if (pPTY->nSlave < 0)
+    {
+        close(pPTY->nMaster);
+        pPTY->nMaster = -1;
+        return XSTDERR;
+    }
+
+    pPTY->nSavedFD = dup(STDIN_FILENO);
+    if (pPTY->nSavedFD < 0 || dup2(pPTY->nSlave, STDIN_FILENO) < 0)
+    {
+        close(pPTY->nSlave);
+        close(pPTY->nMaster);
+        pPTY->nSlave = pPTY->nMaster = -1;
+        return XSTDERR;
+    }
+
+    clearerr(stdin);
+    return isatty(STDIN_FILENO) ? XSTDOK : XSTDERR;
+}
+
+static void pty_end(cli_pty_t *pPTY)
+{
+    if (pPTY->nSavedFD >= 0)
+    {
+        dup2(pPTY->nSavedFD, STDIN_FILENO);
+        close(pPTY->nSavedFD);
+    }
+
+    if (pPTY->nSlave >= 0) close(pPTY->nSlave);
+    if (pPTY->nMaster >= 0) close(pPTY->nMaster);
+
+    clearerr(stdin);
+}
+
+static int XTest_terminal_input(void)
+{
+    /* With a terminal on standard input, the password prompt turns the echo
+     * off for the duration of the read and turns it back on afterwards. The
+     * bytes must come back whole without the newline, and the terminal must
+     * be left exactly as it was found: a prompt that returned early with the
+     * echo still off would leave the user typing blind. */
+    cli_pty_t pty;
+    if (pty_begin(&pty) != XSTDOK)
+    {
+        pty_end(&pty);
+        printf("No pseudo terminal available, skipping\n");
+        return 77;
+    }
+
+    struct termios before;
+    int bHaveBefore = (tcgetattr(STDIN_FILENO, &before) == 0);
+    CHECK(bHaveBefore, "The terminal attributes can be read");
+
+    /* Raw mode is what a key-at-a-time reader needs, and it has to be
+     * reversible from the attributes it hands back. */
+    char sAttributes[sizeof(struct termios) + 64];
+    memset(sAttributes, 0, sizeof(sAttributes));
+
+    XSTATUS nRaw = XCLI_SetInputMode(sAttributes);
+    CHECK(nRaw == XSTDOK, "Raw mode is accepted on a terminal");
+
+    struct termios during;
+    CHECK(tcgetattr(STDIN_FILENO, &during) == 0, "The raw attributes can be read");
+    CHECK((during.c_lflag & ICANON) == 0, "Raw mode turned canonical input off");
+    CHECK((during.c_lflag & ECHO) == 0, "Raw mode turned the echo off");
+
+    CHECK(XCLI_RestoreAttributes(sAttributes) == XSTDOK, "The attributes are restored");
+
+    struct termios after;
+    CHECK(tcgetattr(STDIN_FILENO, &after) == 0, "The restored attributes can be read");
+    CHECK(!bHaveBefore || after.c_lflag == before.c_lflag, "The terminal is left as it was found");
+
+    /* A single key, delivered the moment it is pressed. That only works in
+     * raw mode: a canonical terminal holds everything back until the line
+     * is finished, which is exactly what the raw switch above is for. */
+    CHECK(XCLI_SetInputMode(sAttributes) == XSTDOK, "Raw mode is entered for a single key");
+    CHECK(write(pty.nMaster, "Z", 1) == 1, "A key is typed");
+
+    char cChar = 0;
+    XSTATUS nChar = XCLI_GetChar(&cChar, XFALSE);
+    CHECK(nChar == 1 && cChar == 'Z', "The typed key is read back before any newline");
+    CHECK(XCLI_RestoreAttributes(sAttributes) == XSTDOK, "Canonical mode is restored");
+
+    /* The password prompt itself. */
+    cli_capture_t out;
+    CHECK(capture_begin(&out) == XSTDOK, "Redirect stdout");
+    CHECK(write(pty.nMaster, "s3cret\n", 7) == 7, "A password is typed");
+
+    char sPass[64];
+    memset(sPass, 0, sizeof(sPass));
+    XSTATUS nPass = XCLI_GetPass("password: ", sPass, sizeof(sPass));
+
+    char *pOutput = capture_end(&out, NULL);
+
+    CHECK(nPass == 6, "The password length is what was typed without the newline");
+    CHECK(strcmp(sPass, "s3cret") == 0, "The password comes back whole");
+    CHECK(pOutput != NULL, "Output was captured");
+    CHECK(pOutput == NULL || strstr(pOutput, "password: ") != NULL, "The prompt was written out");
+    CHECK(pOutput == NULL || strstr(pOutput, "s3cret") == NULL, "The password was never echoed");
+    free(pOutput);
+
+    /* The echo has to be back on, or everything typed after this would be
+     * invisible for the rest of the session. */
+    struct termios restored;
+    CHECK(tcgetattr(STDIN_FILENO, &restored) == 0, "The attributes can be read afterwards");
+    CHECK(!bHaveBefore || (restored.c_lflag & ECHO) == (before.c_lflag & ECHO),
+        "The echo setting is back to what it was");
+
+    /* A buffer too short for what was typed truncates rather than
+     * overflowing, and still consumes the whole line. */
+    CHECK(capture_begin(&out) == XSTDOK, "Redirect stdout again");
+    CHECK(write(pty.nMaster, "0123456789abcdef\n", 17) == 17, "A long password is typed");
+
+    char sShort[8];
+    memset(sShort, 0, sizeof(sShort));
+    XSTATUS nShort = XCLI_GetPass(NULL, sShort, sizeof(sShort));
+    free(capture_end(&out, NULL));
+
+    CHECK(nShort >= 0, "A short buffer is not an error");
+    CHECK(strlen(sShort) < sizeof(sShort), "A short buffer truncates the password");
+
+    pty_end(&pty);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(window_size),
     XTEST_CASE(window_lines),
@@ -613,5 +783,6 @@ XTEST_MAIN(
     XTEST_CASE(progress_output),
     XTEST_CASE(progress_animation),
     XTEST_CASE(input),
-    XTEST_CASE(terminal_modes)
+    XTEST_CASE(terminal_modes),
+    XTEST_CASE(terminal_input)
 )

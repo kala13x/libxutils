@@ -10,6 +10,7 @@
  */
 
 #include "test.h"
+#include "rsa.h"
 #include "jwt.h"
 
 static const uint8_t g_secret[] = "local-regression-test-key";
@@ -366,6 +367,136 @@ static int XTest_segments(void)
     return 0;
 }
 
+
+static int XTest_rs256(void)
+{
+    /* RS256 is the asymmetric algorithm: the token is signed with a private
+     * key and anybody holding the public key can check it. That asymmetry is
+     * the whole point, so what has to be pinned down is that the public key
+     * verifies and never signs, and that a token signed by one key is not
+     * accepted by another.
+     *
+     * A build without OpenSSL has no key type to name, so the whole body is
+     * compiled out rather than skipped at runtime. */
+#ifndef XCRYPT_USE_SSL
+    CHECK(XRSA_HaveSSL() == 0, "A build with no OpenSSL reports no RSA support");
+    printf("No RSA support in this build, skipping\n");
+    return 77;
+#else
+    if (!XRSA_HaveSSL())
+    {
+        printf("No RSA support in this build, skipping\n");
+        return 77;
+    }
+
+    xrsa_ctx_t key;
+    if (XRSA_GenerateKeys(&key, 2048, 65537) != XSTDOK)
+    {
+        XRSA_Destroy(&key);
+        printf("No RSA key could be generated, skipping\n");
+        return 77;
+    }
+
+    const char *pPayload = "{\"sub\":\"1234567890\",\"admin\":true}";
+
+    xjwt_t jwt;
+    XJWT_Init(&jwt, XJWT_ALG_RS256);
+    CHECK(XJWT_AddPayload(&jwt, pPayload, strlen(pPayload), XFALSE) == XSTDOK, "The payload is added");
+    CHECK(XJWT_GetAlgorithm(&jwt) == XJWT_ALG_RS256, "The handle carries the RSA algorithm");
+
+    size_t nTokenLen = 0;
+    char *pToken = XJWT_Create(&jwt, (const uint8_t*)key.pPrivateKey, key.nPrivKeyLen, &nTokenLen);
+    CHECK(pToken != NULL && nTokenLen > 0, "The private key signs a token");
+    XJWT_Destroy(&jwt);
+
+    if (pToken == NULL) { XRSA_Destroy(&key); return 1; }
+
+    /* The header of an RS256 token names RS256, so a verifier picks the
+     * right algorithm from the token rather than from its own assumption. */
+    CHECK(strncmp(pToken, "eyJ", 3) == 0, "The token starts with a base64url header");
+
+    xjwt_t parsed;
+    CHECK(XJWT_Parse(&parsed, pToken, nTokenLen,
+        (const uint8_t*)key.pPublicKey, key.nPubKeyLen) == XSTDOK, "The public key parses it");
+    CHECK(parsed.bVerified == XTRUE, "The public key verifies the signature");
+    CHECK(XJWT_GetAlgorithm(&parsed) == XJWT_ALG_RS256, "The parsed algorithm is RS256");
+
+    size_t nBackLen = 0;
+    char *pBack = XJWT_GetPayload(&parsed, XTRUE, &nBackLen);
+    CHECK(pBack != NULL && nBackLen == strlen(pPayload), "The payload comes back at its own length");
+    CHECK(pBack == NULL || memcmp(pBack, pPayload, nBackLen) == 0, "The payload comes back unchanged");
+    free(pBack);
+    XJWT_Destroy(&parsed);
+
+    /* A different key must not verify the same token. */
+    xrsa_ctx_t other;
+    if (XRSA_GenerateKeys(&other, 2048, 65537) == XSTDOK)
+    {
+        XJWT_Parse(&parsed, pToken, nTokenLen, (const uint8_t*)other.pPublicKey, other.nPubKeyLen);
+        CHECK(parsed.bVerified == XFALSE, "Another key does not verify the token");
+        XJWT_Destroy(&parsed);
+    }
+    XRSA_Destroy(&other);
+
+    /* A flipped character anywhere in the signature must be caught. It is
+     * changed in the middle rather than at the end: base64url encodes the
+     * last group in fewer bits than the character carries, so some edits to
+     * the final character decode to the very same signature bytes and would
+     * make this assertion depend on the key that happened to be generated. */
+    char *pSig = strrchr(pToken, '.');
+    CHECK(pSig != NULL && pSig[1] != '\0', "The token has a signature segment");
+
+    if (pSig != NULL && pSig[1] != '\0')
+    {
+        size_t nSigLen = strlen(pSig + 1);
+        size_t nAt = 1 + nSigLen / 2;
+
+        char cSaved = pSig[nAt];
+        pSig[nAt] = (cSaved == 'A') ? 'B' : 'A';
+
+        XJWT_Parse(&parsed, pToken, nTokenLen, (const uint8_t*)key.pPublicKey, key.nPubKeyLen);
+        CHECK(parsed.bVerified == XFALSE, "A tampered signature does not verify");
+        XJWT_Destroy(&parsed);
+        pSig[nAt] = cSaved;
+
+        /* And the untouched token still does. */
+        CHECK(XJWT_Parse(&parsed, pToken, nTokenLen,
+            (const uint8_t*)key.pPublicKey, key.nPubKeyLen) == XSTDOK, "The restored token parses");
+        CHECK(parsed.bVerified == XTRUE, "The restored token verifies again");
+        XJWT_Destroy(&parsed);
+    }
+
+    /* The verifier's own guards, called directly. */
+    XJWT_Init(&parsed, XJWT_ALG_RS256);
+    CHECK(XJWT_VerifyRS256(NULL, "sig", 3, key.pPublicKey, key.nPubKeyLen) == XSTDINV,
+        "Verifying without a handle is rejected");
+    CHECK(XJWT_VerifyRS256(&parsed, NULL, 3, key.pPublicKey, key.nPubKeyLen) == XSTDINV,
+        "Verifying without a signature is rejected");
+    CHECK(XJWT_VerifyRS256(&parsed, "sig", 0, key.pPublicKey, key.nPubKeyLen) == XSTDINV,
+        "Verifying a zero length signature is rejected");
+    CHECK(XJWT_VerifyRS256(&parsed, "sig", 3, NULL, 10) == XSTDINV,
+        "Verifying without a key is rejected");
+    CHECK(XJWT_VerifyRS256(&parsed, "sig", 3, key.pPublicKey, 0) == XSTDINV,
+        "Verifying with a zero length key is rejected");
+    CHECK(parsed.bVerified == XFALSE, "A rejected verification never marks the token verified");
+    XJWT_Destroy(&parsed);
+
+    /* Signing needs the private key: the public one cannot produce a token. */
+    XJWT_Init(&jwt, XJWT_ALG_RS256);
+    CHECK(XJWT_AddPayload(&jwt, pPayload, strlen(pPayload), XFALSE) == XSTDOK, "The payload is added again");
+
+    size_t nBadLen = 0;
+    char *pBadToken = XJWT_Create(&jwt, (const uint8_t*)key.pPublicKey, key.nPubKeyLen, &nBadLen);
+    CHECK(pBadToken == NULL, "The public key cannot sign a token");
+    free(pBadToken);
+    XJWT_Destroy(&jwt);
+
+    free(pToken);
+    XRSA_Destroy(&key);
+    return 0;
+#endif
+}
+
 XTEST_MAIN(
     XTEST_CASE(roundtrip),
     XTEST_CASE(wrong_secret),
@@ -373,5 +504,6 @@ XTEST_MAIN(
     XTEST_CASE(boundaries),
     XTEST_CASE(malformed),
     XTEST_CASE(algorithms),
-    XTEST_CASE(segments)
+    XTEST_CASE(segments),
+    XTEST_CASE(rs256)
 )

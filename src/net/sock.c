@@ -217,48 +217,44 @@ static uint32_t XSock_GetPrefredSSL(uint32_t nFlags)
     return nFlags;
 }
 
-static const SSL_METHOD* XSock_GetSSLMethod(xsock_t *pSock)
+/* Picks the TLS method for a socket.
+ *
+ * Which side of the handshake this is comes from the caller, not from the
+ * socket flags: an accepted peer carries XSOCK_PEER and is the server side,
+ * while the same peer flags appear on a socket a caller drives as a client.
+ * Only the pinned legacy versions come from the flags. */
+static const SSL_METHOD* XSock_GetSSLMethod(xsock_t *pSock, xbool_t bServer)
 {
-    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_CLIENT))
+    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV3))
     {
-        if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV3))
-        {
 #ifdef SSLv3_client_method
-            return SSLv3_client_method();
+        return bServer ? SSLv3_server_method() : SSLv3_client_method();
 #else
-            return NULL;
+        return NULL;
 #endif
-        }
-        else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV2))
-        {
-#ifdef SSLv23_client_method
-            return SSLv23_client_method();
-#else
-            return NULL;
-#endif
-        }
-    }
-    else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SERVER))
-    {
-        if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV3))
-        {
-#ifdef SSLv3_server_method
-            return SSLv3_server_method();
-#else
-            return NULL;
-#endif
-        }
-        else if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV2))
-        {
-#ifdef SSLv23_server_method
-            return SSLv23_server_method();
-#else
-            return NULL;
-#endif
-        }
     }
 
+    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_SSLV2))
+    {
+#ifdef SSLv23_client_method
+        return bServer ? SSLv23_server_method() : SSLv23_client_method();
+#else
+        return NULL;
+#endif
+    }
+
+    /* Plain XSOCK_SSL: negotiate the highest version both ends support.
+       Without this the version checks above fell through to a NULL return,
+       so every socket that asked for TLS without pinning an obsolete
+       version failed with "SSL method is not defined". */
+#ifdef TLS_client_method
+    return bServer ? TLS_server_method() : TLS_client_method();
+#elif defined(SSLv23_client_method)
+    return bServer ? SSLv23_server_method() : SSLv23_client_method();
+#else
+    (void)bServer;
     return NULL;
+#endif
 }
 #endif
 
@@ -267,7 +263,7 @@ void XSock_InitSSL(void)
 #ifdef XSOCK_USE_SSL
     if (XSYNC_ATOMIC_GET(&g_nSSLInit)) return;
 
-#if OPENSSLVERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
     SSL_library_init();
     SSL_load_error_strings();
     OpenSSL_add_all_algorithms();
@@ -822,6 +818,80 @@ XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
     return XSock_SetFlags(pSock, nFlags);
 }
 
+#ifdef XSOCK_USE_SSL
+/* SIGPIPE suppression for the TLS path.
+ *
+ * Every plain send() and recv() in this module passes XMSG_NOSIGNAL, so a
+ * write to a peer that has gone comes back as an error. OpenSSL cannot: it
+ * goes through its socket BIO, which calls write() with no flags, so the
+ * same write on an encrypted socket raised SIGPIPE and killed the process
+ * instead. An application that turned TLS on would start dying on a client
+ * disconnect that it used to handle.
+ *
+ * It is not only SSL_write() that writes. A read returns an alert, a
+ * handshake is made of records, and closing sends close_notify, so every
+ * OpenSSL call that can put a byte on the socket is wrapped in this.
+ *
+ * The signal is blocked for the duration of the write and any instance it
+ * raised is drained before the mask is put back, so nothing leaks out to a
+ * handler the application installed and nothing is swallowed that was
+ * already pending when the call started. The mask is per thread, so this
+ * does not disturb anything running alongside. */
+typedef struct {
+    sigset_t oldSet;
+    xbool_t bBlocked;
+    xbool_t bWasPending;
+} xsock_nosigpipe_t;
+
+static void XSock_BlockSIGPIPE(xsock_nosigpipe_t *pGuard)
+{
+    pGuard->bBlocked = XFALSE;
+    pGuard->bWasPending = XFALSE;
+
+#ifndef _WIN32
+    sigset_t pipeSet, pending;
+    sigemptyset(&pipeSet);
+    sigaddset(&pipeSet, SIGPIPE);
+
+    sigemptyset(&pending);
+    if (!sigpending(&pending) && sigismember(&pending, SIGPIPE))
+        pGuard->bWasPending = XTRUE;
+
+    if (!pthread_sigmask(SIG_BLOCK, &pipeSet, &pGuard->oldSet))
+        pGuard->bBlocked = XTRUE;
+#endif
+}
+
+static void XSock_RestoreSIGPIPE(xsock_nosigpipe_t *pGuard)
+{
+#ifndef _WIN32
+    if (!pGuard->bBlocked) return;
+
+    /* Only drain what this call raised: one that was already pending
+       belongs to whoever was waiting for it. */
+    if (!pGuard->bWasPending)
+    {
+        sigset_t pipeSet, pending;
+        sigemptyset(&pipeSet);
+        sigaddset(&pipeSet, SIGPIPE);
+
+        sigemptyset(&pending);
+        if (!sigpending(&pending) && sigismember(&pending, SIGPIPE))
+        {
+            struct timespec noWait;
+            noWait.tv_sec = 0;
+            noWait.tv_nsec = 0;
+            while (sigtimedwait(&pipeSet, NULL, &noWait) < 0 && errno == EINTR);
+        }
+    }
+
+    pthread_sigmask(SIG_SETMASK, &pGuard->oldSet, NULL);
+#else
+    (void)pGuard;
+#endif
+}
+#endif
+
 void XSock_Close(xsock_t *pSock)
 {
  #ifdef XSOCK_USE_SSL
@@ -833,7 +903,14 @@ void XSock_Close(xsock_t *pSock)
         if (pSSL != NULL)
         {
             if (pPriv->bConnected)
+            {
+                /* close_notify goes out on a socket the peer may already
+                   have dropped, which is the commonest way to be killed. */
+                xsock_nosigpipe_t guard;
+                XSock_BlockSIGPIPE(&guard);
                 SSL_shutdown(pSSL);
+                XSock_RestoreSIGPIPE(&guard);
+            }
 
             SSL_free(pSSL);
         }
@@ -919,6 +996,9 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
     int nLeft = (int)nSize;
     int nReceived = 0;
 
+    xsock_nosigpipe_t guard;
+    XSock_BlockSIGPIPE(&guard);
+
     while (nLeft > 0 && (nExact || !nReceived || SSL_pending(pSSL)))
     {
         int nBytes = SSL_read(pSSL, &pBuff[nReceived], nLeft);
@@ -958,6 +1038,7 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
                 nReceived = XSOCK_ERROR;
 
             XSock_Close(pSock);
+            XSock_RestoreSIGPIPE(&guard);
             return nReceived;
         }
 
@@ -968,6 +1049,7 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
         if (XSock_IsNB(pSock) && !SSL_pending(pSSL)) break;
     }
 
+    XSock_RestoreSIGPIPE(&guard);
     return nReceived;
 #else
     (void)nExact;
@@ -994,6 +1076,9 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
     uint8_t *pBuff = (uint8_t*)pData;
     ssize_t nLeft = nLength;
     size_t nSent = 0;
+
+    xsock_nosigpipe_t guard;
+    XSock_BlockSIGPIPE(&guard);
 
     while (nLeft > 0)
     {
@@ -1026,6 +1111,7 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
             }
 
             XSock_Close(pSock);
+            XSock_RestoreSIGPIPE(&guard);
             return nBytes;
         }
 
@@ -1036,6 +1122,7 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
         if (XSock_IsNB(pSock)) break;
     }
 
+    XSock_RestoreSIGPIPE(&guard);
     return (int)nSent;
 #else
     pSock->eStatus = XSOCK_ERR_NOSSL;
@@ -1315,7 +1402,7 @@ XSOCKET XSock_AcceptNB(xsock_t *pSock)
     xsockaddr_t* pSockAddr = XSock_GetSockAddr(pSock);
     xsocklen_t nAddrLen = XSock_GetAddrLen(pSock);
 
-    XSOCKET nFD = accept4(pSock->nFD, pSockAddr, &nAddrLen, 1);
+    XSOCKET nFD = accept4(pSock->nFD, pSockAddr, &nAddrLen, SOCK_NONBLOCK | SOCK_CLOEXEC);
     if (nFD < 0)
     {
         if (XSOCK_WOULDBLOCK(XSOCK_ERRNO())) pSock->eStatus = XSOCK_WANT_READ;
@@ -1767,6 +1854,24 @@ XSTATUS XSock_LoadPKCS12(xsock_ssl_cert_t *pCert, const char *p12Path, const cha
     return XSOCK_NONE;
 }
 
+void XSock_FreePKCS12(xsock_ssl_cert_t *pCert)
+{
+    XCHECK_VOID_NL((pCert != NULL));
+#ifdef XSOCK_USE_SSL
+    /* Everything PKCS12_parse() hands back belongs to the caller. Installing
+       the certificate and the key into a context takes references of its own,
+       so these have to be dropped afterwards or every bundle that is loaded
+       leaks a certificate, a private key and the whole CA chain with it. */
+    if (pCert->pCert != NULL) X509_free((X509*)pCert->pCert);
+    if (pCert->pKey != NULL) EVP_PKEY_free((EVP_PKEY*)pCert->pKey);
+    if (pCert->pCa != NULL) sk_X509_pop_free((STACK_OF(X509)*)pCert->pCa, X509_free);
+#endif
+    pCert->pCert = NULL;
+    pCert->pKey = NULL;
+    pCert->pCa = NULL;
+    pCert->nStatus = 0;
+}
+
 void XSock_InitCert(xsock_cert_t *pCert)
 {
     pCert->pCertPath = NULL;
@@ -1839,7 +1944,7 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
         xsock_ssl_cert_t sslCert;
         memset(&sslCert, 0, sizeof(xsock_ssl_cert_t));
 
-        if (!XSock_LoadPKCS12(&sslCert, pCert->p12Path, pCert->p12Pass))
+        if (XSock_LoadPKCS12(&sslCert, pCert->p12Path, pCert->p12Pass) != XSOCK_SUCCESS)
         {
             pSock->eStatus = XSOCK_ERR_PKCS12;
             XSock_Close(pSock);
@@ -1852,6 +1957,7 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
         if (pXCert != NULL && SSL_CTX_use_certificate(pSSLCtx, pXCert) <= 0)
         {
             pSock->eStatus = XSOCK_ERR_SSLCRT;
+            XSock_FreePKCS12(&sslCert);
             XSock_Close(pSock);
             return XSOCK_INVALID;
         }
@@ -1859,9 +1965,13 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
         if (pKey != NULL && SSL_CTX_use_PrivateKey(pSSLCtx, pKey) <= 0)
         {
             pSock->eStatus = XSOCK_ERR_SSLKEY;
+            XSock_FreePKCS12(&sslCert);
             XSock_Close(pSock);
             return XSOCK_INVALID;
         }
+
+        /* The context holds its own references now. */
+        XSock_FreePKCS12(&sslCert);
     }
     else
     {
@@ -1910,7 +2020,12 @@ XSOCKET XSock_SSLConnect(xsock_t *pSock)
         return XSOCK_INVALID;
     }
 
+    xsock_nosigpipe_t guard;
+    XSock_BlockSIGPIPE(&guard);
+
     int nStatus = SSL_connect(pSSL);
+    XSock_RestoreSIGPIPE(&guard);
+
     if (nStatus <= 0)
     {
         if (XSock_IsNB(pSock))
@@ -1933,7 +2048,12 @@ XSOCKET XSock_SSLConnect(xsock_t *pSock)
         return XSOCK_INVALID;
     }
 
+    /* Both the "needs more I/O" and the "finished" case return the
+       descriptor, so the status is all a non-blocking caller has to tell
+       them apart. Leaving the want-read from the previous attempt in place
+       made a handshake that had actually completed look unfinished. */
     XSock_SSLConnected(pSock, XTRUE);
+    pSock->eStatus = XSOCK_ERR_NONE;
     return pSock->nFD;
 #endif
 
@@ -1953,7 +2073,12 @@ XSOCKET XSock_SSLAccept(xsock_t *pSock)
         return XSOCK_INVALID;
     }
 
+    xsock_nosigpipe_t guard;
+    XSock_BlockSIGPIPE(&guard);
+
     int nStatus = SSL_accept(pSSL);
+    XSock_RestoreSIGPIPE(&guard);
+
     if (nStatus <= 0)
     {
         if (XSock_IsNB(pSock))
@@ -1976,7 +2101,10 @@ XSOCKET XSock_SSLAccept(xsock_t *pSock)
         return XSOCK_INVALID;
     }
 
+    /* Same as XSock_SSLConnect(): clear the wait state so a completed
+       handshake is distinguishable from one that wants more I/O. */
     XSock_SSLConnected(pSock, XTRUE);
+    pSock->eStatus = XSOCK_ERR_NONE;
     return pSock->nFD;
 #endif
 
@@ -1988,7 +2116,7 @@ XSOCKET XSock_SSLAccept(xsock_t *pSock)
 XSOCKET XSock_InitSSLServer(xsock_t *pSock, int nVerifyFlags)
 {
 #ifdef XSOCK_USE_SSL
-    const SSL_METHOD *pMethod = XSock_GetSSLMethod(pSock);
+    const SSL_METHOD *pMethod = XSock_GetSSLMethod(pSock, XTRUE);
     if (pMethod == NULL)
     {
         pSock->eStatus = XSOCK_ERR_SSLMET;
@@ -2054,7 +2182,7 @@ static void XSock_LoadWinRootCerts(SSL_CTX *pSSLCtx)
 XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
 {
 #ifdef XSOCK_USE_SSL
-    const SSL_METHOD *pMethod = XSock_GetSSLMethod(pSock);
+    const SSL_METHOD *pMethod = XSock_GetSSLMethod(pSock, XFALSE);
     if (pMethod == NULL)
     {
         pSock->eStatus = XSOCK_ERR_SSLMET;

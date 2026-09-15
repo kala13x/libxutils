@@ -4,6 +4,8 @@
 #include "xtime.h"
 #include "sock.h"
 #include <unistd.h>
+#include <signal.h>
+#include <sys/time.h>
 
 typedef struct xtest_events_ {
     xevent_data_t *pVictim;
@@ -178,7 +180,9 @@ static int XTest_status_strings(void)
     /* Every status the loop can report has a description, so a caller
      * logging one never prints a bare number. */
     const xevent_status_t states[] = {
-        XEVENTS_EBREAK, XEVENTS_ECREATE, XEVENTS_EINSERT,
+        XEVENTS_NONE, XEVENTS_ECTL, XEVENTS_EMAX, XEVENTS_ENOCB, XEVENTS_EOMAX,
+        XEVENTS_EWAIT, XEVENTS_EINTR, XEVENTS_EALLOC, XEVENTS_ETIMER,
+        XEVENTS_EEXTEND, XEVENTS_EBREAK, XEVENTS_ECREATE, XEVENTS_EINSERT,
         XEVENTS_EINVALID, XEVENTS_SUCCESS
     };
 
@@ -186,9 +190,23 @@ static int XTest_status_strings(void)
     {
         const char *pText = XEvents_GetStatusStr(states[i]);
         CHECK(pText != NULL && *pText != '\0', "Every status has a description");
+
+        /* Two different statuses reading the same would make a log line
+         * useless for telling which one happened. The undefined status is
+         * the one exception, since it is what the fallback also returns. */
+        if (states[i] == XEVENTS_NONE) continue;
+
+        for (size_t n = 0; n < i; n++)
+        {
+            if (states[n] == XEVENTS_NONE) continue;
+            CHECK(strcmp(pText, XEvents_GetStatusStr(states[n])) != 0,
+                "No two statuses share a description");
+        }
     }
 
     CHECK(XEvents_GetStatusStr((xevent_status_t)999) != NULL, "An out of range status still has a description");
+    CHECK(strcmp(XEvents_GetStatusStr((xevent_status_t)999),
+        XEvents_GetStatusStr(XEVENTS_NONE)) == 0, "An unknown status reads the same as none");
     return 0;
 }
 
@@ -404,6 +422,196 @@ static int XTest_timer_lifecycle(void)
     return 0;
 }
 
+/* ---------------- interrupts and byte wakeups ---------------- */
+
+typedef struct {
+    int nInterrupts;
+    int nReads;
+    char cLast;
+    xbool_t bStop;
+} xtest_signal_t;
+
+static int XTest_SignalCallback(void *pLoop, void *pData, XSOCKET nFD, xevent_cb_type_t eReason)
+{
+    xevents_t *pEvents = (xevents_t*)pLoop;
+    xtest_signal_t *pTest = (xtest_signal_t*)pEvents->pUserSpace;
+    (void)nFD;
+
+    if (eReason == XEVENT_CB_INTERRUPT)
+    {
+        /* The loop hands the interrupt over with no event attached: it is the
+         * wait itself that was cut short, not any one descriptor. */
+        pTest->nInterrupts++;
+        return pTest->bStop ? XEVENTS_DISCONNECT : XEVENTS_CONTINUE;
+    }
+
+    if (eReason == XEVENT_CB_READ && pData != NULL)
+    {
+        char cByte = 0;
+        if (XEvent_ReadByte((xevent_data_t*)pData, &cByte) == 1)
+        {
+            pTest->cLast = cByte;
+            pTest->nReads++;
+        }
+    }
+
+    return XEVENTS_CONTINUE;
+}
+
+static volatile sig_atomic_t g_nAlarms = 0;
+static void XTest_AlarmHandler(int nSignal) { (void)nSignal; g_nAlarms++; }
+
+static int XTest_interrupted(void)
+{
+    /* A signal delivered while the loop is waiting has to come back as an
+     * interrupt callback rather than as a failure, and the answer the
+     * callback gives is what decides whether the loop carries on. */
+#ifdef _WIN32
+    return 77;
+#else
+    xtest_signal_t test;
+    memset(&test, 0, sizeof(test));
+
+    xevents_t loop;
+    CHECK(XEvents_Create(&loop, 8, &test, XTest_SignalCallback, XTRUE) == XEVENTS_SUCCESS,
+        "Create the interrupt loop");
+
+    /* Something has to be registered: an empty loop just sleeps. */
+    int nPipe[2];
+    if (pipe(nPipe) != 0)
+    {
+        XEvents_Destroy(&loop);
+        printf("No pipe available, skipping\n");
+        return 77;
+    }
+
+    xevent_data_t *pRead = XEvents_RegisterEvent(&loop, NULL, nPipe[0], XPOLLIN, XEVENT_TYPE_CUSTOM);
+    CHECK(pRead != NULL, "Register the read end");
+
+    /* No SA_RESTART, so the wait is cut short instead of resumed. */
+    struct sigaction action, previous;
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = XTest_AlarmHandler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+
+    if (sigaction(SIGALRM, &action, &previous) != 0)
+    {
+        close(nPipe[0]);
+        close(nPipe[1]);
+        XEvents_Destroy(&loop);
+        printf("SIGALRM cannot be installed, skipping\n");
+        return 77;
+    }
+
+    struct itimerval timer;
+    memset(&timer, 0, sizeof(timer));
+    timer.it_value.tv_usec = 30000;
+
+    g_nAlarms = 0;
+    CHECK(setitimer(ITIMER_REAL, &timer, NULL) == 0, "Arm the alarm");
+
+    /* A continuing callback turns the interrupt into an ordinary return. */
+    xevent_status_t nStatus = XEvents_Service(&loop, 2000);
+    CHECK(g_nAlarms >= 1, "The alarm was delivered");
+    CHECK(test.nInterrupts >= 1, "The interrupted wait reached the callback");
+    CHECK(nStatus == XEVENTS_SUCCESS, "A continuing callback keeps the loop alive");
+
+    /* A callback that asks to stop turns the same interrupt into an error
+     * the service loop reports to its caller. */
+    test.bStop = XTRUE;
+    test.nInterrupts = 0;
+
+    memset(&timer, 0, sizeof(timer));
+    timer.it_value.tv_usec = 30000;
+    g_nAlarms = 0;
+    CHECK(setitimer(ITIMER_REAL, &timer, NULL) == 0, "Re-arm the alarm");
+
+    nStatus = XEvents_Service(&loop, 2000);
+    CHECK(test.nInterrupts >= 1, "The second interrupt reached the callback too");
+    CHECK(nStatus == XEVENTS_EINTR, "A stopping callback surfaces as an interrupt status");
+    CHECK(XEvents_GetStatusStr(XEVENTS_EINTR) != NULL, "The interrupt status has a description");
+
+    memset(&timer, 0, sizeof(timer));
+    setitimer(ITIMER_REAL, &timer, NULL);
+    sigaction(SIGALRM, &previous, NULL);
+
+    close(nPipe[1]);
+    XEvents_Destroy(&loop);
+    close(nPipe[0]);
+    return 0;
+#endif
+}
+
+static int XTest_write_byte(void)
+{
+    /* One byte through a registered descriptor is the loop's own wakeup
+     * primitive, so it has to survive the round trip and reject a
+     * descriptor that has already gone. */
+#ifdef _WIN32
+    return 77;
+#else
+    xtest_signal_t test;
+    memset(&test, 0, sizeof(test));
+
+    xevents_t loop;
+    CHECK(XEvents_Create(&loop, 8, &test, XTest_SignalCallback, XTRUE) == XEVENTS_SUCCESS,
+        "Create the wakeup loop");
+
+    int nPipe[2];
+    if (pipe(nPipe) != 0)
+    {
+        XEvents_Destroy(&loop);
+        printf("No pipe available, skipping\n");
+        return 77;
+    }
+
+    xevent_data_t *pRead = XEvents_RegisterEvent(&loop, NULL, nPipe[0], XPOLLIN, XEVENT_TYPE_CUSTOM);
+    CHECK(pRead != NULL, "Register the read end");
+
+    xevent_data_t writer;
+    memset(&writer, 0, sizeof(writer));
+    writer.nFD = nPipe[1];
+
+    CHECK(XEvent_WriteByte(&writer, 'q') == 1, "One byte goes out");
+    CHECK(XEvents_Service(&loop, 200) == XEVENTS_SUCCESS, "The loop services the wakeup");
+    CHECK(test.nReads == 1, "The byte woke the loop exactly once");
+    CHECK(test.cLast == 'q', "The byte arrived unchanged");
+
+    /* Every byte value has to survive, including the zero byte a caller
+     * might use as a sentinel. */
+    const char sBytes[] = {'\0', 'A', (char)0xFF, '\n'};
+    for (size_t i = 0; i < sizeof(sBytes); i++)
+    {
+        test.nReads = 0;
+        test.cLast = 'z';
+
+        CHECK(XEvent_WriteByte(&writer, sBytes[i]) == 1, "Each byte goes out");
+        CHECK(XEvents_Service(&loop, 200) == XEVENTS_SUCCESS, "Each byte is serviced");
+        CHECK(test.nReads == 1, "Each byte wakes the loop once");
+        CHECK(test.cLast == sBytes[i], "Each byte arrives unchanged");
+    }
+
+    CHECK(XEvent_WriteByte(NULL, 'x') == XEVENTS_EINVALID, "A missing event is rejected");
+
+    xevent_data_t closed;
+    memset(&closed, 0, sizeof(closed));
+    closed.nFD = XSOCK_INVALID;
+    CHECK(XEvent_WriteByte(&closed, 'x') == XEVENTS_EINVALID, "An invalid descriptor is rejected");
+    CHECK(XEvent_ReadByte(&closed, NULL) == XEVENTS_EINVALID, "Reading one is rejected too");
+    CHECK(XEvent_ReadU64(&closed, NULL) == XEVENTS_EINVALID, "Reading a counter is rejected too");
+    CHECK(XEvent_ReadByte(NULL, NULL) == XEVENTS_EINVALID, "A missing event has nothing to read");
+    CHECK(XEvent_ReadU64(NULL, NULL) == XEVENTS_EINVALID, "A missing event has no counter");
+
+    /* A byte written to a reader that has gone reports the failure rather
+     * than the count, and must not raise SIGPIPE in the process. */
+    close(nPipe[1]);
+    XEvents_Destroy(&loop);
+    close(nPipe[0]);
+    return 0;
+#endif
+}
+
 XTEST_MAIN(
     XTEST_CASE(lifecycle),
     XTEST_CASE(modify),
@@ -415,5 +623,7 @@ XTEST_MAIN(
     XTEST_CASE(lookup),
     XTEST_CASE(event_fd),
     XTEST_CASE(service_guards),
-    XTEST_CASE(timer_lifecycle)
+    XTEST_CASE(timer_lifecycle),
+    XTEST_CASE(interrupted),
+    XTEST_CASE(write_byte)
 )

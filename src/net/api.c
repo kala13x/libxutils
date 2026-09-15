@@ -1025,7 +1025,7 @@ static int XAPI_HandleMDTP(xapi_t *pApi, xapi_session_t *pSession)
     int nRetVal = XEVENTS_CONTINUE;
 
     xpacket_t packet;
-    eStatus = XPacket_Parse(&packet, pBuffer->pData, pBuffer->nSize);
+    eStatus = XPacket_Parse(&packet, pBuffer->pData, pBuffer->nUsed);
 
     if (eStatus == XPACKET_COMPLETE)
     {

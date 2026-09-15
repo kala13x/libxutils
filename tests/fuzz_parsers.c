@@ -10,6 +10,7 @@
 #include "addr.h"
 #include "mdtp.h"
 #include "rtp.h"
+#include "str.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *pData, size_t nSize)
 {
@@ -42,7 +43,24 @@ int LLVMFuzzerTestOneInput(const uint8_t *pData, size_t nSize)
     else if (nTarget == XFUZZ_TARGET_WS)
     {
         xws_frame_t frame;
-        XWebFrame_ParseData(&frame, (uint8_t*)pData, nSize);
+        if (XWebFrame_ParseData(&frame, (uint8_t*)pData, nSize) == XWS_FRAME_COMPLETE)
+        {
+            /* Everything a completed frame reports has to lie inside what
+               was handed in, the same invariant the other framers hold. */
+            const uint8_t *pPayload = XWebFrame_GetPayload(&frame);
+            size_t nPayload = XWebFrame_GetPayloadLength(&frame);
+
+            if (pPayload != NULL && nPayload)
+            {
+                uintptr_t nStart = (uintptr_t)frame.buffer.pData;
+                uintptr_t nOffset = (uintptr_t)pPayload - nStart;
+
+                if ((uintptr_t)pPayload < nStart ||
+                    nOffset > frame.buffer.nUsed ||
+                    nPayload > frame.buffer.nUsed - nOffset) abort();
+            }
+        }
+
         XWebFrame_Clear(&frame);
     }
     else if (nTarget == XFUZZ_TARGET_BASE64)
@@ -102,6 +120,57 @@ int LLVMFuzzerTestOneInput(const uint8_t *pData, size_t nSize)
 
         xrtp_header_t header;
         XRTP_ParseHeader(&header, pData, nSize);
+    }
+    else if (nTarget == XFUZZ_TARGET_UNIX_URL)
+    {
+        /* The unix form splits a socket path from a request path on the
+           first separator, so the split offsets come straight from input. */
+        char *pURL = (char*)malloc(nSize + 1);
+        if (pURL == NULL) return 0;
+        memcpy(pURL, pData, nSize);
+        pURL[nSize] = 0;
+
+        xlink_t link;
+        if (XLink_ParseUnix(&link, pURL) == XSTDOK)
+        {
+            /* Neither half may run past the buffer each was copied into. */
+            if (strlen(link.sAddr) >= sizeof(link.sAddr)) abort();
+            if (strlen(link.sUri) >= sizeof(link.sUri)) abort();
+            if (strlen(link.sFile) >= sizeof(link.sFile)) abort();
+        }
+
+        free(pURL);
+    }
+    else if (nTarget == XFUZZ_TARGET_GLOB)
+    {
+        /* Both sides of the match come from input: the first byte says how
+           much of it is the pattern, the rest is the subject. */
+        if (nSize < 2) return 0;
+
+        const uint8_t *pBody = &pData[1];
+        size_t nBody = nSize - 1;
+        size_t nSplit = (size_t)pData[0] % (nBody + 1);
+
+        char *pPattern = (char*)malloc(nSplit + 1);
+        char *pSubject = (char*)malloc(nBody - nSplit + 1);
+
+        if (pPattern == NULL || pSubject == NULL)
+        {
+            free(pPattern);
+            free(pSubject);
+            return 0;
+        }
+
+        memcpy(pPattern, pBody, nSplit);
+        pPattern[nSplit] = 0;
+
+        memcpy(pSubject, &pBody[nSplit], nBody - nSplit);
+        pSubject[nBody - nSplit] = 0;
+
+        xstrregex(pSubject, strlen(pSubject), pPattern);
+
+        free(pPattern);
+        free(pSubject);
     }
     else
     {

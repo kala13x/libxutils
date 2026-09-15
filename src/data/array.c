@@ -126,7 +126,7 @@ xarray_t* XArray_NewPool(size_t nPoolSize, size_t nSize, uint8_t nFixed)
     if (pPool == NULL) return NULL;
 
     xarray_t *pArr = XArray_New(pPool, nSize, nFixed);
-    if (nSize && pArr == NULL)
+    if (pArr == NULL)
     {
         XPool_Destroy(pPool);
         return NULL;
@@ -138,6 +138,8 @@ xarray_t* XArray_NewPool(size_t nPoolSize, size_t nSize, uint8_t nFixed)
 
 void XArray_Clear(xarray_t *pArr)
 {
+    XCHECK_VOID_NL((pArr != NULL));
+
     if (pArr->pData != NULL)
     {
         size_t i;
@@ -155,6 +157,7 @@ void XArray_Clear(xarray_t *pArr)
 
 void XArray_Destroy(xarray_t *pArr)
 {
+    XCHECK_VOID_NL((pArr != NULL));
     XArray_Clear(pArr);
 
     xpool_t *pPool = pArr->pPool;
@@ -305,13 +308,13 @@ int XArray_AddDataKey(xarray_t *pArr, void *pData, size_t nSize, uint32_t nKey)
 
 xarray_data_t* XArray_Get(xarray_t *pArr, size_t nIndex)
 {
-    if (nIndex >= pArr->nSize) return NULL;
+    if (pArr == NULL || nIndex >= pArr->nSize) return NULL;
     return pArr->pData[nIndex];
 }
 
 void* XArray_GetData(xarray_t *pArr, size_t nIndex)
 {
-    if (nIndex >= pArr->nSize) return NULL;
+    if (pArr == NULL || nIndex >= pArr->nSize) return NULL;
     xarray_data_t *pArrData = pArr->pData[nIndex];
     return pArrData ? pArrData->pData : NULL;
 }
@@ -325,7 +328,7 @@ void* XArray_GetDataOr(xarray_t *pArr, size_t nIndex, void *pRet)
 
 size_t XArray_GetSize(xarray_t *pArr, size_t nIndex)
 {
-    if (nIndex >= pArr->nSize) return 0;
+    if (pArr == NULL || nIndex >= pArr->nSize) return 0;
     xarray_data_t *pArrData = pArr->pData[nIndex];
     return pArrData ? pArrData->nSize : 0;
 }

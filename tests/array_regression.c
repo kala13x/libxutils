@@ -391,6 +391,50 @@ static int XTest_heap_array(void)
     return 0;
 }
 
+
+static int XTest_release_guards(void)
+{
+    /* Releasing is the one thing an error path always does, and an error
+     * path is exactly where the array it holds may be the null a
+     * constructor handed back. Both calls have to answer on that rather
+     * than fault on the very line that was meant to clean up. */
+    XArray_Clear(NULL);
+    XArray_Destroy(NULL);
+    XArray_Free(NULL);
+
+    CHECK(XArray_Used(NULL) == 0, "A missing array holds nothing");
+    CHECK(XArray_Size(NULL) == 0, "A missing array has no size");
+    CHECK(XArray_Get(NULL, 0) == NULL, "A missing array yields no entry");
+    CHECK(XArray_GetData(NULL, 0) == NULL, "A missing array yields no data");
+    CHECK(XArray_GetSize(NULL, 0) == 0, "A missing array yields no entry size");
+
+    /* A real array survives being cleared twice and destroyed after. */
+    xarray_t *pArray = XArray_New(NULL, 4, XFALSE);
+    CHECK(pArray != NULL, "An array is created");
+
+    CHECK(XArray_AddData(pArray, "one", 4) >= 0, "An entry is added");
+    CHECK(XArray_Used(pArray) == 1, "The entry is counted");
+
+    XArray_Clear(pArray);
+    CHECK(XArray_Used(pArray) == 0, "Clearing empties it");
+
+    XArray_Clear(pArray);
+    CHECK(XArray_Used(pArray) == 0, "Clearing an empty array is a no-op");
+
+    XArray_Destroy(pArray);
+
+    /* A pooled array of no declared size still comes back usable or null,
+     * never as a handle that cannot be written to. */
+    xarray_t *pPooled = XArray_NewPool(XSTDNON, XSTDNON, XFALSE);
+    if (pPooled != NULL)
+    {
+        CHECK(XArray_Used(pPooled) == 0, "A pooled array starts empty");
+        XArray_Destroy(pPooled);
+    }
+
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(lifecycle),
     XTEST_CASE(reference_model),
@@ -399,5 +443,6 @@ XTEST_MAIN(
     XTEST_CASE(mutation),
     XTEST_CASE(fixed_capacity),
     XTEST_CASE(search_agreement),
-    XTEST_CASE(heap_array)
+    XTEST_CASE(heap_array),
+    XTEST_CASE(release_guards)
 )

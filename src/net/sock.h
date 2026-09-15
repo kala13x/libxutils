@@ -218,6 +218,11 @@ xbool_t XFlags_IsSSL(uint32_t nFlags);
 xsockaddr_t* XSock_GetSockAddr(xsock_t *pSock);
 xsocklen_t XSock_GetAddrLen(xsock_t *pSock);
 
+/* The whole address union, rather than the one arm XSock_GetSockAddr()
+   picks by family. Exported from the module but never declared here, so a
+   caller reaching for it got an implicit declaration instead. */
+xsock_addr_t* XSock_InAddr(xsock_t *pSock);
+
 uint32_t XSock_GetNetAddr(const xsock_t *pSock);
 uint16_t XSock_GetPort(const xsock_t *pSock);
 int XSock_GetSockType(const xsock_t *pSock);
@@ -262,6 +267,8 @@ void XSock_DeinitSSL(void);
 int XSock_LastSSLError(char* pDst, size_t nSize);
 
 XSTATUS XSock_LoadPKCS12(xsock_ssl_cert_t* pCert, const char* p12Path, const char* p12Pass);
+void XSock_FreePKCS12(xsock_ssl_cert_t* pCert);
+
 XSOCKET XSock_SetSSLCert(xsock_t* pSock, xsock_cert_t* pCert);
 void XSock_InitCert(xsock_cert_t *pCert);
 

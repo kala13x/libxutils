@@ -7,6 +7,10 @@
  */
 
 #include "test.h"
+#include <pwd.h>
+#include <grp.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "xfs.h"
 #include "buf.h"
 #include "str.h"
@@ -450,11 +454,62 @@ static int XTest_directories(void)
     return 0;
 }
 
+
+static int XTest_ownership(void)
+{
+    /* Changing a file's owner by name rather than by id. Only a privileged
+     * process can hand a file to somebody else, so what is checked here is
+     * the lookup and the refusals: a name that does not resolve must fail
+     * before touching the file, not after. */
+    char sPath[256];
+    snprintf(sPath, sizeof(sPath), "/tmp/xutils-own-%d.txt", (int)getpid());
+    unlink(sPath);
+
+    CHECK(XPath_Write(sPath, (const uint8_t*)"x", 1, "cwt") > 0, "The fixture file is written");
+
+    struct passwd *pSelf = getpwuid(getuid());
+    struct group *pGroup = getgrgid(getgid());
+
+    if (pSelf == NULL || pGroup == NULL)
+    {
+        unlink(sPath);
+        printf("The current user has no name entry, skipping\n");
+        return 77;
+    }
+
+    /* Handing a file to the user who already owns it is the one change any
+     * process is allowed to make. */
+    CHECK(xchown(sPath, pSelf->pw_name, pGroup->gr_name) == XSTDOK,
+        "A file can be given to the user that already owns it");
+
+    struct stat statbuf;
+    CHECK(stat(sPath, &statbuf) == 0, "The file can be stat'ed");
+    CHECK(statbuf.st_uid == getuid(), "The owner is unchanged");
+
+    /* A name nobody has is refused, and so is a group nobody is in. The
+     * file must be left exactly as it was. */
+    CHECK(xchown(sPath, "xutils-no-such-user", pGroup->gr_name) == XSTDERR,
+        "An unknown user is refused");
+    CHECK(xchown(sPath, pSelf->pw_name, "xutils-no-such-group") == XSTDERR,
+        "An unknown group is refused");
+
+    CHECK(stat(sPath, &statbuf) == 0, "The file still exists");
+    CHECK(statbuf.st_uid == getuid(), "A refused change left the owner alone");
+
+    /* A path that does not exist cannot be given away either. */
+    CHECK(xchown("/tmp/xutils-no-such-path-at-all", pSelf->pw_name, pGroup->gr_name) == XSTDERR,
+        "A missing path is refused");
+
+    unlink(sPath);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(file_io),
     XTEST_CASE(handles),
     XTEST_CASE(lines),
     XTEST_CASE(load),
     XTEST_CASE(paths),
-    XTEST_CASE(directories)
+    XTEST_CASE(directories),
+    XTEST_CASE(ownership)
 )

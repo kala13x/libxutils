@@ -315,6 +315,138 @@ static int XTest_lifecycle(void)
     return 0;
 }
 
+
+/* Builds a wire packet whose JSON header announces nClaimed payload bytes
+ * while only nActual of them follow. The header is written by hand so the
+ * announced size can be anything a peer could put there. */
+static size_t mdtp_forge(uint8_t *pWire, size_t nMax, uint32_t nClaimed, size_t nActual)
+{
+    char sHeader[256];
+    int nHeader = snprintf(sHeader, sizeof(sHeader),
+        "{\"version\":\"1.0\",\"packetType\":\"data\",\"payload\":"
+        "{\"payloadType\":\"text\",\"payloadSize\":%u}}", (unsigned)nClaimed);
+
+    if (nHeader <= 0 || (size_t)nHeader + XPACKET_INFO_BYTES + nActual > nMax) return 0;
+
+    pWire[0] = (uint8_t)(nHeader & 0xff);
+    pWire[1] = (uint8_t)((nHeader >> 8) & 0xff);
+    pWire[2] = (uint8_t)((nHeader >> 16) & 0xff);
+    pWire[3] = (uint8_t)((nHeader >> 24) & 0xff);
+
+    memcpy(&pWire[XPACKET_INFO_BYTES], sHeader, (size_t)nHeader);
+    memset(&pWire[XPACKET_INFO_BYTES + nHeader], 'p', nActual);
+    return XPACKET_INFO_BYTES + (size_t)nHeader + nActual;
+}
+
+static int XTest_hostile_header(void)
+{
+    /* Everything here is what a peer sends, not what this side assembled,
+     * so every field is attacker chosen and none of it may be trusted as
+     * an offset or a length. */
+    uint8_t sWire[512];
+
+    /* An announced size that wraps when the header length is added to it.
+     * Summed in 32 bits, 4294967255 + 4 + header becomes a small number
+     * that the arriving bytes satisfy, and the parse completes handing out
+     * a payload pointer carrying a four gigabyte length. */
+    size_t nWire = mdtp_forge(sWire, sizeof(sWire), 0xFFFFFFFFu - 40u, 0);
+    CHECK(nWire > 0, "The forged packet fits");
+
+    xpacket_t parsed;
+    memset(&parsed, 0, sizeof(parsed));
+    CHECK(XPacket_Parse(&parsed, sWire, nWire) == XPACKET_INCOMPLETE,
+        "A payload size that overflows the packet size is incomplete");
+    CHECK(parsed.pPayload == NULL, "No payload pointer is handed out for it");
+    XPacket_Clear(&parsed);
+
+    /* The exact boundary: a size one byte past what a uint32_t packet size
+     * can describe is still refused. */
+    nWire = mdtp_forge(sWire, sizeof(sWire), 0xFFFFFFFFu, 0);
+    CHECK(nWire > 0, "The boundary packet fits");
+    memset(&parsed, 0, sizeof(parsed));
+    CHECK(XPacket_Parse(&parsed, sWire, nWire) == XPACKET_INCOMPLETE,
+        "The largest announcable payload is incomplete on a short wire");
+    XPacket_Clear(&parsed);
+
+    /* Announced sizes that do not overflow are still bounded by the wire. */
+    const uint32_t nClaims[] = {1, 2, 64, 4096, 0x7FFFFFFFu, 0x80000000u};
+    for (size_t i = 0; i < sizeof(nClaims) / sizeof(*nClaims); i++)
+    {
+        nWire = mdtp_forge(sWire, sizeof(sWire), nClaims[i], 0);
+        CHECK(nWire > 0, "The claim packet fits");
+
+        memset(&parsed, 0, sizeof(parsed));
+        CHECK(XPacket_Parse(&parsed, sWire, nWire) == XPACKET_INCOMPLETE,
+            "A payload announced but not sent is incomplete");
+        CHECK(parsed.pPayload == NULL, "An incomplete parse hands out no payload");
+        XPacket_Clear(&parsed);
+    }
+
+    /* And the honest case still works, byte for byte. */
+    nWire = mdtp_forge(sWire, sizeof(sWire), 7, 7);
+    CHECK(nWire > 0, "The honest packet fits");
+
+    memset(&parsed, 0, sizeof(parsed));
+    CHECK(XPacket_Parse(&parsed, sWire, nWire) == XPACKET_COMPLETE, "A truthful packet parses");
+    CHECK(parsed.header.nPayloadSize == 7, "The payload size is taken from the header");
+    CHECK(XPacket_GetSize(&parsed) == nWire, "The packet size covers the whole wire");
+
+    /* A parsed packet points into the caller's buffer rather than owning a
+     * copy, so the accessor has to reach that pointer and not an assembled
+     * one this side never built. */
+    const uint8_t *pPayload = XPacket_GetPayload(&parsed);
+    CHECK(pPayload != NULL, "A parsed packet hands out its payload");
+    CHECK(pPayload == parsed.pPayload, "The accessor agrees with the parsed pointer");
+    CHECK(pPayload >= sWire && pPayload + 7 <= sWire + nWire, "The payload lies inside the wire bytes");
+    CHECK(pPayload == NULL || memcmp(pPayload, "ppppppp", 7) == 0, "The payload bytes are the ones sent");
+    XPacket_Clear(&parsed);
+    return 0;
+}
+
+static int XTest_parse_into_stale(void)
+{
+    /* A stream hands its first bytes over a few at a time, so a caller that
+     * loops "parse, clear, read more" is the normal shape. The destination
+     * it hands in has not been zeroed by anyone, and a short read must not
+     * leave the stack contents of the caller sitting in it as a callback
+     * pointer and an owned buffer for XPacket_Clear to act on. */
+    uint8_t sWire[512];
+    size_t nWire = mdtp_forge(sWire, sizeof(sWire), 4, 4);
+    CHECK(nWire > 0, "The packet fits");
+
+    for (size_t n = 1; n < nWire; n++)
+    {
+        xpacket_t parsed;
+        memset(&parsed, 0xAB, sizeof(parsed));
+
+        xpacket_status_t eStatus = XPacket_Parse(&parsed, sWire, n);
+        CHECK(eStatus == XPACKET_INCOMPLETE || eStatus == XPACKET_INVALID,
+            "Every short prefix is refused");
+
+        CHECK(parsed.callback == NULL, "The parse cleared the stale callback pointer");
+        CHECK(parsed.rawData.pData == NULL, "The parse cleared the stale buffer pointer");
+        CHECK(parsed.pHeaderObj == NULL, "The parse cleared the stale header object");
+        CHECK(parsed.pPayload == NULL, "The parse cleared the stale payload pointer");
+        CHECK(parsed.pUserData == NULL, "The parse cleared the stale user pointer");
+
+        /* This is the call that used to run the stale pointers. */
+        XPacket_Clear(&parsed);
+    }
+
+    /* The argument guards have to clear it too, for the same reason. */
+    xpacket_t parsed;
+    memset(&parsed, 0xCD, sizeof(parsed));
+    CHECK(XPacket_Parse(&parsed, NULL, 16) == XPACKET_INVALID_ARGS, "A missing buffer is rejected");
+    CHECK(parsed.callback == NULL && parsed.rawData.pData == NULL, "A rejected parse still clears it");
+    XPacket_Clear(&parsed);
+
+    memset(&parsed, 0xCD, sizeof(parsed));
+    CHECK(XPacket_Parse(&parsed, sWire, 0) == XPACKET_INVALID_ARGS, "A zero length buffer is rejected");
+    CHECK(parsed.callback == NULL && parsed.rawData.pData == NULL, "A zero length parse still clears it");
+    XPacket_Clear(&parsed);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(type_mapping),
     XTEST_CASE(assemble_parse),
@@ -322,5 +454,7 @@ XTEST_MAIN(
     XTEST_CASE(payload_size_lies),
     XTEST_CASE(header_fields),
     XTEST_CASE(create_guards),
-    XTEST_CASE(lifecycle)
+    XTEST_CASE(lifecycle),
+    XTEST_CASE(hostile_header),
+    XTEST_CASE(parse_into_stale)
 )

@@ -40,7 +40,10 @@ case "$MODE" in
         ctest --test-dir "$TEST_BUILD" -T memcheck --output-on-failure \
             --overwrite 'MemoryCheckCommandOptions=--leak-check=full --show-leak-kinds=definite,indirect --errors-for-leak-kinds=definite,indirect --track-origins=yes --error-exitcode=99' "$@"
         ;;
-    tsan) ctest --test-dir "$TEST_BUILD" --output-on-failure -R '(thread|type|sync|mon)_regression' "$@" ;;
+    # Anything that runs a second thread belongs here, which now includes the
+    # network cases that drive a client or a server alongside the test.
+    tsan) ctest --test-dir "$TEST_BUILD" --output-on-failure \
+            -R '(thread|type|sync|mon|sock_ext|sock_tls|sock_timeout|http_client|api_tls|api_events|worker_sock)_regression' "$@" ;;
     fuzz)
         mkdir -p "$TEST_BUILD/artifacts"
         "$TEST_BUILD/tests/fuzz_corpus" "$TEST_BUILD/corpus"

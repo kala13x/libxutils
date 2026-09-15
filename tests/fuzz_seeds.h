@@ -34,7 +34,12 @@ static const xfuzz_seed_t g_fuzzSeeds[] = {
         "\x12\x34\x56\xa1" "\x00\x03" "abc"),
     XFUZZ_SEED("rtp-csrc", XFUZZ_TARGET_RTP,
         "\x81\x60\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01"
-        "\x00\x00\x00\x09" "\x00\x00\x02\x00" "\x00\x02" "hi")
+        "\x00\x00\x00\x09" "\x00\x00\x02\x00" "\x00\x02" "hi"),
+    XFUZZ_SEED("unix-url", XFUZZ_TARGET_UNIX_URL, "unix:///var/run/app.sock:/v1/status"),
+    XFUZZ_SEED("unix-url-query", XFUZZ_TARGET_UNIX_URL, "/tmp/x.sock?key=value"),
+    /* The first byte splits the rest into a pattern and a subject. */
+    XFUZZ_SEED("glob", XFUZZ_TARGET_GLOB, "\x06" "*.tar.gzlibxutils-2.8.tar.gz"),
+    XFUZZ_SEED("glob-exact", XFUZZ_TARGET_GLOB, "\x05" "adminadministrator")
 };
 
 #endif

@@ -499,6 +499,123 @@ static int XTest_random(void)
     return 0;
 }
 
+
+static int XTest_glob(void)
+{
+    /* Glob style matching, with the star as the only wildcard. It is used
+     * to pick names out of a list, so what has to be pinned down is which
+     * strings do NOT match: a pattern that matched everything would quietly
+     * widen whatever it is filtering. */
+    const char *pName = "libxutils-2.8.39.tar.gz";
+    size_t nLength = strlen(pName);
+
+    CHECK(xstrregex(pName, nLength, "*") == XTRUE, "A bare star matches anything");
+    CHECK(xstrregex(pName, nLength, "libxutils*") == XTRUE, "A leading literal matches a prefix");
+    CHECK(xstrregex(pName, nLength, "*tar.gz") == XTRUE, "A trailing literal matches a suffix");
+    CHECK(xstrregex(pName, nLength, "libxutils*tar.gz") == XTRUE, "Both ends match together");
+    CHECK(xstrregex(pName, nLength, "*2.8*") == XTRUE, "An interior literal matches");
+    CHECK(xstrregex(pName, nLength, "*x*t*g*") == XTRUE, "Several literals match in order");
+
+    CHECK(xstrregex(pName, nLength, "*nosuchpart*") == XFALSE, "A literal that is absent does not match");
+    CHECK(xstrregex(pName, nLength, "*.zip") == XFALSE, "A different suffix does not match");
+    CHECK(xstrregex(pName, nLength, "other*") == XFALSE, "A different prefix does not match");
+
+    /* Without a star the pattern is a plain comparison, anchored at both
+     * ends. Anything else would make it unsafe to filter with: a list
+     * holding "admin" must not also admit "administrator". */
+    CHECK(xstrregex(pName, nLength, pName) == XTRUE, "An exact pattern matches itself");
+    CHECK(xstrregex(pName, nLength, "libxutils") == XFALSE, "A shorter exact pattern does not match");
+    CHECK(xstrregex("administrator", 13, "admin") == XFALSE, "A starless pattern is not a prefix match");
+    CHECK(xstrregex("admin", 5, "admin") == XTRUE, "A starless pattern still matches exactly");
+    CHECK(xstrregex("administrator", 13, "admin*") == XTRUE, "The star is what opens the end up");
+
+    CHECK(xstrregex(NULL, 4, "*") == XFALSE, "A missing string matches nothing");
+    CHECK(xstrregex(pName, nLength, NULL) == XFALSE, "A missing pattern matches nothing");
+    CHECK(xstrregex("", 0, "*") == XTRUE, "An empty string still matches a bare star");
+    return 0;
+}
+
+static int XTest_field_formatting(void)
+{
+    /* Padding a formatted value out to a fixed width, from either side.
+     * These build the columns of a rendered table, so what matters is that
+     * the field is exactly the requested width and that a value too wide
+     * for it is not silently padded out to the whole buffer. */
+    char sBuffer[64];
+
+    /* Right aligned: the fill goes in front of the text. */
+    memset(sBuffer, 0, sizeof(sBuffer));
+    size_t nLeft = xstrnlcpyf(sBuffer, sizeof(sBuffer), 10, ' ', "%d", 42);
+    CHECK(nLeft == 10, "A right aligned field reports its width");
+    CHECK(strlen(sBuffer) == 10, "The rendered field is the width asked for");
+    CHECK(strcmp(sBuffer, "        42") == 0, "The value is pushed to the right");
+
+    memset(sBuffer, 0, sizeof(sBuffer));
+    xstrnlcpyf(sBuffer, sizeof(sBuffer), 8, '0', "%s", "7");
+    CHECK(strcmp(sBuffer, "0000000" "7") == 0, "The fill character is the one asked for");
+
+    /* Left aligned: the fill goes after the text. */
+    memset(sBuffer, 0, sizeof(sBuffer));
+    size_t nRight = xstrncpyfl(sBuffer, sizeof(sBuffer), 10, '.', "%d", 42);
+    CHECK(nRight == 10, "A left aligned field reports its width");
+    CHECK(strcmp(sBuffer, "42........") == 0, "The value stays on the left");
+
+    /* A value wider than the field is written whole rather than truncated
+     * to the field or padded out to the buffer. */
+    memset(sBuffer, 0, sizeof(sBuffer));
+    size_t nWide = xstrnlcpyf(sBuffer, sizeof(sBuffer), 4, ' ', "%s", "much-too-long");
+    CHECK(nWide == strlen("much-too-long"), "An overwide value reports its own length");
+    CHECK(strcmp(sBuffer, "much-too-long") == 0, "An overwide value is written whole");
+    CHECK(strchr(sBuffer, ' ') == NULL, "An overwide value is not padded at all");
+
+    memset(sBuffer, 0, sizeof(sBuffer));
+    xstrncpyfl(sBuffer, sizeof(sBuffer), 4, ' ', "%s", "much-too-long");
+    CHECK(strcmp(sBuffer, "much-too-long") == 0, "The left aligned form agrees");
+
+    /* A field wider than the buffer is clamped to the buffer rather than
+     * running past it. */
+    char sSmall[8];
+    memset(sSmall, 0, sizeof(sSmall));
+    xstrnlcpyf(sSmall, sizeof(sSmall), 100, '-', "%s", "x");
+    CHECK(strlen(sSmall) < sizeof(sSmall), "A field wider than the buffer is clamped");
+
+    CHECK(xstrnlcpyf(NULL, 16, 4, ' ', "%d", 1) == 0, "A missing destination renders nothing");
+    CHECK(xstrnlcpyf(sBuffer, 0, 4, ' ', "%d", 1) == 0, "A zero sized destination renders nothing");
+    CHECK(xstrncpyfl(NULL, 16, 4, ' ', "%d", 1) == 0, "The left aligned form agrees on a missing destination");
+    return 0;
+}
+
+static int XTest_append_remaining(void)
+{
+    /* Appending into the space a buffer has left, where the caller tracks
+     * how much is left rather than measuring the string each time. The
+     * count that comes back is what is still free afterwards, so a loop
+     * that appends until it reaches zero must never write past the end. */
+    char sBuffer[32];
+    memset(sBuffer, 0, sizeof(sBuffer));
+
+    size_t nAvail = sizeof(sBuffer);
+    nAvail = xstrncatsf(sBuffer, sizeof(sBuffer), nAvail, "%s", "first");
+    CHECK(nAvail == sizeof(sBuffer) - strlen("first"), "The remaining space drops by what was written");
+    CHECK(strcmp(sBuffer, "first") == 0, "The first append lands at the start");
+
+    nAvail = xstrncatsf(sBuffer, sizeof(sBuffer), nAvail, "-%s", "second");
+    CHECK(strcmp(sBuffer, "first-second") == 0, "The second append lands after the first");
+    CHECK(nAvail == sizeof(sBuffer) - strlen("first-second"), "The remaining space keeps dropping");
+
+    /* Appending until there is no room left must stop rather than run on. */
+    for (int i = 0; i < 20 && nAvail > 0; i++)
+        nAvail = xstrncatsf(sBuffer, sizeof(sBuffer), nAvail, "%s", "xxxx");
+
+    CHECK(strlen(sBuffer) < sizeof(sBuffer), "The buffer is still terminated inside itself");
+    CHECK(strncmp(sBuffer, "first-second", 12) == 0, "What was already there was not overwritten");
+
+    CHECK(xstrncatsf(NULL, 16, 16, "%d", 1) == 0, "A missing destination appends nothing");
+    CHECK(xstrncatsf(sBuffer, 0, 16, "%d", 1) == 0, "A zero sized destination appends nothing");
+    CHECK(xstrncatsf(sBuffer, sizeof(sBuffer), 0, "%d", 1) == 0, "No remaining space appends nothing");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(split),
     XTEST_CASE(match),
@@ -512,5 +629,8 @@ XTEST_MAIN(
     XTEST_CASE(duplicate),
     XTEST_CASE(concat),
     XTEST_CASE(colors),
-    XTEST_CASE(random)
+    XTEST_CASE(random),
+    XTEST_CASE(glob),
+    XTEST_CASE(field_formatting),
+    XTEST_CASE(append_remaining)
 )

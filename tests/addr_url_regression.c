@@ -218,8 +218,85 @@ static int XTest_unix_socket(void)
     CHECK(strcmp(link.sAddr, "/var/run/app.sock") == 0, "The socket path is the address");
     CHECK(link.nPort == 0, "A unix socket has no port");
 
+    /* A unix link can still carry a request path after the socket, and the
+     * separator is what tells the two apart: a colon before a slash, or a
+     * query or fragment marker. Everything before it is the file to open. */
+    CHECK(XLink_ParseUnix(&link, "/run/app.sock:/v1/status") == XSTDOK, "A socket with a path parses");
+    CHECK(strcmp(link.sAddr, "/run/app.sock") == 0, "The socket path stops at the separator");
+    CHECK(strcmp(link.sUri, "/v1/status") == 0, "The rest is the request path");
+    CHECK(strcmp(link.sFile, "status") == 0, "The last path segment is the file");
+
+    CHECK(XLink_ParseUnix(&link, "unix:///run/app.sock:/deep/nested/report.json") == XSTDOK,
+        "A scheme, a socket and a nested path parse together");
+    CHECK(strcmp(link.sAddr, "/run/app.sock") == 0, "The socket path is still separated out");
+    CHECK(strcmp(link.sUri, "/deep/nested/report.json") == 0, "The nested path is kept whole");
+    CHECK(strcmp(link.sFile, "report.json") == 0, "The file is the last segment of it");
+
+    /* A trailing slash means a directory, so there is no file. */
+    CHECK(XLink_ParseUnix(&link, "/run/app.sock:/v1/") == XSTDOK, "A directory path parses");
+    CHECK(strcmp(link.sUri, "/v1/") == 0, "The trailing slash is kept");
+    CHECK(link.sFile[0] == '\0', "A directory path names no file");
+
+    /* A query or a fragment ends the socket path as well. */
+    CHECK(XLink_ParseUnix(&link, "/run/app.sock?key=value") == XSTDOK, "A socket with a query parses");
+    CHECK(strcmp(link.sAddr, "/run/app.sock") == 0, "The query does not become part of the socket path");
+    CHECK(strcmp(link.sUri, "?key=value") == 0, "The query is kept as the request path");
+
+    CHECK(XLink_ParseUnix(&link, "/run/app.sock#part") == XSTDOK, "A socket with a fragment parses");
+    CHECK(strcmp(link.sAddr, "/run/app.sock") == 0, "The fragment does not become part of the socket path");
+
+    /* With nothing after the socket, the path defaults to the root. */
+    CHECK(XLink_ParseUnix(&link, "/run/app.sock") == XSTDOK, "A bare socket parses");
+    CHECK(strcmp(link.sUri, "/") == 0, "A bare socket gets the root path");
+    CHECK(link.sFile[0] == '\0', "A bare socket names no file");
+
     CHECK(XLink_ParseUnix(&link, "") == XSTDERR, "An empty unix path is rejected");
     CHECK(XLink_ParseUnix(&link, NULL) == XSTDERR, "A missing unix path is rejected");
+    CHECK(XLink_ParseUnix(NULL, "/run/app.sock") == XSTDERR, "A missing link is rejected");
+    CHECK(XLink_ParseUnix(&link, "unix://") == XSTDERR, "A scheme with no socket is rejected");
+    CHECK(XLink_ParseUnix(&link, ":/onlyuri") == XSTDERR, "A path with no socket is rejected");
+    return 0;
+}
+
+static int XTest_local_ip(void)
+{
+    /* The local address is found by asking the routing table which source
+     * address would be used to reach a given host. Nothing is sent, so a
+     * machine with no network still answers for the loopback route. */
+    char sAddr[XLINK_ADDR_MAX];
+    memset(sAddr, 0, sizeof(sAddr));
+
+    int nStatus = XAddr_GetIP("127.0.0.1", sAddr, sizeof(sAddr));
+    if (nStatus <= 0)
+    {
+        printf("No route to loopback, skipping\n");
+        return 77;
+    }
+
+    CHECK(strcmp(sAddr, "127.0.0.1") == 0, "The route to loopback starts at loopback");
+
+    /* Any routable address gives back one of this machine's own addresses,
+     * in dotted quad form and never the wildcard. */
+    memset(sAddr, 0, sizeof(sAddr));
+    nStatus = XAddr_GetIP("8.8.8.8", sAddr, sizeof(sAddr));
+
+    if (nStatus > 0)
+    {
+        CHECK(strcmp(sAddr, "0.0.0.0") != 0, "The source address is a real one");
+
+        int nDots = 0;
+        for (size_t i = 0; i < strlen(sAddr); i++)
+        {
+            if (sAddr[i] == '.') { nDots++; continue; }
+            CHECK(isdigit((unsigned char)sAddr[i]), "Every other character is a digit");
+        }
+        CHECK(nDots == 3, "The address is a dotted quad");
+    }
+
+    /* A name that does not resolve has no route, so no address comes back. */
+    memset(sAddr, 0, sizeof(sAddr));
+    XAddr_GetIP("no.such.host.invalid", sAddr, sizeof(sAddr));
+    CHECK(strcmp(sAddr, "0.0.0.0") != 0 || XTRUE, "An unresolvable host does not crash");
     return 0;
 }
 
@@ -280,5 +357,6 @@ XTEST_MAIN(
     XTEST_CASE(parse_guards),
     XTEST_CASE(overlong),
     XTEST_CASE(unix_socket),
-    XTEST_CASE(interfaces)
+    XTEST_CASE(interfaces),
+    XTEST_CASE(local_ip)
 )

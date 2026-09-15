@@ -316,6 +316,44 @@ static int XTest_size_limits(void)
     return 0;
 }
 
+
+static int XTest_build_support(void)
+{
+    /* Whether RSA is available at all is a build-time answer, and every
+     * other entry point in this module depends on it. A caller has to be
+     * able to ask before it reaches for a key. */
+    int nHave = XRSA_HaveSSL();
+    CHECK(nHave == 0 || nHave == 1, "The support flag is a plain yes or no");
+
+    if (!nHave)
+    {
+        /* Without support, nothing may quietly succeed. */
+        xrsa_ctx_t key;
+        XRSA_Init(&key);
+        CHECK(XRSA_GenerateKeys(&key, 2048, 65537) != XSTDOK, "No key can be generated without support");
+        XRSA_Destroy(&key);
+        return 0;
+    }
+
+    /* With support, the smallest key the library will make still works
+     * end to end, which is what the rest of this file assumes. */
+    xrsa_ctx_t key;
+    XRSA_Init(&key);
+    CHECK(key.pPrivateKey == NULL && key.pPublicKey == NULL, "A fresh context holds no keys");
+    CHECK(key.nPrivKeyLen == 0 && key.nPubKeyLen == 0, "A fresh context holds no lengths");
+
+    CHECK(XRSA_GenerateKeys(&key, 1024, 65537) == XSTDOK, "A key is generated");
+    CHECK(key.pPrivateKey != NULL && key.nPrivKeyLen > 0, "The private key is exported");
+    CHECK(key.pPublicKey != NULL && key.nPubKeyLen > 0, "The public key is exported");
+    CHECK(strstr(key.pPrivateKey, "PRIVATE KEY") != NULL, "The private key is PEM encoded");
+    CHECK(strstr(key.pPublicKey, "PUBLIC KEY") != NULL, "The public key is PEM encoded");
+    CHECK(strstr(key.pPublicKey, "PRIVATE") == NULL, "The public key carries no private material");
+
+    XRSA_Destroy(&key);
+    CHECK(key.pPrivateKey == NULL && key.pPublicKey == NULL, "Destroying releases both keys");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(signatures),
     XTEST_CASE(encryption),
@@ -325,5 +363,6 @@ XTEST_MAIN(
     XTEST_CASE(key_import),
     XTEST_CASE(key_files),
     XTEST_CASE(context),
-    XTEST_CASE(size_limits)
+    XTEST_CASE(size_limits),
+    XTEST_CASE(build_support)
 )

@@ -990,7 +990,7 @@ xhttp_status_t XHTTP_ReadHeader(xhttp_t *pHttp, xsock_t *pSock)
         if (XSock_IsNB(pSock)) break;
     }
 
-    int nRetVal = XHTTP_Callback(pHttp, XHTTP_READ_HDR, pBuffer->pData, pBuffer->nSize);
+    int nRetVal = XHTTP_Callback(pHttp, XHTTP_READ_HDR, pBuffer->pData, pBuffer->nUsed);
     if (nRetVal == XSTDERR) return XHTTP_TERMINATED;
     else if (nRetVal == XSTDNON)
     {
@@ -1074,7 +1074,11 @@ xhttp_status_t XHTTP_ReadContent(xhttp_t *pHttp, xsock_t *pSock)
         {
             if ((!pHttp->nContentLength && !XHTTP_GetBodySize(pHttp)) ||
                 (pHttp->nContentLength == XHTTP_GetBodySize(pHttp)) ||
-                XSock_Status(pSock) == XSOCK_EOF) return XHTTP_COMPLETE;
+                XSock_Status(pSock) == XSOCK_EOF)
+            {
+                pHttp->nComplete = XTRUE;
+                return XHTTP_COMPLETE;
+            }
 
             return XHTTP_StatusCb(pHttp, XHTTP_EREAD);
         }
