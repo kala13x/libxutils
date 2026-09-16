@@ -32,7 +32,6 @@ find_package(OpenSSL)
 if(OpenSSL_FOUND)
     include_directories(${OPENSSL_INCLUDE_DIR})
     link_directories(${OPENSSL_LIBRARIES})
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_XUTILS_USE_SSL")
 endif()
 
 SET(HEADER_DST "include/xutils")
@@ -91,6 +90,10 @@ add_library(xutils STATIC
     ./src/sys/srch.c
     ./src/sys/xtime.c
 )
+
+if(OpenSSL_FOUND)
+    target_compile_definitions(xutils PUBLIC _XUTILS_USE_SSL)
+endif()
 
 if(XUTILS_BUILD_TESTS)
     include(CTest)
