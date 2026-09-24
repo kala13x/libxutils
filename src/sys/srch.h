@@ -38,6 +38,10 @@ typedef struct XSearchEntry {
     char *pRealPath;
 } xsearch_entry_t;
 
+/* Directory levels a recursive search descends before it stops and reports the
+ * skipped subtree. Keeps a runaway tree from exhausting a worker thread's stack. */
+#define XSEARCH_MAX_DEPTH 256
+
 typedef struct XSearchCtx xsearch_t;
 typedef int(*xsearch_cb_t)(xsearch_t *pSearch, xsearch_entry_t *pEntry, const char *pMsg);
 

@@ -306,7 +306,24 @@ static XSTATUS XSearch_LoadData(xsearch_t *pSearch, xbyte_buffer_t *pBuffer, con
     {
         char sPath[XPATH_MAX];
         xstrncpyf(sPath, sizeof(sPath), "%s%s", pPath, pName);
-        XPath_LoadBufferSize(sPath, pBuffer, pSearch->nBufferSize);
+
+        /* Non-blocking: the criteria saw a regular file, but a FIFO swapped in
+           since then would park this thread in open() for good, and whoever
+           joins it with it. XFile_LoadSize re-checks the type on the descriptor. */
+        xfile_t file;
+        if (XFile_Open(&file, sPath, "rni", NULL) >= 0)
+        {
+            size_t nSize = 0;
+            uint8_t *pData = XFile_LoadSize(&file, pSearch->nBufferSize, &nSize);
+            XFile_Close(&file);
+
+            if (pData != NULL)
+            {
+                pBuffer->pData = pData;
+                pBuffer->nUsed = nSize;
+                pBuffer->nSize = nSize + 1;
+            }
+        }
     }
 
     return pBuffer->nUsed > 0 ? XSTDOK : XSTDNON;
@@ -456,6 +473,102 @@ xsearch_entry_t* XSearch_GetEntry(xsearch_t *pSearch, int nIndex)
     return (xsearch_entry_t*)XArray_GetData(&pSearch->fileArray, nIndex);
 }
 
+/* One directory level of a recursive search. The two path buffers live on the
+   heap, not in the frame: the recursion runs on whatever stack the caller's
+   thread has, and 8 KB of path per level overflowed a default thread stack a
+   few dozen directories down. The depth is bounded for the same reason. */
+static int XSearch_Directory(xsearch_t *pSearch, const char *pDirectory, size_t nDepth)
+{
+    if (nDepth >= XSEARCH_MAX_DEPTH)
+    {
+        XSearch_ErrorCallback(pSearch, "Search depth limit reached, not descending: %s", pDirectory);
+        return XSYNC_ATOMIC_GET(pSearch->pInterrupted) ? XSTDERR : XSTDOK;
+    }
+
+    char *pPaths = (char*)malloc(XPATH_MAX * 2);
+    if (pPaths == NULL)
+    {
+        XSearch_ErrorCallback(pSearch, "Failed to alloc search path: %s", pDirectory);
+        return XSTDERR;
+    }
+
+    char *sDirPath = pPaths;
+    char *sFullPath = pPaths + XPATH_MAX;
+    xdir_t dirHandle;
+
+    size_t nDirLen = strlen(pDirectory);
+    while (nDirLen && pDirectory[nDirLen--] == XSTR_SPACE_CHAR);
+    const char *pSlash = pDirectory[nDirLen] == '/' ? XSTR_EMPTY : "/";
+    xstrncpyf(sDirPath, XPATH_MAX, "%s%s", pDirectory, pSlash);
+
+    if (XDir_Open(&dirHandle, sDirPath) < 0)
+    {
+        XSearch_ErrorCallback(pSearch, "Failed to open directory: %s", sDirPath);
+        free(pPaths);
+        return XSYNC_ATOMIC_GET(pSearch->pInterrupted) ? XSTDERR : XSTDOK;
+    }
+
+    int nStatus = XSTDOK;
+    while (XDir_Read(&dirHandle, NULL, 0) > 0 && !XSYNC_ATOMIC_GET(pSearch->pInterrupted))
+    {
+        xstat_t statbuf;
+
+        const char *pEntryName = dirHandle.pCurrEntry;
+        xstrncpyf(sFullPath, XPATH_MAX, "%s%s", sDirPath, pEntryName);
+
+        if (xstat(sFullPath, &statbuf) < 0)
+        {
+            XSearch_ErrorCallback(pSearch, "Failed to stat file: %s", sFullPath);
+            if (!XSYNC_ATOMIC_GET(pSearch->pInterrupted)) continue;
+
+            nStatus = XSTDERR;
+            break;
+        }
+
+        int nMatch = XSearch_CheckCriteria(pSearch, sDirPath, pEntryName, &statbuf);
+        if (nMatch > 0)
+        {
+            xsearch_entry_t *pEntry = XSearch_NewEntry(pEntryName, sDirPath, &statbuf);
+            if (pEntry == NULL)
+            {
+                XSearch_ErrorCallback(pSearch, "Failed to alloc entry: %s", sFullPath);
+                nStatus = XSTDERR;
+                break;
+            }
+
+            if (XSearch_Callback(pSearch, pEntry) < 0)
+            {
+                nStatus = XSTDERR;
+                break;
+            }
+        }
+        else if (nMatch < 0)
+        {
+            nStatus = XSTDERR;
+            break;
+        }
+
+        /* Recursive search. A link is never descended into: on POSIX the
+           lstat above already reports one as a link, and on Windows stat()
+           follows it, so a junction pointing back up the tree would recurse
+           until the path stops growing and then never stop at all. */
+        xbool_t bDescend = pSearch->bRecursive && S_ISDIR(statbuf.st_mode);
+#ifdef _WIN32
+        if (bDescend && XPath_IsLink(sFullPath)) bDescend = XFALSE;
+#endif
+
+        if (bDescend && XSearch_Directory(pSearch, sFullPath, nDepth + 1) < 0)
+        {
+            nStatus = XSTDERR;
+            break;
+        }
+    }
+
+    XDir_Close(&dirHandle);
+    free(pPaths);
+    return nStatus;
+}
+
 int XSearch(xsearch_t *pSearch, const char *pDirectory)
 {
     if (XSYNC_ATOMIC_GET(pSearch->pInterrupted) ||
@@ -491,74 +604,5 @@ int XSearch(xsearch_t *pSearch, const char *pDirectory)
         return XSTDOK;
     }
 
-    xdir_t dirHandle;
-    char sDirPath[XPATH_MAX];
-
-    size_t nDirLen = strlen(pDirectory);
-    while (nDirLen && pDirectory[nDirLen--] == XSTR_SPACE_CHAR);
-    const char *pSlash = pDirectory[nDirLen] == '/' ? XSTR_EMPTY : "/";
-    xstrncpyf(sDirPath, sizeof(sDirPath), "%s%s", pDirectory, pSlash);
-
-    if (XDir_Open(&dirHandle, sDirPath) < 0)
-    {
-        XSearch_ErrorCallback(pSearch, "Failed to open directory: %s", sDirPath);
-        return XSYNC_ATOMIC_GET(pSearch->pInterrupted) ? XSTDERR : XSTDOK;
-    }
-
-    while (XDir_Read(&dirHandle, NULL, 0) > 0 && !XSYNC_ATOMIC_GET(pSearch->pInterrupted))
-    {
-        char sFullPath[XPATH_MAX];
-        xstat_t statbuf;
-
-        const char *pEntryName = dirHandle.pCurrEntry;
-        xstrncpyf(sFullPath, sizeof(sFullPath), "%s%s", sDirPath, pEntryName);
-
-        if (xstat(sFullPath, &statbuf) < 0)
-        {
-            XSearch_ErrorCallback(pSearch, "Failed to stat file: %s", sFullPath);
-            if (XSYNC_ATOMIC_GET(pSearch->pInterrupted)) return XSTDERR;
-            continue;
-        }
-
-        int nMatch = XSearch_CheckCriteria(pSearch, sDirPath, pEntryName, &statbuf);
-        if (nMatch > 0)
-        {
-            xsearch_entry_t *pEntry = XSearch_NewEntry(pEntryName, sDirPath, &statbuf);
-            if (pEntry == NULL)
-            {
-                XSearch_ErrorCallback(pSearch, "Failed to alloc entry: %s", sFullPath);
-                XDir_Close(&dirHandle);
-                return XSTDERR;
-            }
-
-            if (XSearch_Callback(pSearch, pEntry) < 0)
-            {
-                XDir_Close(&dirHandle);
-                return XSTDERR;
-            }
-        }
-        else if (nMatch < 0)
-        {
-            XDir_Close(&dirHandle);
-            return XSTDERR;
-        }
-
-        /* Recursive search. A link is never descended into: on POSIX the
-           lstat above already reports one as a link, and on Windows stat()
-           follows it, so a junction pointing back up the tree would recurse
-           until the path stops growing and then never stop at all. */
-        xbool_t bDescend = pSearch->bRecursive && S_ISDIR(statbuf.st_mode);
-#ifdef _WIN32
-        if (bDescend && XPath_IsLink(sFullPath)) bDescend = XFALSE;
-#endif
-
-        if (bDescend && XSearch(pSearch, sFullPath) < 0)
-        {
-            XDir_Close(&dirHandle);
-            return XSTDERR;
-        }
-    }
-
-    XDir_Close(&dirHandle);
-    return XSTDOK;
+    return XSearch_Directory(pSearch, pDirectory, 0);
 }

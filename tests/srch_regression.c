@@ -7,6 +7,7 @@
 
 #include "test.h"
 #include "srch.h"
+#include "thread.h"
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -590,7 +591,109 @@ static int XTest_text_shapes(void)
     return 0;
 }
 
+/* A deep tree searched from a thread with the library's default stack, which is
+ * what an application's search worker gets. Every level used to keep two full
+ * path buffers on the stack, so a few dozen nested directories overflowed it
+ * and took the whole process down. */
+typedef struct {
+    char sRoot[128];
+    int nStatus;
+    int nWarnings;
+    int nFound;
+} srch_deep_t;
+
+static int srch_deep_callback(xsearch_t *pSearch, xsearch_entry_t *pEntry, const char *pMsg)
+{
+    srch_deep_t *pDeep = (srch_deep_t*)pSearch->pUserCtx;
+    if (pMsg != NULL) pDeep->nWarnings++;
+    if (pEntry != NULL && strcmp(pEntry->sName, "bottom.txt") == 0) pDeep->nFound++;
+    return XSTDNON;
+}
+
+static void* srch_deep_worker(void *pArg)
+{
+    srch_deep_t *pDeep = (srch_deep_t*)pArg;
+    xsearch_t search;
+
+    XSearch_Init(&search, "bottom.txt");
+    search.bRecursive = XTRUE;
+    search.callback = srch_deep_callback;
+    search.pUserCtx = pDeep;
+
+    pDeep->nStatus = XSearch(&search, pDeep->sRoot);
+    XSearch_Destroy(&search);
+    return NULL;
+}
+
+static int srch_make_deep(char *pPath, size_t nSize, const char *pRoot, int nLevels)
+{
+    size_t nLen = (size_t)snprintf(pPath, nSize, "%s", pRoot);
+
+    for (int i = 0; i < nLevels; i++)
+    {
+        if (nLen + 3 >= nSize) return XSTDERR;
+        nLen += (size_t)snprintf(pPath + nLen, nSize - nLen, "/d");
+        if (mkdir(pPath, 0755) != 0) return XSTDERR;
+    }
+
+    if (nLen + 12 >= nSize) return XSTDERR;
+    snprintf(pPath + nLen, nSize - nLen, "/bottom.txt");
+
+    FILE *pFile = fopen(pPath, "wb");
+    if (pFile == NULL) return XSTDERR;
+    fclose(pFile);
+    return XSTDOK;
+}
+
+static int XTest_deep_tree(void)
+{
+    static char sPath[XPATH_MAX];
+    srch_fixture_t fixture;
+
+    snprintf(fixture.sRoot, sizeof(fixture.sRoot), "/tmp/xutils-srch-deep-XXXXXX");
+    CHECK(mkdtemp(fixture.sRoot) != NULL, "Create the deep fixture root");
+    fixture.nCreated = 1;
+
+    /* Deep enough to overflow the old per-level frame, shallow enough to be
+       searched in full. */
+    char sShallow[160];
+    snprintf(sShallow, sizeof(sShallow), "%s/shallow", fixture.sRoot);
+    CHECK(mkdir(sShallow, 0755) == 0, "Create the searchable tree root");
+    CHECK(srch_make_deep(sPath, sizeof(sPath), sShallow, 200) == XSTDOK, "Build a 200 level tree");
+
+    srch_deep_t deep;
+    memset(&deep, 0, sizeof(deep));
+    xstrncpy(deep.sRoot, sizeof(deep.sRoot), sShallow);
+
+    xthread_t thread;
+    CHECK(XThread_Create(&thread, srch_deep_worker, &deep, 0) == XSTDOK, "Start a default-stack search thread");
+    XThread_Join(&thread);
+
+    CHECK(deep.nStatus == XSTDOK, "A 200 level recursive search completes on a default thread stack");
+    CHECK(deep.nFound == 1, "The file at the bottom of the tree is found");
+
+    /* Past the depth limit the search still completes and says what it skipped
+       instead of recursing until something gives. */
+    char sDeep[160];
+    snprintf(sDeep, sizeof(sDeep), "%s/deep", fixture.sRoot);
+    CHECK(mkdir(sDeep, 0755) == 0, "Create the over-deep tree root");
+    CHECK(srch_make_deep(sPath, sizeof(sPath), sDeep, XSEARCH_MAX_DEPTH + 20) == XSTDOK, "Build an over-deep tree");
+
+    memset(&deep, 0, sizeof(deep));
+    xstrncpy(deep.sRoot, sizeof(deep.sRoot), sDeep);
+    CHECK(XThread_Create(&thread, srch_deep_worker, &deep, 0) == XSTDOK, "Start the over-deep search thread");
+    XThread_Join(&thread);
+
+    CHECK(deep.nStatus == XSTDOK, "A search past the depth limit still completes");
+    CHECK(deep.nFound == 0, "Nothing below the depth limit is visited");
+    CHECK(deep.nWarnings > 0, "The depth limit is reported");
+
+    srch_destroy(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(deep_tree),
     XTEST_CASE(name_matching),
     XTEST_CASE(recursion),
     XTEST_CASE(criteria),

@@ -168,7 +168,7 @@ endif()
 if(UNIX)
     xutils_regression(xfs_regression sys copy permissions directories nonregular_source copy_failures)
     xutils_regression(xfs_ops_regression sys file_io handles lines load paths directories ownership path_bounds)
-    xutils_regression(srch_regression sys name_matching recursion criteria text_search callback entries guards text_shapes)
+    xutils_regression(srch_regression sys deep_tree name_matching recursion criteria text_search callback entries guards text_shapes)
     xutils_regression(cli_regression sys window_size window_lines window_align window_display
         progress_bounds progress_output progress_animation input terminal_modes terminal_input)
     xutils_regression(sig_regression sys register exit_handler errexit backtrace daemonize)

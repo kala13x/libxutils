@@ -365,6 +365,72 @@ static int XTest_untrusted(void)
     return 0;
 }
 
+static int XTest_host_override(void)
+{
+    /* The client dials localhost but asks, through the certificate options, for a different name. The name asked
+     * for is the one that has to be verified: a caller that connects by address and names the service it expects
+     * (the relay's Redis link does exactly that with its SNI setting) must get that name checked, not the address.
+     * The guard around this used to test a function name with defined(), which compiled the check away. */
+    tls_fixture_t fixture;
+    if (tls_fixture_begin(&fixture) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("The TLS fixture could not be built, skipping\n");
+        return 77;
+    }
+
+    tls_server_t server;
+    xthread_t thread;
+    if (tls_start(&server, &fixture, &thread, XFALSE) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("No free loopback port, skipping\n");
+        return 77;
+    }
+
+    XSock_InitSSL();
+
+    /* Trusted anchor, valid certificate for localhost - but not for the name the caller asked for. */
+    xsock_cert_t cert;
+    XSock_InitCert(&cert);
+    cert.pCaPath = fixture.sCert;
+    cert.pHostName = "wrong.example";
+    cert.nVerifyFlags = SSL_VERIFY_PEER;
+
+    xsock_t client;
+    CHECK(tls_connect_armed(&client, server.nPort, &cert, &server) == XSTDERR,
+        "A certificate that does not cover the requested name is refused");
+    CHECK(XSock_IsSSLError(XSock_Status(&client)) == XTRUE, "The refusal is reported as a TLS error");
+
+    XSock_Close(&client);
+    XThread_Join(&thread);
+    tls_fixture_end(&fixture);
+
+    /* An address works as the requested name too, matched against the certificate's IP entry. */
+    if (tls_fixture_begin(&fixture) != XSTDOK || tls_start(&server, &fixture, &thread, XFALSE) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("The second TLS server could not be started, skipping\n");
+        return 77;
+    }
+
+    cert.pCaPath = fixture.sCert;
+    cert.pHostName = "127.0.0.1";
+    CHECK(tls_connect_armed(&client, server.nPort, &cert, &server) == XSTDOK,
+        "An address the certificate covers is accepted as the requested name");
+
+    const char *pMessage = "by address";
+    CHECK(XSock_SSLWrite(&client, pMessage, strlen(pMessage)) == (int)strlen(pMessage), "The client writes over TLS");
+
+    char sReply[256];
+    CHECK(XSock_SSLRead(&client, sReply, sizeof(sReply) - 1, XFALSE) > 0, "The client reads the answer");
+
+    XSock_Close(&client);
+    XThread_Join(&thread);
+    tls_fixture_end(&fixture);
+    return 0;
+}
+
 static int XTest_cert_guards(void)
 {
     /* A certificate the server cannot load is reported at configuration
@@ -781,6 +847,7 @@ XTEST_MAIN(
     XTEST_CASE(pkcs12_identity),
     XTEST_CASE(pkcs12_ownership),
     XTEST_CASE(untrusted),
+    XTEST_CASE(host_override),
     XTEST_CASE(cert_guards),
     XTEST_CASE(peer_endings),
     XTEST_CASE(closed_session_io),

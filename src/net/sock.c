@@ -1933,14 +1933,25 @@ XSOCKET XSock_SetSSLCert(xsock_t *pSock, xsock_cert_t *pCert)
     }
 #endif
 
-#if defined(X509_VERIFY_PARAM_set1_host)
+    /* X509_VERIFY_PARAM_set1_host() is a function, not a macro, so testing it with defined() compiled this out on
+       every OpenSSL: verification stayed bound to the dialed address and the name asked for here was never checked.
+       Same version gate and the same name-or-address split as XSock_InitSSLClient(). */
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
     if (pSSL != NULL &&
         xstrused(pCert->pHostName) &&
         pCert->nVerifyFlags > 0)
     {
         X509_VERIFY_PARAM *pParam = SSL_get0_param(pSSL);
-        if (pParam == NULL ||
-            X509_VERIFY_PARAM_set1_host(pParam, pCert->pHostName, 0) != 1)
+        int nHostOk = 0;
+
+        if (pParam != NULL)
+        {
+            nHostOk = (XSock_NetAddr(pCert->pHostName) > 0) ?
+                X509_VERIFY_PARAM_set1_ip_asc(pParam, pCert->pHostName) :
+                X509_VERIFY_PARAM_set1_host(pParam, pCert->pHostName, 0);
+        }
+
+        if (nHostOk != 1)
         {
             pSock->eStatus = XSOCK_ERR_SSLCNT;
             XSock_Close(pSock);
