@@ -26,7 +26,7 @@ The library targets `Linux`, `Unix` and `Windows` and is released under the `MIT
 
 The strongest side of `libxutils` is networking, although it is much more than a networking library. While networking is its most mature and feature-complete area, the library also provides data structures, cryptography, JSON/JWT processing, filesystem utilities, threading, resource monitoring, logging, and many other building blocks for native applications.
 
-Instead of combining separate libraries for sockets, event loops, HTTP, WebSocket, SSL and protocol glue, `libxutils` keeps them inside one library with shared conventions for buffers, callbacks, ownership, and runtime flow.
+Instead of combining separate libraries for sockets, event loops, HTTP, WebSocket, SSL, and protocol glue, `libxutils` keeps them inside one library with shared conventions for buffers, callbacks, ownership, and runtime flow.
 
 Built-in networking pieces include:
 
@@ -39,7 +39,7 @@ Built-in networking pieces include:
 
 All networking components support both client-side and server-side operation.
 
-HTTP, WebSocket and raw TCP share the same callback model, endpoint setup and event loop. Switch between protocols by changing a single enum, the rest of your code stays the same. More importantly, they can coexist: a single instance can serve an HTTP API on one port, a WebSocket feed on another and a raw TCP control channel on a third, all multiplexed through one service loop with no threading required.
+HTTP, WebSocket, and raw TCP share the same callback model, endpoint setup, and event loop. Switch between protocols by changing a single enum, the rest of your code stays the same. More importantly, they can coexist: a single instance can serve an HTTP API on one port, a WebSocket feed on another and a raw TCP control channel on a third, all multiplexed through one service loop with no threading required.
 
 ## Typical use cases
 
@@ -53,11 +53,11 @@ HTTP, WebSocket and raw TCP share the same callback model, endpoint setup and ev
 
 libxutils started as a personal utility library in 2015 and has evolved over years of real-world use into a focused, production-tested stack.
 
-The library is designed around predictable performance and explicit resource control. There are no hidden allocations, no implicit threading and no garbage-collected layers, memory ownership is always visible at the call site.
+The library is designed around predictable performance and explicit resource control. There are no hidden allocations, no implicit threading, and no garbage-collected layers, memory ownership is always visible at the call site.
 
-Every commit is tested against Valgrind as part of the CI pipeline to catch leaks, invalid reads and use-after-free errors before they reach a release. Combined with CodeQL static analysis running on every push, the codebase is continuously checked for memory safety and overall quality.
+The entire codebase is tested on every commit with Valgrind, ASan, TSan, UBSan, and fuzzing as part of the CI pipeline to catch memory leaks, invalid memory accesses, use-after-free errors, data races, and undefined behavior before they reach a release. Combined with CodeQL static analysis on every push, this provides continuous checks for memory safety, security issues, and overall code quality.
 
-The result is a library that stays small, builds fast and behaves the same way whether it runs in a long-lived server or a short-lived CLI tool.
+The result is a library that stays small, builds fast, and behaves the same way whether it runs in a long-lived server or a short-lived CLI tool.
 
 ## Compared to other stacks
 
@@ -213,7 +213,7 @@ int main(void)
 }
 ```
 
-A single abstraction covers HTTP, WebSocket and raw TCP. The same `XAPI_Init` → `XAPI_AddEndpoint` → `XAPI_Service` flow, the same callback signature and the same return codes apply regardless of protocol. Code written for one transport carries over to another with minimal changes, which removes the integration cost of combining separate libraries for each protocol. Multiple endpoints with different protocols can also run side by side in the same event loop, making it straightforward to expose an HTTP API, a WebSocket stream and a raw TCP channel from one process without threads or external glue.
+A single abstraction covers HTTP, WebSocket, and raw TCP. The same `XAPI_Init` → `XAPI_AddEndpoint` → `XAPI_Service` flow, the same callback signature, and the same return codes apply regardless of protocol. Code written for one transport carries over to another with minimal changes, which removes the integration cost of combining separate libraries for each protocol. Multiple endpoints with different protocols can also run side by side in the same event loop, making it straightforward to expose an HTTP API, a WebSocket stream, and a raw TCP channel from one process without threads or external glue.
 
 ## Installation
 
