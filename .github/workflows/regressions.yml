@@ -20,6 +20,8 @@ jobs:
             compiler: gcc
           - mode: asan
             compiler: clang
+          - mode: ubsan
+            compiler: gcc
           - mode: valgrind
             compiler: gcc
           - mode: tsan

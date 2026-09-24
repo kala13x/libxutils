@@ -9,9 +9,10 @@ TEST_JOBS="${JOBS:-4}"
 CMAKE_ARGS=(-S "$TEST_ROOT" -B "$TEST_BUILD" -DXUTILS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug)
 case "$MODE" in
     native|no-ssl|valgrind) CMAKE_ARGS+=(-DCMAKE_C_COMPILER="${CC:-cc}") ;;
+    ubsan) CMAKE_ARGS+=(-DCMAKE_C_COMPILER="${CC:-gcc}") ;;
     asan|tsan|fuzz) CMAKE_ARGS+=(-DCMAKE_C_COMPILER="${CC:-clang}") ;;
     coverage) CMAKE_ARGS+=(-DCMAKE_C_COMPILER="${CC:-gcc}") ;;
-    *) echo "Usage: $0 {native|no-ssl|asan|valgrind|tsan|fuzz|coverage} [ctest options]" >&2; exit 2 ;;
+    *) echo "Usage: $0 {native|no-ssl|asan|ubsan|valgrind|tsan|fuzz|coverage} [ctest options]" >&2; exit 2 ;;
 esac
 case "$MODE" in
     no-ssl) CMAKE_ARGS+=(-DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON) ;;
@@ -23,6 +24,14 @@ case "$MODE" in
         fi
         CMAKE_ARGS+=("-DCMAKE_C_FLAGS=$TEST_FLAGS" '-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined')
         export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=1:halt_on_error=1}"
+        export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=1:print_stacktrace=1}"
+        ;;
+    # UBSan on its own, by default under gcc: the asan mode already carries
+    # clang's UBSan, and gcc's implementation instruments differently. With
+    # -fno-sanitize-recover every report aborts the test even if UBSAN_OPTIONS
+    # is overridden.
+    ubsan)
+        CMAKE_ARGS+=('-DCMAKE_C_FLAGS=-fsanitize=undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer' '-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=undefined')
         export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=1:print_stacktrace=1}"
         ;;
     tsan)
