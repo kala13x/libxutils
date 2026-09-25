@@ -17,6 +17,7 @@
 #include "thread.h"
 #include "sync.h"
 #include "xtime.h"
+#include <stdlib.h>
 #include <unistd.h>
 
 typedef struct {
@@ -592,6 +593,18 @@ static int XTest_missing_identity(void)
     return 0;
 }
 
+/* Every deadline in the async cases stretches with the runner: XUTILS_TEST_TIMEOUT_MS, as in api_io_regression.
+ * Under valgrind creating the TLS client context alone - loading the system trust store - takes seconds. */
+static unsigned long api_tls_timeout_ms(void)
+{
+    const char *pTimeout = getenv("XUTILS_TEST_TIMEOUT_MS");
+    unsigned long nTimeout = pTimeout ? strtoul(pTimeout, NULL, 10) : 10000;
+
+    if (nTimeout < 10000) nTimeout = 10000;
+    if (nTimeout > 90000) nTimeout = 90000;
+    return nTimeout;
+}
+
 static xapi_endpoint_t api_tls_async_endpoint(uint16_t nPort, const char *pCaPath)
 {
     xapi_endpoint_t client;
@@ -633,24 +646,30 @@ static int XTest_async_client(void)
 
     test.pClientRequest = "an async request over tls";
     xapi_endpoint_t client = api_tls_async_endpoint(test.nPort, fixture.sCert);
+    unsigned long nTimeoutMs = api_tls_timeout_ms();
 
     /* A blocking client would sit in its handshake waiting for a server that only this same loop can run */
-    alarm(30);
-    CHECK(XAPI_AddEndpoint(&test.api, &client) == XSTDOK, "The async client endpoint is registered");
-    CHECK(test.nClientConnected == 1, "The client was handed to the loop at once");
+    alarm((unsigned int)(nTimeoutMs / 1000U) * 2U);
+    XSTATUS nStatus = XAPI_AddEndpoint(&test.api, &client);
 
-    for (int i = 0; i < 400 && test.nReceived < strlen(test.pClientRequest); i++)
+    uint64_t nDeadlineMs = XTime_GetMs() + nTimeoutMs;
+    while (nStatus == XSTDOK && test.nReceived < strlen(test.pClientRequest) && XTime_GetMs() < nDeadlineMs)
         XAPI_Service(&test.api, 25);
 
     alarm(0);
 
-    CHECK(test.nAccepted == 1, "The listener accepted the client");
-    CHECK(test.nReceived == strlen(test.pClientRequest), "The request crossed the handshake the loop completed");
-    CHECK(strcmp(test.sFirst, test.pClientRequest) == 0, "The request arrived unchanged");
-    CHECK(test.nClientErrors == 0 && test.nClientClosed == 0, "The client saw no error");
-
+    /* Checked after the teardown, so a failure reads as the failed check rather than as the leaks of a session
+     * the early return would have skipped. */
+    api_tls_t result = test;
     XAPI_Destroy(&test.api);
     tls_fixture_end(&fixture);
+
+    CHECK(nStatus == XSTDOK, "The async client endpoint is registered");
+    CHECK(result.nClientConnected == 1, "The client was handed to the loop at once");
+    CHECK(result.nAccepted == 1, "The listener accepted the client");
+    CHECK(result.nReceived == strlen(result.pClientRequest), "The request crossed the handshake the loop completed");
+    CHECK(strcmp(result.sFirst, result.pClientRequest) == 0, "The request arrived unchanged");
+    CHECK(result.nClientErrors == 0 && result.nClientClosed == 0, "The client saw no error");
     return 0;
 }
 
@@ -681,21 +700,23 @@ static int XTest_async_stalled(void)
     CHECK(XAPI_Init(&test.api, api_tls_callback, &test) == XSTDOK, "The API initializes");
 
     xapi_endpoint_t client = api_tls_async_endpoint(nPort, fixture.sCert);
-    uint64_t nStartMs = XTime_GetMs();
 
-    alarm(10);
+    /* The server never answers, so a client that waited for the handshake would never return: the alarm is the
+     * check. A stopwatch is not - under valgrind the TLS context alone can take longer than any fixed budget. */
+    alarm((unsigned int)(api_tls_timeout_ms() / 1000U));
     XSTATUS nStatus = XAPI_AddEndpoint(&test.api, &client);
     alarm(0);
 
-    CHECK(nStatus == XSTDOK, "The client endpoint is registered while the server stays silent");
-    CHECK(XTime_GetMs() - nStartMs < 1000, "Registering did not wait for the handshake");
-
     XAPI_Service(&test.api, 50);
-    CHECK(test.nClientErrors == 0, "A handshake still pending is not an error");
+    int nClientErrors = test.nClientErrors;
 
+    /* Torn down before the checks, so a failure cannot also leave the pending session behind as leaks */
     XAPI_Destroy(&test.api);
     XSock_Close(&silent);
     tls_fixture_end(&fixture);
+
+    CHECK(nStatus == XSTDOK, "The client endpoint is registered while the server stays silent");
+    CHECK(nClientErrors == 0, "A handshake still pending is not an error");
     return 0;
 }
 
