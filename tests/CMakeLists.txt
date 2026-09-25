@@ -168,7 +168,8 @@ endif()
 if(UNIX)
     xutils_regression(xfs_regression sys copy permissions directories nonregular_source copy_failures)
     xutils_regression(xfs_ops_regression sys file_io handles lines load paths directories ownership path_bounds)
-    xutils_regression(srch_regression sys deep_tree name_matching recursion criteria text_search callback entries guards text_shapes)
+    xutils_regression(srch_regression sys deep_tree name_matching recursion criteria text_search callback entries guards
+        text_shapes)
     xutils_regression(cli_regression sys window_size window_lines window_align window_display
         progress_bounds progress_output progress_animation input terminal_modes terminal_input)
     xutils_regression(sig_regression sys register exit_handler errexit backtrace daemonize)
@@ -218,12 +219,12 @@ if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "1.1.0")
     if(UNIX)
         xutils_regression(sock_tls_regression net handshake pkcs12_identity pkcs12_ownership untrusted cert_guards
             peer_endings closed_session_io status_strings write_after_reset ssl_teardown)
-        xutils_regression(api_tls_regression net handshake pkcs12_listener partial_writes
+        xutils_regression(api_tls_regression net handshake async_client async_stalled pkcs12_listener partial_writes
             plaintext_client missing_identity)
 
         # Every case here runs a real handshake and moves bytes through it, so
         # under valgrind they are an order of magnitude slower than the rest.
-        foreach(tls_case handshake pkcs12_listener partial_writes plaintext_client missing_identity)
+        foreach(tls_case handshake async_client async_stalled pkcs12_listener partial_writes plaintext_client missing_identity)
             set_tests_properties("api_tls_regression.${tls_case}" PROPERTIES TIMEOUT 300)
         endforeach()
 

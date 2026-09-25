@@ -2319,6 +2319,20 @@ XSOCKET XSock_InitSSLClient(xsock_t *pSock, const char *pAddr)
     return XSOCK_INVALID;
 }
 
+/* An asynchronous client's connect() that has started and not finished. The
+   outcome arrives on the descriptor: writable once connected, an error if not. */
+static xbool_t XSock_ConnectPending(const xsock_t *pSock)
+{
+    if (!XFLAGS_CHECK(pSock->nFlags, XSOCK_ASYNC) ||
+        !XFLAGS_CHECK(pSock->nFlags, XSOCK_NB)) return XFALSE;
+
+#ifdef _WIN32
+    return WSAGetLastError() == WSAEWOULDBLOCK ? XTRUE : XFALSE;
+#else
+    return (errno == EINPROGRESS || errno == EINTR) ? XTRUE : XFALSE;
+#endif
+}
+
 static XSOCKET XSock_SetupStream(xsock_t *pSock, const char *pAddr, size_t nFdMax)
 {
     if (!XSock_Check(pSock)) return XSOCK_INVALID;
@@ -2343,7 +2357,7 @@ static XSOCKET XSock_SetupStream(xsock_t *pSock, const char *pAddr, size_t nFdMa
         xsockaddr_t* pSockAddr = XSock_GetSockAddr(pSock);
         xsocklen_t nAddrLen = XSock_GetAddrLen(pSock);
 
-        if (connect(pSock->nFD, pSockAddr, nAddrLen) < 0)
+        if (connect(pSock->nFD, pSockAddr, nAddrLen) < 0 && !XSock_ConnectPending(pSock))
         {
             pSock->eStatus = XSOCK_ERR_CONNECT;
             XSock_Close(pSock);
@@ -2477,8 +2491,10 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
     xbool_t bReuseAddr = XFLAGS_CHECK(pSock->nFlags, XSOCK_REUSEADDR);
 
     /* A full Unix accept queue must fail promptly instead of blocking connect.
-       Internet client connection setup retains its existing behavior. */
-    if (XFLAGS_CHECK(nFlags, XSOCK_UNIX) && XFLAGS_CHECK(nFlags, XSOCK_NB) &&
+       Internet clients do the same only when asked to (XSOCK_ASYNC); the
+       rest keep connecting, and handshaking, before the create returns. */
+    if (XFLAGS_CHECK(nFlags, XSOCK_NB) &&
+        (XFLAGS_CHECK(nFlags, XSOCK_UNIX) || XFLAGS_CHECK(nFlags, XSOCK_ASYNC)) &&
         XSock_NonBlock(pSock, XTRUE) == XSOCK_INVALID) return XSOCK_INVALID;
 
     if (pSock->nType == SOCK_STREAM) XSock_SetupStream(pSock, pAddr, nFdMax);

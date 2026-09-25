@@ -17,6 +17,7 @@
 #include "thread.h"
 #include "sync.h"
 #include "xtime.h"
+#include <unistd.h>
 
 typedef struct {
     xapi_t api;
@@ -36,6 +37,12 @@ typedef struct {
 
     char sFirst[256];
     size_t nFirstLen;
+
+    /* An XAPI client in the same loop (the async cases) */
+    const char *pClientRequest;
+    int nClientConnected;
+    int nClientErrors;
+    int nClientClosed;
 } api_tls_t;
 
 static uint16_t api_tls_port(void)
@@ -60,9 +67,38 @@ static uint16_t api_tls_port(void)
     return nPort;
 }
 
+/* The loop's own client, used by the async cases: it queues its request as soon as it is registered, before the
+ * connect or the handshake have finished, and leaves both to the loop. */
+static int api_tls_client_callback(api_tls_t *pTest, xapi_ctx_t *pCtx, xapi_session_t *pSession)
+{
+    switch (pCtx->eCbType)
+    {
+        case XAPI_CB_CONNECTED:
+        {
+            pTest->nClientConnected++;
+            if (pTest->pClientRequest == NULL) return XAPI_CONTINUE;
+
+            xbyte_buffer_t *pTx = XAPI_GetTxBuff(pSession);
+            size_t nLength = strlen(pTest->pClientRequest);
+
+            if (pTx == NULL || XByteBuffer_Add(pTx, (const uint8_t*)pTest->pClientRequest, nLength) <= 0)
+                return XAPI_DISCONNECT;
+
+            return XAPI_EnableEvent(pSession, XPOLLOUT);
+        }
+        case XAPI_CB_ERROR: pTest->nClientErrors++; break;
+        case XAPI_CB_CLOSED: pTest->nClientClosed++; break;
+        case XAPI_CB_COMPLETE: return XAPI_EnableEvent(pSession, XPOLLIN);
+        default: break;
+    }
+
+    return XAPI_CONTINUE;
+}
+
 static int api_tls_callback(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
     api_tls_t *pTest = (api_tls_t*)pCtx->pApi->pUserCtx;
+    if (pSession != NULL && pSession->eRole == XAPI_CLIENT) return api_tls_client_callback(pTest, pCtx, pSession);
 
     switch (pCtx->eCbType)
     {
@@ -556,8 +592,117 @@ static int XTest_missing_identity(void)
     return 0;
 }
 
+static xapi_endpoint_t api_tls_async_endpoint(uint16_t nPort, const char *pCaPath)
+{
+    xapi_endpoint_t client;
+    XAPI_InitEndpoint(&client);
+    client.eType = XAPI_SOCK;
+    client.eRole = XAPI_CLIENT;
+    client.pAddr = "127.0.0.1";
+    client.nPort = nPort;
+    client.nEvents = XPOLLIN;
+    client.bTLS = XTRUE;
+    client.bAsync = XTRUE;
+    client.certs.pCaPath = pCaPath;
+    client.certs.nVerifyFlags = SSL_VERIFY_PEER;
+    return client;
+}
+
+static int XTest_async_client(void)
+{
+    /* A client endpoint that neither connects nor handshakes inside XAPI_AddEndpoint: both finish on the loop,
+     * against a server in the same loop. The server's certificate is only trusted through the private anchor
+     * handed in with the endpoint, which a blocking client installs too late - its handshake has already run
+     * against the system store by the time the endpoint's certificates are applied. */
+    tls_fixture_t fixture;
+    if (tls_fixture_begin(&fixture) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("No TLS fixture could be built, skipping\n");
+        return 77;
+    }
+
+    api_tls_t test;
+    int nPrep = api_tls_listen(&test, &fixture, XFALSE);
+    if (nPrep != 0)
+    {
+        tls_fixture_end(&fixture);
+        printf("No TLS listener could be created, skipping\n");
+        return nPrep;
+    }
+
+    test.pClientRequest = "an async request over tls";
+    xapi_endpoint_t client = api_tls_async_endpoint(test.nPort, fixture.sCert);
+
+    /* A blocking client would sit in its handshake waiting for a server that only this same loop can run */
+    alarm(30);
+    CHECK(XAPI_AddEndpoint(&test.api, &client) == XSTDOK, "The async client endpoint is registered");
+    CHECK(test.nClientConnected == 1, "The client was handed to the loop at once");
+
+    for (int i = 0; i < 400 && test.nReceived < strlen(test.pClientRequest); i++)
+        XAPI_Service(&test.api, 25);
+
+    alarm(0);
+
+    CHECK(test.nAccepted == 1, "The listener accepted the client");
+    CHECK(test.nReceived == strlen(test.pClientRequest), "The request crossed the handshake the loop completed");
+    CHECK(strcmp(test.sFirst, test.pClientRequest) == 0, "The request arrived unchanged");
+    CHECK(test.nClientErrors == 0 && test.nClientClosed == 0, "The client saw no error");
+
+    XAPI_Destroy(&test.api);
+    tls_fixture_end(&fixture);
+    return 0;
+}
+
+static int XTest_async_stalled(void)
+{
+    /* A server that accepts TCP and never answers TLS. A blocking client waits in SSL_connect for as long as it
+     * stays silent - the caller's whole loop with it; the async one registers at once and leaves the verdict to
+     * its own timeout. The alarm turns a hang into a failure rather than a stuck run. */
+    tls_fixture_t fixture;
+    if (tls_fixture_begin(&fixture) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("No TLS fixture could be built, skipping\n");
+        return 77;
+    }
+
+    xsock_t silent;
+    uint16_t nPort = api_tls_port();
+    if (!nPort || XSock_Create(&silent, XSOCK_TCP_SERVER, "127.0.0.1", nPort) == XSOCK_INVALID)
+    {
+        tls_fixture_end(&fixture);
+        printf("No silent listener could be created, skipping\n");
+        return 77;
+    }
+
+    api_tls_t test;
+    memset(&test, 0, sizeof(test));
+    CHECK(XAPI_Init(&test.api, api_tls_callback, &test) == XSTDOK, "The API initializes");
+
+    xapi_endpoint_t client = api_tls_async_endpoint(nPort, fixture.sCert);
+    uint64_t nStartMs = XTime_GetMs();
+
+    alarm(10);
+    XSTATUS nStatus = XAPI_AddEndpoint(&test.api, &client);
+    alarm(0);
+
+    CHECK(nStatus == XSTDOK, "The client endpoint is registered while the server stays silent");
+    CHECK(XTime_GetMs() - nStartMs < 1000, "Registering did not wait for the handshake");
+
+    XAPI_Service(&test.api, 50);
+    CHECK(test.nClientErrors == 0, "A handshake still pending is not an error");
+
+    XAPI_Destroy(&test.api);
+    XSock_Close(&silent);
+    tls_fixture_end(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(handshake),
+    XTEST_CASE(async_client),
+    XTEST_CASE(async_stalled),
     XTEST_CASE(pkcs12_listener),
     XTEST_CASE(partial_writes),
     XTEST_CASE(plaintext_client),

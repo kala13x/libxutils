@@ -2227,6 +2227,7 @@ void XAPI_InitEndpoint(xapi_endpoint_t *pEndpt)
     pEndpt->pUri = NULL;
     pEndpt->bTLS = XFALSE;
     pEndpt->bUnix = XFALSE;
+    pEndpt->bAsync = XFALSE;
     pEndpt->bForce = XFALSE;
     pEndpt->bExclusive = XTRUE;
     pEndpt->nFD = XSOCK_INVALID;
@@ -2387,6 +2388,7 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     uint32_t nFlags = XSOCK_CLIENT | XSOCK_NB;
     if (pEndpt->bTLS) nFlags |= XSOCK_SSL;
     if (pEndpt->bUnix) nFlags |= XSOCK_UNIX;
+    if (pEndpt->bAsync) nFlags |= XSOCK_ASYNC;
     else nFlags |= XSOCK_TCP;
 
     /* Pass the endpoint host as the socket name so the SSL client sends SNI and
