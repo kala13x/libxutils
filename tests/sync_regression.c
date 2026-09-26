@@ -343,6 +343,12 @@ static int XTest_atomics(void)
     XSYNC_ATOMIC_SET(&nValue, 0);
     for (int i = 0; i < 1000; i++) XSYNC_ATOMIC_ADD(&nValue, 1);
     CHECK(XSYNC_ATOMIC_GET(&nValue) == 1000, "Repeated increments accumulate exactly");
+
+    /* Add and subtract return the value they leave behind, on every platform:
+     * that is what a reference count's "last one out frees" test relies on. */
+    CHECK(XSYNC_ATOMIC_ADD(&nValue, 5) == 1005, "An add returns the new value");
+    CHECK(XSYNC_ATOMIC_SUB(&nValue, 1005) == 0, "A subtract returns the new value");
+    CHECK(XSYNC_ATOMIC_GET(&nValue) == 0, "The returned value is the stored one");
     return 0;
 }
 

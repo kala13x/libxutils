@@ -963,6 +963,15 @@ void XSock_Close(xsock_t *pSock)
     }
 }
 
+/* The I/O paths close a socket that failed or reached its end, unless its
+   owner asked to close it itself (XSOCK_KEEPOPEN): the status says what
+   happened either way, and the owner's own close follows. */
+static void XSock_CloseOnError(xsock_t *pSock)
+{
+    if (XFLAGS_CHECK(pSock->nFlags, XSOCK_KEEPOPEN)) return;
+    XSock_Close(pSock);
+}
+
 #ifdef XSOCK_USE_SSL
 /* Non-blocking senders queue outbound bytes in a growable buffer and retry the
    write when the socket becomes writable again. By default OpenSSL forbids
@@ -1018,7 +1027,7 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
     if (pSSL == NULL)
     {
         pSock->eStatus = XSOCK_ERR_SSLINV;
-        XSock_Close(pSock);
+        XSock_CloseOnError(pSock);
         return XSOCK_ERROR;
     }
 
@@ -1072,7 +1081,7 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
             if (pSock->eStatus != XSOCK_EOF)
                 nReceived = XSOCK_ERROR;
 
-            XSock_Close(pSock);
+            XSock_CloseOnError(pSock);
             XSock_RestoreSIGPIPE(&guard);
             return nReceived;
         }
@@ -1089,7 +1098,7 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
 #else
     (void)nExact;
     pSock->eStatus = XSOCK_ERR_NOSSL;
-    XSock_Close(pSock);
+    XSock_CloseOnError(pSock);
     return XSOCK_ERROR;
 #endif
 }
@@ -1104,7 +1113,7 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
     if (pSSL == NULL)
     {
         pSock->eStatus = XSOCK_ERR_SSLINV;
-        XSock_Close(pSock);
+        XSock_CloseOnError(pSock);
         return XSOCK_ERROR;
     }
 
@@ -1149,7 +1158,7 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
                 XSock_SSLConnected(pSock, XFALSE);
             }
 
-            XSock_Close(pSock);
+            XSock_CloseOnError(pSock);
             XSock_RestoreSIGPIPE(&guard);
             return nBytes;
         }
@@ -1165,7 +1174,7 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
     return (int)nSent;
 #else
     pSock->eStatus = XSOCK_ERR_NOSSL;
-    XSock_Close(pSock);
+    XSock_CloseOnError(pSock);
     return XSOCK_ERROR;
 #endif
 }
@@ -1192,7 +1201,7 @@ int XSock_RecvChunk(xsock_t *pSock, void* pData, size_t nSize)
         if (nRecvSize <= 0)
         {
             pSock->eStatus = XSOCK_EOF;
-            XSock_Close(pSock);
+            XSock_CloseOnError(pSock);
 
             if (nRecvSize < 0)
             {
@@ -1239,7 +1248,7 @@ int XSock_Recv(xsock_t *pSock, void* pData, size_t nSize)
     {
         if (!nRecvSize) pSock->eStatus = XSOCK_EOF;
         else pSock->eStatus = XSOCK_ERR_RECV;
-        XSock_Close(pSock);
+        XSock_CloseOnError(pSock);
     }
 
     return nRecvSize;
@@ -1267,7 +1276,7 @@ int XSock_SendChunk(xsock_t *pSock, void *pData, size_t nLength)
         if (nSent <= 0)
         {
             pSock->eStatus = XSOCK_ERR_SEND;
-            XSock_Close(pSock);
+            XSock_CloseOnError(pSock);
             return nSent;
         }
 
@@ -1306,7 +1315,7 @@ int XSock_Send(xsock_t *pSock, const void *pData, size_t nLength)
     if (nSent <= 0)
     {
         pSock->eStatus = XSOCK_ERR_SEND;
-        XSock_Close(pSock);
+        XSock_CloseOnError(pSock);
     }
 
     return nSent;
@@ -1342,7 +1351,7 @@ int XSock_Read(xsock_t *pSock, void *pData, size_t nSize)
     {
         if (!nReadSize) pSock->eStatus = XSOCK_EOF;
         else pSock->eStatus = XSOCK_ERR_READ;
-        XSock_Close(pSock);
+        XSock_CloseOnError(pSock);
     }
 
     return nReadSize;
@@ -1373,7 +1382,7 @@ int XSock_Write(xsock_t *pSock, const void *pData, size_t nLength)
     if (nBytes <= 0)
     {
         pSock->eStatus = XSOCK_ERR_WRITE;
-        XSock_Close(pSock);
+        XSock_CloseOnError(pSock);
     }
 #endif
 

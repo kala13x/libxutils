@@ -704,8 +704,6 @@ xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
     if (pData->nFD >= 0)
     {
         nStatus = epoll_ctl(pEvents->nEventFd, EPOLL_CTL_DEL, pData->nFD, NULL);
-        /* Socket EOF may already have closed the descriptor and removed it
-           from epoll. It still owns one entry in our event map/count. */
         if (nStatus < 0 && (errno == EBADF || errno == ENOENT)) nStatus = XSTDNON;
         if (nStatus >= 0 && pEvents->nEventCount) pEvents->nEventCount--;
     }

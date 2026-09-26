@@ -97,6 +97,33 @@ static int XTest_empty_and_eof(void)
     return 0;
 }
 
+/* XSOCK_KEEPOPEN: the end of the stream and a failed write are reported the
+   same way, but the descriptor stays open until its owner closes it. */
+static int XTest_keep_open(void)
+{
+    XSOCKET pair[2];
+    xsock_t reader;
+    char data[4];
+    CHECK(XSock_CreatePair(pair) == XSTDOK, "Create a kept-open EOF fixture");
+    CHECK(XSock_Init(&reader, XSOCK_TCP_PEER | XSOCK_KEEPOPEN, pair[0]) != XSOCK_ERROR, "Wrap a kept-open reader");
+    xclosesock(pair[1]);
+
+    CHECK(XSock_Read(&reader, data, sizeof(data)) == 0 && reader.eStatus == XSOCK_EOF, "EOF is still reported as EOF");
+    CHECK(reader.nFD == pair[0] && XSock_IsOpen(&reader) == XSOCK_SUCCESS, "A kept-open socket is left for its owner to close");
+    CHECK(XSock_Read(&reader, data, sizeof(data)) == 0 && reader.eStatus == XSOCK_EOF, "Reading again reports EOF again");
+
+#ifndef _WIN32
+    /* Sending to a peer that is gone fails the same way: reported, not closed. */
+    reader.eStatus = XSOCK_ERR_NONE;
+    CHECK(XSock_Send(&reader, "abcd", 4) <= 0 && reader.eStatus == XSOCK_ERR_SEND, "A send to a closed peer fails");
+    CHECK(XSock_IsOpen(&reader) == XSOCK_SUCCESS, "A failed send leaves a kept-open socket open");
+#endif
+
+    XSock_Close(&reader);
+    CHECK(reader.nFD == XSOCK_INVALID, "The owner's close releases the descriptor");
+    return 0;
+}
+
 static int XTest_interrupted_io(void)
 {
 #ifdef _WIN32
@@ -175,6 +202,7 @@ XTEST_MAIN(
     XTEST_CASE(retry_read),
     XTEST_CASE(retry_write),
     XTEST_CASE(empty_and_eof),
+    XTEST_CASE(keep_open),
     XTEST_CASE(interrupted_io),
     XTEST_CASE(accept_cloexec)
 )

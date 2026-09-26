@@ -2,6 +2,11 @@
 #include "test.h"
 #include "api.h"
 #include "xtime.h"
+#ifndef _WIN32
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 typedef struct xtest_api_ {
     xapi_session_t *pSession;
@@ -160,6 +165,55 @@ static int XTest_peer_eof(void)
     XAPI_Destroy(&api);
     XByteBuffer_Clear(&test.received);
     return 0;
+}
+
+/* A peer ends its stream while a forked child holds every descriptor, the way
+   it does between a fork and its exec. The kernel keeps a socket - and its
+   event registration - alive while any copy is open, so a session closed
+   before it left the event set kept being reported to the loop, pointing at
+   memory the loop had already freed. */
+static int XTest_peer_eof_forked(void)
+{
+#ifdef _WIN32
+    return 77;
+#else
+    xtest_api_t test = {0};
+    xapi_t api;
+    xsock_t peer;
+    CHECK(XTest_Open(&api, &test, &peer) == 0, "Create a forked EOF fixture");
+
+    pid_t nChild = fork();
+    CHECK(nChild >= 0, "Fork a child that holds every descriptor");
+    if (nChild == 0)
+    {
+        pause();
+        _exit(0);
+    }
+
+    /* Closing shuts the stream down for every holder, so the session sees its end. */
+    XSock_Close(&peer);
+    for (int i = 0; i < 10 && test.nClosed == 0; i++) XAPI_Service(&api, 20);
+    int nClosed = test.nClosed;
+    size_t nEvents = XAPI_GetEventCount(&api);
+
+    /* Nothing is left to wake the loop: each wait sleeps its whole timeout. */
+    int nWoken = 0;
+    for (int i = 0; i < 5; i++)
+    {
+        uint64_t nStart = XTime_GetMonoMs();
+        XAPI_Service(&api, 40);
+        if (XTime_GetMonoMs() - nStart < 20) nWoken++;
+    }
+
+    kill(nChild, SIGKILL);
+    waitpid(nChild, NULL, 0);
+    XAPI_Destroy(&api);
+    XByteBuffer_Clear(&test.received);
+
+    CHECK(nClosed == 1 && nEvents == 0, "Peer EOF removes its session while a child holds the descriptor");
+    CHECK(nWoken == 0, "A closed session leaves nothing in the event set for the child's copy to wake");
+    return 0;
+#endif
 }
 
 static int XTest_websocket_fragments(void)
@@ -344,6 +398,7 @@ XTEST_MAIN(
     XTEST_CASE(partial_io),
     XTEST_CASE(callback_disconnect),
     XTEST_CASE(peer_eof),
+    XTEST_CASE(peer_eof_forked),
     XTEST_CASE(websocket_fragments),
     XTEST_CASE(unexpected_continuation),
     XTEST_CASE(buffered_upgrade),

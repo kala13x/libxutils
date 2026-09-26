@@ -8,6 +8,7 @@ Cross-platform socket wrapper covering TCP, UDP, Unix sockets, socket options an
 
 - Functions returning `XSOCKET` usually return a valid file descriptor/handle on success and `XSOCK_INVALID` on failure.
 - Functions returning `int` usually return transferred byte count, `XSOCK_NONE` for no-op/empty input and `XSOCK_ERROR` on failure.
+- The read and write helpers close a socket that fails or reaches the end of its stream. With `XSOCK_KEEPOPEN` in `nFlags` they only report it in `eStatus` and leave the descriptor for the owner's `XSock_Close()`. An event loop needs that: a descriptor has to leave the event set before it is closed, or a copy held by a forked child (between its `fork()` and `exec()`) keeps the registration alive after the loop has freed what it points at. XAPI sets the flag on every socket it registers.
 - Most failure paths set `pSock->eStatus`.
 - Many fatal failures also close the socket immediately.
 
@@ -234,7 +235,7 @@ Cross-platform socket wrapper covering TCP, UDP, Unix sockets, socket options an
 - Does:
   - performs SSL I/O.
   - maps `SSL_ERROR_WANT_READ` / `WANT_WRITE` to socket status for event-driven retry.
-  - closes the socket on terminal SSL errors or EOF.
+  - closes the socket on terminal SSL errors or EOF, unless it has `XSOCK_KEEPOPEN`.
 - Returns:
   - transferred byte count on success.
   - partial byte count in some EOF/error paths after data was already read.
@@ -252,7 +253,7 @@ Cross-platform socket wrapper covering TCP, UDP, Unix sockets, socket options an
 - Does:
   - stream-style `read()` / `write()` wrappers.
   - forward to SSL helpers when the socket has `XSOCK_SSL`.
-  - close the socket on EOF or write/read error.
+  - close the socket on EOF or write/read error, unless it has `XSOCK_KEEPOPEN`.
 - Returns:
   - transferred byte count.
   - `XSOCK_NONE` for zero-length or `NULL` buffer requests.
@@ -267,7 +268,7 @@ Cross-platform socket wrapper covering TCP, UDP, Unix sockets, socket options an
 - Does:
   - `recv/recvfrom` and `send/sendto` wrappers.
   - use datagram address semantics for `SOCK_DGRAM`.
-  - close the socket on error or EOF.
+  - close the socket on error or EOF, unless it has `XSOCK_KEEPOPEN`.
 - Returns:
   - transferred byte count, `XSOCK_NONE`, or `XSOCK_ERROR`.
 

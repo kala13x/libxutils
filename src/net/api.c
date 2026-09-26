@@ -1789,6 +1789,7 @@ static int XAPI_Accept(xapi_t *pApi, xapi_session_t *pSession)
     pPeerData->pSessionData = NULL;
     pPeerData->pEvData = pEventData;
     pPeerData->nEvents = XSTDNON;
+    pPeerData->sock.nFlags |= XSOCK_KEEPOPEN;
 
     if (XAPI_ServiceCb(pApi, pPeerData, XAPI_CB_ACCEPTED) < 0)
     {
@@ -2355,6 +2356,7 @@ XSTATUS XAPI_Listen(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 
     pSession->pEvData = pEvData;
     pSession->nEvents = nEvents;
+    pSession->sock.nFlags |= XSOCK_KEEPOPEN;
 
     if (XAPI_ServiceCb(pApi, pSession, XAPI_CB_LISTENING) < 0)
     {
@@ -2435,6 +2437,7 @@ XSTATUS XAPI_Connect(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 
     pSession->pEvData = pEvData;
     pSession->nEvents = nEvents;
+    pSession->sock.nFlags |= XSOCK_KEEPOPEN;
 
     if (XAPI_ServiceCb(pApi, pSession, XAPI_CB_CONNECTED) < 0)
     {
@@ -2496,6 +2499,7 @@ XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt)
 
     pSession->pEvData = pEvData;
     pSession->nEvents = nEvents;
+    pSession->sock.nFlags |= XSOCK_KEEPOPEN;
 
     if (XAPI_ServiceCb(pApi, pSession, XAPI_CB_REGISTERED) < 0)
     {

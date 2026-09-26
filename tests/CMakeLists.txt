@@ -123,7 +123,8 @@ endif()
 
 xutils_regression(hash_regression data collisions ownership operations distribution pairs)
 xutils_regression(list_regression data links rings stack_head push removal single_node insert_nodes ring_walk)
-xutils_regression(api_io_regression net partial_io callback_disconnect peer_eof websocket_fragments unexpected_continuation
+xutils_regression(api_io_regression net partial_io callback_disconnect peer_eof peer_eof_forked websocket_fragments
+    unexpected_continuation
     buffered_upgrade websocket_burst websocket_burst_invalid eof_with_data)
 xutils_regression(api_http_regression net http_partial http_pipeline http_pipeline_burst auth_key auth_basic auth_short)
 if(UNIX)
@@ -193,7 +194,7 @@ xutils_regression(rtp_regression net header_fields header_guards csrc packet_blo
 xutils_regression(mdtp_regression net type_mapping assemble_parse parse_guards payload_size_lies
     header_fields create_guards lifecycle hostile_header parse_into_stale
     header_combinations header_refusals)
-xutils_regression(sock_regression net retry_read retry_write empty_and_eof interrupted_io accept_cloexec)
+xutils_regression(sock_regression net retry_read retry_write empty_and_eof keep_open interrupted_io accept_cloexec)
 xutils_regression(log_regression sys filtering large_message severities flag_mask config
     formatting file_output rotation throw callback_veto)
 xutils_regression(type_regression sys float_bits concurrent printable byte_units kb_units version)

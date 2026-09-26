@@ -77,6 +77,11 @@ Cross-platform event loop over `epoll`, `poll` or `WSAPoll`, with timer support.
 
 - Add/change/remove watched fd or timer.
 - Return `XEVENTS_SUCCESS` or specific failure status.
+- Delete a descriptor while it is still open. epoll forgets a registration only
+  once every copy of the descriptor is closed, so one closed first - while a
+  forked child still holds a copy - stays registered with a pointer to the
+  event data `XEvents_Delete` frees. XAPI keeps its sockets open until they
+  have been deleted (see `XSOCK_KEEPOPEN` in [sock.md](sock.md)).
 
 ### Service loop
 
