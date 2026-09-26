@@ -36,6 +36,17 @@ WebSocket frame creation and parsing.
 
 - Returns allocated raw frame bytes or `NULL`.
 
+#### `xws_status_t XWS_AppendFrame(xbyte_buffer_t *pBuffer, const uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bMask, xbool_t bFin)`
+
+- Appends a whole frame to `pBuffer`: the header, the mask key when `bMask` is set, and the payload, masked in the
+  same pass. The payload is copied once, straight into the buffer, which makes this the cheap way to queue a frame
+  for sending (for example into an `xapi_session_t` tx buffer) compared with `XWebFrame_Create()` followed by adding
+  its buffer.
+- The payload may lie inside `pBuffer` itself; it is found again if the buffer has to grow.
+- Returns `XWS_ERR_NONE`, or `XWS_INVALID_ARGS`, `XWS_INVALID_TYPE`, `XWS_FRAME_INVALID` (a control frame that is
+  fragmented or longer than 125 bytes), `XWS_ERR_SIZE`, `XWS_ERR_RANDOM` or `XWS_ERR_ALLOC`. On any failure
+  `pBuffer` is left as it was.
+
 #### `xws_frame_t *XWebFrame_New(const uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bMask, xbool_t bFin)`
 
 #### `xws_frame_t *XWebFrame_Alloc(xws_frame_type_t eType, size_t nBuffSize)`

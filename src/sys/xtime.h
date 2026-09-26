@@ -83,6 +83,7 @@ uint32_t XTime_Get(xtime_t *pTime);
 uint64_t XTime_Serialized(void);
 uint64_t XTime_GetU64(void);
 uint64_t XTime_GetMs(void);
+uint64_t XTime_GetMonoMs(void);
 uint32_t XTime_GetUsec(void);
 uint64_t XTime_GetStamp(void);
 

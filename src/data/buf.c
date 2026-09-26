@@ -160,9 +160,11 @@ void XByteBuffer_Free(xbyte_buffer_t **pBuffer)
 void XByteBuffer_Reset(xbyte_buffer_t *pBuffer)
 {
     XCHECK_VOID(pBuffer);
-    if (pBuffer->pData != NULL)
+
+    if (pBuffer->pData != NULL && pBuffer->nSize > 0)
         pBuffer->pData[0] = '\0';
-    else pBuffer->nSize = 0;
+    else if (pBuffer->pData == NULL)
+        pBuffer->nSize = 0;
 
     pBuffer->nStatus = 0;
     pBuffer->nUsed = 0;
@@ -238,7 +240,7 @@ int XByteBuffer_ReadStdin(xbyte_buffer_t *pBuffer)
 
     while ((nRead = fread(sBuffer, 1, sizeof(sBuffer), stdin)) > 0)
     {
-        if (!XByteBuffer_Add(pBuffer, (const uint8_t*)sBuffer, nRead))
+        if (XByteBuffer_Add(pBuffer, (const uint8_t*)sBuffer, nRead) <= 0)
             return XSTDERR;
     }
 
@@ -503,13 +505,9 @@ void* XDataBuffer_Pop(xdata_buffer_t *pBuffer, unsigned int nIndex)
 {
     void *pRetVal = XDataBuffer_Get(pBuffer, nIndex);
     if (pRetVal == NULL) return NULL;
-    size_t i;
 
-    for (i = (size_t)nIndex; i < pBuffer->nUsed; i++)
-    {
-        if ((i + 1) >= pBuffer->nUsed) break;
-        pBuffer->pData[i] = pBuffer->pData[i+1];
-    }
+    size_t nTail = pBuffer->nUsed - (size_t)nIndex - 1;
+    if (nTail) memmove(&pBuffer->pData[nIndex], &pBuffer->pData[nIndex + 1], nTail * sizeof(void*));
 
     pBuffer->pData[--pBuffer->nUsed] = NULL;
     XDataBuffer_Realloc(pBuffer);

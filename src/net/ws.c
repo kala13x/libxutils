@@ -194,52 +194,78 @@ static xbool_t XWS_GenerateMaskKey(uint32_t *pKey)
 #endif
 }
 
-uint8_t* XWS_CreateFrame(const uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize)
+static xbool_t XWS_CheckFrame(const uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin)
 {
-    if (pFrameSize != NULL) *pFrameSize = 0;
     if ((!pPayload && nLength) || nLength > SIZE_MAX - XWS_MAX_HEADER_SIZE - 1 ||
         (uint64_t)nLength > INT64_MAX || nOpCode > 0x0F ||
-        (nOpCode >= 8 && (!bFin || nLength > 125))) return NULL;
+        (nOpCode >= 8 && (!bFin || nLength > 125))) return XFALSE;
 
+    return XTRUE;
+}
+
+/* Header size without a mask key, for a payload of nLength */
+static size_t XWS_HeaderSize(size_t nLength)
+{
+    if (nLength <= 125) return 2;
+    else if (nLength <= 65535) return 4;
+    return 10;
+}
+
+static void XWS_WriteHeader(uint8_t *pFrame, size_t nLength, uint8_t nOpCode, xbool_t bFin)
+{
     uint8_t nFIN = bFin ? XSTDOK : XSTDNON;
-    uint8_t nStartByte = (nFIN << 7) | nOpCode;
-
-    uint8_t nLengthByte = 0;
-    size_t nHeaderSize = 2;
+    pFrame[0] = (nFIN << 7) | nOpCode;
 
     if (nLength <= 125)
     {
-        nLengthByte = (uint8_t)nLength;
+        pFrame[1] = (uint8_t)nLength;
     }
     else if (nLength <= 65535)
     {
-        nLengthByte = 126;
-        nHeaderSize += 2;
+        uint16_t nLength16 = htons((uint16_t)nLength);
+        pFrame[1] = 126;
+        memcpy(pFrame + 2, &nLength16, 2);
     }
     else
     {
-        nLengthByte = 127;
-        nHeaderSize += 8;
+        uint64_t nLength64 = htobe64(nLength);
+        pFrame[1] = 127;
+        memcpy(pFrame + 2, &nLength64, 8);
+    }
+}
+
+static void XWS_ApplyMask(uint8_t *pDst, const uint8_t *pSrc, size_t nLength, const uint8_t *pKey)
+{
+    uint8_t key[8];
+    memcpy(key, pKey, 4);
+    memcpy(key + 4, pKey, 4);
+
+    uint64_t nKey = 0;
+    memcpy(&nKey, key, sizeof(nKey));
+    size_t i = 0;
+
+    for (; i + sizeof(nKey) <= nLength; i += sizeof(nKey))
+    {
+        uint64_t nWord = 0;
+        memcpy(&nWord, pSrc + i, sizeof(nWord));
+        nWord ^= nKey;
+        memcpy(pDst + i, &nWord, sizeof(nWord));
     }
 
+    for (; i < nLength; i++) pDst[i] = pSrc[i] ^ key[i & 3];
+}
+
+uint8_t* XWS_CreateFrame(const uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize)
+{
+    if (pFrameSize != NULL) *pFrameSize = 0;
+    if (!XWS_CheckFrame(pPayload, nLength, nOpCode, bFin)) return NULL;
+
+    size_t nHeaderSize = XWS_HeaderSize(nLength);
     size_t nFrameSize = nHeaderSize + nLength;
     uint8_t *pFrame = (uint8_t*)malloc(nFrameSize + 1);
     XCHECK((pFrame != NULL), NULL);
 
-    pFrame[0] = nStartByte;
-    pFrame[1] = nLengthByte;
-
-    if (nLengthByte == 126)
-    {
-        uint16_t nLength16 = htons((uint16_t)nLength);
-        memcpy(pFrame + 2, &nLength16, 2);
-    }
-    else if (nLengthByte == 127)
-    {
-        uint64_t nLength64 = htobe64(nLength);
-        memcpy(pFrame + 2, &nLength64, 8);
-    }
-
+    XWS_WriteHeader(pFrame, nLength, nOpCode, bFin);
     if (pPayload != NULL && nLength)
         memcpy(pFrame + nHeaderSize, pPayload, nLength);
 
@@ -292,6 +318,44 @@ void XWebFrame_Free(xws_frame_t **pFrame)
     }
 }
 
+/* RFC 6455: a client masks every frame. It is built masked in one pass over
+   the payload: building it plain, moving the whole payload over to make room
+   for the key and then masking it in place went over every byte three times.
+   The result, and every failure, is what XWebFrame_Mask() on a plain frame
+   gives, including the limit an XByteBuffer puts on the frame size. */
+static xws_status_t XWebFrame_CreateMasked(xws_frame_t *pFrame, const uint8_t *pPayload, size_t nLength)
+{
+    XCHECK(XWS_CheckFrame(pPayload, nLength, pFrame->nOpCode, pFrame->bFin), XWS_ERR_ALLOC);
+    size_t nHeaderSize = XWS_HeaderSize(nLength);
+    size_t nFrameSize = nHeaderSize + nLength + 4;
+    XCHECK((nFrameSize < INT_MAX), XWS_ERR_ALLOC);
+
+    uint8_t *pWsFrame = (uint8_t*)malloc(nFrameSize + 1);
+    XCHECK((pWsFrame != NULL), XWS_ERR_ALLOC);
+
+    if (!XWS_GenerateMaskKey(&pFrame->nMaskKey))
+    {
+        free(pWsFrame);
+        return XWS_ERR_RANDOM;
+    }
+
+    XWS_WriteHeader(pWsFrame, nLength, pFrame->nOpCode, pFrame->bFin);
+    pWsFrame[1] |= 0x80;
+
+    uint8_t *pMaskKey = (uint8_t*)&pFrame->nMaskKey;
+    memcpy(pWsFrame + nHeaderSize, pMaskKey, 4);
+
+    if (nLength) XWS_ApplyMask(pWsFrame + nHeaderSize + 4, pPayload, nLength, pMaskKey);
+    pWsFrame[nFrameSize] = '\0';
+
+    XByteBuffer_OwnData(&pFrame->buffer, pWsFrame, nFrameSize);
+    pFrame->nHeaderSize = nHeaderSize + 4;
+    pFrame->nPayloadLength = nLength;
+    pFrame->bMask = XTRUE;
+
+    return XWS_ERR_NONE;
+}
+
 xws_status_t XWebFrame_Create(xws_frame_t *pFrame, const uint8_t *pPayload, size_t nLength,
                               xws_frame_type_t eType, xbool_t bMask, xbool_t bFin)
 {
@@ -306,6 +370,7 @@ xws_status_t XWebFrame_Create(xws_frame_t *pFrame, const uint8_t *pPayload, size
     pFrame->eType = eType;
     pFrame->bFin = bFin;
     pFrame->nOpCode = XWS_OpCode(pFrame->eType);
+    if (bMask) return XWebFrame_CreateMasked(pFrame, pPayload, nLength);
 
     pWsFrame = XWS_CreateFrame(pPayload, nLength,
         pFrame->nOpCode, pFrame->bFin, &nFrameSize);
@@ -317,14 +382,52 @@ xws_status_t XWebFrame_Create(xws_frame_t *pFrame, const uint8_t *pPayload, size
     pFrame->nHeaderSize = nFrameSize - nLength;
     pFrame->nPayloadLength = nLength;
 
-    // RFC 6455: The client should always mask the frame
+    return XWS_ERR_NONE;
+}
+
+xws_status_t XWS_AppendFrame(xbyte_buffer_t *pBuffer, const uint8_t *pPayload, size_t nLength,
+                             xws_frame_type_t eType, xbool_t bMask, xbool_t bFin)
+{
+    XCHECK((pBuffer != NULL && (pPayload != NULL || !nLength)), XWS_INVALID_ARGS);
+    XCHECK((eType != XWS_INVALID), XWS_INVALID_TYPE);
+
+    uint8_t nOpCode = XWS_OpCode(eType);
+    XCHECK(XWS_CheckFrame(pPayload, nLength, nOpCode, bFin), XWS_FRAME_INVALID);
+
+    size_t nHeaderSize = XWS_HeaderSize(nLength);
+    size_t nKeySize = bMask ? 4 : 0;
+    XCHECK((nLength < (size_t)INT_MAX - nHeaderSize - nKeySize), XWS_ERR_SIZE);
+    size_t nFrameSize = nHeaderSize + nKeySize + nLength;
+
+    /* A payload that lives in the buffer itself moves if the buffer grows */
+    uintptr_t nOffset = (uintptr_t)pPayload - (uintptr_t)pBuffer->pData;
+    xbool_t bAlias = nLength && pBuffer->pData != NULL && nOffset < pBuffer->nUsed;
+    XCHECK((!bAlias || nLength <= pBuffer->nUsed - nOffset), XWS_INVALID_ARGS);
+
+    uint32_t nMaskKey = 0;
+    if (bMask) XCHECK(XWS_GenerateMaskKey(&nMaskKey), XWS_ERR_RANDOM);
+
+    /* The byte buffer keeps its data terminated, one byte past the frame */
+    XCHECK((XByteBuffer_Reserve(pBuffer, nFrameSize + 1) > 0), XWS_ERR_ALLOC);
+    if (bAlias) pPayload = pBuffer->pData + nOffset;
+
+    uint8_t *pFrame = pBuffer->pData + pBuffer->nUsed;
+    XWS_WriteHeader(pFrame, nLength, nOpCode, bFin);
+
     if (bMask)
     {
-        xws_status_t status = XWebFrame_Mask(pFrame);
-        if (status != XWS_ERR_NONE) XWebFrame_Clear(pFrame);
-        return status;
+        const uint8_t *pKey = (const uint8_t*)&nMaskKey;
+        pFrame[1] |= 0x80;
+        memcpy(pFrame + nHeaderSize, pKey, 4);
+        if (nLength) XWS_ApplyMask(pFrame + nHeaderSize + 4, pPayload, nLength, pKey);
+    }
+    else if (nLength)
+    {
+        memcpy(pFrame + nHeaderSize, pPayload, nLength);
     }
 
+    pBuffer->nUsed += nFrameSize;
+    pBuffer->pData[pBuffer->nUsed] = '\0';
     return XWS_ERR_NONE;
 }
 
@@ -461,14 +564,12 @@ xws_status_t XWebFrame_Mask(xws_frame_t *pFrame)
     pFrame->bMask = XTRUE;
 
     uint8_t *pPayload = pFrame->buffer.pData + pFrame->nHeaderSize;
-    size_t i, nPayloadLen = pFrame->nPayloadLength;
+    size_t nPayloadLen = pFrame->nPayloadLength;
 
     /* Never mask more bytes than the buffer actually holds */
     XCHECK_NL((pFrame->buffer.nUsed - pFrame->nHeaderSize >= nPayloadLen), XWS_FRAME_INCOMPLETE);
 
-    for (i = 0; i < nPayloadLen; i++)
-        pPayload[i] ^= pMaskKey[i % 4];
-
+    XWS_ApplyMask(pPayload, pPayload, nPayloadLen, pMaskKey);
     return XWS_ERR_NONE;
 }
 
@@ -479,7 +580,7 @@ xws_status_t XWebFrame_Unmask(xws_frame_t *pFrame)
 
     XCHECK((pFrame->buffer.pData != NULL), XWS_INVALID_ARGS);
     XCHECK_NL((pFrame->buffer.nUsed >= pFrame->nHeaderSize), XWS_FRAME_INCOMPLETE);
-    size_t i, nPayloadLen = pFrame->nPayloadLength;
+    size_t nPayloadLen = pFrame->nPayloadLength;
 
     if (!nPayloadLen)
     {
@@ -493,9 +594,7 @@ xws_status_t XWebFrame_Unmask(xws_frame_t *pFrame)
     uint8_t *pPayload = pFrame->buffer.pData + pFrame->nHeaderSize;
     uint8_t *pMaskKey = (uint8_t*)&pFrame->nMaskKey;
 
-    for (i = 0; i < nPayloadLen; i++)
-        pPayload[i] ^= pMaskKey[i % 4];
-
+    XWS_ApplyMask(pPayload, pPayload, nPayloadLen, pMaskKey);
     pFrame->bMask = XFALSE;
     return XWS_ERR_NONE;
 }

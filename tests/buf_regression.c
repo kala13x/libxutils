@@ -541,8 +541,41 @@ static int XTest_read_stdin(void)
     return 0;
 }
 
+static int XTest_borrowed_reset(void)
+{
+    /* A buffer set over someone else's data owns nothing: resetting it wrote
+       a terminator into the first byte of that data. */
+    char sData[] = "keep";
+    xbyte_buffer_t buffer;
+    XByteBuffer_Init(&buffer, 0, XFALSE);
+    XByteBuffer_SetData(&buffer, (uint8_t*)sData, 4);
+    XByteBuffer_Reset(&buffer);
+    CHECK(buffer.nUsed == 0, "A reset borrowed buffer is empty");
+    CHECK(strcmp(sData, "keep") == 0, "Resetting a borrowed buffer leaves the borrowed data alone");
+
+    /* An owned buffer is still terminated at its start */
+    XByteBuffer_Init(&buffer, 0, XFALSE);
+    CHECK(XByteBuffer_Add(&buffer, (const uint8_t*)"abc", 3) == 3, "Fill an owned buffer");
+    XByteBuffer_Reset(&buffer);
+    CHECK(buffer.nUsed == 0 && buffer.pData[0] == '\0', "A reset owned buffer is an empty string");
+    XByteBuffer_Clear(&buffer);
+
+    /* Popping from the middle keeps the order of the rest */
+    xdata_buffer_t data;
+    CHECK(XDataBuffer_Init(&data, 8, XFALSE) > 0, "Create a data buffer");
+    static int items[5] = { 0, 1, 2, 3, 4 };
+    for (int i = 0; i < 5; i++) CHECK(XDataBuffer_Add(&data, &items[i]) == i, "Add an item");
+    CHECK(XDataBuffer_Pop(&data, 1) == &items[1], "Pop an item from the middle");
+    CHECK(data.nUsed == 4, "One item fewer is held");
+    CHECK(XDataBuffer_Get(&data, 0) == &items[0] && XDataBuffer_Get(&data, 1) == &items[2] &&
+        XDataBuffer_Get(&data, 3) == &items[4], "The remaining items keep their order");
+    XDataBuffer_Destroy(&data);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(aliasing),
+    XTEST_CASE(borrowed_reset),
     XTEST_CASE(borrowed),
     XTEST_CASE(pointer_ownership),
     XTEST_CASE(ring_model),

@@ -271,10 +271,67 @@ static int XTest_malformed_ciphertext(void)
     return 0;
 }
 
+static int XTest_unpredictable_random(void)
+{
+    /* Generated IVs and the XBC random prefix do not come from rand(): a
+     * program that seeds it the same way (or never seeds it at all) would
+     * otherwise hand out the same IV and prefix on every run. */
+    const uint8_t key[32] = {
+        0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
+        0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f
+    };
+
+    xaes_key_t first, second;
+    srand(7);
+    XAES_InitKey(&first, key, 256, NULL, 1);
+    srand(7);
+    XAES_InitKey(&second, key, 256, NULL, 1);
+    CHECK(memcmp(first.IV, second.IV, XAES_BLOCK_SIZE) != 0, "The same rand() seed does not repeat a generated IV");
+
+    /* A fixed IV and a 16 byte message leave a 12 byte random prefix, which is
+     * all that tells two encryptions of the same message apart. */
+    uint8_t iv[XAES_BLOCK_SIZE];
+    memset(iv, 0x5C, sizeof(iv));
+
+    uint8_t plain[16];
+    memcpy(plain, "xbc prefix check", sizeof(plain));
+
+    xaes_key_t fixedKey;
+    XAES_InitKey(&fixedKey, key, 256, iv, 0);
+
+    uint8_t *pCipher[2] = { NULL, NULL };
+    size_t nLength[2] = { sizeof(plain), sizeof(plain) };
+
+    for (int i = 0; i < 2; i++)
+    {
+        xaes_t aes;
+        CHECK(XAES_Init(&aes, &fixedKey, XAES_MODE_XBC) > 0, "Initialize XBC with a fixed IV");
+        srand(7);
+        pCipher[i] = XAES_Encrypt(&aes, plain, &nLength[i]);
+        CHECK(pCipher[i] != NULL && nLength[i] == 2 * XAES_BLOCK_SIZE, "XBC pads a 16 byte message to two blocks");
+    }
+
+    CHECK(memcmp(pCipher[0], pCipher[1], nLength[0]) != 0, "The same rand() seed does not repeat the XBC prefix");
+
+    for (int i = 0; i < 2; i++)
+    {
+        xaes_t aes;
+        CHECK(XAES_Init(&aes, &fixedKey, XAES_MODE_XBC) > 0, "Reset the XBC IV for decryption");
+        size_t nPlain = nLength[i];
+        uint8_t *pPlain = XAES_Decrypt(&aes, pCipher[i], &nPlain);
+        CHECK(pPlain != NULL && nPlain == sizeof(plain) && !memcmp(pPlain, plain, nPlain), "Each ciphertext still decrypts");
+        free(pPlain);
+        free(pCipher[i]);
+    }
+
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(ecb_vector),
     XTEST_CASE(modes),
     XTEST_CASE(siv_tampering),
     XTEST_CASE(generated_iv),
-    XTEST_CASE(malformed_ciphertext)
+    XTEST_CASE(malformed_ciphertext),
+    XTEST_CASE(unpredictable_random)
 )

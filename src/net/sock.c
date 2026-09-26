@@ -41,10 +41,14 @@ typedef SSIZE_T ssize_t;
 */
 #ifdef _WIN32
 #define XSOCK_ERRNO() WSAGetLastError()
-#define XSOCK_WOULDBLOCK(err) (err == WSAEWOULDBLOCK || err == WSAECONNABORTED)
+#define XSOCK_WOULDBLOCK(err) ((err) == WSAEWOULDBLOCK)
+#define XSOCK_ACCEPT_AGAIN(err) ((err) == WSAEWOULDBLOCK || (err) == WSAECONNABORTED)
+#define XSOCK_INTERRUPTED(err) (XFALSE)
 #else
 #define XSOCK_ERRNO() errno
-#define XSOCK_WOULDBLOCK(err) (err == EAGAIN || err == EWOULDBLOCK || err == ECONNABORTED)
+#define XSOCK_WOULDBLOCK(err) ((err) == EAGAIN || (err) == EWOULDBLOCK)
+#define XSOCK_ACCEPT_AGAIN(err) ((err) == EAGAIN || (err) == EWOULDBLOCK || (err) == ECONNABORTED)
+#define XSOCK_INTERRUPTED(err) ((err) == EINTR)
 #endif
 
 #ifdef _WIN32
@@ -294,7 +298,7 @@ void XSock_DeinitSSL(void)
 
 int XSock_LastSSLError(char *pDst, size_t nSize)
 {
-    if (pDst == NULL) return XSOCK_NONE;
+    if (pDst == NULL || !nSize) return XSOCK_NONE;
     size_t nLength = 0;
     pDst[0] = XSTR_NUL;
 
@@ -305,17 +309,21 @@ int XSock_LastSSLError(char *pDst, size_t nSize)
     ERR_print_errors(pBIO);
     char *pErrBuff = NULL;
 
+    /* A memory BIO is not NUL terminated, so its length is all there is to go
+       on: with no text in it, a copy bounded only by the destination read past
+       the end of whatever the BIO held. */
     int nErrSize = BIO_get_mem_data(pBIO, &pErrBuff);
-    if (nErrSize <= 0 && pErrBuff == NULL)
+    if (nErrSize <= 0 || pErrBuff == NULL)
     {
         BIO_free(pBIO);
         return 0;
     }
 
+    /* The last byte of the report is its trailing newline */
     nLength = nSize < (size_t)nErrSize ?
         nSize - 1 : (size_t)nErrSize - 1;
 
-    strncpy(pDst, pErrBuff, nLength);
+    memcpy(pDst, pErrBuff, nLength);
     pDst[nLength] = 0;
     BIO_free(pBIO);
 #else
@@ -926,11 +934,11 @@ void XSock_Close(xsock_t *pSock)
         {
             if (pPriv->bConnected)
             {
-                /* close_notify goes out on a socket the peer may already
-                   have dropped, which is the commonest way to be killed. */
                 xsock_nosigpipe_t guard;
                 XSock_BlockSIGPIPE(&guard);
+                ERR_clear_error();
                 SSL_shutdown(pSSL);
+                ERR_clear_error();
                 XSock_RestoreSIGPIPE(&guard);
             }
 
@@ -1014,8 +1022,9 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
         return XSOCK_ERROR;
     }
 
+    /* SSL_read() takes an int and so does the count reported back */
     uint8_t *pBuff = (uint8_t*)pData;
-    int nLeft = (int)nSize;
+    int nLeft = nSize > (size_t)INT_MAX ? INT_MAX : (int)nSize;
     int nReceived = 0;
 
     xsock_nosigpipe_t guard;
@@ -1023,6 +1032,10 @@ int XSock_SSLRead(xsock_t *pSock, void *pData, size_t nSize, xbool_t nExact)
 
     while (nLeft > 0 && (nExact || !nReceived || SSL_pending(pSSL)))
     {
+        /* SSL_get_error() consults this thread's error queue before the
+           return value, so an error some other connection left there made a
+           plain "no data yet" read as fatal and closed a healthy socket. */
+        ERR_clear_error();
         int nBytes = SSL_read(pSSL, &pBuff[nReceived], nLeft);
         if (nBytes <= 0)
         {
@@ -1095,8 +1108,9 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
         return XSOCK_ERROR;
     }
 
+    /* SSL_write() takes an int and so does the count reported back */
     uint8_t *pBuff = (uint8_t*)pData;
-    ssize_t nLeft = nLength;
+    size_t nLeft = nLength > (size_t)INT_MAX ? (size_t)INT_MAX : nLength;
     size_t nSent = 0;
 
     xsock_nosigpipe_t guard;
@@ -1104,6 +1118,9 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
 
     while (nLeft > 0)
     {
+        /* See XSock_SSLRead(): a stale error would be read as this write's */
+        ERR_clear_error();
+
         int nBytes = SSL_write(pSSL, &pBuff[nSent], (int)nLeft);
         if (nBytes <= 0)
         {
@@ -1137,8 +1154,8 @@ int XSock_SSLWrite(xsock_t *pSock, const void *pData, size_t nLength)
             return nBytes;
         }
 
-        nSent += nBytes;
-        nLeft -= nBytes;
+        nSent += (size_t)nBytes;
+        nLeft -= (size_t)nBytes;
 
         /* Wait for write event if non-blocking */
         if (XSock_IsNB(pSock)) break;
@@ -1161,6 +1178,8 @@ int XSock_RecvChunk(xsock_t *pSock, void* pData, size_t nSize)
     if (!XSock_Check(pSock)) return XSOCK_ERROR;
     if (!nSize || pData == NULL) return XSOCK_NONE;
 
+    /* The count is reported through an int */
+    if (nSize > (size_t)INT_MAX) nSize = (size_t)INT_MAX;
     uint8_t* pBuff = (uint8_t*)pData;
     int nReceived = 0;
 
@@ -1168,6 +1187,7 @@ int XSock_RecvChunk(xsock_t *pSock, void* pData, size_t nSize)
     {
         int nChunk = XSOCK_MIN((int)nSize - nReceived, XSOCK_CHUNK_MAX);
         int nRecvSize = recv(pSock->nFD, (char*)&pBuff[nReceived], nChunk, XMSG_NOSIGNAL);
+        if (nRecvSize < 0 && XSOCK_INTERRUPTED(XSOCK_ERRNO())) continue;
 
         if (nRecvSize <= 0)
         {
@@ -1200,9 +1220,14 @@ int XSock_Recv(xsock_t *pSock, void* pData, size_t nSize)
     int nRecvSize = 0;
     xsockaddr_t* pSockAddr = XSock_GetSockAddr(pSock);
     xsocklen_t nSockAddrLen = XSock_GetAddrLen(pSock);
+    if (nSize > (size_t)INT_MAX) nSize = (size_t)INT_MAX;
 
-    if (pSock->nType != SOCK_DGRAM) nRecvSize = recv(pSock->nFD, pData, (int)nSize, XMSG_NOSIGNAL);
-    else nRecvSize = recvfrom(pSock->nFD, pData, (int)nSize, 0, pSockAddr, &nSockAddrLen);
+    do
+    {
+        if (pSock->nType != SOCK_DGRAM) nRecvSize = recv(pSock->nFD, pData, (int)nSize, XMSG_NOSIGNAL);
+        else nRecvSize = recvfrom(pSock->nFD, pData, (int)nSize, 0, pSockAddr, &nSockAddrLen);
+    }
+    while (nRecvSize < 0 && XSOCK_INTERRUPTED(XSOCK_ERRNO()));
 
     if (nRecvSize < 0 && XSock_IsNB(pSock) && XSOCK_WOULDBLOCK(XSOCK_ERRNO()))
     {
@@ -1228,6 +1253,8 @@ int XSock_SendChunk(xsock_t *pSock, void *pData, size_t nLength)
     if (!XSock_Check(pSock)) return XSOCK_ERROR;
     if (!nLength || pData == NULL) return XSOCK_NONE;
 
+    /* The count is reported through an int */
+    if (nLength > (size_t)INT_MAX) nLength = (size_t)INT_MAX;
     uint8_t* pBuff =(uint8_t*)pData;
     int nDone = 0;
 
@@ -1235,6 +1262,7 @@ int XSock_SendChunk(xsock_t *pSock, void *pData, size_t nLength)
     {
         int nChunk = XSOCK_MIN((int)nLength - nDone, XSOCK_CHUNK_MAX);
         int nSent = send(pSock->nFD, (const char*)&pBuff[nDone], nChunk, XMSG_NOSIGNAL);
+        if (nSent < 0 && XSOCK_INTERRUPTED(XSOCK_ERRNO())) continue;
 
         if (nSent <= 0)
         {
@@ -1259,10 +1287,15 @@ int XSock_Send(xsock_t *pSock, const void *pData, size_t nLength)
 
     xsockaddr_t* pSockAddr = XSock_GetSockAddr(pSock);
     xsocklen_t nAddrLen = XSock_GetAddrLen(pSock);
+    if (nLength > (size_t)INT_MAX) nLength = (size_t)INT_MAX;
     int nSent = 0;
 
-    if (pSock->nType != SOCK_DGRAM) nSent = send(pSock->nFD, pData, (int)nLength, XMSG_NOSIGNAL);
-    else nSent = sendto(pSock->nFD, pData, (int)nLength, XMSG_NOSIGNAL, pSockAddr, nAddrLen);
+    do
+    {
+        if (pSock->nType != SOCK_DGRAM) nSent = send(pSock->nFD, pData, (int)nLength, XMSG_NOSIGNAL);
+        else nSent = sendto(pSock->nFD, pData, (int)nLength, XMSG_NOSIGNAL, pSockAddr, nAddrLen);
+    }
+    while (nSent < 0 && XSOCK_INTERRUPTED(XSOCK_ERRNO()));
 
     if (nSent < 0 && XSock_IsNB(pSock) && XSOCK_WOULDBLOCK(XSOCK_ERRNO()))
     {
@@ -1292,6 +1325,7 @@ int XSock_Read(xsock_t *pSock, void *pData, size_t nSize)
     (void)nReadSize;
     return XSock_Recv(pSock, pData, nSize);
 #elif EINTR
+    if (nSize > (size_t)INT_MAX) nSize = (size_t)INT_MAX;
     do nReadSize = read(pSock->nFD, pData, nSize);
     while (nReadSize < 0 && errno == EINTR);
 #else
@@ -1326,7 +1360,10 @@ int XSock_Write(xsock_t *pSock, const void *pData, size_t nLength)
 #ifdef _WIN32
     nBytes = XSock_Send(pSock, pData, nLength);
 #else
-    nBytes = write(pSock->nFD, pData, nLength);
+    if (nLength > (size_t)INT_MAX) nLength = (size_t)INT_MAX;
+    do nBytes = write(pSock->nFD, pData, nLength);
+    while (nBytes < 0 && errno == EINTR);
+
     if (nBytes < 0 && XSock_IsNB(pSock) && XSOCK_WOULDBLOCK(XSOCK_ERRNO()))
     {
         pSock->eStatus = XSOCK_WANT_WRITE;
@@ -1373,12 +1410,19 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
     pNewSock->nFD = accept(pSock->nFD, pSockAddr, &nAddrLen);
     if (pNewSock->nFD == XSOCK_INVALID)
     {
-        if (XSOCK_WOULDBLOCK(XSOCK_ERRNO())) pSock->eStatus = XSOCK_WANT_READ;
+        if (XSOCK_ACCEPT_AGAIN(XSOCK_ERRNO())) pSock->eStatus = XSOCK_WANT_READ;
         else pSock->eStatus = XSOCK_ERR_ACCEPT;
 
         XSock_Close(pNewSock);
         return XSOCK_INVALID;
     }
+
+#if !defined(_WIN32) && defined(FD_CLOEXEC)
+    /* Every other descriptor this module creates is close-on-exec, and so is
+       the XSock_AcceptNB() path; an accepted connection must not outlive the
+       process either by leaking into a child it spawns. */
+    fcntl(pNewSock->nFD, F_SETFD, FD_CLOEXEC);
+#endif
 
     /* TLS negotiation must obey a nonblocking listener before SSL_accept reads
        any ClientHello bytes; otherwise one stalled client stops the worker. */
@@ -1427,7 +1471,7 @@ XSOCKET XSock_AcceptNB(xsock_t *pSock)
     XSOCKET nFD = accept4(pSock->nFD, pSockAddr, &nAddrLen, SOCK_NONBLOCK | SOCK_CLOEXEC);
     if (nFD < 0)
     {
-        if (XSOCK_WOULDBLOCK(XSOCK_ERRNO())) pSock->eStatus = XSOCK_WANT_READ;
+        if (XSOCK_ACCEPT_AGAIN(XSOCK_ERRNO())) pSock->eStatus = XSOCK_WANT_READ;
         else pSock->eStatus = XSOCK_ERR_ACCEPT;
     }
 
@@ -2056,6 +2100,7 @@ XSOCKET XSock_SSLConnect(xsock_t *pSock)
     xsock_nosigpipe_t guard;
     XSock_BlockSIGPIPE(&guard);
 
+    ERR_clear_error();
     int nStatus = SSL_connect(pSSL);
     XSock_RestoreSIGPIPE(&guard);
 
@@ -2109,6 +2154,7 @@ XSOCKET XSock_SSLAccept(xsock_t *pSock)
     xsock_nosigpipe_t guard;
     XSock_BlockSIGPIPE(&guard);
 
+    ERR_clear_error();
     int nStatus = SSL_accept(pSSL);
     XSock_RestoreSIGPIPE(&guard);
 

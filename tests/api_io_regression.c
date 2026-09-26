@@ -242,6 +242,85 @@ static int XTest_buffered_upgrade(void)
     return 0;
 }
 
+static int XTest_websocket_burst(void)
+{
+    xtest_api_t test = {0};
+    xapi_t api;
+    xsock_t peer;
+    CHECK(XTest_Open(&api, &test, &peer) == 0, "Create a WebSocket burst fixture");
+    test.pSession->eType = XAPI_WS;
+    test.pSession->bHandshakeDone = XTRUE;
+
+    /* Masked one byte client frames, seven bytes each on the wire. Handling
+       them by recursion took one stack frame per frame and overflowed the
+       stack; cutting each one off the front moved the whole rest every time. */
+    enum
+    {
+        BURST_FRAMES = 100000
+    };
+    xws_frame_t frame, tail;
+    CHECK(XWebFrame_Create(&frame, (const uint8_t*)"z", 1, XWS_BINARY, XTRUE, XTRUE) == XWS_ERR_NONE,
+        "Create the smallest masked data frame");
+    CHECK(XWebFrame_Create(&tail, (const uint8_t*)"end", 3, XWS_BINARY, XTRUE, XTRUE) == XWS_ERR_NONE,
+        "Create the frame that arrives split across two reads");
+
+    xbyte_buffer_t *pRx = &test.pSession->rxBuffer;
+    CHECK(XByteBuffer_Reserve(pRx, frame.buffer.nUsed * BURST_FRAMES + tail.buffer.nUsed + 1) > 0,
+        "Reserve the whole burst up front");
+    for (int i = 0; i < BURST_FRAMES; i++)
+        CHECK(XByteBuffer_Add(pRx, frame.buffer.pData, frame.buffer.nUsed) > 0, "Queue one burst frame");
+    CHECK(XByteBuffer_Add(pRx, tail.buffer.pData, 3) > 0, "Queue only the head of the last frame");
+
+    CHECK(XAPI_ProcessBuffered(test.pSession) == XAPI_CONTINUE, "A burst of valid frames keeps the session");
+    CHECK(test.nRead == BURST_FRAMES && test.received.nUsed == BURST_FRAMES, "Deliver every frame of the burst exactly once");
+    CHECK(pRx->nUsed == 3 && memcmp(pRx->pData, tail.buffer.pData, 3) == 0,
+        "Keep only the unfinished frame, byte for byte, after consuming the burst");
+
+    CHECK(XByteBuffer_Add(pRx, tail.buffer.pData + 3, tail.buffer.nUsed - 3) > 0, "Complete the split frame");
+    CHECK(XAPI_ProcessBuffered(test.pSession) == XAPI_CONTINUE, "The completed frame is dispatched");
+    CHECK(test.nRead == BURST_FRAMES + 1 && pRx->nUsed == 0, "The split frame arrives once and nothing is left over");
+    CHECK(memcmp(test.received.pData + BURST_FRAMES, "end", 3) == 0, "The split frame keeps its payload");
+
+    XWebFrame_Clear(&frame);
+    XWebFrame_Clear(&tail);
+    XSock_Close(&peer);
+    XAPI_Destroy(&api);
+    XByteBuffer_Clear(&test.received);
+    return 0;
+}
+
+static int XTest_websocket_burst_invalid(void)
+{
+    xtest_api_t test = {0};
+    xapi_t api;
+    xsock_t peer;
+    CHECK(XTest_Open(&api, &test, &peer) == 0, "Create a burst with an invalid tail fixture");
+    test.pSession->eType = XAPI_WS;
+    test.pSession->bHandshakeDone = XTRUE;
+
+    xws_frame_t frame;
+    CHECK(XWebFrame_Create(&frame, (const uint8_t*)"ok", 2, XWS_BINARY, XTRUE, XTRUE) == XWS_ERR_NONE,
+        "Create a valid frame");
+
+    xbyte_buffer_t *pRx = &test.pSession->rxBuffer;
+    for (int i = 0; i < 3; i++)
+        CHECK(XByteBuffer_Add(pRx, frame.buffer.pData, frame.buffer.nUsed) > 0, "Queue a valid frame");
+
+    /* Reserved bits set: no extension was negotiated, so this is a protocol error */
+    const uint8_t invalid[] = { 0xF2, 0x80, 0, 0, 0, 0 };
+    CHECK(XByteBuffer_Add(pRx, invalid, sizeof(invalid)) > 0, "Queue an invalid frame after them");
+
+    CHECK(XAPI_ProcessBuffered(test.pSession) == XAPI_DISCONNECT, "An invalid frame ends the session");
+    CHECK(test.nRead == 3 && test.received.nUsed == 6 && test.nErrors == 1,
+        "Frames before the invalid one are delivered in order and the error is reported once");
+
+    XWebFrame_Clear(&frame);
+    XSock_Close(&peer);
+    XAPI_Destroy(&api);
+    XByteBuffer_Clear(&test.received);
+    return 0;
+}
+
 static int XTest_eof_with_data(void)
 {
     xtest_api_t test = {0};
@@ -268,5 +347,7 @@ XTEST_MAIN(
     XTEST_CASE(websocket_fragments),
     XTEST_CASE(unexpected_continuation),
     XTEST_CASE(buffered_upgrade),
+    XTEST_CASE(websocket_burst),
+    XTEST_CASE(websocket_burst_invalid),
     XTEST_CASE(eof_with_data)
 )

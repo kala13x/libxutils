@@ -143,6 +143,23 @@ xarray_t* XArray_NewPool(size_t nPoolSize, size_t nSize, uint8_t nFixed)
     return pArr;
 }
 
+static xbool_t XArray_InPool(const xpool_t *pPool, const void *pData)
+{
+    const uint8_t *pByte = (const uint8_t*)pData;
+
+    while (pPool != NULL)
+    {
+        if (pPool->pData != NULL &&
+            pByte >= pPool->pData &&
+            pByte < pPool->pData + pPool->nSize)
+            return XTRUE;
+
+        pPool = pPool->pNext;
+    }
+
+    return XFALSE;
+}
+
 void XArray_Clear(xarray_t *pArr)
 {
     XCHECK_VOID_NL((pArr != NULL));
@@ -157,7 +174,20 @@ void XArray_Clear(xarray_t *pArr)
         }
     }
 
-    if (pArr->nHasPool) XPool_Reset(pArr->pPool);
+    if (pArr->nHasPool && pArr->pPool != NULL && !XArray_InPool(pArr->pPool, pArr))
+    {
+        size_t nSize = pArr->pData != NULL ? pArr->nSize : 0;
+        XPool_Reset(pArr->pPool);
+        pArr->pData = NULL;
+
+        if (nSize)
+        {
+            pArr->pData = (xarray_data_t**)xalloc(pArr->pPool, nSize * sizeof(xarray_data_t*));
+            if (pArr->pData != NULL) memset(pArr->pData, 0, nSize * sizeof(xarray_data_t*));
+            else pArr->nSize = 0;
+        }
+    }
+
     pArr->eStatus = XARRAY_STATUS_EMPTY;
     pArr->nUsed = 0;
 }
@@ -206,7 +236,7 @@ size_t XArray_Realloc(xarray_t *pArr)
 
     xpool_t *pPool = pArr->pPool;
     size_t nSize = 0, nUsed = pArr->nUsed;
-    float fQuotient = (float)nUsed / (float)pArr->nSize;
+    float fQuotient = pArr->nSize ? (float)nUsed / (float)pArr->nSize : 1.0f;
 
     if (nUsed && nUsed == pArr->nSize) nSize = pArr->nSize * 2;
     else if (nUsed && fQuotient < 0.25) nSize = pArr->nSize / 2;
@@ -462,7 +492,7 @@ static int XArray_CompareSize(const void *pData1, const void *pData2, void *pCtx
     (void)pCtx;
     xarray_data_t *pFirst = (xarray_data_t*)pData1;
     xarray_data_t *pSecond = (xarray_data_t*)pData2;
-    return (int)pFirst->nSize - (int)pSecond->nSize;
+    return (pFirst->nSize > pSecond->nSize) - (pFirst->nSize < pSecond->nSize);
 }
 
 static int XArray_CompareKey(const void *pData1, const void *pData2, void *pCtx)
@@ -470,35 +500,49 @@ static int XArray_CompareKey(const void *pData1, const void *pData2, void *pCtx)
     (void)pCtx;
     xarray_data_t *pFirst = (xarray_data_t*)pData1;
     xarray_data_t *pSecond = (xarray_data_t*)pData2;
-    return (int)pFirst->nKey - (int)pSecond->nKey;
+    return (pFirst->nKey > pSecond->nKey) - (pFirst->nKey < pSecond->nKey);
 }
 
 int XArray_Partitioning(xarray_t *pArr, xarray_comparator_t compare, void *pCtx, int nStart, int nFinish)
 {
     XCHECK((compare != NULL), nStart);
-    int nPivot = nStart;
+    xarray_data_t *pPivot = pArr->pData[nStart + (nFinish - nStart) / 2];
+    int i = nStart - 1, j = nFinish + 1;
 
-    while(1)
+    for (;;)
     {
-        while (compare((void*)pArr->pData[nStart], (void*)pArr->pData[nPivot], pCtx) < 0) nStart++;
-        while (compare((void*)pArr->pData[nFinish], (void*)pArr->pData[nPivot], pCtx) > 0) nFinish--;
-        if (!compare((void*)pArr->pData[nStart], (void*)pArr->pData[nFinish], pCtx)) nFinish--;
-        if (nStart >= nFinish) return nStart;
-        XArray_Swap(pArr, nStart, nFinish);
-    }
+        do i++; while (compare((void*)pArr->pData[i], (void*)pPivot, pCtx) < 0);
+        do j--; while (compare((void*)pArr->pData[j], (void*)pPivot, pCtx) > 0);
+        if (i >= j) return j;
 
-    return nStart;
+        xarray_data_t *pData = pArr->pData[i];
+        pArr->pData[i] = pArr->pData[j];
+        pArr->pData[j] = pData;
+    }
 }
 
 void XArray_QuickSort(xarray_t *pArr, xarray_comparator_t compare, void *pCtx, int nStart, int nFinish)
 {
     XCHECK_VOID_NL((pArr != NULL && compare != NULL));
+    if (nStart >= nFinish) return;
+    XCHECK_VOID_NL((nStart >= 0 && (size_t)nFinish < pArr->nUsed));
 
-    if (nStart < nFinish)
+    while (nStart < nFinish)
     {
         int nPartitioning = XArray_Partitioning(pArr, compare, pCtx, nStart, nFinish);
-        XArray_QuickSort(pArr, compare, pCtx, nStart, nPartitioning);
-        XArray_QuickSort(pArr, compare, pCtx, nPartitioning+1, nFinish);
+
+        /* Recurse into the smaller side and loop over the larger one, so
+           the stack stays logarithmic in the number of elements. */
+        if (nPartitioning - nStart < nFinish - nPartitioning)
+        {
+            XArray_QuickSort(pArr, compare, pCtx, nStart, nPartitioning);
+            nStart = nPartitioning + 1;
+        }
+        else
+        {
+            XArray_QuickSort(pArr, compare, pCtx, nPartitioning + 1, nFinish);
+            nFinish = nPartitioning;
+        }
     }
 }
 

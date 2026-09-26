@@ -91,11 +91,18 @@ int XNTP_GetDate(const char *pAddr, uint16_t nPort, xtime_t *pTime)
     XSock_Open(&sock, XSOCK_UDP_CLIENT, &sockAddr);
     if (sock.eStatus != XSOCK_ERR_NONE) return XSTDERR;
 
-    if (XNTP_SendRequest(&sock) <= 0) return XSTDERR;
+    /* The socket is closed on every path: a failed exchange left it open, one
+       descriptor lost for each time query that went unanswered */
+    if (XNTP_SendRequest(&sock) <= 0)
+    {
+        XSock_Close(&sock);
+        return XSTDERR;
+    }
+
     time_t nEpoch = XNTP_ReceiveTime(&sock);
+    XSock_Close(&sock);
     if (!nEpoch) return XSTDERR;
 
     XTime_FromEpoch(pTime, nEpoch);
-    XSock_Close(&sock);
     return XSTDOK;
 }

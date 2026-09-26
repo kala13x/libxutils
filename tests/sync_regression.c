@@ -346,12 +346,41 @@ static int XTest_atomics(void)
     return 0;
 }
 
+static int sync_idle_callback(void *pContext)
+{
+    (void)pContext;
+    return 0;
+}
+
+static int XTest_task_start_state(void)
+{
+    /* The worker marks itself ACTIVE as its first step. XTask_Start() used to
+       write CREATED only after starting it, which could land on top of that
+       and was never replaced, so waiting for the task to become active hung. */
+    for (int nRun = 0; nRun < 500; nRun++)
+    {
+        xtask_t task;
+        memset(&task, 0, sizeof(task));
+        CHECK(XTask_Start(&task, sync_idle_callback, NULL, 200) == XSTDOK, "The task starts");
+
+        uint64_t nDeadline = XTime_GetMs() + 2000;
+        while (XSYNC_ATOMIC_GET(&task.nStatus) != XTASK_STAT_ACTIVE && XTime_GetMs() < nDeadline) xusleep(50);
+        CHECK(XSYNC_ATOMIC_GET(&task.nStatus) == XTASK_STAT_ACTIVE, "A started task always becomes active");
+
+        XTask_Stop(&task, 100);
+        CHECK(XSYNC_ATOMIC_GET(&task.nStatus) == XTASK_STAT_STOPPED, "The task stops");
+    }
+
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(mutex),
     XTEST_CASE(recursive),
     XTEST_CASE(rwlock),
     XTEST_CASE(barrier),
     XTEST_CASE(task),
+    XTEST_CASE(task_start_state),
     XTEST_CASE(sleep),
     XTEST_CASE(atomics)
 )

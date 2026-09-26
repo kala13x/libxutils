@@ -37,6 +37,13 @@ size_t xstrarglen(const char *pFmt, va_list args)
 
     int nLength = vsnprintf(0, 0, pFmt, locArgs);
 
+#ifndef _XUTILS_USE_EXT
+    /* A format vsnprintf() rejects reports -1, which as a length is SIZE_MAX:
+       the callers then allocated nothing (SIZE_MAX + 1) and reported a length
+       of SIZE_MAX for it. Nothing can be formatted, so the length is zero. */
+    if (nLength < 0) nLength = 0;
+#endif
+
 #ifdef _XUTILS_USE_EXT
     if (nLength > 0)
     {
@@ -75,9 +82,11 @@ size_t xstrarglen(const char *pFmt, va_list args)
                 nLength++;
                 break;
             case 's':
+            {
                 const char* pArg = va_arg(locArgs,const char*);
                 if (pArg != NULL) nLength += strlen(pArg);
                 break;
+            }
             case 'f':
             case 'e':
             case 'E':
@@ -175,46 +184,50 @@ xbool_t xstrcmp(const char *pStr, const char *pCmp)
     return strcmp(pStr, pCmp) ? XFALSE : XTRUE;
 }
 
+/*
+    '*' matches any run of characters (none included), '?' exactly one, and
+    every other pattern character itself.
+
+    Matched in one pass that backs up only to the most recent '*'. That is
+    enough: an earlier '*' can never need a different split once a later one
+    has matched. The recursive version took one stack frame per character of
+    the name and, with several '*' in the pattern, time exponential in their
+    number; search patterns come from remote clients, and one pattern like
+    "*a*a*a*a*a*b" over a long name could stall the search for good.
+*/
 xbool_t xstrnmatch(const char *pStr, size_t nLength, const char *pPattern, size_t nPatternLength)
 {
     XCHECK_NL(((pStr != NULL) && (pPattern != NULL)), XFALSE);
     if (!nPatternLength) return !nLength ? XTRUE : XFALSE;
 
-    if (pPattern[0] == '*')
+    size_t nStr = 0, nPat = 0;
+    size_t nStarPat = SIZE_MAX, nStarStr = 0;
+
+    while (nStr < nLength)
     {
-        /* Skip multiple '*' characters */
-        while (nPatternLength > 1 && pPattern[1] == '*')
+        if (nPat < nPatternLength && pPattern[nPat] == '*')
         {
-            nPatternLength--;
-            pPattern++;
+            /* Remember where the run started, and first try it empty */
+            nStarPat = nPat++;
+            nStarStr = nStr;
         }
-
-        /* '*' at the end matches everything */
-        if (nPatternLength == 1) return XTRUE;
-        size_t i;
-
-        for (i = 0; i <= nLength; i++)
+        else if (nPat < nPatternLength && (pPattern[nPat] == '?' || pPattern[nPat] == pStr[nStr]))
         {
-            if (xstrnmatch(pStr + i, nLength - i,
-                pPattern + 1, nPatternLength - 1))
-                    return XTRUE;
+            nStr++;
+            nPat++;
         }
-
-        return XFALSE;
+        else if (nStarPat != SIZE_MAX)
+        {
+            /* Let the last '*' take one more character and retry after it */
+            nPat = nStarPat + 1;
+            nStr = ++nStarStr;
+        }
+        else return XFALSE;
     }
 
-    if (!nLength) return XFALSE;
-
-    if (pPattern[0] == '?')
-    {
-        return xstrnmatch(pStr + 1, nLength - 1,
-            pPattern + 1, nPatternLength - 1);
-    }
-
-    if (pPattern[0] != pStr[0]) return XFALSE;
-
-    return xstrnmatch(pStr + 1, nLength - 1,
-        pPattern + 1, nPatternLength - 1);
+    /* The name is used up: only trailing '*' may be left of the pattern */
+    while (nPat < nPatternLength && pPattern[nPat] == '*') nPat++;
+    return nPat == nPatternLength ? XTRUE : XFALSE;
 }
 
 xbool_t xstrmatch(const char *pStr, size_t nLength, const char *pPattern)
@@ -338,17 +351,18 @@ char* xstracpyargs(const char *pFmt, va_list args, size_t *nDstLength)
     size_t nArgLength = xstrarglen(pFmt, args);
     if (!nArgLength) return NULL;
 
+    if (nArgLength == SIZE_MAX) return NULL;
     char *pDest = (char*)malloc(++nArgLength);
     if (pDest == NULL) return NULL;
 
-    size_t nLength = xstrncpyarg(pDest, nArgLength, pFmt, args);
-    if (nLength <= 0 || pDest == NULL)
+    int nLength = xstrncpyarg(pDest, nArgLength, pFmt, args);
+    if (nLength <= 0)
     {
         free(pDest);
         return NULL;
     }
 
-    if (nDstLength) *nDstLength = nLength;
+    if (nDstLength) *nDstLength = (size_t)nLength;
     return pDest;
 }
 
@@ -358,17 +372,18 @@ char* xstrpcpyargs(xpool_t *pPool, const char *pFmt, va_list args, size_t *nDstL
     size_t nArgLength = xstrarglen(pFmt, args);
     if (!nArgLength) return NULL;
 
+    if (nArgLength == SIZE_MAX) return NULL;
     char *pDest = (char*)xalloc(pPool, ++nArgLength);
     if (pDest == NULL) return NULL;
 
-    size_t nLength = xstrncpyarg(pDest, nArgLength, pFmt, args);
-    if (nLength <= 0 || pDest == NULL)
+    int nLength = xstrncpyarg(pDest, nArgLength, pFmt, args);
+    if (nLength <= 0)
     {
         xfree(pPool, pDest);
         return NULL;
     }
 
-    if (nDstLength) *nDstLength = nLength;
+    if (nDstLength) *nDstLength = (size_t)nLength;
     return pDest;
 }
 
@@ -445,11 +460,14 @@ size_t xstrxcpyf(char **pDst, const char *pFmt, ...)
 
 size_t xstrncpy(char *pDst, size_t nSize, const char* pSrc)
 {
-    xstrnul(pDst);
-    if (pDst == NULL || !nSize || !xstrused(pSrc)) return 0;
+    if (pDst == NULL || !nSize) return 0;
+    pDst[0] = XSTR_NUL;
+    if (!xstrused(pSrc)) return 0;
+
     size_t nCopySize = strnlen(pSrc, nSize - 1);
     if (nCopySize) memcpy(pDst, pSrc, nCopySize);
     pDst[nCopySize] = XSTR_NUL;
+
     return nCopySize;
 }
 
@@ -549,7 +567,7 @@ size_t xstrnyuv(char *pStr, size_t nSize, int nY, int nU, int nV)
 char *xstrrgb(int nR, int nG, int nB)
 {
     char *sRetVal = (char*)malloc(XSTR_MICRO);
-    size_t nLen = xstrnrgb(sRetVal, sizeof(sRetVal), nR, nG, nB);
+    size_t nLen = xstrnrgb(sRetVal, XSTR_MICRO, nR, nG, nB);
     if (nLen) return sRetVal;
     free(sRetVal);
     return NULL;
@@ -558,7 +576,7 @@ char *xstrrgb(int nR, int nG, int nB)
 char *xstryuv(int nY, int nU, int nV)
 {
     char *sRetVal = (char*)malloc(XSTR_MICRO);
-    size_t nLen = xstrnyuv(sRetVal, sizeof(sRetVal), nY, nU, nV);
+    size_t nLen = xstrnyuv(sRetVal, XSTR_MICRO, nY, nU, nV);
     if (nLen) return sRetVal;
     free(sRetVal);
     return NULL;
@@ -765,6 +783,7 @@ size_t xstrncases(char* pDst, size_t nSize, xstr_case_t eCase, const char *pSrc,
 
 size_t xstrncase(char* pDst, size_t nSize, xstr_case_t eCase, const char *pSrc)
 {
+    if (pDst == NULL || pSrc == NULL || !nSize) return 0;
     size_t nCopyLength = strnlen(pSrc, nSize - 1);
     return xstrncases(pDst, nSize, eCase, pSrc, nCopyLength);
 }
@@ -829,7 +848,7 @@ int xstrsrcb(const char *pStr, size_t nLength, const char *pSrc)
     void *pOffset = memmem(pStr, nLength, pSrc, pSearchLen);
     if (pOffset != NULL) nPosit = (int)((char*)pOffset - pStr);
 #else
-    nPosit = xstrsrc((char*)pStr, pSrc);
+    if (xstrused(pSrc)) nPosit = xstrnsrc(pStr, nLength, pSrc, 0);
 #endif
 
     return nPosit;
@@ -877,7 +896,7 @@ int xstrntok(char *pDst, size_t nSize, const char *pStr, size_t nPosit, const ch
     }
     else if (!nOffset)
     {
-        pDst[0] = '\0';
+        if (pDst != NULL) pDst[0] = '\0';
         return (int)(nPosit + nDlmtLen);
     }
 
@@ -1095,6 +1114,44 @@ void xstrnul(char *pString)
     pString[0] = XSTR_NUL;
 }
 
+int xstrntokat(char *pDst, size_t nSize, const char *pStr, size_t nLen, size_t nPosit, const char *pDlmt, size_t nDlmtLen)
+{
+    if (pDst != NULL) pDst[0] = XSTR_NUL;
+    if (nPosit >= nLen) return XSTDERR;
+
+    const char *pStart = pStr + nPosit;
+    const char *pCursor = pStart;
+    const char *pFound = NULL;
+    size_t nLeft = nLen - nPosit;
+
+    while (nLeft >= nDlmtLen)
+    {
+        const char *pHit = (const char*)memchr(pCursor, pDlmt[0], nLeft - nDlmtLen + 1);
+        if (pHit == NULL) break;
+
+        if (!memcmp(pHit, pDlmt, nDlmtLen))
+        {
+            pFound = pHit;
+            break;
+        }
+
+        nLeft -= (size_t)(pHit - pCursor) + 1;
+        pCursor = pHit + 1;
+    }
+
+    if (pFound == NULL)
+    {
+        xstrncpys(pDst, nSize, pStart, nLen - nPosit);
+        return 0;
+    }
+
+    size_t nOffset = (size_t)(pFound - pStart);
+    if (!nOffset) return (int)(nPosit + nDlmtLen);
+
+    xstrncpys(pDst, nSize, pStart, nOffset);
+    return (int)(nPosit + nOffset + nDlmtLen);
+}
+
 size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbool_t bIncludeDlmt, xbool_t bIncludeEmpty)
 {
     if (!xstrused(pString) || !xstrused(pDlmt) || pTokens == NULL) return XSTDNON;
@@ -1102,6 +1159,8 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
     char sDelimiter[XSTR_MID];
     char sToken[XSTR_MAX];
 
+    size_t nStrLength = strlen(pString);
+    size_t nSearchLength = strlen(pDlmt);
     int nDlmtLen = 0;
     int nNext = 0;
 
@@ -1111,7 +1170,7 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
         if (xstrncmp(pString, sDelimiter, nDlmtLen)) XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1);
     }
 
-    while((nNext = xstrntok(sToken, sizeof(sToken), pString, nNext, pDlmt)) >= 0)
+    while((nNext = xstrntokat(sToken, sizeof(sToken), pString, nStrLength, (size_t)nNext, pDlmt, nSearchLength)) >= 0)
     {
         size_t nLength = strlen(sToken);
         if (!nLength)
@@ -1234,13 +1293,18 @@ int XString_Resize(xstring_t *pString, size_t nSize)
 
     char* pOldData = pString->pData;
     pString->pData = (char*)realloc(pString->pData, nSize);
-    pString->nLength = XSTD_MIN(pString->nLength, nSize);
 
     if (nSize && pString->pData == NULL)
     {
         pString->pData = pOldData;
         pString->nStatus = XSTDERR;
         return pString->nStatus;
+    }
+
+    if (pString->nLength >= nSize)
+    {
+        pString->nLength = nSize - 1;
+        pString->pData[pString->nLength] = XSTR_NUL;
     }
 
     pString->nSize = nSize;
@@ -1352,10 +1416,12 @@ int XString_AddString(xstring_t *pString, xstring_t *pSrc)
 int XString_Copy(xstring_t *pString, xstring_t *pSrc)
 {
     if (pString == NULL || pSrc == NULL || pSrc->pData == NULL) return XSTDERR;
-    XString_Init(pString, pSrc->nSize, pSrc->nFast);
-    if (pString->nStatus == XSTDERR) return XSTDERR;
+    size_t nSize = XSTD_MAX(pSrc->nSize, pSrc->nLength + 1);
 
-    memcpy(pString->pData, pSrc->pData, pSrc->nSize);
+    XString_Init(pString, nSize, pSrc->nFast);
+    if (pString->nStatus == XSTDERR || pString->pData == NULL) return XSTDERR;
+
+    memcpy(pString->pData, pSrc->pData, pSrc->nLength);
     pString->nLength = pSrc->nLength;
     pString->pData[pString->nLength] = XSTR_NUL;
     return (int)pString->nLength;
@@ -1821,6 +1887,7 @@ xarray_t* XString_SplitStr(xstring_t *pString, const char *pDlmt)
 
 xarray_t* XString_Split(const char *pCStr, const char *pDlmt)
 {
+    if (pCStr == NULL) return NULL;
     xstring_t *pString = XString_From(pCStr, strlen(pCStr));
     if (pString == NULL) return NULL;
 

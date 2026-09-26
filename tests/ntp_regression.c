@@ -207,9 +207,75 @@ static int XTest_guards(void)
     return 0;
 }
 
+static int ntp_open_fds(void)
+{
+    int nCount = 0;
+    for (int nFD = 0; nFD < 4096; nFD++)
+        if (fcntl(nFD, F_GETFD) != -1) nCount++;
+
+    return nCount;
+}
+
+static int XTest_failure_closes_socket(void)
+{
+    /* A query that failed after the socket was opened returned without
+     * closing it, so a client polling an unreachable server ran out of
+     * descriptors. Nothing listens on the port used here. */
+    int nFD = (int)socket(AF_INET, SOCK_DGRAM, 0);
+    if (nFD < 0)
+    {
+        printf("UDP sockets unavailable, skipping\n");
+        return 77;
+    }
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    socklen_t nLen = sizeof(addr);
+    if (bind(nFD, (struct sockaddr*)&addr, nLen) < 0 || getsockname(nFD, (struct sockaddr*)&addr, &nLen) < 0)
+    {
+        close(nFD);
+        printf("UDP loopback unavailable, skipping\n");
+        return 77;
+    }
+
+    uint16_t nPort = ntohs(addr.sin_port);
+    close(nFD);
+
+    int nBefore = ntp_open_fds();
+
+    for (int i = 0; i < 3; i++)
+    {
+        xtime_t time;
+        CHECK(XNTP_GetDate("127.0.0.1", nPort, &time) == XSTDERR, "A query nobody answers fails");
+    }
+
+    CHECK(ntp_open_fds() == nBefore, "Failed queries leave no socket open");
+
+    /* The rejected exchange of a served zero timestamp closes it too */
+    ntp_server_t server;
+    xthread_t task;
+    if (ntp_start(&server, &task, NTP_REPLY_NORMAL, 0) != XSTDOK)
+    {
+        printf("UDP loopback unavailable, skipping\n");
+        return 77;
+    }
+
+    xtime_t time;
+    CHECK(XNTP_GetDate("127.0.0.1", server.nPort, &time) == XSTDERR, "A zero timestamp is rejected");
+    XThread_Join(&task);
+
+    /* The responder has closed its own socket by now as well */
+    CHECK(ntp_open_fds() == nBefore, "A rejected reply leaves no socket open");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(request_reply),
     XTEST_CASE(no_reply),
     XTEST_CASE(zero_epoch),
-    XTEST_CASE(guards)
+    XTEST_CASE(guards),
+    XTEST_CASE(failure_closes_socket)
 )

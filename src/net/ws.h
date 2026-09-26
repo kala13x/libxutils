@@ -89,6 +89,9 @@ void XWebFrame_Clear(xws_frame_t *pFrame);
 void XWebFrame_Reset(xws_frame_t *pFrame);
 
 uint8_t* XWS_CreateFrame(const uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin, size_t *pFrameSize);
+xws_status_t XWS_AppendFrame(xbyte_buffer_t *pBuffer, const uint8_t *pPayload, size_t nLength,
+                             xws_frame_type_t eType, xbool_t bMask, xbool_t bFin);
+
 xws_frame_t* XWebFrame_New(const uint8_t *pPayload, size_t nLength, xws_frame_type_t eType, xbool_t bMask, xbool_t bFin);
 xws_frame_t* XWebFrame_Alloc(xws_frame_type_t eType, size_t nBuffSize);
 

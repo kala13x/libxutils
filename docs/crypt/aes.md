@@ -45,6 +45,9 @@ AES helper layer with four modes:
   - copies key bytes and records key size.
   - copies `pIV` only if `pIV` exists and its first byte is non-zero.
   - otherwise generates a random IV when `bContainIV` is true, or uses all-zero IV when false.
+  - a generated IV comes from the system CSPRNG (OpenSSL `RAND_bytes()` when built with SSL,
+    `CryptGenRandom()` on Windows, `/dev/urandom` elsewhere); `rand()` is only the last resort
+    when none of those can be read.
 - Returns:
   - no return value.
 
@@ -148,7 +151,7 @@ AES helper layer with four modes:
 - Does:
   - creates a custom framed plaintext:
     - 4-byte big-endian random-prefix length
-    - random prefix bytes
+    - random prefix bytes, from the same CSPRNG as a generated IV
     - user plaintext
   - CBC-encrypts that framed buffer.
   - optionally embeds IV.

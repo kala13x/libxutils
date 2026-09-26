@@ -49,21 +49,39 @@ uint8_t* XCrypt_HEX(const uint8_t *pInput, size_t *pLength, const char* pSpace, 
 {
     if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
     size_t i, nCount = 0, nLength = *pLength;
+    if (nLength > INT_MAX) return NULL;
 
-    xbyte_buffer_t buffer;
-    XByteBuffer_Init(&buffer, nLength, 0);
-    if (!buffer.nSize) return NULL;
+    const char *pDigits = bLowCase ? "0123456789abcdef" : "0123456789ABCDEF";
+    const char *pDlmt = xstrused(pSpace) ? pSpace : XSTR_EMPTY;
+    size_t nDlmtLen = strlen(pDlmt);
+    size_t nLines = nColumns ? nLength / nColumns : 0;
+
+    if (nDlmtLen > (SIZE_MAX - nLines - 1) / nLength - 2)
+    {
+        *pLength = 0;
+        return NULL;
+    }
+
+    size_t nTotal = nLength * (2 + nDlmtLen) + nLines;
+    if (nTotal >= INT_MAX)
+    {
+        *pLength = 0;
+        return NULL;
+    }
+
+    uint8_t *pOutput = (uint8_t*)malloc(nTotal + 1);
+    if (pOutput == NULL) return NULL;
+    size_t nOffset = 0;
 
     for (i = 0; i < nLength; i++)
     {
-        const char *pFmt = bLowCase ? "%02x%s" : "%02X%s";
-        const char *pDlmt = xstrused(pSpace) ? pSpace : XSTR_EMPTY;
+        pOutput[nOffset++] = (uint8_t)pDigits[pInput[i] >> 4];
+        pOutput[nOffset++] = (uint8_t)pDigits[pInput[i] & 0x0f];
 
-        if (XByteBuffer_AddFmt(&buffer, pFmt, pInput[i], pDlmt) <= 0)
+        if (nDlmtLen)
         {
-            XByteBuffer_Clear(&buffer);
-            *pLength = 0;
-            return NULL;
+            memcpy(&pOutput[nOffset], pDlmt, nDlmtLen);
+            nOffset += nDlmtLen;
         }
 
         if (!nColumns) continue;
@@ -71,25 +89,20 @@ uint8_t* XCrypt_HEX(const uint8_t *pInput, size_t *pLength, const char* pSpace, 
 
         if (nCount == nColumns)
         {
-            if (XByteBuffer_AddByte(&buffer, '\n') <= 0)
-            {
-                XByteBuffer_Clear(&buffer);
-                *pLength = 0;
-                return NULL;
-            }
-
+            pOutput[nOffset++] = '\n';
             nCount = 0;
         }
     }
 
-    *pLength = buffer.nUsed;
-    return buffer.pData;
+    pOutput[nOffset] = '\0';
+    *pLength = nOffset;
+    return pOutput;
 }
 
 uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
 {
     if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
-    const char *pFmt = bLowCase ? " %02x%n" : " %02X%n";
+    const char *pFmt = bLowCase ? "%02x%n" : "%02X%n";
     const char *pData = (const char*)pInput;
 
     xbyte_buffer_t buffer;
@@ -103,12 +116,22 @@ uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
     unsigned int nVal = 0;
     int nOffset = 0;
 
-#ifdef _WIN32
-    while (sscanf_s(pData, pFmt, &nVal, &nOffset) == 1)
-#else
-    while (sscanf(pData, pFmt, &nVal, &nOffset) == 1)
-#endif
+    while (XTRUE)
     {
+        size_t nSpace = 0;
+        while (isspace((unsigned char)pData[nSpace])) nSpace++;
+
+        char sPair[3];
+        sPair[0] = pData[nSpace];
+        sPair[1] = sPair[0] != '\0' ? pData[nSpace + 1] : '\0';
+        sPair[2] = '\0';
+
+#ifdef _WIN32
+        if (sscanf_s(sPair, pFmt, &nVal, &nOffset) != 1) break;
+#else
+        if (sscanf(sPair, pFmt, &nVal, &nOffset) != 1) break;
+#endif
+
         if (XByteBuffer_AddByte(&buffer, (uint8_t)nVal) <= 0)
         {
             XByteBuffer_Clear(&buffer);
@@ -116,7 +139,7 @@ uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
             return NULL;
         }
 
-        pData += nOffset;
+        pData += nSpace + (size_t)nOffset;
     }
 
     *pLength = buffer.nUsed;

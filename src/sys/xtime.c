@@ -471,6 +471,22 @@ uint64_t XTime_GetMs(void)
     return (uint64_t)now.nSec * 1000 + nTimeStamp;
 }
 
+uint64_t XTime_GetMonoMs(void)
+{
+#ifdef _WIN32
+    return (uint64_t)GetTickCount64();
+#elif defined(CLOCK_MONOTONIC)
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+
+    /* Not reached on any supported system, but never worse than before */
+    return XTime_GetMs();
+#else
+    return XTime_GetMs();
+#endif
+}
+
 uint64_t XTime_Serialized(void)
 {
     xtime_t xtime;

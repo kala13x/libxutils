@@ -184,9 +184,10 @@ int XTask_Start(xtask_t *pTask, xtask_cb_t callback, void *pContext, uint32_t nI
 
     XSYNC_ATOMIC_SET(&pTask->nAction, XTASK_CTRL_RELEASE);
     XSYNC_ATOMIC_SET(&pTask->nIntervalU, nIntervalU);
+    XSYNC_ATOMIC_SET(&pTask->nStatus, XTASK_STAT_CREATED);
 
     int nStatus = XThread_Create(&pTask->taskTd, XTask_WorkerThread, pTask, 1);
-    XSYNC_ATOMIC_SET(&pTask->nStatus, nStatus == XSTDOK ? XTASK_STAT_CREATED : XTASK_STAT_FAIL);
+    if (nStatus != XSTDOK) XSYNC_ATOMIC_SET(&pTask->nStatus, XTASK_STAT_FAIL);
 
     return nStatus;
 }

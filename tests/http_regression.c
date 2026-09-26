@@ -674,6 +674,35 @@ static int XTest_unix_and_auth(void)
     return 0;
 }
 
+static int XTest_many_header_lines(void)
+{
+    /* A header made of many short lines. Splitting it measured the whole
+       header again for every line, so this took minutes instead of
+       milliseconds and held up everything else on the event loop. */
+    enum
+    {
+        HEADER_LINES = 150000
+    };
+    xbyte_buffer_t wire;
+    XByteBuffer_Init(&wire, 0, XTRUE);
+    CHECK(XByteBuffer_AddFmt(&wire, "GET /many HTTP/1.1\r\n") > 0, "Start the request line");
+    for (int i = 0; i < HEADER_LINES; i++)
+        CHECK(XByteBuffer_Add(&wire, (const uint8_t*)"a:b\r\n", 5) > 0, "Append one repeated header line");
+    CHECK(XByteBuffer_AddFmt(&wire, "X-Last: yes\r\n\r\n") > 0, "Terminate the header");
+
+    xhttp_t http;
+    xhttp_status_t eStatus = XHTTP_ParseData(&http, wire.pData, wire.nUsed);
+    CHECK(eStatus == XHTTP_COMPLETE, "A header of many lines still parses as one complete request");
+    CHECK(strcmp(http.sUri, "/many") == 0, "The request line survives the large header");
+    CHECK(http.nHeaderCount == 2, "A repeated header is stored once next to the last distinct one");
+    CHECK(strcmp(XHTTP_GetHeader(&http, "a"), "b") == 0 && strcmp(XHTTP_GetHeader(&http, "x-last"), "yes") == 0,
+        "Both distinct header values are kept");
+
+    XHTTP_Clear(&http);
+    XByteBuffer_Clear(&wire);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(partial),
     XTEST_CASE(pipeline),
@@ -690,5 +719,6 @@ XTEST_MAIN(
     XTEST_CASE(limits),
     XTEST_CASE(callbacks),
     XTEST_CASE(lifecycle),
-    XTEST_CASE(unix_and_auth)
+    XTEST_CASE(unix_and_auth),
+    XTEST_CASE(many_header_lines)
 )

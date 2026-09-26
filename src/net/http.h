@@ -26,8 +26,8 @@ extern "C" {
 #define XHTTP_XCHECK_FLAG(c, f) (((c) & (f)) == (f))
 
 #define XHTTP_VER_DEFAULT       "1.0"
-#define XHTTP_PACKAGE_MAX       5000 * 1024
-#define XHTTP_HEADER_MAX        32 * 1024
+#define XHTTP_PACKAGE_MAX       (5000 * 1024)
+#define XHTTP_HEADER_MAX        (32 * 1024)
 #define XHTTP_HEADER_SIZE       4096
 #define XHTTP_OPTION_MAX        1024
 #define XHTTP_FIELD_MAX         128

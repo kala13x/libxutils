@@ -151,6 +151,67 @@ static int XTest_timers(void)
     return 0;
 }
 
+typedef struct {
+    int aFired[8];
+    int nFired;
+} xtest_timer_order_t;
+
+static int XTest_OrderCallback(void *pLoop, void *pData, XSOCKET nFD, xevent_cb_type_t eReason)
+{
+    xevents_t *pEvents = (xevents_t*)pLoop;
+    xtest_timer_order_t *pOrder = (xtest_timer_order_t*)pEvents->pUserSpace;
+    xevent_data_t *pEvent = (xevent_data_t*)pData;
+    (void)nFD;
+
+    if (eReason == XEVENT_CB_TIMEOUT && pEvent != NULL && pOrder->nFired < 8)
+        pOrder->aFired[pOrder->nFired++] = *(int*)pEvent->pContext;
+
+    return XEVENTS_CONTINUE;
+}
+
+static int XTest_timer_order(void)
+{
+    /* Timers fire in deadline order, not in the order they were added. The
+       portable timer list used on macOS and Windows appended every new timer
+       at its tail and only ever looked at the head, so a short timer added
+       after a long one waited for the long one. A timer that fired and was not
+       rearmed then went back to the head and held up all the others. */
+    xtest_timer_order_t order = {0};
+    xevents_t loop;
+    CHECK(XEvents_Create(&loop, 16, &order, XTest_OrderCallback, XTRUE) == XEVENTS_SUCCESS, "Create an ordering loop");
+
+    static int ids[] = { 1, 2, 3, 4, 5 };
+    xevent_data_t *pLong = XEvents_AddTimer(&loop, &ids[0], 400);
+    xevent_data_t *pShort = XEvents_AddTimer(&loop, &ids[1], 100);
+    xevent_data_t *pMiddle = XEvents_AddTimer(&loop, &ids[2], 250);
+    xevent_data_t *pFirst = XEvents_AddTimer(&loop, &ids[3], 20);
+    CHECK(pLong && pShort && pMiddle && pFirst, "Add timers out of deadline order");
+
+    uint64_t nUntil = XTime_GetMs() + 5000;
+    while (order.nFired < 4 && XTime_GetMs() < nUntil)
+        CHECK(XEvents_Service(&loop, 10) == XEVENTS_SUCCESS, "Service the ordering loop");
+
+    CHECK(order.nFired == 4, "Every timer fires, including those behind a spent one");
+    CHECK(order.aFired[0] == 4 && order.aFired[1] == 2 && order.aFired[2] == 3 && order.aFired[3] == 1,
+        "Timers fire in deadline order");
+
+    /* An indefinite wait still ends when the next timer is due. */
+    xevent_data_t *pWake = XEvents_AddTimer(&loop, &ids[4], 50);
+    CHECK(pWake != NULL, "Add a timer to end an indefinite wait");
+    nUntil = XTime_GetMs() + 5000;
+    while (order.nFired < 5 && XTime_GetMs() < nUntil)
+        CHECK(XEvents_Service(&loop, -1) == XEVENTS_SUCCESS, "An indefinite wait returns for a due timer");
+    CHECK(order.nFired == 5 && order.aFired[4] == 5, "The timer ends the indefinite wait");
+
+    CHECK(XEvents_Delete(&loop, pLong) == XEVENTS_SUCCESS, "Delete a spent timer");
+    CHECK(XEvents_Delete(&loop, pShort) == XEVENTS_SUCCESS, "Delete a spent timer");
+    CHECK(XEvents_Delete(&loop, pMiddle) == XEVENTS_SUCCESS, "Delete a spent timer");
+    CHECK(XEvents_Delete(&loop, pFirst) == XEVENTS_SUCCESS, "Delete a spent timer");
+    CHECK(XEvents_Delete(&loop, pWake) == XEVENTS_SUCCESS, "Delete a spent timer");
+    XEvents_Destroy(&loop);
+    return 0;
+}
+
 static int XTest_wakeup(void)
 {
 #if defined(__linux__)
@@ -617,6 +678,7 @@ XTEST_MAIN(
     XTEST_CASE(modify),
     XTEST_CASE(callback_delete),
     XTEST_CASE(timers),
+    XTEST_CASE(timer_order),
     XTEST_CASE(wakeup),
     XTEST_CASE(status_strings),
     XTEST_CASE(capacity),

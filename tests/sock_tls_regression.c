@@ -266,6 +266,70 @@ static int XTest_handshake(void)
     return 0;
 }
 
+static int XTest_stale_error_queue(void)
+{
+    /* SSL_get_error() consults this thread's OpenSSL error queue before the
+     * return value it is given. An error that some unrelated connection or call
+     * left there made a read that merely had no data yet look like a fatal
+     * protocol error, and the healthy connection was closed on the spot. */
+    tls_fixture_t fixture;
+    if (tls_fixture_begin(&fixture) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("The TLS fixture could not be built, skipping\n");
+        return 77;
+    }
+
+    tls_server_t server;
+    xthread_t thread;
+    if (tls_start(&server, &fixture, &thread, XFALSE) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("No free loopback port, skipping\n");
+        return 77;
+    }
+
+    XSock_InitSSL();
+
+    xsock_cert_t cert;
+    XSock_InitCert(&cert);
+    cert.pCaPath = fixture.sCert;
+    cert.pHostName = "localhost";
+    cert.nVerifyFlags = SSL_VERIFY_PEER;
+
+    xsock_t client;
+    CHECK(tls_connect_armed(&client, server.nPort, &cert, &server) == XSTDOK, "The TLS handshake completes");
+    CHECK(XSock_NonBlock(&client, XTRUE) != XSOCK_INVALID, "Read without blocking");
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    ERR_raise(ERR_LIB_SSL, SSL_R_BAD_LENGTH);
+#else
+    ERR_put_error(ERR_LIB_SSL, 0, SSL_R_BAD_LENGTH, __FILE__, __LINE__);
+#endif
+    CHECK(ERR_peek_error() != 0, "An unrelated failure is left on the error queue");
+
+    char sReply[256];
+    int nRead = XSock_SSLRead(&client, sReply, sizeof(sReply) - 1, XFALSE);
+    CHECK(nRead <= 0 && XSock_Status(&client) == XSOCK_WANT_READ, "A read with no data yet asks to be retried");
+    CHECK(client.nFD != XSOCK_INVALID && XSock_GetSSL(&client) != NULL, "A stale error does not close the connection");
+
+    CHECK(XSock_NonBlock(&client, XFALSE) != XSOCK_INVALID, "Go back to blocking reads");
+    const char *pMessage = "still here";
+    CHECK(XSock_SSLWrite(&client, pMessage, strlen(pMessage)) == (int)strlen(pMessage), "The session still carries data");
+
+    nRead = XSock_SSLRead(&client, sReply, sizeof(sReply) - 1, XFALSE);
+    CHECK(nRead > 0, "The answer arrives over the same session");
+    sReply[nRead] = '\0';
+    CHECK(strcmp(sReply, server.pReply) == 0, "The answer arrives unchanged");
+
+    XSock_Close(&client);
+    XThread_Join(&thread);
+    CHECK(strcmp(server.sReceived, pMessage) == 0, "The server received the message sent after the stale error");
+
+    tls_fixture_end(&fixture);
+    return 0;
+}
+
 static int XTest_pkcs12_identity(void)
 {
     /* The same identity loaded from a PKCS#12 bundle has to serve the same
@@ -844,6 +908,7 @@ static int XTest_pkcs12_ownership(void)
 
 XTEST_MAIN(
     XTEST_CASE(handshake),
+    XTEST_CASE(stale_error_queue),
     XTEST_CASE(pkcs12_identity),
     XTEST_CASE(pkcs12_ownership),
     XTEST_CASE(untrusted),

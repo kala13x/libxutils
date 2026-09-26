@@ -51,6 +51,10 @@ Cross-platform event loop over `epoll`, `poll` or `WSAPoll`, with timer support.
 #### `xevent_data_t *XEvents_AddTimer(xevents_t *pEvents, void *pContext, int nTimeoutMs)`
 
 - Creates and registers timer event.
+- Where timers are kept in the event list (`poll`/`WSAPoll` builds: macOS and Windows), they are ordered by
+  deadline and measured on the monotonic clock (`XTime_GetMonoMs()`), so a change of the system time neither
+  fires them early nor holds them back. On Linux they are `timerfd`s, which the kernel already runs on a
+  monotonic clock.
 - Returns timer handle or `NULL`.
 
 #### `xevent_status_t XEvents_ExtendTimer(xevents_t *pEvents, xevent_data_t *pTimer, int nTimeoutMs)`

@@ -12,6 +12,8 @@ typedef struct xtest_http_ {
     int nReads;
     int nClosed;
     int nInvalid;
+    int nCounted;
+    xbool_t bCountOnly;
 } xtest_http_t;
 
 static int XTest_Callback(xapi_ctx_t *pContext, xapi_session_t *pSession)
@@ -22,6 +24,12 @@ static int XTest_Callback(xapi_ctx_t *pContext, xapi_session_t *pSession)
     {
         pTest->pSession = NULL;
         pTest->nClosed++;
+    }
+    else if (pContext->eCbType == XAPI_CB_READ && pTest->bCountOnly)
+    {
+        xhttp_t *pHTTP = (xhttp_t*)pSession->pPacket;
+        if (pHTTP == NULL || strcmp(pHTTP->sUri, "/burst") != 0) pTest->nInvalid++;
+        else pTest->nCounted++;
     }
     else if (pContext->eCbType == XAPI_CB_READ)
     {
@@ -103,6 +111,31 @@ static int XTest_http_pipeline(void)
     return 0;
 }
 
+static int XTest_http_pipeline_burst(void)
+{
+    xtest_http_t test = {0};
+    CHECK(XTest_Open(&test) == 0, "Create a pipelined burst fixture");
+    test.bCountOnly = XTRUE;
+
+    /* Each pipelined request used to be handled by a recursive call and cut
+       off the front of the buffer separately: one stack frame and one move of
+       the whole remaining input per request. */
+    enum
+    {
+        BURST_REQUESTS = 20000
+    };
+    const char request[] = "GET /burst HTTP/1.1\r\nHost: a\r\n\r\n";
+    xbyte_buffer_t *pRx = &test.pSession->rxBuffer;
+    for (int i = 0; i < BURST_REQUESTS; i++)
+        CHECK(XByteBuffer_Add(pRx, (const uint8_t*)request, sizeof(request) - 1) > 0, "Queue one pipelined request");
+
+    CHECK(XAPI_ProcessBuffered(test.pSession) == XAPI_CONTINUE, "A pipelined burst keeps the session");
+    CHECK(test.nCounted == BURST_REQUESTS && !test.nInvalid, "Deliver every pipelined request in the burst");
+    CHECK(pRx->nUsed == 0, "Consume the whole burst");
+    XTest_Close(&test);
+    return 0;
+}
+
 static int XTest_Authorize(const char *pHeader, const char *pValue, xbool_t bBasic, xbool_t bAllowed)
 {
     xtest_http_t test = {0};
@@ -161,6 +194,7 @@ static int XTest_auth_short(void)
 XTEST_MAIN(
     XTEST_CASE(http_partial),
     XTEST_CASE(http_pipeline),
+    XTEST_CASE(http_pipeline_burst),
     XTEST_CASE(auth_key),
     XTEST_CASE(auth_basic),
     XTEST_CASE(auth_short)

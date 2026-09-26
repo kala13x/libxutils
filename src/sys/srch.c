@@ -101,7 +101,7 @@ void XSearch_FreeEntry(xsearch_entry_t *pEntry)
 static void XSearch_ArrayClearCb(xarray_data_t *pItem)
 {
     if (pItem == NULL) return;
-    free(pItem->pData);
+    XSearch_FreeEntry((xsearch_entry_t*)pItem->pData);
 }
 
 static int XSearch_ErrorCallback(xsearch_t *pSearch, const char *pStr, ...)
@@ -245,13 +245,14 @@ static XSTATUS XSearch_Buffer(xsearch_t *pSearch, xsearch_context_t *pCtx)
     size_t nLength = pCtx->nLength;
     XSTATUS nStatus = XSTDNON;
 
-    while (pCtx->nPosit < (int)nLength)
+    while (pCtx->nPosit < nLength)
     {
-        while (pCtx->nPosit > 1 && pData[pCtx->nPosit] != '\n') pCtx->nPosit--;
+        while (pCtx->nPosit > 0 && pData[pCtx->nPosit] != '\n') pCtx->nPosit--;
         if (pData[pCtx->nPosit] == '\n') pCtx->nPosit++;
 
         int nEnd = xstrsrc(&pData[pCtx->nPosit], "\n");
-        if (nEnd <= 0 || (pCtx->nPosit + nEnd) > (int)nLength) break;
+        if (nEnd < 0 && pCtx->nPosit < nLength) nEnd = (int)XSTD_MIN(nLength - pCtx->nPosit, (size_t)INT_MAX);
+        if (nEnd <= 0 || pCtx->nPosit + (size_t)nEnd > nLength) break;
 
         char sLine[XSTR_MAX];
         xstrncpys(sLine, sizeof(sLine), &pData[pCtx->nPosit], nEnd);

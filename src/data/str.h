@@ -189,6 +189,7 @@ char* xstracut(const char *pSrc, size_t nPosit, size_t nSize);
 size_t xstrncut(char *pDst, size_t nDstSize, const char *pData, size_t nPosit, size_t nSize);
 size_t xstrncuts(char *pDst, size_t nSize, const char *pSrc, const char *pStart, const char *pEnd);
 
+int xstrntokat(char *pDst, size_t nSize, const char *pStr, size_t nLen, size_t nPosit, const char *pDlmt, size_t nDlmtLen);
 int xstrntok(char *pDst, size_t nSize, const char *pStr, size_t nPosit, const char *pDlmt);
 size_t xstrnclr(char *pDst, size_t nSize, const char* pClr, const char* pStr, ...);
 size_t xstrnrm(char *pStr, size_t nPosit, size_t nSize);

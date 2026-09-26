@@ -101,6 +101,19 @@ Time parsing, formatting, serialization, epoch conversion and current-clock help
 - Returns:
   - the requested numeric representation.
 
+#### `uint64_t XTime_GetMonoMs(void)`
+
+- Arguments:
+  - none.
+- Does:
+  - reads a monotonic millisecond clock: `CLOCK_MONOTONIC` on POSIX, `GetTickCount64()` on Windows,
+    and `XTime_GetMs()` only where no monotonic clock exists.
+  - the value has no fixed origin, so it is only meaningful as a difference between two readings.
+  - unlike the wall clock it never jumps when the system time is stepped (NTP, a manual change or a
+    suspended VM catching up), so it is the clock to measure timeouts and intervals with.
+- Returns:
+  - milliseconds since an unspecified start point.
+
 #### `size_t XTime_GetStr(char *pDst, size_t nSize, xtime_fmt_t eFmt)`
 
 - Arguments:

@@ -435,7 +435,112 @@ static int XTest_release_guards(void)
     return 0;
 }
 
+static int XTest_FillCheck(xarray_t *pArr, int nRound)
+{
+    for (int i = 0; i < 200; i++)
+    {
+        char sItem[32];
+        int nLen = snprintf(sItem, sizeof(sItem), "round-%d-item-%d", nRound, i);
+        CHECK(XArray_AddData(pArr, sItem, (size_t)nLen + 1) >= 0, "Add an item after clearing");
+    }
+
+    for (int i = 0; i < 200; i++)
+    {
+        char sItem[32];
+        snprintf(sItem, sizeof(sItem), "round-%d-item-%d", nRound, i);
+        const char *pItem = (const char*)XArray_GetData(pArr, (size_t)i);
+        CHECK(pItem != NULL && strcmp(pItem, sItem) == 0, "Every item reads back intact after the array was cleared");
+    }
+
+    CHECK(XArray_Used(pArr) == 200, "The array holds exactly what was added since the last clear");
+    return 0;
+}
+
+static int XTest_pool_clear_reuse(void)
+{
+    /* Clearing a pool backed array reset the pool under the array's own table
+       (and, for XArray_NewPool(), under the array itself). Refilling it then
+       handed out that same memory, and the array came back corrupted. */
+    xarray_t *pHeapArr = XArray_NewPool(0, 0, XFALSE);
+    CHECK(pHeapArr != NULL, "Create an array that lives in its own pool");
+
+    xarray_t embedded;
+    CHECK(XArray_InitPool(&embedded, 0, 4, XFALSE) != NULL, "Create an array that only keeps its items in a pool");
+
+    for (int nRound = 0; nRound < 4; nRound++)
+    {
+        CHECK(XTest_FillCheck(pHeapArr, nRound) == 0, "Refill the self-pooled array");
+        CHECK(XTest_FillCheck(&embedded, nRound) == 0, "Refill the pool backed array");
+        XArray_Clear(pHeapArr);
+        XArray_Clear(&embedded);
+        CHECK(XArray_Used(pHeapArr) == 0 && XArray_Used(&embedded) == 0, "Clearing empties both arrays");
+    }
+
+    XArray_Destroy(pHeapArr);
+    XArray_Destroy(&embedded);
+    return 0;
+}
+
+static int XTest_sort_scaling(void)
+{
+    /* The first element used to be the pivot, so sorted input took quadratic
+       time and one recursion level per element. */
+    enum
+    {
+        SORT_ITEMS = 300000
+    };
+
+    for (int nMode = 0; nMode < 3; nMode++)
+    {
+        xarray_t arr;
+        XArray_Init(&arr, NULL, SORT_ITEMS, XFALSE);
+
+        for (uint32_t i = 0; i < SORT_ITEMS; i++)
+        {
+            uint32_t nKey = nMode == 0 ? i : nMode == 1 ? SORT_ITEMS - i : 7;
+            CHECK(XArray_AddDataKey(&arr, NULL, 0, nKey) >= 0, "Add a keyed item");
+        }
+
+        XArray_Sort(&arr, XTest_CompareKey, NULL);
+        for (size_t i = 1; i < SORT_ITEMS; i++)
+            CHECK(XArray_GetKey(&arr, i - 1) <= XArray_GetKey(&arr, i), "Sorted, reversed and equal input all come out ordered");
+
+        XArray_Destroy(&arr);
+    }
+
+    return 0;
+}
+
+static int XTest_sort_unsigned_keys(void)
+{
+    /* Keys are unsigned. Sorting them by int subtraction put the ones above
+       INT_MAX first, so a binary search over the sorted array missed them. */
+    const uint32_t keys[] = { 0xFFFFFFF0u, 5, 0x80000000u, 0x7FFFFFFFu, 0, 1234567 };
+    const size_t nCount = sizeof(keys) / sizeof(keys[0]);
+
+    xarray_t arr;
+    XArray_Init(&arr, NULL, 0, XFALSE);
+    for (size_t i = 0; i < nCount; i++)
+        CHECK(XArray_AddDataKey(&arr, NULL, 0, keys[i]) >= 0, "Add a key from the whole unsigned range");
+
+    XArray_SortBy(&arr, XARRAY_SORTBY_KEY);
+    for (size_t i = 1; i < nCount; i++)
+        CHECK(XArray_GetKey(&arr, i - 1) <= XArray_GetKey(&arr, i), "Keys sort in unsigned order");
+
+    for (size_t i = 0; i < nCount; i++)
+    {
+        int nIndex = XArray_BinarySearch(&arr, keys[i]);
+        CHECK(nIndex >= 0 && XArray_GetKey(&arr, (size_t)nIndex) == keys[i], "Every sorted key is found by binary search");
+    }
+
+    XArray_Destroy(&arr);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(pool_clear_reuse),
+    XTEST_CASE(sort_scaling),
+    XTEST_CASE(sort_unsigned_keys),
     XTEST_CASE(lifecycle),
     XTEST_CASE(reference_model),
     XTEST_CASE(search_boundaries),

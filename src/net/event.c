@@ -203,22 +203,25 @@ static void XEvents_ListClearCb(void *pCtx, void *pData)
     XEvents_ClearCb(pEvents, pEvData, (int)nFD);
 }
 
+/*
+    The timer list is kept in deadline order: the loop only ever looks at its
+    head, both to fire what is due and to size the wait. Armed timers come
+    first, earliest deadline first; a timer that has fired and was not armed
+    again has no deadline and sits after all of them.
+*/
 static int XEvents_NodeSearchCb(void *pUserPtr, xlist_t *pNode)
 {
     xevent_data_t *pSearchData = (xevent_data_t*)pUserPtr;
     XCHECK_NL((pNode && pNode->data.pData), XFALSE);
     xevent_data_t *pNodeData = (xevent_data_t*)pNode->data.pData;
-    if (!pNodeData->nTimerValue) return XTRUE; // Placed at the end if no timer value
-    return (pSearchData->nTimerValue <= pNodeData->nTimerValue) ? XTRUE : XFALSE;
-}
 
-static int XEvents_TimerSearchCb(void *pUserPtr, xlist_t *pNode)
-{
-    xevent_data_t *pSearchData = (xevent_data_t*)pUserPtr;
-    XCHECK_NL((pNode && pNode->data.pData), XFALSE);
-    xevent_data_t *pNodeData = (xevent_data_t*)pNode->data.pData;
-    return (pNodeData->nTimerValue == pSearchData->nTimerValue &&
-            pNodeData->pContext == pSearchData->pContext) ? XTRUE : XFALSE;
+    /* An unarmed timer goes to the end. Placing it before the first node, as
+       happened here, parked it at the head where it stopped the loop from
+       ever reaching the armed timers behind it. */
+    if (!pSearchData->nTimerValue) return XFALSE;
+    if (!pNodeData->nTimerValue) return XTRUE;
+
+    return (pSearchData->nTimerValue <= pNodeData->nTimerValue) ? XTRUE : XFALSE;
 }
 
 static xlist_t* XEvents_AddNodeSorted(xlist_t *pList, xlist_t *pNode)
@@ -230,14 +233,30 @@ static xlist_t* XEvents_AddNodeSorted(xlist_t *pList, xlist_t *pNode)
     return XList_InsertTail(pList, pNode);
 }
 
+/* Returns the node that now carries the timer. A new timer used to be added
+   at the tail without regard to its deadline, and in the one case it was
+   inserted in the middle the stored node was the neighbour XList_PushPrev()
+   reports rather than the new node, so deleting the timer later unlinked and
+   freed someone else's node. */
 static xlist_t* XEvents_AddTimerSorted(xlist_t *pList, void *pData)
 {
     XCHECK_NL((pList != NULL && pData != NULL), NULL);
-    xlist_t *pNode = XList_Search(pList, pData, XEvents_TimerSearchCb);
-    if (pNode != NULL) return XList_PushPrev(pNode, pData, XSTDNON);
-    return XList_PushBack(pList, pData, XSTDNON);
+    xlist_t *pNode = XList_New(pData, XSTDNON, pList->data.onClear, pList->data.pClearCtx);
+    XCHECK_NL((pNode != NULL), NULL);
+
+    if (XEvents_AddNodeSorted(pList, pNode) == NULL)
+    {
+        /* The timer data still belongs to the caller */
+        pNode->data.onClear = NULL;
+        XList_Free(pNode);
+        return NULL;
+    }
+
+    return pNode;
 }
 
+/* Timer deadlines are on the monotonic clock: on the wall clock a system time
+   change moved every pending timer by the size of the step. */
 static xevent_data_t* XEvents_AddTimerCommon(xevents_t *pEvents, void *pCtx, int nTimeoutMs)
 {
     XCHECK((pEvents != NULL), NULL);
@@ -246,7 +265,7 @@ static xevent_data_t* XEvents_AddTimerCommon(xevents_t *pEvents, void *pCtx, int
     xevent_data_t* pData = XEvents_NewData(pCtx, XSOCK_INVALID, XEVENT_TYPE_TIMER);
     XCHECK((pData != NULL), NULL);
 
-    pData->nTimerValue = XTime_GetMs() + nTimeoutMs;
+    pData->nTimerValue = XTime_GetMonoMs() + nTimeoutMs;
     pData->pTimerNode = XEvents_AddTimerSorted(&pEvents->timerList, pData);
     XCHECK_CALL((pData->pTimerNode != NULL), free, pData, NULL);
 
@@ -261,19 +280,19 @@ static xevent_status_t XEvents_ExtendTimerCommon(xevents_t *pEvents, xevent_data
 
     if (pTimer->pTimerNode == NULL)
     {
-        pTimer->nTimerValue = XTime_GetMs() + nTimeoutMs;
+        pTimer->nTimerValue = XTime_GetMonoMs() + nTimeoutMs;
         pTimer->pTimerNode = XEvents_AddTimerSorted(&pEvents->timerList, pTimer);
         return (pTimer->pTimerNode == NULL) ? XEVENTS_EEXTEND : XEVENTS_SUCCESS;
     }
 
-    pTimer->nTimerValue = XTime_GetMs() + nTimeoutMs;
+    pTimer->nTimerValue = XTime_GetMonoMs() + nTimeoutMs;
     XList_Detach(pTimer->pTimerNode);
 
     xlist_t *pNode = XEvents_AddNodeSorted(&pEvents->timerList, pTimer->pTimerNode);
     return (pNode != NULL) ? XEVENTS_SUCCESS : XEVENTS_EEXTEND;
 }
 
-static int XEvents_TimerServiceCommon(xevents_t *pEvents, uint64_t nNowMs, xbool_t *pBreak)
+static int XEvents_TimerServiceCommon(xevents_t *pEvents, uint64_t nNowMs, xbool_t *pBreak, xbool_t *pFired)
 {
     XCHECK_NL((pEvents != NULL), XSTDNON);
     XCHECK_NL((pEvents->timerList.pNext != NULL), XSTDNON);
@@ -284,6 +303,7 @@ static int XEvents_TimerServiceCommon(xevents_t *pEvents, uint64_t nNowMs, xbool
     while (pTimerData && pTimerData->nTimerValue && pTimerData->nTimerValue <= nNowMs)
     {
         pTimerData->nTimerValue = XSTDNON;
+        if (pFired) *pFired = XTRUE;
 
         int nRetVal = XEvents_EventCb(pEvents, pTimerData, pTimerData->nFD, XEVENT_CB_TIMEOUT);
         if (nRetVal > XEVENTS_DISCONNECT && pEvents->timerList.pNext == pNode)
@@ -302,8 +322,9 @@ static int XEvents_TimerServiceCommon(xevents_t *pEvents, uint64_t nNowMs, xbool
         pTimerData = pNode ? (xevent_data_t*)pNode->data.pData : NULL;
     }
 
-    return pTimerData != NULL && pTimerData->nTimerValue ?
-        (int)(pTimerData->nTimerValue - nNowMs) : XSTDNON;
+    if (pTimerData == NULL || !pTimerData->nTimerValue) return XSTDNON;
+    uint64_t nWaitMs = pTimerData->nTimerValue - nNowMs;
+    return nWaitMs > (uint64_t)INT_MAX ? INT_MAX : (int)nWaitMs;
 }
 #else
 static xevent_data_t* XEvents_AddTimerLinux(xevents_t *pEvents, void *pContext, int nTimeoutMs)
@@ -741,10 +762,20 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
     int nTimeout = nTimeoutMs;
 
 #if defined(_XEVENTS_USE_EVENT_LIST)
-    xbool_t bBreak = XFALSE;
-    nTimeout = XEvents_TimerServiceCommon(pEvents, XTime_GetMs(), &bBreak);
-    if (nTimeout <= 0 || nTimeout > nTimeoutMs) nTimeout = nTimeoutMs;
+    xbool_t bBreak = XFALSE, bFired = XFALSE;
+    nTimeout = XEvents_TimerServiceCommon(pEvents, XTime_GetMonoMs(), &bBreak, &bFired);
+
+    /* The next deadline bounds the wait. A negative timeout asks to wait
+       indefinitely, and it used to win over any pending timer, so the loop
+       slept through timers until some descriptor happened to wake it. */
+    if (nTimeout <= 0 || (nTimeoutMs >= 0 && nTimeout > nTimeoutMs)) nTimeout = nTimeoutMs;
     if (bBreak) return XEVENTS_BREAK;
+
+    /* Timers here are fired before the wait, not by it. With epoll a call that
+       waits indefinitely returns once the timer that woke it is handled; here
+       the same call went on to wait for descriptors that may never come, so a
+       caller counting on its timers was stuck. Only look at descriptors then. */
+    if (bFired && nTimeoutMs < 0) nTimeout = 0;
 #endif
 
 #if defined(_XEVENTS_USE_EPOLL)

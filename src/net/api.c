@@ -1021,41 +1021,44 @@ static int XAPI_HandleMDTP(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pSession != NULL), XSTDINV);
     xbyte_buffer_t *pBuffer = &pSession->rxBuffer;
-    xpacket_status_t eStatus = XPACKET_ERR_NONE;
     int nRetVal = XEVENTS_CONTINUE;
+    size_t nOffset = 0;
 
-    xpacket_t packet;
-    eStatus = XPacket_Parse(&packet, pBuffer->pData, pBuffer->nUsed);
-
-    if (eStatus == XPACKET_COMPLETE)
+    while (nRetVal == XEVENTS_CONTINUE && nOffset < pBuffer->nUsed)
     {
-        pSession->pPacket = &packet;
+        size_t nLeft = pBuffer->nUsed - nOffset;
+        xpacket_t packet;
 
-        int nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_READ);
-        nRetVal = XAPI_StatusToEvent(pApi, nStatus);
+        xpacket_status_t eStatus = XPacket_Parse(&packet, pBuffer->pData + nOffset, nLeft);
+        if (eStatus == XPACKET_COMPLETE)
+        {
+            pSession->pPacket = &packet;
 
-        size_t nPacketSize = XPacket_GetSize(&packet);
-        XByteBuffer_Advance(pBuffer, nPacketSize);
+            int nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_READ);
+            nRetVal = XAPI_StatusToEvent(pApi, nStatus);
+
+            /* A packet always covers at least its info bytes, but a parser
+               that ever reported zero must not stall this loop forever. */
+            size_t nPacketSize = XPacket_GetSize(&packet);
+            nOffset += nPacketSize ? XSTD_MIN(nPacketSize, nLeft) : nLeft;
+        }
+        else if (eStatus != XPACKET_PARSED && eStatus != XPACKET_INCOMPLETE)
+        {
+            XAPI_ErrorCb(pApi, pSession, XAPI_MDTP, eStatus);
+            nRetVal = XEVENTS_DISCONNECT;
+        }
+        else if (eStatus == XPACKET_INCOMPLETE && nLeft > pApi->nRxSize)
+        {
+            XAPI_ErrorCb(pApi, pSession, XAPI_MDTP, XPACKET_BIGDATA);
+            nRetVal = XEVENTS_DISCONNECT;
+        }
+
+        pSession->pPacket = NULL;
+        XPacket_Clear(&packet);
+        if (eStatus != XPACKET_COMPLETE) break;
     }
-    else if (eStatus != XPACKET_PARSED && eStatus != XPACKET_INCOMPLETE)
-    {
-        XAPI_ErrorCb(pApi, pSession, XAPI_MDTP, eStatus);
-        nRetVal = XEVENTS_DISCONNECT;
-    }
-    else if (eStatus == XPACKET_INCOMPLETE && pBuffer->nUsed > pApi->nRxSize)
-    {
-        XAPI_ErrorCb(pApi, pSession, XAPI_MDTP, XPACKET_BIGDATA);
-        nRetVal = XEVENTS_DISCONNECT;
-    }
 
-    pSession->pPacket = NULL;
-    XPacket_Clear(&packet);
-
-    if (eStatus == XPACKET_COMPLETE &&
-        nRetVal == XEVENTS_CONTINUE &&
-        XByteBuffer_HasData(pBuffer))
-        return XAPI_HandleMDTP(pApi, pSession);
-
+    if (nOffset) XByteBuffer_Advance(pBuffer, nOffset);
     return nRetVal;
 }
 
@@ -1063,48 +1066,51 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pSession != NULL), XSTDINV);
     xbyte_buffer_t *pBuffer = &pSession->rxBuffer;
-    xhttp_status_t eStatus = XHTTP_NONE;
     int nRetVal = XEVENTS_CONTINUE;
+    size_t nOffset = 0;
 
-    xhttp_t handle;
-    XHTTP_Init(&handle, XHTTP_DUMMY, XSTDNON);
-    eStatus = XHTTP_ParseBuff(&handle, pBuffer);
-
-    if (!xstrused(pSession->sRealIP) &&
-        (eStatus == XHTTP_COMPLETE ||
-         eStatus == XHTTP_PARSED))
-        XAPI_DetectRealIP(pSession, &handle);
-
-    if (eStatus == XHTTP_COMPLETE)
+    while (nRetVal == XEVENTS_CONTINUE && nOffset < pBuffer->nUsed)
     {
-        pSession->pPacket = &handle;
-        pSession->bKeepAlive = handle.nKeepAlive;
+        size_t nLeft = pBuffer->nUsed - nOffset;
+        xhttp_t handle;
 
-        int nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_READ);
-        nRetVal = XAPI_StatusToEvent(pApi, nStatus);
+        XHTTP_Init(&handle, XHTTP_DUMMY, XSTDNON);
+        XByteBuffer_SetData(&handle.rawData, pBuffer->pData + nOffset, nLeft);
+        xhttp_status_t eStatus = XHTTP_Parse(&handle);
 
-        size_t nPacketSize = XHTTP_GetPacketSize(&handle);
-        XByteBuffer_Advance(pBuffer, nPacketSize);
+        if (!xstrused(pSession->sRealIP) &&
+            (eStatus == XHTTP_COMPLETE ||
+             eStatus == XHTTP_PARSED))
+            XAPI_DetectRealIP(pSession, &handle);
+
+        if (eStatus == XHTTP_COMPLETE)
+        {
+            pSession->pPacket = &handle;
+            pSession->bKeepAlive = handle.nKeepAlive;
+
+            int nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_READ);
+            nRetVal = XAPI_StatusToEvent(pApi, nStatus);
+
+            size_t nPacketSize = XHTTP_GetPacketSize(&handle);
+            nOffset += nPacketSize ? XSTD_MIN(nPacketSize, nLeft) : nLeft;
+        }
+        else if (eStatus != XHTTP_PARSED && eStatus != XHTTP_INCOMPLETE)
+        {
+            XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, eStatus);
+            nRetVal = XEVENTS_DISCONNECT;
+        }
+        else if (eStatus == XHTTP_INCOMPLETE && nLeft > pApi->nRxSize)
+        {
+            XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, XHTTP_BIGCNT);
+            nRetVal = XEVENTS_DISCONNECT;
+        }
+
+        pSession->pPacket = NULL;
+        XHTTP_Clear(&handle);
+        if (eStatus != XHTTP_COMPLETE) break;
     }
-    else if (eStatus != XHTTP_PARSED && eStatus != XHTTP_INCOMPLETE)
-    {
-        XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, eStatus);
-        nRetVal = XEVENTS_DISCONNECT;
-    }
-    else if (eStatus == XHTTP_INCOMPLETE && pBuffer->nUsed > pApi->nRxSize)
-    {
-        XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, XHTTP_BIGCNT);
-        nRetVal = XEVENTS_DISCONNECT;
-    }
 
-    pSession->pPacket = NULL;
-    XHTTP_Clear(&handle);
-
-    if (eStatus == XHTTP_COMPLETE &&
-        nRetVal == XEVENTS_CONTINUE &&
-        XByteBuffer_HasData(pBuffer))
-        return XAPI_HandleHTTP(pApi, pSession);
-
+    if (nOffset) XByteBuffer_Advance(pBuffer, nOffset);
     return nRetVal;
 }
 
@@ -1502,118 +1508,123 @@ static int XAPI_HandleWS(xapi_t *pApi, xapi_session_t *pSession)
         XCHECK_NL(pSession->bHandshakeDone, XEVENTS_CONTINUE);
     }
 
-    xws_frame_t frame;
-    eStatus = XWebFrame_ParseBuff(&frame, pBuffer);
-
-    if (eStatus == XWS_FRAME_COMPLETE)
+    size_t nOffset = 0;
+    while (nRetVal == XEVENTS_CONTINUE && nOffset < pBuffer->nUsed)
     {
-        const uint8_t *pPayload = XWebFrame_GetPayload(&frame);
-        size_t nPayloadLength = XWebFrame_GetPayloadLength(&frame);
-        size_t nFrameLength = XWebFrame_GetFrameLength(&frame);
-        xbool_t bControl = XAPI_IsWSControlFrame(frame.eType);
-        xbool_t bData = XAPI_IsWSDataFrame(frame.eType);
-        xbool_t bContinuation = frame.eType == XWS_CONTINUATION;
+        size_t nLeft = pBuffer->nUsed - nOffset;
+        xws_frame_t frame;
 
-        if (bControl)
-        {
-            // Control frames must not be fragmented
-            nRetVal = XAPI_DispatchWSFrame(pApi, pSession, &frame);
-        }
-        else if (pSession->bWSFragStart)
-        {
-            if (!bContinuation)
-            {
-                XAPI_ResetWSFragments(pSession);
-                XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_INVALID);
-                nRetVal = XEVENTS_DISCONNECT;
-            }
-            else if (nPayloadLength && XByteBuffer_Add(&pSession->wsBuffer, pPayload, nPayloadLength) <= 0)
-            {
-                XAPI_ResetWSFragments(pSession);
-                XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_ERR_ALLOC);
-                nRetVal = XEVENTS_DISCONNECT;
-            }
-            else if (pSession->wsBuffer.nUsed > pApi->nRxSize)
-            {
-                XAPI_ResetWSFragments(pSession);
-                XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_TOOBIG);
-                nRetVal = XEVENTS_DISCONNECT;
-            }
-            else if (frame.bFin)
-            {
-                xws_frame_t assembled;
-                xws_status_t eAssembled = XWebFrame_Create(
-                    &assembled,
-                    pSession->wsBuffer.pData,
-                    pSession->wsBuffer.nUsed,
-                    pSession->eWSFragType,
-                    XFALSE,
-                    XTRUE
-                );
+        XWebFrame_Init(&frame);
+        XByteBuffer_SetData(&frame.buffer, pBuffer->pData + nOffset, nLeft);
+        eStatus = XWebFrame_Parse(&frame);
 
-                if (eAssembled != XWS_ERR_NONE)
+        if (eStatus == XWS_FRAME_COMPLETE)
+        {
+            const uint8_t *pPayload = XWebFrame_GetPayload(&frame);
+            size_t nPayloadLength = XWebFrame_GetPayloadLength(&frame);
+            size_t nFrameLength = XWebFrame_GetFrameLength(&frame);
+            xbool_t bControl = XAPI_IsWSControlFrame(frame.eType);
+            xbool_t bData = XAPI_IsWSDataFrame(frame.eType);
+            xbool_t bContinuation = frame.eType == XWS_CONTINUATION;
+
+            if (bControl)
+            {
+                /* Control frames must not be fragmented */
+                nRetVal = XAPI_DispatchWSFrame(pApi, pSession, &frame);
+            }
+            else if (pSession->bWSFragStart)
+            {
+                if (!bContinuation)
                 {
                     XAPI_ResetWSFragments(pSession);
-                    XAPI_ErrorCb(pApi, pSession, XAPI_WS, eAssembled);
+                    XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_INVALID);
+                    nRetVal = XEVENTS_DISCONNECT;
+                }
+                else if (nPayloadLength && XByteBuffer_Add(&pSession->wsBuffer, pPayload, nPayloadLength) <= 0)
+                {
+                    XAPI_ResetWSFragments(pSession);
+                    XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_ERR_ALLOC);
+                    nRetVal = XEVENTS_DISCONNECT;
+                }
+                else if (pSession->wsBuffer.nUsed > pApi->nRxSize)
+                {
+                    XAPI_ResetWSFragments(pSession);
+                    XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_TOOBIG);
+                    nRetVal = XEVENTS_DISCONNECT;
+                }
+                else if (frame.bFin)
+                {
+                    xws_frame_t assembled;
+                    xws_status_t eAssembled = XWebFrame_Create(
+                        &assembled,
+                        pSession->wsBuffer.pData,
+                        pSession->wsBuffer.nUsed,
+                        pSession->eWSFragType,
+                        XFALSE,
+                        XTRUE
+                    );
+
+                    if (eAssembled != XWS_ERR_NONE)
+                    {
+                        XAPI_ResetWSFragments(pSession);
+                        XAPI_ErrorCb(pApi, pSession, XAPI_WS, eAssembled);
+                        nRetVal = XEVENTS_DISCONNECT;
+                    }
+                    else
+                    {
+                        XAPI_ResetWSFragments(pSession);
+                        nRetVal = XAPI_DispatchWSFrame(pApi, pSession, &assembled);
+                        XWebFrame_Clear(&assembled);
+                    }
+                }
+            }
+            else if (!frame.bFin)
+            {
+                if (!bData)
+                {
+                    XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_INVALID);
+                    nRetVal = XEVENTS_DISCONNECT;
+                }
+                else if (nPayloadLength && XByteBuffer_Add(&pSession->wsBuffer, pPayload, nPayloadLength) <= 0)
+                {
+                    XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_ERR_ALLOC);
                     nRetVal = XEVENTS_DISCONNECT;
                 }
                 else
                 {
-                    XAPI_ResetWSFragments(pSession);
-                    nRetVal = XAPI_DispatchWSFrame(pApi, pSession, &assembled);
-                    XWebFrame_Clear(&assembled);
+                    pSession->bWSFragStart = XTRUE;
+                    pSession->eWSFragType = frame.eType;
                 }
             }
-        }
-        else if (!frame.bFin)
-        {
-            if (!bData)
+            else if (bContinuation)
             {
                 XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_INVALID);
                 nRetVal = XEVENTS_DISCONNECT;
             }
-            else if (nPayloadLength && XByteBuffer_Add(&pSession->wsBuffer, pPayload, nPayloadLength) <= 0)
-            {
-                XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_ERR_ALLOC);
-                nRetVal = XEVENTS_DISCONNECT;
-            }
             else
             {
-                pSession->bWSFragStart = XTRUE;
-                pSession->eWSFragType = frame.eType;
+                nRetVal = XAPI_DispatchWSFrame(pApi, pSession, &frame);
             }
+
+            nOffset += nFrameLength ? XSTD_MIN(nFrameLength, nLeft) : nLeft;
         }
-        else if (bContinuation)
+        else if (eStatus != XWS_FRAME_PARSED && eStatus != XWS_FRAME_INCOMPLETE)
         {
-            XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_FRAME_INVALID);
+            XAPI_ErrorCb(pApi, pSession, XAPI_WS, eStatus);
             nRetVal = XEVENTS_DISCONNECT;
         }
-        else
+        else if (eStatus == XWS_FRAME_INCOMPLETE && nLeft > pApi->nRxSize)
         {
-            nRetVal = XAPI_DispatchWSFrame(pApi, pSession, &frame);
+            XAPI_ErrorCb(pApi, pSession, XAPI_WS, XPACKET_BIGDATA);
+            nRetVal = XEVENTS_DISCONNECT;
         }
 
-        XByteBuffer_Advance(pBuffer, nFrameLength);
-    }
-    else if (eStatus != XWS_FRAME_PARSED && eStatus != XWS_FRAME_INCOMPLETE)
-    {
-        XAPI_ErrorCb(pApi, pSession, XAPI_WS, eStatus);
-        nRetVal = XEVENTS_DISCONNECT;
-    }
-    else if (eStatus == XWS_FRAME_INCOMPLETE && pBuffer->nUsed > pApi->nRxSize)
-    {
-        XAPI_ErrorCb(pApi, pSession, XAPI_WS, XPACKET_BIGDATA);
-        nRetVal = XEVENTS_DISCONNECT;
+        pSession->pPacket = NULL;
+        XWebFrame_Clear(&frame);
+        if (eStatus != XWS_FRAME_COMPLETE) break;
     }
 
-    pSession->pPacket = NULL;
-    XWebFrame_Clear(&frame);
-
-    if (eStatus == XWS_FRAME_COMPLETE &&
-        nRetVal == XEVENTS_CONTINUE &&
-        XByteBuffer_HasData(pBuffer))
-        return XAPI_HandleWS(pApi, pSession);
-
+    if (nOffset) XByteBuffer_Advance(pBuffer, nOffset);
     return nRetVal;
 }
 

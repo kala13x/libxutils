@@ -272,9 +272,11 @@ xpacket_status_t XPacket_Create(xbyte_buffer_t *pBuffer, const char *pHeader, si
     uint8_t sInfoBytes[XPACKET_INFO_BYTES];
     XPacket_WriteU32LE(sInfoBytes, (uint32_t)nHdrLen);
 
-    if ((!XByteBuffer_Add(pBuffer, sInfoBytes, sizeof(sInfoBytes))) ||
-        (!XByteBuffer_Add(pBuffer, (uint8_t*)pHeader, nHdrLen)) ||
-        (pData != NULL && nSize && !XByteBuffer_Add(pBuffer, pData, nSize)))
+    /* A failed append returns XSTDERR, which a "!" test took for success and
+       went on to build a packet whose length prefix names a missing header */
+    if (XByteBuffer_Add(pBuffer, sInfoBytes, sizeof(sInfoBytes)) <= 0 ||
+        XByteBuffer_Add(pBuffer, (uint8_t*)pHeader, nHdrLen) <= 0 ||
+        (pData != NULL && nSize && XByteBuffer_Add(pBuffer, pData, nSize) <= 0))
     {
         XByteBuffer_Clear(pBuffer);
         return XPACKET_ERR_ALLOC;
@@ -296,7 +298,7 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
 
     if (XJSON_WriteObject(pPacket->pHeaderObj, &jsonWriter))
     {
-        xpacket_status_t nStatus = XPacket_Create(
+        nStatus = XPacket_Create(
             &pPacket->rawData,
             jsonWriter.pData,
             jsonWriter.nLength,
@@ -304,7 +306,8 @@ xbyte_buffer_t *XPacket_Assemble(xpacket_t *pPacket)
             pHeader->nPayloadSize
         );
 
-        XCHECK((nStatus == XPACKET_ERR_NONE), NULL);
+        /* The writer's buffer is released on this path too */
+        XCHECK_CALL((nStatus == XPACKET_ERR_NONE), XJSON_DestroyWriter, &jsonWriter, NULL);
         pPacket->nHeaderLength = (uint32_t)jsonWriter.nLength;
         XPacket_ParseHeader(&pPacket->header, pPacket->pHeaderObj);
     }

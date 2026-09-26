@@ -380,6 +380,31 @@ static int XTest_colors(void)
     return 0;
 }
 
+static int XTest_borrowed_copy(void)
+{
+    /* A string set over borrowed data has a length but no size of its own.
+       Copying it sized the copy by that size, got no buffer at all, and wrote
+       the terminator through a NULL pointer. */
+    char sBorrowed[] = "borrowed text";
+    xstring_t source, copy;
+    XString_Init(&source, 0, XFALSE);
+    XString_Set(&source, sBorrowed, strlen(sBorrowed));
+
+    CHECK(XString_Copy(&copy, &source) == (int)strlen(sBorrowed), "A borrowed string can be copied");
+    CHECK(copy.pData != sBorrowed && strcmp(copy.pData, sBorrowed) == 0, "The copy owns identical text");
+    XString_Clear(&copy);
+
+    /* A shrink keeps the terminator inside the buffer */
+    xstring_t shrunk;
+    CHECK(XString_Init(&shrunk, 32, XFALSE) >= 0 && XString_Add(&shrunk, "0123456789", 10) == 10, "Build a string to shrink");
+    CHECK(XString_Resize(&shrunk, 4) == 4, "Shrink the buffer below the text");
+    CHECK(shrunk.nLength == 3 && strcmp(shrunk.pData, "012") == 0, "The shrunk text keeps its terminator in bounds");
+    XString_Clear(&shrunk);
+
+    CHECK(XString_Split(NULL, ",") == NULL, "Splitting a missing string yields nothing");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(build),
     XTEST_CASE(edit),
@@ -387,5 +412,6 @@ XTEST_MAIN(
     XTEST_CASE(substrings),
     XTEST_CASE(tokens),
     XTEST_CASE(construction),
-    XTEST_CASE(colors)
+    XTEST_CASE(colors),
+    XTEST_CASE(borrowed_copy)
 )

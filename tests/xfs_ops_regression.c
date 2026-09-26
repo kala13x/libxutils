@@ -7,6 +7,8 @@
  */
 
 #include "test.h"
+#include <signal.h>
+#include <sys/resource.h>
 #include <pwd.h>
 #include <grp.h>
 #include <sys/stat.h>
@@ -598,6 +600,109 @@ static int XTest_path_bounds(void)
     return 0;
 }
 
+static int XTest_short_write(void)
+{
+    /* A write that lands only partly: the file size limit cuts it short. The
+       retry used to pass the full length again from the new offset, reading
+       past the end of the caller's data (sanitizer builds see that read). */
+    xfs_fixture_t fixture;
+    CHECK(xfs_begin(&fixture) == XSTDOK, "Create a private directory");
+
+    char sPath[128];
+    snprintf(sPath, sizeof(sPath), "%s/limited.bin", fixture.sRoot);
+
+    uint8_t data[8192];
+    for (size_t i = 0; i < sizeof(data); i++) data[i] = (uint8_t)(i * 7);
+
+    struct rlimit oldLimit, newLimit;
+    CHECK(getrlimit(RLIMIT_FSIZE, &oldLimit) == 0, "Read the file size limit");
+    newLimit = oldLimit;
+    newLimit.rlim_cur = 3000;
+
+    void (*pOldHandler)(int) = signal(SIGXFSZ, SIG_IGN);
+    CHECK(setrlimit(RLIMIT_FSIZE, &newLimit) == 0, "Lower the file size limit below the data");
+
+    int nWritten = XPath_Write(sPath, data, sizeof(data), "cwt");
+
+    setrlimit(RLIMIT_FSIZE, &oldLimit);
+    signal(SIGXFSZ, pOldHandler);
+
+    CHECK(nWritten == 3000, "A short write reports what landed and stops at the limit");
+
+    size_t nSize = 0;
+    uint8_t *pLoaded = XPath_Load(sPath, &nSize);
+    CHECK(pLoaded != NULL && nSize == 3000, "Exactly the bytes that fit are in the file");
+    CHECK(memcmp(pLoaded, data, 3000) == 0, "The file holds the start of the data, unchanged");
+    free(pLoaded);
+
+    xfs_end(&fixture);
+    return 0;
+}
+
+static int XTest_read_bounds(void)
+{
+    xfs_fixture_t fixture;
+    CHECK(xfs_begin(&fixture) == XSTDOK, "Create a private directory");
+
+    char sPath[128];
+    snprintf(sPath, sizeof(sPath), "%s/exact.txt", fixture.sRoot);
+    CHECK(XPath_Write(sPath, (const uint8_t*)"0123456789", 10, "cwt") == 10, "Write a file of ten bytes");
+
+    /* A file as large as the buffer: the terminator used to land one byte
+       past the end of it. */
+    char sBuffer[11];
+    memset(sBuffer, '#', sizeof(sBuffer));
+    CHECK(XPath_Read(sPath, (uint8_t*)sBuffer, 10) == 9, "A read keeps a byte of the buffer for the terminator");
+    CHECK(strcmp(sBuffer, "012345678") == 0, "The read text is terminated inside the buffer");
+    CHECK(sBuffer[10] == '#', "Nothing is written past the end of the buffer");
+    CHECK(XPath_Read(sPath, (uint8_t*)sBuffer, 0) < 0, "A zero sized buffer reads nothing");
+
+    /* The end of the file is reported whatever a previous call left in errno */
+    xfile_t file;
+    CHECK(XFile_Open(&file, sPath, "r", NULL) >= 0, "Open the file for reading");
+    char sAll[32];
+    CHECK(XFile_Read(&file, sAll, sizeof(sAll)) == 10 && !file.bEOF, "Read the whole file");
+    errno = EAGAIN;
+    CHECK(XFile_Read(&file, sAll, sizeof(sAll)) == 0, "Reading at the end returns nothing");
+    CHECK(file.bEOF, "Reading at the end reports the end of the file");
+    XFile_Close(&file);
+
+    xfs_end(&fixture);
+    return 0;
+}
+
+static int XTest_remove_large_dir(void)
+{
+    /* Removal reopened the directory once per entry and read it from the
+       start each time; it now takes the names a batch at a time. */
+    xfs_fixture_t fixture;
+    CHECK(xfs_begin(&fixture) == XSTDOK, "Create a private directory");
+
+    char sTree[128], sPath[192];
+    snprintf(sTree, sizeof(sTree), "%s/tree", fixture.sRoot);
+    CHECK(XDir_Create(sTree, 0755) > 0, "Create the tree root");
+
+    for (int i = 0; i < 3000; i++)
+    {
+        snprintf(sPath, sizeof(sPath), "%s/file-%04d", sTree, i);
+        CHECK(XPath_Write(sPath, (const uint8_t*)"x", 1, "cwt") == 1, "Create a file in the large directory");
+    }
+
+    for (int nDir = 0; nDir < 3; nDir++)
+    {
+        snprintf(sPath, sizeof(sPath), "%s/sub-%d/deeper", sTree, nDir);
+        CHECK(XDir_Create(sPath, 0755) > 0, "Create nested directories");
+        snprintf(sPath, sizeof(sPath), "%s/sub-%d/deeper/leaf", sTree, nDir);
+        CHECK(XPath_Write(sPath, (const uint8_t*)"y", 1, "cwt") == 1, "Create a nested file");
+    }
+
+    CHECK(XDir_Remove(sTree) == XSTDOK, "A large directory tree is removed");
+    CHECK(!XPath_Exists(sTree), "Nothing of the tree is left");
+
+    xfs_end(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(file_io),
     XTEST_CASE(handles),
@@ -606,5 +711,8 @@ XTEST_MAIN(
     XTEST_CASE(paths),
     XTEST_CASE(directories),
     XTEST_CASE(ownership),
-    XTEST_CASE(path_bounds)
+    XTEST_CASE(path_bounds),
+    XTEST_CASE(short_write),
+    XTEST_CASE(read_bounds),
+    XTEST_CASE(remove_large_dir)
 )

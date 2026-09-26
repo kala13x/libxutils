@@ -58,8 +58,8 @@ typedef int                 XSOCKET;
 #define XSOCK_NONE          XSTDNON
 
 /* Limits */
-#define XSOCK_CHUNK_MAX     1024 * 32
-#define XSOCK_RX_MAX        1024 * 8
+#define XSOCK_CHUNK_MAX     (1024 * 32)
+#define XSOCK_RX_MAX        (1024 * 8)
 #define XSOCK_FD_MAX        120000
 #define XSOCK_INFO_MAX      256
 #define XSOCK_ADDR_MAX      128

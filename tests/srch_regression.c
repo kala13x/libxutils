@@ -692,6 +692,67 @@ static int XTest_deep_tree(void)
     return 0;
 }
 
+static int XTest_line_bounds(void)
+{
+    srch_fixture_t fixture;
+    snprintf(fixture.sRoot, sizeof(fixture.sRoot), "/tmp/xutils-srch-XXXXXX");
+    CHECK(mkdtemp(fixture.sRoot) != NULL, "Create a private search directory");
+    fixture.nCreated = 1;
+
+    CHECK(srch_write(&fixture, "first.txt", "a needle on the first line\nother\n", 0644) == XSTDOK, "Write a first line match");
+    CHECK(srch_write(&fixture, "last.txt", "other\nneedle on the last line", 0644) == XSTDOK, "Write an unterminated last line");
+
+    xsearch_t search;
+    XSearch_Init(&search, "*.txt");
+    xstrncpy(search.sText, sizeof(search.sText), "needle");
+    CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "A buffer search runs");
+
+    int nChecked = 0;
+    for (size_t i = 0; i < XArray_Used(&search.fileArray); i++)
+    {
+        xsearch_entry_t *pEntry = XSearch_GetEntry(&search, (int)i);
+        CHECK(pEntry != NULL, "Entry lookup");
+
+        /* The first character of the first line used to be cut off, and a
+           last line without a newline was reported as a binary match. */
+        if (strcmp(pEntry->sName, "first.txt") == 0)
+            CHECK(strcmp(pEntry->sLine, "a needle on the first line") == 0, "A first line match is reported whole");
+        else if (strcmp(pEntry->sName, "last.txt") == 0)
+            CHECK(strcmp(pEntry->sLine, "needle on the last line") == 0, "An unterminated last line is reported as text");
+        nChecked++;
+    }
+
+    CHECK(nChecked == 2, "Both files are reported once");
+    XSearch_Destroy(&search);
+    srch_destroy(&fixture);
+    return 0;
+}
+
+static int XTest_link_entries(void)
+{
+    srch_fixture_t fixture;
+    CHECK(srch_build(&fixture) == XSTDOK, "Build the search fixture");
+
+    char sTarget[256], sLink[256];
+    snprintf(sTarget, sizeof(sTarget), "%s/alpha.txt", fixture.sRoot);
+    snprintf(sLink, sizeof(sLink), "%s/alpha.lnk", fixture.sRoot);
+    CHECK(symlink(sTarget, sLink) == 0, "Create a link in the tree");
+
+    /* A link entry carries the realpath() of its target. Destroying the
+       search freed the entry but not that string (the leak checker sees it). */
+    xsearch_t search;
+    XSearch_Init(&search, "*.lnk");
+    CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "A name search runs");
+    CHECK(XArray_Used(&search.fileArray) == 1, "The link is found");
+
+    xsearch_entry_t *pEntry = XSearch_GetEntry(&search, 0);
+    CHECK(pEntry != NULL && pEntry->eType == XF_SYMLINK && pEntry->pRealPath != NULL, "The link entry knows its target");
+    XSearch_Destroy(&search);
+
+    srch_destroy(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(deep_tree),
     XTEST_CASE(name_matching),
@@ -701,5 +762,7 @@ XTEST_MAIN(
     XTEST_CASE(callback),
     XTEST_CASE(entries),
     XTEST_CASE(guards),
-    XTEST_CASE(text_shapes)
+    XTEST_CASE(text_shapes),
+    XTEST_CASE(line_bounds),
+    XTEST_CASE(link_entries)
 )

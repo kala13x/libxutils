@@ -20,6 +20,9 @@
    unit: it costs a read and a write syscall per few kilobytes. */
 #define XFILE_COPY_BUF_SIZE (256 * 1024)
 
+/* Names XDir_Remove() collects per pass over a directory */
+#define XDIR_REMOVE_BATCH   256
+
 int xchmod(const char* pPath, xmode_t nMode)
 {
 #ifdef _WIN32
@@ -293,7 +296,9 @@ size_t XFile_Seek(xfile_t *pFile, uint64_t nPosit, int nOffset)
 {
     XCHECK(XFile_IsOpen(pFile), XSTDERR);
 #ifdef _WIN32
-    return (int)_lseek(pFile->nFD, (long)nPosit, nOffset);
+    /* _lseek() takes and returns a 32 bit long, so every offset past 2 GB
+       was cut down to its low bits and landed somewhere else in the file. */
+    return (size_t)_lseeki64(pFile->nFD, (__int64)nPosit, nOffset);
 #else
     return lseek(pFile->nFD, nPosit, nOffset);
 #endif
@@ -323,7 +328,9 @@ int XFile_Read(xfile_t *pFile, void *pBuff, size_t nSize)
     ssize_t nRead = read(pFile->nFD, pBuff, nSize);
 #endif
 
-    if (nRead <= 0 && errno != EAGAIN) pFile->bEOF = XTRUE;
+    /* errno only means something after a failure: a successful read of zero
+       bytes is the end of the file, whatever a previous call left in errno. */
+    if (!nRead || (nRead < 0 && errno != EAGAIN)) pFile->bEOF = XTRUE;
     return (int)nRead;
 }
 
@@ -896,10 +903,11 @@ int XPath_CopyFile(const char *pSrc, const char *pDst)
 
 int XPath_Read(const char *pPath, uint8_t *pBuffer, size_t nSize)
 {
+    if (pBuffer == NULL || !nSize) return XSTDERR;
     xfile_t file;
     if (XFile_Open(&file, pPath, NULL, NULL) < 0) return XSTDERR;
 
-    int nBytes = XFile_Read(&file, pBuffer, nSize);
+    int nBytes = XFile_Read(&file, pBuffer, nSize - 1);
     size_t nTermPosit = (nBytes > 0) ? nBytes : 0;
     pBuffer[nTermPosit] = '\0';
 
@@ -972,24 +980,19 @@ int XPath_Write(const char *pPath, const uint8_t *pData, size_t nSize, const cha
     xfile_t file;
     if (XFile_Open(&file, pPath, pFlags, NULL) < 0) return XSTDERR;
 
-    int nLeft = (int)nSize;
-    int nDone = 0;
+    if (nSize > (size_t)INT_MAX) nSize = (size_t)INT_MAX;
+    size_t nDone = 0;
 
-    while (nLeft > 0)
+    while (nDone < nSize)
     {
-        int nBytes = XFile_Write(&file, &pData[nDone], nSize);
-        if (nBytes <= 0)
-        {
-            XFile_Close(&file);
-            return nDone;
-        }
-
-        nDone += nBytes;
-        nLeft -= nBytes;
+        int nBytes = XFile_Write(&file, &pData[nDone], nSize - nDone);
+        if (nBytes < 0 && errno == EINTR) continue;
+        if (nBytes <= 0) break;
+        nDone += (size_t)nBytes;
     }
 
     XFile_Close(&file);
-    return nDone;
+    return (int)nDone;
 }
 
 int XPath_WriteBuffer(const char *pPath, xbyte_buffer_t *pBuffer, const char *pFlags)
@@ -1212,6 +1215,33 @@ int XPath_Remove(const char *pPath)
         XDir_Remove(pPath) : xunlink(pPath);
 }
 
+static int XDir_RemoveEntry(const char *pPath, size_t nLength, const char *pName)
+{
+    size_t nSize = nLength + strlen(pName) + 2;
+    char *pNewPath = (char*)malloc(nSize);
+
+    if (pNewPath == NULL)
+    {
+        if (!errno) errno = ENOMEM;
+        return XSTDERR;
+    }
+
+    size_t nLen = xstrncpyf(pNewPath, nSize, "%s/%s", pPath, pName);
+    if (nLen <= 0)
+    {
+        free(pNewPath);
+        errno = ENAMETOOLONG;
+        return XSTDERR;
+    }
+
+    int nStatus = XPath_Remove(pNewPath);
+    int nErrno = errno;
+
+    free(pNewPath);
+    errno = nErrno;
+    return nStatus < 0 ? XSTDERR : XSTDOK;
+}
+
 int XDir_Remove(const char *pPath)
 {
     if (!xstrused(pPath))
@@ -1220,47 +1250,45 @@ int XDir_Remove(const char *pPath)
         return XSTDERR;
     }
 
+    char (*pNames)[XNAME_MAX] = (char(*)[XNAME_MAX])malloc(sizeof(*pNames) * XDIR_REMOVE_BATCH);
+    if (pNames == NULL)
+    {
+        if (!errno) errno = ENOMEM;
+        return XSTDERR;
+    }
+
     size_t nLength = strlen(pPath);
 
     while (XTRUE)
     {
         xdir_t dir;
-        if (XDir_Open(&dir, pPath) < 0) return XSTDERR;
-
-        char sName[XNAME_MAX];
-        int nRead = XDir_Read(&dir, NULL, 0);
-        if (nRead > 0) xstrncpy(sName, sizeof(sName), dir.pCurrEntry);
-
-        XDir_Close(&dir);
-        if (nRead <= 0) break;
-
-        size_t nSize = nLength + strlen(sName) + 2;
-        char *pNewPath = (char*)malloc(nSize);
-
-        if (pNewPath == NULL)
-        {
-            if (!errno) errno = ENOMEM;
-            return XSTDERR;
-        }
-
-        size_t nLen = xstrncpyf(pNewPath, nSize, "%s/%s", pPath, sName);
-        if (nLen <= 0)
-        {
-            free(pNewPath);
-            errno = ENAMETOOLONG;
-            return XSTDERR;
-        }
-
-        if (XPath_Remove(pNewPath) < 0)
+        if (XDir_Open(&dir, pPath) < 0)
         {
             int nErrno = errno;
-            free(pNewPath);
+            free(pNames);
             errno = nErrno;
             return XSTDERR;
         }
 
-        free(pNewPath);
+        size_t i, nCount = 0;
+        while (nCount < XDIR_REMOVE_BATCH && XDir_Read(&dir, NULL, 0) > 0)
+            xstrncpy(pNames[nCount++], XNAME_MAX, dir.pCurrEntry);
+
+        XDir_Close(&dir);
+        if (!nCount) break;
+
+        for (i = 0; i < nCount; i++)
+        {
+            if (XDir_RemoveEntry(pPath, nLength, pNames[i]) < 0)
+            {
+                int nErrno = errno;
+                free(pNames);
+                errno = nErrno;
+                return XSTDERR;
+            }
+        }
     }
 
+    free(pNames);
     return xrmdir(pPath) == 0 ? XSTDOK : XSTDERR;
 }

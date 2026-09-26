@@ -5,6 +5,7 @@
 #include "ws.h"
 #include "map.h"
 #include "api.h"
+#include "mdtp.h"
 #include <fcntl.h>
 
 void *__real_malloc(size_t nSize);
@@ -122,9 +123,41 @@ static int XTest_endpoint_ownership(void)
     return 0;
 }
 
+static int XTest_mdtp_assemble(void)
+{
+    /* Assembling either fails or gives the whole packet. A failed append
+     * went unnoticed and left a packet without its header behind, and a
+     * failure after the header was written leaked the header writer's buffer
+     * (which the leak checkers of the sanitizer and valgrind lanes see). */
+    uint8_t payload[64];
+    memset(payload, 'p', sizeof(payload));
+    size_t nFailures = 0;
+
+    for (size_t i = 1; i <= 64; i++)
+    {
+        xpacket_t *pPacket = XPacket_New(payload, sizeof(payload));
+        CHECK(pPacket != NULL, "Create a packet");
+        pPacket->header.eType = XPACKET_TYPE_DATA;
+
+        g_nCalls = 0;
+        g_nFailAt = i;
+        xbyte_buffer_t *pBuffer = XPacket_Assemble(pPacket);
+        g_nFailAt = 0;
+
+        if (pBuffer == NULL || !pBuffer->nUsed) nFailures++;
+        else CHECK(pBuffer->nUsed > sizeof(payload), "An assembled packet carries its header and payload");
+
+        XPacket_Free(&pPacket);
+    }
+
+    CHECK(nFailures > 3, "Exercise allocation failures while assembling");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(json_cleanup),
     XTEST_CASE(http_header),
     XTEST_CASE(buffer_preservation),
-    XTEST_CASE(endpoint_ownership)
+    XTEST_CASE(endpoint_ownership),
+    XTEST_CASE(mdtp_assemble)
 )

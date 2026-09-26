@@ -433,6 +433,44 @@ static int XTest_hex_columns(void)
     return 0;
 }
 
+static int XTest_hex_scaling(void)
+{
+    /* Hex decoding ran sscanf() on the rest of the input for every byte, and
+     * sscanf() measures all of it each time: a megabyte took about a minute.
+     * Encoding grew its output a few bytes at a time, which is as slow under
+     * any allocator that moves a block to grow it. Both have to stay linear,
+     * and decoding still has to stop where the old parse stopped. */
+    enum { HEX_BYTES = 1000000 };
+    uint8_t *pData = (uint8_t*)malloc(HEX_BYTES);
+    CHECK(pData != NULL, "Allocate a megabyte to encode");
+
+    for (size_t i = 0; i < HEX_BYTES; i++) pData[i] = (uint8_t)(i * 131 + 7);
+
+    size_t nLength = HEX_BYTES;
+    uint8_t *pHex = XCrypt_HEX(pData, &nLength, " ", 16, XTRUE);
+    CHECK(pHex != NULL && nLength > HEX_BYTES * 3, "Encode with separators and line breaks");
+
+    size_t nDecoded = nLength;
+    uint8_t *pBack = XDecrypt_HEX(pHex, &nDecoded, XTRUE);
+    CHECK(pBack != NULL && nDecoded == HEX_BYTES, "Decode a megabyte of hex");
+    CHECK(!memcmp(pBack, pData, HEX_BYTES), "The decoded bytes are the encoded ones");
+
+    free(pBack);
+    free(pHex);
+    free(pData);
+
+    /* Whitespace of every kind is skipped, and the first thing that is not a
+     * hex value ends the input, as it always has */
+    const char *pMixed = " 0a\t\n1B\v\f\r ff zz 00";
+    nDecoded = strlen(pMixed);
+    pBack = XDecrypt_HEX((const uint8_t*)pMixed, &nDecoded, XFALSE);
+    CHECK(pBack != NULL && nDecoded == 3, "Decoding stops at the first non hex value");
+    CHECK(pBack[0] == 0x0a && pBack[1] == 0x1b && pBack[2] == 0xff, "Mixed whitespace between values is skipped");
+    free(pBack);
+
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(hex),
     XTEST_CASE(transforms),
@@ -443,5 +481,6 @@ XTEST_MAIN(
     XTEST_CASE(digests),
     XTEST_CASE(casear),
     XTEST_CASE(multy),
-    XTEST_CASE(hex_columns)
+    XTEST_CASE(hex_columns),
+    XTEST_CASE(hex_scaling)
 )

@@ -8,6 +8,7 @@
  */
 
 #include "test.h"
+#include <wchar.h>
 #include "str.h"
 #include "array.h"
 #include <ctype.h>
@@ -71,6 +72,95 @@ static int XTest_split(void)
     CHECK(pTokens != NULL && XArray_Used(pTokens) == 5, "The fields and delimiters are all tokens");
     CHECK(strcmp((char*)XArray_GetData(pTokens, 1), "-") == 0, "A delimiter sits between two fields");
     XArray_Destroy(pTokens);
+    return 0;
+}
+
+static int XTest_split_scaling(void)
+{
+    /* Splitting measured the whole remaining string again for every token, so
+       the time grew with the square of the token count. A million fields took
+       minutes; it has to stay linear. */
+    enum
+    {
+        SPLIT_FIELDS = 1000000
+    };
+    size_t nLength = (size_t)SPLIT_FIELDS * 2;
+    char *pInput = (char*)malloc(nLength + 1);
+    CHECK(pInput != NULL, "Allocate a string of a million fields");
+
+    for (size_t i = 0; i < SPLIT_FIELDS; i++)
+    {
+        pInput[i * 2] = (char)('a' + (i % 26));
+        pInput[i * 2 + 1] = ';';
+    }
+    pInput[nLength] = '\0';
+
+    xarray_t *pTokens = xstrsplit(pInput, ";");
+    CHECK(pTokens != NULL && XArray_Used(pTokens) == SPLIT_FIELDS, "Every field of a very long string is split out");
+    CHECK(strcmp((char*)XArray_GetData(pTokens, 0), "a") == 0, "The first field is intact");
+    CHECK(strcmp((char*)XArray_GetData(pTokens, SPLIT_FIELDS - 1), "n") == 0, "The last field is intact");
+
+    XArray_Destroy(pTokens);
+    free(pInput);
+    return 0;
+}
+
+static int XTest_match_pathological(void)
+{
+    /* Several '*' used to cost time exponential in their number... */
+    char sName[256];
+    memset(sName, 'a', sizeof(sName) - 1);
+    sName[sizeof(sName) - 1] = '\0';
+    const char *pPattern = "*a*a*a*a*a*a*a*a*a*a*a*a*b";
+    CHECK(xstrnmatch(sName, strlen(sName), pPattern, strlen(pPattern)) == XFALSE,
+        "A pattern of many stars is refused promptly");
+    CHECK(xstrmatch(sName, strlen(sName), "*a*a*a*a*a*a*a*a*a*a*a*a*a") == XTRUE,
+        "A pattern of many stars is still matched promptly");
+
+    /* ...and every literal character one level of recursion. */
+    enum
+    {
+        LONG_NAME = 1000000
+    };
+    char *pLong = (char*)malloc(LONG_NAME + 1);
+    char *pLongPattern = (char*)malloc(LONG_NAME + 1);
+    CHECK(pLong != NULL && pLongPattern != NULL, "Allocate a very long name and pattern");
+    memset(pLong, 'x', LONG_NAME);
+    memset(pLongPattern, 'x', LONG_NAME);
+    pLong[LONG_NAME] = pLongPattern[LONG_NAME] = '\0';
+    pLongPattern[LONG_NAME / 2] = '?';
+    CHECK(xstrnmatch(pLong, LONG_NAME, pLongPattern, LONG_NAME) == XTRUE, "A very long literal pattern matches");
+    pLongPattern[LONG_NAME - 1] = 'y';
+    CHECK(xstrnmatch(pLong, LONG_NAME, pLongPattern, LONG_NAME) == XFALSE, "A very long literal pattern mismatches");
+    free(pLong);
+    free(pLongPattern);
+
+    /* A literal '*' in the name is still covered by a pattern '*' */
+    CHECK(xstrmatch("a*b", 3, "a*") == XTRUE, "A '*' in the name matches a pattern '*'");
+    CHECK(xstrmatch("a*b", 3, "*\\*") == XFALSE, "Nothing in the name matches a missing character");
+    return 0;
+}
+
+static int XTest_bounded_copies(void)
+{
+    /* A zero size leaves no room even for the terminator: nothing is written */
+    char sCanary[4] = { 'k', 'e', 'e', 'p' };
+    CHECK(xstrncpy(sCanary, 0, "text") == 0, "A zero sized copy copies nothing");
+    CHECK(sCanary[0] == 'k', "A zero sized copy does not write its terminator");
+
+#if !defined(_WIN32)
+    /* A format vsnprintf() rejects: a wide character the C locale cannot
+       encode. Its -1 used to become a SIZE_MAX length on an empty buffer. */
+    size_t nLength = 1234;
+    char *pFormatted = xstracpyn(&nLength, "%lc", (wint_t)0x20AC);
+    CHECK(pFormatted == NULL && nLength == 0, "An unformattable string produces nothing, not a huge length");
+    free(pFormatted);
+#endif
+
+    /* The bounded search never looks past the length it is given */
+    const char data[] = { 'a', 'b', 'c', 'x', 'y', 'z' };
+    CHECK(xstrsrcb(data, 3, "c") == 2, "A needle inside the bound is found");
+    CHECK(xstrsrcb(data, 3, "xy") < 0, "A needle past the bound is not found");
     return 0;
 }
 
@@ -435,10 +525,14 @@ static int XTest_colors(void)
 
     char *pAllocated = xstrrgb(1, 2, 3);
     CHECK(pAllocated != NULL && pAllocated[0] == '\x1B', "The allocating rgb helper builds a sequence");
+    /* Sized by the pointer, the sequence used to stop after seven bytes */
+    CHECK(strcmp(pAllocated, "\x1B[38;2;1;2;3m") == 0, "The allocating rgb helper returns the whole sequence");
     free(pAllocated);
 
     pAllocated = xstryuv(1, 2, 3);
     CHECK(pAllocated != NULL && pAllocated[0] == '\x1B', "The allocating yuv helper builds a sequence");
+    xstrnyuv(sColor, sizeof(sColor), 1, 2, 3);
+    CHECK(strcmp(pAllocated, sColor) == 0, "The allocating yuv helper returns the whole sequence");
     free(pAllocated);
 
     /* The colouring wrapper wraps the text and resets afterwards. */
@@ -727,6 +821,9 @@ static int XTest_ansi_widths(void)
 }
 
 XTEST_MAIN(
+    XTEST_CASE(split_scaling),
+    XTEST_CASE(match_pathological),
+    XTEST_CASE(bounded_copies),
     XTEST_CASE(split),
     XTEST_CASE(match),
     XTEST_CASE(compare),

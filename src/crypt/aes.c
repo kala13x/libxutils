@@ -18,6 +18,10 @@
 #include "xstd.h"
 #include "aes.h"
 
+#ifdef _XUTILS_USE_SSL
+#include <openssl/rand.h>
+#endif
+
 typedef uint8_t xaes_state_t[4][4];
 
 static const uint8_t g_sbox[256] = {
@@ -154,9 +158,51 @@ static void XAES_KeyExpansion(xaes_ctx_t *pCtx, const uint8_t* pKey, size_t nKey
     }
 }
 
+static xbool_t XAES_SystemRand(uint8_t *pBuffer, size_t nSize)
+{
+#ifdef _XUTILS_USE_SSL
+    if (nSize > INT_MAX) return XFALSE;
+    return RAND_bytes((unsigned char*)pBuffer, (int)nSize) == 1;
+#elif defined(_WIN32)
+    HCRYPTPROV provider;
+    if (nSize > MAXDWORD) return XFALSE;
+    if (!CryptAcquireContext(&provider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) return XFALSE;
+
+    BOOL ok = CryptGenRandom(provider, (DWORD)nSize, (BYTE*)pBuffer);
+    CryptReleaseContext(provider, 0);
+    return ok ? XTRUE : XFALSE;
+#else
+    int flags = O_RDONLY;
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+    int fd = open("/dev/urandom", flags);
+    if (fd < 0) return XFALSE;
+    size_t offset = 0;
+
+    while (offset < nSize)
+    {
+        ssize_t count = read(fd, pBuffer + offset, nSize - offset);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) break;
+        offset += (size_t)count;
+    }
+
+    close(fd);
+    return offset == nSize;
+#endif
+}
+
+/* Generated IVs and the XBC random prefix come from the system CSPRNG. They
+   came from rand(), which is predictable (an unseeded program repeats the same
+   sequence on every run), and a CBC IV an attacker can predict lets a chosen
+   plaintext confirm a guess about an earlier block. rand() stays only as the
+   last resort when no system source can be read, so this never fails. */
 static void XAES_Rand(uint8_t* pBuffer, size_t nSize)
 {
     XCHECK_VOID((pBuffer != NULL));
+    if (!nSize || XAES_SystemRand(pBuffer, nSize)) return;
+
     for (size_t i = 0; i < nSize; ++i)
         pBuffer[i] = (uint8_t)(rand() % 256);
 }
@@ -852,9 +898,6 @@ uint8_t* XAES_XBC_Crypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
     XCHECK((pLength != NULL && *pLength > 0), NULL);
 
     size_t nPlainLen = *pLength;
-    size_t i;
-
-    /* Calculate random prefix length to align: hdr + rand + plain = N * blocksize */
     size_t nKnownLen = (XAES_XBC_HDR_SIZE + nPlainLen) % XAES_BLOCK_SIZE;
     size_t nRandLen = (XAES_BLOCK_SIZE - nKnownLen) % XAES_BLOCK_SIZE;
     size_t nTotalLen = XAES_XBC_HDR_SIZE + nRandLen + nPlainLen;
@@ -880,8 +923,7 @@ uint8_t* XAES_XBC_Crypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
     pOffset[3] = (uint8_t)(nRandLen & 0xFF);
 
     /* Fill random prefix */
-    for (i = 0; i < nRandLen; i++)
-        pOffset[XAES_XBC_HDR_SIZE + i] = (uint8_t)(rand() & 0xFF);
+    XAES_Rand(pOffset + XAES_XBC_HDR_SIZE, nRandLen);
 
     /* Copy plaintext after header and random prefix */
     memcpy(pOffset + XAES_XBC_HDR_SIZE + nRandLen, pInput, nPlainLen);

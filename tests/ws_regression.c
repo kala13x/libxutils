@@ -372,6 +372,187 @@ static int XTest_allocation(void)
     return 0;
 }
 
+static int XTest_mask_lengths(void)
+{
+    /* Masking works on words, with a byte tail, and a client frame is built
+     * masked in one pass. Every length around the word size and the header
+     * size steps must give exactly what masking the plain frame gives: the
+     * same header with the mask bit, the key, then each byte XOR key[i % 4]. */
+    static uint8_t data[65537 + 8];
+    for (size_t i = 0; i < sizeof(data); i++) data[i] = (uint8_t)(i * 131 + 7);
+
+    size_t lengths[80];
+    size_t nCount = 0;
+    for (size_t i = 0; i <= 70; i++) lengths[nCount++] = i;
+    lengths[nCount++] = 125;
+    lengths[nCount++] = 126;
+    lengths[nCount++] = 127;
+    lengths[nCount++] = 65535;
+    lengths[nCount++] = 65536;
+    lengths[nCount++] = 65537;
+
+    for (size_t n = 0; n < nCount; n++)
+    {
+        size_t nLength = lengths[n];
+        const uint8_t *pPayload = nLength ? data + (n % 3) : NULL; /* not word aligned either */
+
+        xws_frame_t plain, masked;
+        CHECK(XWebFrame_Create(&plain, pPayload, nLength, XWS_BINARY, XFALSE, XTRUE) == XWS_ERR_NONE, "Build a plain frame");
+        CHECK(XWebFrame_Create(&masked, pPayload, nLength, XWS_BINARY, XTRUE, XTRUE) == XWS_ERR_NONE, "Build a masked frame");
+
+        const uint8_t *pPlain = plain.buffer.pData;
+        const uint8_t *pWire = masked.buffer.pData;
+        size_t nHeader = plain.nHeaderSize;
+
+        CHECK(masked.bMask && masked.nPayloadLength == nLength, "The masked frame records its mask and length");
+        CHECK(masked.nHeaderSize == nHeader + 4 && masked.buffer.nUsed == plain.buffer.nUsed + 4, "The key adds 4 bytes");
+        CHECK(pWire[0] == pPlain[0] && pWire[1] == (pPlain[1] | 0x80), "The header only gains the mask bit");
+        CHECK(!memcmp(pWire + 2, pPlain + 2, nHeader - 2), "The extended length is the plain one");
+        CHECK(!memcmp(pWire + nHeader, &masked.nMaskKey, 4), "The key on the wire is the frame's key");
+        CHECK(pWire[masked.buffer.nUsed] == 0, "The wire bytes stay terminated");
+
+        const uint8_t *pKey = pWire + nHeader;
+        const uint8_t *pMasked = pWire + nHeader + 4;
+        size_t nWrong = 0;
+
+        for (size_t i = 0; i < nLength; i++)
+            if (pMasked[i] != (uint8_t)(pPayload[i] ^ pKey[i % 4])) nWrong++;
+
+        CHECK(nWrong == 0, "Every payload byte is masked with key[i % 4]");
+
+        /* Masking the plain frame in place agrees, and unmasking restores it */
+        CHECK(XWebFrame_Mask(&plain) == XWS_ERR_NONE, "Mask a plain frame in place");
+        pKey = plain.buffer.pData + nHeader;
+        pMasked = plain.buffer.pData + plain.nHeaderSize;
+
+        for (size_t i = 0; i < nLength; i++)
+            if (pMasked[i] != (uint8_t)(pPayload[i] ^ pKey[i % 4])) nWrong++;
+
+        CHECK(nWrong == 0, "In place masking uses key[i % 4] too");
+        CHECK(XWebFrame_Unmask(&plain) == XWS_ERR_NONE, "Unmask in place");
+        CHECK(!nLength || !memcmp(plain.buffer.pData + plain.nHeaderSize, pPayload, nLength), "Unmasking restores the payload");
+
+        xws_frame_t parsed;
+        xws_status_t eStatus = XWebFrame_ParseData(&parsed, (uint8_t*)pWire, masked.buffer.nUsed);
+        CHECK(eStatus == XWS_FRAME_COMPLETE, "The masked frame parses");
+        CHECK(parsed.nPayloadLength == nLength, "The parsed length is the payload length");
+        CHECK(!nLength || !memcmp(XWebFrame_GetPayload(&parsed), pPayload, nLength), "Parsing unmasks the payload");
+
+        XWebFrame_Clear(&parsed);
+        XWebFrame_Clear(&masked);
+        XWebFrame_Clear(&plain);
+    }
+
+    /* Control frame limits hold for masked frames as they do for plain ones */
+    xws_frame_t frame;
+    CHECK(XWebFrame_Create(&frame, data, 126, XWS_PING, XTRUE, XTRUE) != XWS_ERR_NONE, "A masked ping over 125 bytes is refused");
+    CHECK(XWebFrame_Create(&frame, data, 4, XWS_CLOSE, XTRUE, XFALSE) != XWS_ERR_NONE, "A fragmented masked close is refused");
+    CHECK(XWebFrame_Create(&frame, NULL, 4, XWS_BINARY, XTRUE, XTRUE) != XWS_ERR_NONE, "A masked frame needs its payload");
+
+    return 0;
+}
+
+static int XTest_append_frame(void)
+{
+    /* A frame appended to a buffer is the frame XWebFrame_Create() builds,
+     * after whatever the buffer already held, and a failed append leaves the
+     * buffer as it was. */
+    static uint8_t data[65537];
+    for (size_t i = 0; i < sizeof(data); i++) data[i] = (uint8_t)(i * 7 + 3);
+
+    const size_t lengths[] = { 0, 1, 7, 8, 9, 125, 126, 127, 65535, 65536, 65537 };
+    const xws_frame_type_t types[] = { XWS_TEXT, XWS_BINARY, XWS_PING, XWS_PONG, XWS_CLOSE };
+
+    for (size_t t = 0; t < sizeof(types) / sizeof(types[0]); t++)
+    {
+        for (size_t n = 0; n < sizeof(lengths) / sizeof(lengths[0]); n++)
+        {
+            size_t nLength = lengths[n];
+            const uint8_t *pPayload = nLength ? data : NULL;
+
+            for (int bMask = 0; bMask < 2; bMask++)
+            {
+                xws_frame_t frame;
+                xws_status_t eCreated = XWebFrame_Create(&frame, pPayload, nLength, types[t], bMask, XTRUE);
+
+                xbyte_buffer_t buffer;
+                XByteBuffer_Init(&buffer, 0, XFALSE);
+                CHECK(XByteBuffer_Add(&buffer, (const uint8_t*)"head", 4) > 0, "Seed the buffer");
+
+                xws_status_t eAppended = XWS_AppendFrame(&buffer, pPayload, nLength, types[t], bMask, XTRUE);
+                CHECK((eCreated == XWS_ERR_NONE) == (eAppended == XWS_ERR_NONE), "Append refuses what create refuses");
+
+                if (eCreated != XWS_ERR_NONE)
+                {
+                    CHECK(buffer.nUsed == 4 && !memcmp(buffer.pData, "head", 5), "A refused frame adds nothing");
+                    XByteBuffer_Clear(&buffer);
+                    continue;
+                }
+
+                const uint8_t *pWire = buffer.pData + 4;
+                size_t nWire = buffer.nUsed - 4;
+                CHECK(!memcmp(buffer.pData, "head", 4), "What the buffer held stays in front");
+                CHECK(nWire == frame.buffer.nUsed && buffer.pData[buffer.nUsed] == 0, "The frame has the created size");
+
+                if (!bMask)
+                {
+                    CHECK(!memcmp(pWire, frame.buffer.pData, nWire), "An unmasked frame is byte for byte the created one");
+                }
+                else
+                {
+                    size_t nHeader = frame.nHeaderSize - 4;
+                    CHECK(!memcmp(pWire, frame.buffer.pData, nHeader), "A masked frame has the created header");
+
+                    const uint8_t *pKey = pWire + nHeader;
+                    size_t nWrong = 0;
+                    for (size_t i = 0; i < nLength; i++)
+                        if (pWire[nHeader + 4 + i] != (uint8_t)(data[i] ^ pKey[i % 4])) nWrong++;
+
+                    CHECK(nWrong == 0, "The payload is masked with the key it carries");
+                }
+
+                xws_frame_t parsed;
+                CHECK(XWebFrame_ParseData(&parsed, (uint8_t*)pWire, nWire) == XWS_FRAME_COMPLETE, "The frame parses");
+                CHECK(parsed.eType == types[t] && parsed.nPayloadLength == nLength, "Type and length survive");
+                CHECK(!nLength || !memcmp(XWebFrame_GetPayload(&parsed), data, nLength), "The payload survives");
+
+                XWebFrame_Clear(&parsed);
+                XWebFrame_Clear(&frame);
+                XByteBuffer_Clear(&buffer);
+            }
+        }
+    }
+
+    /* Failures leave the buffer alone */
+    xbyte_buffer_t buffer;
+    XByteBuffer_Init(&buffer, 0, XFALSE);
+    CHECK(XByteBuffer_Add(&buffer, (const uint8_t*)"keep", 4) > 0, "Seed the buffer");
+
+    CHECK(XWS_AppendFrame(&buffer, NULL, 4, XWS_BINARY, XFALSE, XTRUE) == XWS_INVALID_ARGS, "A missing payload is refused");
+    CHECK(XWS_AppendFrame(&buffer, data, 4, XWS_INVALID, XFALSE, XTRUE) == XWS_INVALID_TYPE, "An invalid type is refused");
+    CHECK(XWS_AppendFrame(&buffer, data, 126, XWS_PING, XTRUE, XTRUE) == XWS_FRAME_INVALID, "A long ping is refused");
+    CHECK(XWS_AppendFrame(&buffer, data, 4, XWS_CLOSE, XFALSE, XFALSE) == XWS_FRAME_INVALID, "A fragmented close is refused");
+    CHECK(XWS_AppendFrame(NULL, data, 4, XWS_BINARY, XFALSE, XTRUE) == XWS_INVALID_ARGS, "A missing buffer is refused");
+    CHECK(buffer.nUsed == 4 && !memcmp(buffer.pData, "keep", 5), "Refused frames leave the buffer as it was");
+
+    /* A payload taken from the buffer itself survives the buffer growing */
+    for (int i = 0; i < 64; i++) CHECK(XByteBuffer_Add(&buffer, (const uint8_t*)"0123456789abcdef", 16) > 0, "Grow");
+    size_t nBefore = buffer.nUsed;
+    CHECK(XWS_AppendFrame(&buffer, buffer.pData, nBefore, XWS_BINARY, XFALSE, XTRUE) == XWS_ERR_NONE, "Append from itself");
+
+    xws_frame_t parsed;
+    CHECK(XWebFrame_ParseData(&parsed, buffer.pData + nBefore, buffer.nUsed - nBefore) == XWS_FRAME_COMPLETE, "It parses");
+    CHECK(parsed.nPayloadLength == nBefore, "The whole old content is the payload");
+    CHECK(!memcmp(XWebFrame_GetPayload(&parsed), "keep0123456789abcdef", 20), "The payload is the old content");
+    XWebFrame_Clear(&parsed);
+
+    CHECK(XWS_AppendFrame(&buffer, buffer.pData + 2, buffer.nUsed, XWS_BINARY, XFALSE, XTRUE) == XWS_INVALID_ARGS,
+        "A payload running past the end of its own buffer is refused");
+
+    XByteBuffer_Clear(&buffer);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(lengths),
     XTEST_CASE(partial),
@@ -382,5 +563,7 @@ XTEST_MAIN(
     XTEST_CASE(masking),
     XTEST_CASE(control_frames),
     XTEST_CASE(extra_data),
-    XTEST_CASE(allocation)
+    XTEST_CASE(allocation),
+    XTEST_CASE(mask_lengths),
+    XTEST_CASE(append_frame)
 )
