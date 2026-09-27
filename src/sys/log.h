@@ -148,6 +148,7 @@ typedef enum
 #define xlog_enable(fl) XLog_FlagEnable(fl)
 #define xlog_disable(fl) XLog_FlagDisable(fl)
 #define xlog_getfl(fl) XLog_FlagsGet(fl)
+#define xlog_enabled(fl) XLog_IsEnabled(fl)
 #define xlog_setfl(fl) XLog_FlagsSet(fl)
 #define xlog_path(path) XLog_PathSet(path)
 #define xlog_name(name) XLog_NameSet(name)
@@ -219,6 +220,8 @@ void XLog_FlagsSet(uint16_t nFlags);
 uint16_t XLog_FlagsGet(void);
 
 xbool_t XLog_IsInit(void);
+xbool_t XLog_IsEnabled(xlog_flag_t eFlag);
+
 void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe);
 void XLog_Destroy(void);
 

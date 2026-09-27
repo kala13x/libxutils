@@ -38,6 +38,26 @@ typedef struct XLogCtx {
 
 static xlog_t g_xlog;
 static xatomic_t g_bInit = XFALSE;
+static xatomic_t g_nActiveFlags = 0;
+
+#if defined(__GNUC__) || defined(__clang__)
+#define XLOG_ACTIVE_GET() ((uint16_t)__atomic_load_n(&g_nActiveFlags, __ATOMIC_RELAXED))
+#define XLOG_ACTIVE_SET(val) __atomic_store_n(&g_nActiveFlags, (xatomic_t)(val), __ATOMIC_RELAXED)
+#else
+#define XLOG_ACTIVE_GET() ((uint16_t)XSYNC_ATOMIC_GET(&g_nActiveFlags))
+#define XLOG_ACTIVE_SET(val) XSYNC_ATOMIC_SET(&g_nActiveFlags, (xatomic_t)(val))
+#endif
+
+/* Called with the lock held, after anything that decides whether a level is written. */
+static void XLog_UpdateActive(void)
+{
+    const xlog_cfg_t *pCfg = &g_xlog.config;
+    xbool_t bOutput = (pCfg->logCallback != NULL ||
+                       pCfg->bToScreen ||
+                       pCfg->bToFile) ?
+                       XTRUE : XFALSE;
+    XLOG_ACTIVE_SET(bOutput ? pCfg->nFlags : 0);
+}
 
 xbool_t XLog_IsInit(void)
 {
@@ -337,9 +357,17 @@ static void XLog_DisplayStack(const xlog_ctx_t *pCtx, va_list args)
     XLog_DisplayMessage(pCtx, sLogInfo, nLength, sMessage);
 }
 
+xbool_t XLog_IsEnabled(xlog_flag_t eFlag)
+{
+    XCHECK_NL(g_bInit, XFALSE);
+    return XLOG_FLAGS_CHECK(XLOG_ACTIVE_GET(), eFlag) ? XTRUE : XFALSE;
+}
+
 void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFmt, ...)
 {
     XCHECK_VOID_NL(g_bInit);
+    if (!XLOG_FLAGS_CHECK(XLOG_ACTIVE_GET(), eFlag)) return;
+
     XSync_Lock(&g_xlog.lock);
     xlog_cfg_t *pCfg = &g_xlog.config;
 
@@ -369,8 +397,8 @@ void XLog_Display(xlog_flag_t eFlag, xbool_t bNewLine, const char *pFmt, ...)
 XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
 {
     XCHECK_NL(g_bInit, nRetVal);
-    int nFlag = (nRetVal <= 0) ?
-        XLOG_ERROR : XLOG_NONE;
+    int nFlag = (nRetVal <= 0) ? XLOG_ERROR : XLOG_NONE;
+    if (!XLog_IsEnabled((xlog_flag_t)nFlag)) return nRetVal;
 
     if (pFmt == NULL)
     {
@@ -391,8 +419,8 @@ XSTATUS XLog_Throw(int nRetVal, const char *pFmt, ...)
 XSTATUS XLog_Throwe(int nRetVal, const char *pFmt, ...)
 {
     XCHECK_NL(g_bInit, nRetVal);
-    int nFlag = (nRetVal <= 0) ?
-        XLOG_ERROR : XLOG_NONE;
+    int nFlag = (nRetVal <= 0) ? XLOG_ERROR : XLOG_NONE;
+    if (!XLog_IsEnabled((xlog_flag_t)nFlag)) return nRetVal;
 
     if (pFmt == NULL)
     {
@@ -413,6 +441,7 @@ XSTATUS XLog_Throwe(int nRetVal, const char *pFmt, ...)
 void* XLog_ThrowPtr(void* pRetVal, const char *pFmt, ...)
 {
     XCHECK_NL(g_bInit, pRetVal);
+    if (!XLog_IsEnabled(XLOG_ERROR)) return pRetVal;
 
     if (pFmt == NULL)
     {
@@ -455,6 +484,7 @@ void XLog_ConfigSet(struct XLogConfig *pCfg)
     }
 
     g_xlog.config = *pCfg;
+    XLog_UpdateActive();
     XSync_Unlock(&g_xlog.lock);
 }
 
@@ -468,6 +498,7 @@ void XLog_FlagEnable(xlog_flag_t eFlag)
     else if (!XLOG_FLAGS_CHECK(g_xlog.config.nFlags, eFlag))
         g_xlog.config.nFlags |= eFlag;
 
+    XLog_UpdateActive();
     XSync_Unlock(&g_xlog.lock);
 }
 
@@ -481,6 +512,7 @@ void XLog_FlagDisable(xlog_flag_t eFlag)
     else if (XLOG_FLAGS_CHECK(g_xlog.config.nFlags, eFlag))
         g_xlog.config.nFlags &= ~eFlag;
 
+    XLog_UpdateActive();
     XSync_Unlock(&g_xlog.lock);
 }
 
@@ -493,6 +525,7 @@ void XLog_CallbackSet(xlog_cb_t callback, void *pContext)
     pCfg->pCbCtx = pContext;
     pCfg->logCallback = callback;
 
+    XLog_UpdateActive();
     XSync_Unlock(&g_xlog.lock);
 }
 
@@ -557,6 +590,7 @@ void XLog_FileLogSet(xbool_t bEnable)
     if (!bEnable) XLog_CloseFile(pFile);
     pCfg->bToFile = bEnable;
 
+    XLog_UpdateActive();
     XSync_Unlock(&g_xlog.lock);
 }
 
@@ -565,6 +599,7 @@ void XLog_ScreenLogSet(xbool_t bEnable)
     XCHECK_VOID_NL(g_bInit);
     XSync_Lock(&g_xlog.lock);
     g_xlog.config.bToScreen = bEnable;
+    XLog_UpdateActive();
     XSync_Unlock(&g_xlog.lock);
 }
 
@@ -589,6 +624,7 @@ void XLog_FlagsSet(uint16_t nFlags)
     XCHECK_VOID_NL(g_bInit);
     XSync_Lock(&g_xlog.lock);
     g_xlog.config.nFlags = nFlags;
+    XLog_UpdateActive();
     XSync_Unlock(&g_xlog.lock);
 }
 
@@ -693,6 +729,7 @@ void XLog_Init(const char* pName, uint16_t nFlags, xbool_t bTdSafe)
     if (bTdSafe) XSync_Init(&g_xlog.lock);
     else g_xlog.lock.bEnabled = XFALSE;
 
+    XLog_UpdateActive();
     g_bInit = XTRUE;
 }
 
@@ -704,6 +741,7 @@ void XLog_Destroy(void)
     memset(&g_xlog.config, 0, sizeof(g_xlog.config));
     g_xlog.config.logCallback = NULL;
     g_xlog.config.pCbCtx = NULL;
+    XLog_UpdateActive();
 
     XSync_Unlock(&g_xlog.lock);
     XSync_Destroy(&g_xlog.lock);

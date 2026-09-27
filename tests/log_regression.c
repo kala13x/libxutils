@@ -442,6 +442,59 @@ static int XTest_callback_veto(void)
     return 0;
 }
 
+static int XTest_enabled(void)
+{
+    /* XLog_IsEnabled() answers exactly what XLog_Display() would do: the level is on and something is listening. */
+    xtest_log_t test = {0};
+    CHECK(!xlog_enabled(XLOG_ERROR), "Nothing is enabled before init");
+
+    xlog_init("enabled", XLOG_ERROR | XLOG_WARN, XTRUE);
+    xlog_screen(XFALSE);
+    CHECK(!xlog_enabled(XLOG_ERROR), "A level with no output is not enabled");
+
+    xlog_callback(XTest_Callback, &test);
+    CHECK(xlog_enabled(XLOG_ERROR) && xlog_enabled(XLOG_WARN), "A callback makes the enabled levels live");
+    CHECK(!xlog_enabled(XLOG_DEBUG) && !xlog_enabled(XLOG_TRACE), "Levels that are off stay off");
+    xlogd("never formatted %s", "at all");
+    CHECK(test.nCalls == 0, "A disabled level never reaches the callback");
+
+    xlog_enable(XLOG_DEBUG);
+    CHECK(xlog_enabled(XLOG_DEBUG), "Enabling a level is seen");
+    xlogd("now %d", 1);
+    CHECK(test.nCalls == 1 && test.eLast == XLOG_DEBUG, "The enabled level is written");
+
+    xlog_disable(XLOG_DEBUG);
+    CHECK(!xlog_enabled(XLOG_DEBUG), "Disabling a level is seen");
+    xlog_setfl(XLOG_INFO);
+    CHECK(xlog_enabled(XLOG_INFO) && !xlog_enabled(XLOG_ERROR), "Replacing the flags is seen");
+
+    xlog_callback(NULL, NULL);
+    CHECK(!xlog_enabled(XLOG_INFO), "Removing the only output disables everything");
+    xlog_screen(XTRUE);
+    CHECK(xlog_enabled(XLOG_INFO), "Screen output counts as an output");
+    xlog_screen(XFALSE);
+
+    xlog_cfg_t cfg;
+    xlog_get(&cfg);
+    cfg.logCallback = XTest_Callback;
+    cfg.pCbCtx = &test;
+    cfg.nFlags = XLOG_WARN;
+    xlog_set(&cfg);
+    CHECK(xlog_enabled(XLOG_WARN) && !xlog_enabled(XLOG_INFO), "A whole new config is seen");
+
+    test.nCalls = 0;
+    xlog_setfl(XLOG_ALL);
+    CHECK(xlog_enabled(XLOG_TRACE) && xlog_enabled(XLOG_NONE), "All levels are enabled at once");
+    xlog_setfl(0);
+    CHECK(!xlog_enabled(XLOG_ERROR), "No flags enables nothing");
+    CHECK(xthrowr(-5, "silent %d", 5) == -5 && test.nCalls == 0, "A throw at a disabled level returns its value unlogged");
+
+    xlog_callback(NULL, NULL);
+    xlog_destroy();
+    CHECK(!xlog_enabled(XLOG_ALL) && !xlog_enabled(XLOG_ERROR), "Nothing is enabled after destroy");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(filtering),
     XTEST_CASE(large_message),
@@ -452,5 +505,6 @@ XTEST_MAIN(
     XTEST_CASE(file_output),
     XTEST_CASE(rotation),
     XTEST_CASE(throw),
-    XTEST_CASE(callback_veto)
+    XTEST_CASE(callback_veto),
+    XTEST_CASE(enabled)
 )

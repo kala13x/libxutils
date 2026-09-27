@@ -148,6 +148,11 @@ typedef struct xapi_session_ {
     xbool_t bHandshakeDone;
     xbool_t bWSFragStart;
 
+    /* How far an unfinished handshake request has been looked at: the bytes known to hold no end of header, and
+       the size the buffer must reach before a complete header still waiting for its body can parse differently. */
+    size_t nHeaderScan;
+    size_t nHeaderWait;
+
     xbyte_buffer_t rxBuffer;
     xbyte_buffer_t txBuffer;
     xbyte_buffer_t wsBuffer;
@@ -193,6 +198,8 @@ struct xapi_ {
     xbool_t bUseHashMap;
     xbool_t bSetAffinity;
     xbool_t bIsWorker;
+
+    uint8_t *pReadBuffer;
 };
 
 const char* XAPI_GetStatus(xapi_ctx_t *pCtx);

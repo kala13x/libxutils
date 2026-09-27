@@ -119,9 +119,11 @@ static int XTest_pending_record(void)
     CHECK(XTest_Handshake(&test), "Complete a verified handshake");
     uint8_t data[16384];
     for (size_t i = 0; i < sizeof(data); i++) data[i] = (uint8_t)(i % 251);
-    CHECK(SSL_write(test.pServer, data, sizeof(data)) == sizeof(data), "Send one TLS record larger than the API read buffer");
+    /* Reads take up to XAPI_READ_CHUNK now, so the whole record usually comes out of OpenSSL in one read; only the
+       fallback read size leaves part of it to the drain. Either way, one readable event must deliver all of it. */
+    CHECK(SSL_write(test.pServer, data, sizeof(data)) == sizeof(data), "Send one full-size TLS record");
     CHECK(XAPI_Service(&test.api, 100) == XEVENTS_SUCCESS, "Service one readable event");
-    CHECK(test.received.nUsed == sizeof(data) && test.nReads > 1, "Drain decrypted bytes without requiring another socket event");
+    CHECK(test.received.nUsed == sizeof(data) && test.nReads >= 1, "Deliver the record without requiring another socket event");
     CHECK(memcmp(test.received.pData, data, sizeof(data)) == 0, "Record draining retains all bytes in order");
     CHECK(XSock_Pending(&test.pSession->sock) == 0, "No plaintext remains stranded inside OpenSSL");
     XTest_Close(&test);

@@ -26,6 +26,11 @@
 
 #define XAPI_RX_MAX         (5000 * 1024)
 #define XAPI_RX_SIZE        4096
+
+/* How much one read may take off a socket. It lands in a buffer owned by the XAPI instance, not the session:
+   a large frame used to cost one pass of the event loop per XAPI_RX_SIZE, while a session's own buffer still
+   only ever holds what actually arrived, a peer that trickles bytes cannot make it hold a whole read's worth. */
+#define XAPI_READ_CHUNK     (128 * 1024)
 #define XAPI_SSL_DRAIN_MAX  64
 
 typedef struct XAPIWorkerEvents {
@@ -305,6 +310,8 @@ static xapi_session_t* XAPI_NewData(xapi_t *pApi, xapi_type_t eType)
     pSession->bHandshakeStart = XFALSE;
     pSession->bHandshakeDone = XFALSE;
     pSession->bWSFragStart = XFALSE;
+    pSession->nHeaderScan = XSTDNON;
+    pSession->nHeaderWait = XSTDNON;
     pSession->bReadOnWrite = XFALSE;
     pSession->bWriteOnRead = XFALSE;
     pSession->bKeepRxBuffer = XFALSE;
@@ -1277,6 +1284,47 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     return XAPI_StatusToEvent(pApi, nStatus);
 }
 
+/* Whether parsing the pending handshake request could give a different answer than last time. Parsing searches for
+   the end of the header from the first byte on every call, and parses a complete header whole again while its body
+   arrives: a peer sending either a byte at a time made each read cost everything it had sent so far, and a single
+   connection kept a worker busy. The search goes on from where the last one stopped, and a header waiting for its
+   body is left alone until the whole body can be there. Neither ever skips a parse that could now succeed: the
+   parser's own search stops at the first NUL, so it never finds an end of header this search would not. */
+static xbool_t XAPI_HandshakeChanged(xapi_session_t *pSession, const xbyte_buffer_t *pBuffer)
+{
+    if (pSession->nHeaderWait) return pBuffer->nUsed >= pSession->nHeaderWait;
+    if (pBuffer->nUsed < 4) return XFALSE;
+
+    size_t nFrom = pSession->nHeaderScan > 3 ? pSession->nHeaderScan - 3 : 0;
+    const uint8_t *pEnd = pBuffer->pData + pBuffer->nUsed;
+    const uint8_t *pChar = pBuffer->pData + nFrom;
+
+    while (pChar < pEnd && (pChar = (const uint8_t*)memchr(pChar, '\r', (size_t)(pEnd - pChar))) != NULL)
+    {
+        if (pEnd - pChar >= 4 && !memcmp(pChar, "\r\n\r\n", 4)) return XTRUE;
+        pChar++;
+    }
+
+    pSession->nHeaderScan = pBuffer->nUsed;
+    return XFALSE;
+}
+
+/* Records what a parse that did not complete the request learned, for XAPI_HandshakeChanged() */
+static void XAPI_HandshakeWait(xapi_session_t *pSession, xhttp_t *pHandle, xhttp_status_t eStatus)
+{
+    if (eStatus == XHTTP_INCOMPLETE)
+    {
+        pSession->nHeaderScan = pHandle->rawData.nUsed;
+        return;
+    }
+
+    /* Only a Content-Length that has fully arrived can complete a parsed header; without one it never completes */
+    pSession->nHeaderWait = SIZE_MAX;
+    if (XHTTP_GetHeader(pHandle, "Content-Length") != NULL &&
+        pHandle->nContentLength <= SIZE_MAX - pHandle->nHeaderLength)
+        pSession->nHeaderWait = XSTD_MAX(pHandle->nHeaderLength + pHandle->nContentLength, pHandle->rawData.nUsed + 1);
+}
+
 static int XAPI_ServerHandshake(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pApi != NULL), XSTDINV);
@@ -1300,6 +1348,14 @@ static int XAPI_ServerHandshake(xapi_t *pApi, xapi_session_t *pSession)
         }
     }
 
+    /* Until the request can parse differently, only its size can end it */
+    if (!XAPI_HandshakeChanged(pSession, pBuffer))
+    {
+        if (pBuffer->nUsed <= pApi->nRxSize) return XEVENTS_CONTINUE;
+        XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, XHTTP_BIGCNT);
+        return XEVENTS_DISCONNECT;
+    }
+
     xhttp_t handle;
     XHTTP_Init(&handle, XHTTP_DUMMY, XSTDNON);
     eStatus = XHTTP_ParseBuff(&handle, pBuffer);
@@ -1308,6 +1364,9 @@ static int XAPI_ServerHandshake(xapi_t *pApi, xapi_session_t *pSession)
         (eStatus == XHTTP_COMPLETE ||
          eStatus == XHTTP_PARSED))
         XAPI_DetectRealIP(pSession, &handle);
+
+    if (eStatus == XHTTP_INCOMPLETE || eStatus == XHTTP_PARSED)
+        XAPI_HandshakeWait(pSession, &handle, eStatus);
 
     if (eStatus == XHTTP_COMPLETE)
     {
@@ -1345,8 +1404,9 @@ static int XAPI_ServerHandshake(xapi_t *pApi, xapi_session_t *pSession)
         XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, eStatus);
         nRetVal = XEVENTS_DISCONNECT;
     }
-    else if (eStatus == XHTTP_INCOMPLETE && pBuffer->nUsed > pApi->nRxSize)
+    else if (pBuffer->nUsed > pApi->nRxSize)
     {
+        /* A complete header waiting for its body is bounded too: it used to be buffered without limit */
         XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, XHTTP_BIGCNT);
         nRetVal = XEVENTS_DISCONNECT;
     }
@@ -1671,9 +1731,22 @@ static int XAPI_ReadOnce(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pSession != NULL), XEVENTS_DISCONNECT);
     xsock_t *pSock = (xsock_t*)&pSession->sock;
-    uint8_t sBuffer[XAPI_RX_SIZE];
 
-    int nBytes = XSock_Read(pSock, sBuffer, sizeof(sBuffer));
+    /* The data is copied into the session buffer before anything else runs, so one buffer serves every session. */
+    uint8_t sFallback[XAPI_RX_SIZE];
+    uint8_t *pBuffer = sFallback;
+    size_t nBufferSize = sizeof(sFallback);
+
+    if (pApi != NULL && pApi->pReadBuffer == NULL)
+        pApi->pReadBuffer = (uint8_t*)malloc(XAPI_READ_CHUNK);
+
+    if (pApi != NULL && pApi->pReadBuffer != NULL)
+    {
+        pBuffer = pApi->pReadBuffer;
+        nBufferSize = XAPI_READ_CHUNK;
+    }
+
+    int nBytes = XSock_Read(pSock, pBuffer, nBufferSize);
     if (nBytes <= 0)
     {
         if (pSock->eStatus == XSOCK_EOF)
@@ -1701,7 +1774,7 @@ static int XAPI_ReadOnce(xapi_t *pApi, xapi_session_t *pSession)
         return XEVENTS_DISCONNECT;
     }
 
-    if (XByteBuffer_Add(&pSession->rxBuffer, sBuffer, nBytes) <= 0)
+    if (XByteBuffer_Add(&pSession->rxBuffer, pBuffer, nBytes) <= 0)
     {
         XAPI_ErrorCb(pApi, pSession, XAPI_SELF, XAPI_ERR_ALLOC);
         return XEVENTS_DISCONNECT;
@@ -1710,18 +1783,18 @@ static int XAPI_ReadOnce(xapi_t *pApi, xapi_session_t *pSession)
     return XAPI_DispatchBuffer(pApi, pSession);
 }
 
-/* One TLS record carries up to 16 KiB of plaintext, so a single read into the
-   XAPI_RX_SIZE buffer routinely leaves the rest sitting inside OpenSSL. Those
-   bytes are already off the socket: with level-triggered polling the descriptor
-   goes quiet and nothing wakes the loop again until the peer happens to send
-   more. The tail then waits for the next inbound packet, which on an otherwise
-   idle link is the far side's next keepalive - long enough for a session to
-   look dead and be dropped. Drain what TLS is holding before handing control
-   back to the poller.
+/* One TLS record carries up to 16 KiB of plaintext, so a read smaller than that -
+   the XAPI_RX_SIZE fallback when the read buffer could not be allocated - leaves
+   the rest sitting inside OpenSSL. Those bytes are already off the socket: with
+   level-triggered polling the descriptor goes quiet and nothing wakes the loop
+   again until the peer happens to send more. The tail then waits for the next
+   inbound packet, which on an otherwise idle link is the far side's next
+   keepalive - long enough for a session to look dead and be dropped. Drain what
+   TLS is holding before handing control back to the poller.
 
    XAPI_SSL_DRAIN_MAX only exists so one very busy session cannot monopolise the
-   loop. OpenSSL decrypts a single record per read, so four passes already clear
-   the largest possible one and the limit is actually never reached in practice. */
+   loop. OpenSSL decrypts a single record per read, so even the fallback clears
+   the largest possible one in four passes and the limit is never reached in practice. */
 static int XAPI_Read(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pSession != NULL), XEVENTS_DISCONNECT);
@@ -2117,6 +2190,7 @@ XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx)
     pApi->callback = callback;
     pApi->pUserCtx = pUserCtx;
     pApi->nRxSize = XAPI_RX_MAX;
+    pApi->pReadBuffer = NULL;
     return XSTDOK;
 }
 
@@ -2207,9 +2281,14 @@ void XAPI_Destroy(xapi_t *pApi)
     pApi->nWorkerPID = XSTDNON;
     pApi->bIsWorker = XFALSE;
 
-    XCHECK_VOID_NL(pApi->bHaveEvents);
-    xevents_t *pEvents = &pApi->events;
-    XEvents_Destroy(pEvents);
+    if (pApi->bHaveEvents)
+    {
+        xevents_t *pEvents = &pApi->events;
+        XEvents_Destroy(pEvents);
+    }
+
+    free(pApi->pReadBuffer);
+    pApi->pReadBuffer = NULL;
 }
 
 xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)

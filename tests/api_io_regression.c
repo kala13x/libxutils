@@ -296,6 +296,94 @@ static int XTest_buffered_upgrade(void)
     return 0;
 }
 
+/* Feeds pData to a server session one byte at a time and returns the result of the last dispatch */
+static int XTest_Trickle(xapi_session_t *pSession, const char *pData, size_t nSize)
+{
+    int nStatus = XAPI_CONTINUE;
+    for (size_t i = 0; i < nSize && nStatus == XAPI_CONTINUE; i++)
+    {
+        if (XByteBuffer_Add(&pSession->rxBuffer, (const uint8_t*)pData + i, 1) <= 0) return XAPI_DISCONNECT;
+        nStatus = XAPI_ProcessBuffered(pSession);
+    }
+
+    return nStatus;
+}
+
+/* A request sent a byte at a time used to be searched from its first byte on every read, and a complete header
+   waiting for its body parsed whole again: the work per read grew with everything sent so far, and one such peer
+   kept a worker busy. The search resumes where it stopped, and a header waiting for a body waits for all of it. */
+static int XTest_handshake_trickle(void)
+{
+    xtest_api_t test = {0};
+    xapi_t api;
+    xsock_t peer;
+    CHECK(XTest_Open(&api, &test, &peer) == 0, "Create a trickled handshake fixture");
+    xapi_session_t *pSession = test.pSession;
+    pSession->eType = XAPI_WS;
+
+    const char sHead[] = "GET / HTTP/1.1\r\nHost: local\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                         "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nX-Pad: ";
+    CHECK(XTest_Trickle(pSession, sHead, sizeof(sHead) - 1) == XAPI_CONTINUE, "A partial header keeps the session");
+
+    /* Blank-looking bytes that are not the end of the header, one at a time */
+    for (int i = 0; i < 20000; i++)
+        CHECK(XTest_Trickle(pSession, i % 2 ? "\r" : "x", 1) == XAPI_CONTINUE, "Keep waiting for the end of the header");
+    CHECK(pSession->nHeaderScan == pSession->rxBuffer.nUsed && !pSession->bHandshakeStart,
+        "Every byte is looked at once, and nothing is answered early");
+
+    /* The end of the header split across reads still completes it */
+    CHECK(XTest_Trickle(pSession, "\r\n\r", 3) == XAPI_CONTINUE && !pSession->bHandshakeStart, "Three of four");
+    CHECK(XTest_Trickle(pSession, "\n", 1) == XAPI_CONTINUE && pSession->bHandshakeStart, "The last byte completes it");
+    CHECK(pSession->txBuffer.nUsed > 0 && pSession->rxBuffer.nUsed == 0, "The upgrade is answered and consumed");
+    XSock_Close(&peer);
+    XAPI_Destroy(&api);
+    XByteBuffer_Clear(&test.received);
+
+    /* A header with a body is answered once the body has arrived, and not looked at in between */
+    memset(&test, 0, sizeof(test));
+    CHECK(XTest_Open(&api, &test, &peer) == 0, "Create a handshake with a body");
+    pSession = test.pSession;
+    pSession->eType = XAPI_WS;
+    const char sBody[] = "GET / HTTP/1.1\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                         "Content-Length: 6\r\n\r\nabcde";
+    CHECK(XTest_Trickle(pSession, sBody, sizeof(sBody) - 1) == XAPI_CONTINUE && !pSession->bHandshakeStart,
+        "A header waiting for its body waits");
+    CHECK(pSession->nHeaderWait == pSession->rxBuffer.nUsed + 1, "It waits for exactly the rest of the body");
+    CHECK(XTest_Trickle(pSession, "f", 1) == XAPI_CONTINUE && pSession->bHandshakeStart, "The whole body completes it");
+    XSock_Close(&peer);
+    XAPI_Destroy(&api);
+    XByteBuffer_Clear(&test.received);
+
+    /* A header that can never complete is bounded like a partial one; it used to be buffered without limit */
+    memset(&test, 0, sizeof(test));
+    CHECK(XTest_Open(&api, &test, &peer) == 0, "Create an endless handshake body");
+    api.nRxSize = 4096;
+    pSession = test.pSession;
+    pSession->eType = XAPI_WS;
+    const char sEndless[] = "GET / HTTP/1.1\r\nUpgrade: websocket\r\nContent-Type: text/plain\r\n\r\n";
+    CHECK(XTest_Trickle(pSession, sEndless, sizeof(sEndless) - 1) == XAPI_CONTINUE, "An endless body starts");
+    char sFill[4096];
+    memset(sFill, 'b', sizeof(sFill));
+    CHECK(XTest_Trickle(pSession, sFill, sizeof(sFill)) == XAPI_DISCONNECT, "An endless body ends at the limit");
+    CHECK(pSession->rxBuffer.nUsed == api.nRxSize + 1, "Nothing is buffered past the limit");
+    XSock_Close(&peer);
+    XAPI_Destroy(&api);
+    XByteBuffer_Clear(&test.received);
+
+    /* So is a header that never ends */
+    memset(&test, 0, sizeof(test));
+    CHECK(XTest_Open(&api, &test, &peer) == 0, "Create an endless handshake header");
+    api.nRxSize = 4096;
+    pSession = test.pSession;
+    pSession->eType = XAPI_WS;
+    CHECK(XTest_Trickle(pSession, sFill, sizeof(sFill)) == XAPI_CONTINUE, "A header up to the limit waits");
+    CHECK(XTest_Trickle(pSession, "b", 1) == XAPI_DISCONNECT, "A header past the limit ends the session");
+    XSock_Close(&peer);
+    XAPI_Destroy(&api);
+    XByteBuffer_Clear(&test.received);
+    return 0;
+}
+
 static int XTest_websocket_burst(void)
 {
     xtest_api_t test = {0};
@@ -394,6 +482,70 @@ static int XTest_eof_with_data(void)
     return 0;
 }
 
+static int XTest_read_chunk(void)
+{
+    xtest_api_t test = {0};
+    xapi_t api;
+    xsock_t peer, second;
+    CHECK(XTest_Open(&api, &test, &peer) == 0, "Create a large read fixture");
+    xapi_session_t *pFirst = test.pSession;
+
+    /* One wakeup takes everything the socket holds, not XAPI_RX_SIZE of it */
+    enum
+    {
+        TEST_BYTES = 65536
+    };
+    uint8_t *pData = (uint8_t*)malloc(TEST_BYTES);
+    CHECK(pData != NULL, "Allocate the payload");
+    for (size_t i = 0; i < TEST_BYTES; i++) pData[i] = (uint8_t)(i % 253);
+    CHECK(XSock_Write(&peer, pData, TEST_BYTES) == TEST_BYTES, "Queue the whole payload at once");
+    CHECK(XAPI_Service(&api, 1000) == XEVENTS_SUCCESS, "Service one wakeup");
+    CHECK(test.nRead == 1 && test.received.nUsed == TEST_BYTES, "A single read delivers the whole payload");
+    CHECK(memcmp(test.received.pData, pData, TEST_BYTES) == 0, "The payload arrives byte for byte");
+
+    /* A second session reads through the same buffer: each one gets its own bytes and nothing else */
+    XSOCKET pair[2];
+    CHECK(XSock_CreatePair(pair) == XSTDOK, "Create a second transport");
+    CHECK(XSock_Init(&second, XSOCK_TCP_PEER, pair[1]) != XSOCK_ERROR, "Wrap the second remote endpoint");
+    xapi_endpoint_t endpoint;
+    XAPI_InitEndpoint(&endpoint);
+    endpoint.eType = XAPI_SOCK;
+    endpoint.eRole = XAPI_PEER;
+    endpoint.nFD = pair[0];
+    endpoint.nEvents = XPOLLIN;
+    CHECK(XAPI_AddEndpoint(&api, &endpoint) == XSTDOK && test.pSession != pFirst, "Register the second peer");
+    xapi_session_t *pSecond = test.pSession;
+    CHECK(XSock_NonBlock(&pSecond->sock, XTRUE) != XSOCK_INVALID, "Force the second local endpoint nonblocking");
+
+    XByteBuffer_Clear(&test.received);
+    test.nRead = 0;
+    CHECK(XSock_Write(&peer, pData, TEST_BYTES) == TEST_BYTES, "The first peer sends a large payload");
+    CHECK(XSock_Write(&second, (const uint8_t*)"tail", 4) == 4, "The second peer sends a few bytes");
+    for (int i = 0; i < 10 && test.nRead < 2; i++) XAPI_Service(&api, 100);
+    CHECK(test.nRead == 2 && test.received.nUsed == TEST_BYTES + 4, "Each session reports exactly what its peer sent");
+    xbool_t bLargeFirst = memcmp(test.received.pData, pData, TEST_BYTES) == 0;
+    const uint8_t *pTail = bLargeFirst ? test.received.pData + TEST_BYTES : test.received.pData;
+    const uint8_t *pLarge = bLargeFirst ? test.received.pData : test.received.pData + 4;
+    CHECK(memcmp(pTail, "tail", 4) == 0 && memcmp(pLarge, pData, TEST_BYTES) == 0, "No bytes cross between sessions");
+
+    /* A peer that trickles the start of a large frame holds what it sent, not a read's worth */
+    pSecond->eType = XAPI_WS;
+    pSecond->bHandshakeDone = XTRUE;
+    const uint8_t head[] = { 0x82, 0xFF, 0, 0, 0, 0, 0, 0x01, 0x86, 0xA0, 1, 2, 3, 4, 'a', 'b', 'c', 'd', 'e', 'f' };
+    CHECK(XSock_Write(&second, head, sizeof(head)) == sizeof(head), "Send the head of a 100000 byte frame");
+    for (int i = 0; i < 10 && pSecond->rxBuffer.nUsed < sizeof(head); i++) XAPI_Service(&api, 100);
+    CHECK(test.nRead == 2 && pSecond->rxBuffer.nUsed == sizeof(head), "The unfinished frame waits in the session");
+    CHECK(pSecond->rxBuffer.nSize < 4096, "The session buffer holds only the bytes that arrived");
+
+    free(pData);
+    XSock_Close(&peer);
+    XSock_Close(&second);
+    XAPI_Destroy(&api);
+    CHECK(test.nClosed == 2, "Teardown closes both peers");
+    XByteBuffer_Clear(&test.received);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(partial_io),
     XTEST_CASE(callback_disconnect),
@@ -404,5 +556,7 @@ XTEST_MAIN(
     XTEST_CASE(buffered_upgrade),
     XTEST_CASE(websocket_burst),
     XTEST_CASE(websocket_burst_invalid),
-    XTEST_CASE(eof_with_data)
+    XTEST_CASE(eof_with_data),
+    XTEST_CASE(read_chunk),
+    XTEST_CASE(handshake_trickle)
 )
