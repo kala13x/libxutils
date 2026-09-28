@@ -148,7 +148,16 @@ XSTATUS XSHA1_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, siz
 
     xsha1_ctx_t xsha;
     XSHA1_Init(&xsha);
-    XSHA1_Update(&xsha, pInput, (uint32_t)nLength);
+
+    /* The update takes a 32 bit length, so a larger input is fed in parts */
+    while (nLength > 0)
+    {
+        uint32_t nPart = nLength > 0x40000000 ? 0x40000000 : (uint32_t)nLength;
+        XSHA1_Update(&xsha, pInput, nPart);
+        pInput += nPart;
+        nLength -= nPart;
+    }
+
     XSHA1_Final(&xsha, pOutput);
 
     return XSTDOK;

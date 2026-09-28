@@ -345,9 +345,40 @@ int xstrncpyarg(char *pDest, size_t nSize, const char *pFmt, va_list args)
     return (int)nLength;
 }
 
+/* Formats into a small stack buffer. A positive return below nSize is the whole
+   result; anything else means it has to be measured and formatted again. */
+static int xstrtryargs(char *pDst, size_t nSize, const char *pFmt, va_list args)
+{
+    va_list locArgs;
+#ifdef va_copy
+    va_copy(locArgs, args);
+#else
+    memcpy(&locArgs, &args, sizeof(va_list));
+#endif
+
+    int nBytes = vsnprintf(pDst, nSize, pFmt, locArgs);
+    va_end(locArgs);
+    return nBytes;
+}
+
 char* xstracpyargs(const char *pFmt, va_list args, size_t *nDstLength)
 {
     if (nDstLength) *nDstLength = 0;
+
+    char sStack[XSTR_MIN];
+    int nBytes = xstrtryargs(sStack, sizeof(sStack), pFmt, args);
+    if (!nBytes) return NULL;
+
+    if (nBytes > 0 && (size_t)nBytes < sizeof(sStack))
+    {
+        char *pDest = (char*)malloc((size_t)nBytes + 1);
+        if (pDest == NULL) return NULL;
+
+        memcpy(pDest, sStack, (size_t)nBytes + 1);
+        if (nDstLength) *nDstLength = (size_t)nBytes;
+        return pDest;
+    }
+
     size_t nArgLength = xstrarglen(pFmt, args);
     if (!nArgLength) return NULL;
 
@@ -369,6 +400,21 @@ char* xstracpyargs(const char *pFmt, va_list args, size_t *nDstLength)
 char* xstrpcpyargs(xpool_t *pPool, const char *pFmt, va_list args, size_t *nDstLength)
 {
     if (nDstLength) *nDstLength = 0;
+
+    char sStack[XSTR_MIN];
+    int nBytes = xstrtryargs(sStack, sizeof(sStack), pFmt, args);
+    if (!nBytes) return NULL;
+
+    if (nBytes > 0 && (size_t)nBytes < sizeof(sStack))
+    {
+        char *pDest = (char*)xalloc(pPool, (size_t)nBytes + 1);
+        if (pDest == NULL) return NULL;
+
+        memcpy(pDest, sStack, (size_t)nBytes + 1);
+        if (nDstLength) *nDstLength = (size_t)nBytes;
+        return pDest;
+    }
+
     size_t nArgLength = xstrarglen(pFmt, args);
     if (!nArgLength) return NULL;
 

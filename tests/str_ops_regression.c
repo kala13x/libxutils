@@ -8,6 +8,9 @@
  */
 
 #include "test.h"
+#include "pool.h"
+#include "json.h"
+#include "buf.h"
 #include <wchar.h>
 #include "str.h"
 #include "array.h"
@@ -820,6 +823,88 @@ static int XTest_ansi_widths(void)
     return 0;
 }
 
+static int XTest_format_boundaries(void)
+{
+    /* A formatted string comes back whole and exactly as long as it is,
+       however its length falls against the buffers used to build it. */
+    const size_t nLengths[] = { 1, 2, 255, 510, 511, 512, 513, 1023, 1024, 4097, 20000 };
+    char *pText = (char*)malloc(20001);
+    CHECK(pText != NULL, "Allocate the source text");
+
+    for (size_t i = 0; i < 20000; i++) pText[i] = (char)('A' + i % 26);
+
+    for (size_t l = 0; l < sizeof(nLengths) / sizeof(*nLengths); l++)
+    {
+        size_t nLength = nLengths[l];
+        char cSaved = pText[nLength];
+        pText[nLength] = '\0';
+
+        size_t nOut = 0;
+        char *pOut = xstracpyn(&nOut, "%s", pText);
+        CHECK(pOut != NULL && nOut == nLength && strcmp(pOut, pText) == 0, "The allocated copy is whole");
+        free(pOut);
+
+        pOut = xstracpy("<%s>", pText);
+        CHECK(pOut != NULL && strlen(pOut) == nLength + 2 && !strncmp(pOut + 1, pText, nLength), "Formatting around it too");
+        free(pOut);
+
+        xbyte_buffer_t buffer;
+        XByteBuffer_Init(&buffer, 0, XFALSE);
+        CHECK(XByteBuffer_Add(&buffer, (const uint8_t*)"head:", 5) == 5, "Start the buffer");
+        CHECK(XByteBuffer_AddFmt(&buffer, "%s|%zu", pText, nLength) > 0, "Append the formatted text");
+
+        char sTail[32];
+        int nTail = snprintf(sTail, sizeof(sTail), "|%zu", nLength);
+        CHECK(buffer.nUsed == 5 + nLength + (size_t)nTail, "The append adds exactly the formatted length");
+        CHECK(!memcmp(buffer.pData + 5, pText, nLength) && !strcmp((char*)buffer.pData + 5 + nLength, sTail),
+            "And exactly the formatted bytes, terminated");
+        XByteBuffer_Clear(&buffer);
+
+        xpool_t *pPool = XPool_Create(1024);
+        CHECK(pPool != NULL, "Create a pool");
+        xjson_obj_t *pJson = XJSON_FromStr(pPool, "{\"k\":\"%s\"}", pText);
+        CHECK(pJson != NULL && strlen(XJSON_GetString(XJSON_GetObject(pJson, "k"))) == nLength,
+            "A pooled format is whole as well");
+        XPool_Destroy(pPool);
+
+        pText[nLength] = cSaved;
+    }
+
+    /* An empty result is no string at all, as it always was */
+    size_t nOut = 7;
+    CHECK(xstracpyn(&nOut, "%s", "") == NULL && nOut == 0, "An empty result gives nothing");
+    CHECK(xstracpy("") == NULL, "An empty format gives nothing");
+
+    xbyte_buffer_t buffer;
+    XByteBuffer_Init(&buffer, 0, XFALSE);
+    CHECK(XByteBuffer_AddFmt(&buffer, "%s", "") < 0 && buffer.nUsed == 0, "Appending an empty result is refused");
+    XByteBuffer_Clear(&buffer);
+
+    /* Arguments may point into the buffer being appended to, whether the
+       result is short or long enough to make the buffer move */
+    const size_t nSeeds[] = { 6, 700 };
+    for (size_t k = 0; k < 2; k++)
+    {
+        XByteBuffer_Init(&buffer, 0, XFALSE);
+        CHECK(XByteBuffer_Add(&buffer, (const uint8_t*)pText, nSeeds[k]) == (int)nSeeds[k], "Seed the buffer");
+
+        char *pExpected = xstracpy("%.*s[%.*s|%.*s]", (int)nSeeds[k], pText, (int)nSeeds[k], pText,
+            (int)(nSeeds[k] - 2), pText + 2);
+        CHECK(pExpected != NULL, "Build the expected result");
+
+        CHECK(XByteBuffer_AddFmt(&buffer, "[%s|%s]", (char*)buffer.pData, (char*)buffer.pData + 2) > 0,
+            "Append the buffer's own content");
+        CHECK(buffer.nUsed == strlen(pExpected) && !strcmp((char*)buffer.pData, pExpected),
+            "The buffer's own bytes are read before anything is written");
+
+        free(pExpected);
+        XByteBuffer_Clear(&buffer);
+    }
+
+    free(pText);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(split_scaling),
     XTEST_CASE(match_pathological),
@@ -840,5 +925,6 @@ XTEST_MAIN(
     XTEST_CASE(glob),
     XTEST_CASE(field_formatting),
     XTEST_CASE(append_remaining),
-    XTEST_CASE(ansi_widths)
+    XTEST_CASE(ansi_widths),
+    XTEST_CASE(format_boundaries)
 )

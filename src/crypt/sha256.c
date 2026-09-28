@@ -24,6 +24,7 @@
 #endif
 
 #define XSHA_UPPER(x) w[(x) & 0x0F]
+#define XSHA_LOAD32(p) (((uint32_t)(p)[0] << 24) | ((uint32_t)(p)[1] << 16) | ((uint32_t)(p)[2] << 8) | (uint32_t)(p)[3])
 #define XSHA_CH(x, y, z) (((x) & (y)) | (~(x) & (z)))
 #define XSHA_MAJ(x, y, z) (((x) & (y)) | ((x) & (z)) | ((y) & (z)))
 #define XSHA_ROR32(x, n) ((x >> n) | (x << ((sizeof(x) << 3) - n)))
@@ -66,23 +67,89 @@ void XSHA256_Init(xsha256_t *pSha)
     pSha->uDigest.hBytes[7] = 0x5BE0CD19;
 }
 
+/* The schedule for round i, from the previous 16 words kept in a ring of 16 */
+#define XSHA_SCHEDULE(i) \
+    (XSHA_UPPER(i) += XSHA_SIGMA4(XSHA_UPPER((i) + 14)) + XSHA_UPPER((i) + 9) + XSHA_SIGMA3(XSHA_UPPER((i) + 1)))
+
+/* One round. The working variables are renamed from round to round instead of
+   being moved: a round only writes the new e (into d) and the new a (into h). */
+#define XSHA_ROUND(a, b, c, d, e, f, g, h, i)                                                   \
+    do {                                                                                        \
+        uint32_t nT1 = h + XSHA_SIGMA2(e) + XSHA_CH(e, f, g) + XSHA256K[i] + XSHA_UPPER(i);     \
+        d += nT1;                                                                               \
+        h = nT1 + XSHA_SIGMA1(a) + XSHA_MAJ(a, b, c);                                           \
+    } while (0)
+
+#define XSHA_ROUNDS8(i)                                     \
+    do {                                                    \
+        XSHA_ROUND(a, b, c, d, e, f, g, h, (i) + 0);        \
+        XSHA_ROUND(h, a, b, c, d, e, f, g, (i) + 1);        \
+        XSHA_ROUND(g, h, a, b, c, d, e, f, (i) + 2);        \
+        XSHA_ROUND(f, g, h, a, b, c, d, e, (i) + 3);        \
+        XSHA_ROUND(e, f, g, h, a, b, c, d, (i) + 4);        \
+        XSHA_ROUND(d, e, f, g, h, a, b, c, (i) + 5);        \
+        XSHA_ROUND(c, d, e, f, g, h, a, b, (i) + 6);        \
+        XSHA_ROUND(b, c, d, e, f, g, h, a, (i) + 7);        \
+    } while (0)
+
+/* Compresses one 64 byte block into the state. The block is read as big endian
+   bytes, so it can come straight from the caller's data at any alignment. */
+static void XSHA256_Compress(uint32_t *pState, const uint8_t *pBlock)
+{
+    uint32_t a = pState[0], b = pState[1], c = pState[2], d = pState[3];
+    uint32_t e = pState[4], f = pState[5], g = pState[6], h = pState[7];
+    uint32_t w[16];
+    size_t i;
+
+    for (i = 0; i < 16; i++) w[i] = XSHA_LOAD32(pBlock + i * 4);
+
+    XSHA_ROUNDS8(0);
+    XSHA_ROUNDS8(8);
+
+    for (i = 16; i < 64; i += 8)
+    {
+        XSHA_SCHEDULE(i + 0); XSHA_SCHEDULE(i + 1);
+        XSHA_SCHEDULE(i + 2); XSHA_SCHEDULE(i + 3);
+        XSHA_SCHEDULE(i + 4); XSHA_SCHEDULE(i + 5);
+        XSHA_SCHEDULE(i + 6); XSHA_SCHEDULE(i + 7);
+        XSHA_ROUNDS8(i);
+    }
+
+    pState[0] += a; pState[1] += b; pState[2] += c; pState[3] += d;
+    pState[4] += e; pState[5] += f; pState[6] += g; pState[7] += h;
+}
+
 void XSHA256_Update(xsha256_t *pSha, const uint8_t *pData, size_t nLength)
 {
-    while (nLength > 0)
+    if (!nLength) return;
+    pSha->nTotalSize += nLength;
+
+    if (pSha->nSize > 0)
     {
         size_t nPart = XSTD_MIN(nLength, XSHA256_BLOCK_SIZE - pSha->nSize);
         memcpy(pSha->uBlock.block + pSha->nSize, pData, nPart);
 
-        pSha->nTotalSize += nPart;
         pSha->nSize += nPart;
-        pData = pData + nPart;
+        pData += nPart;
         nLength -= nPart;
 
-        if (pSha->nSize == XSHA256_BLOCK_SIZE)
-        {
-            XSHA256_ProcessBlock(pSha);
-            pSha->nSize = 0;
-        }
+        if (pSha->nSize < XSHA256_BLOCK_SIZE) return;
+        XSHA256_Compress(pSha->uDigest.hBytes, pSha->uBlock.block);
+        pSha->nSize = 0;
+    }
+
+    /* Whole blocks are compressed where they are, without a copy */
+    while (nLength >= XSHA256_BLOCK_SIZE)
+    {
+        XSHA256_Compress(pSha->uDigest.hBytes, pData);
+        pData += XSHA256_BLOCK_SIZE;
+        nLength -= XSHA256_BLOCK_SIZE;
+    }
+
+    if (nLength > 0)
+    {
+        memcpy(pSha->uBlock.block, pData, nLength);
+        pSha->nSize = nLength;
     }
 }
 
@@ -110,31 +177,7 @@ void XSHA256_FinalRaw(xsha256_t *pSha, uint8_t *pDigest)
 
 void XSHA256_ProcessBlock(xsha256_t *pSha)
 {
-    uint32_t *w = pSha->uBlock.wBytes;
-    uint32_t nReg[8];
-    uint8_t i;
-
-    for (i = 0; i < 8; i++) nReg[i] = pSha->uDigest.hBytes[i];
-    for (i = 0; i < 16; i++) w[i] = be32toh(w[i]);
-
-    for (i = 0; i < 64; i++)
-    {
-        if (i >= 16) XSHA_UPPER(i) += XSHA_SIGMA4(XSHA_UPPER(i + 14)) + XSHA_UPPER(i + 9) + XSHA_SIGMA3(XSHA_UPPER(i + 1));
-        uint32_t nT1 = nReg[7] + XSHA_SIGMA2(nReg[4]) + XSHA_CH(nReg[4], nReg[5], nReg[6]) + XSHA256K[i] + XSHA_UPPER(i);
-        uint32_t nT2 = XSHA_SIGMA1(nReg[0]) + XSHA_MAJ(nReg[0], nReg[1], nReg[2]);
-
-        nReg[7] = nReg[6];
-        nReg[6] = nReg[5];
-        nReg[5] = nReg[4];
-        nReg[4] = nReg[3] + nT1;
-        nReg[3] = nReg[2];
-        nReg[2] = nReg[1];
-        nReg[1] = nReg[0];
-        nReg[0] = nT1 + nT2;
-    }
-
-    for (i = 0; i < 8; i++)
-        pSha->uDigest.hBytes[i] += nReg[i];
+    XSHA256_Compress(pSha->uDigest.hBytes, pSha->uBlock.block);
 }
 
 XSTATUS XSHA256_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)

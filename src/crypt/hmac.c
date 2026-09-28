@@ -14,6 +14,14 @@
 #include "md5.h"
 #include "str.h"
 
+/* The pads and digests below are derived from the key. They are wiped through
+   a volatile pointer, which the compiler can not drop as a dead store. */
+static void XHMAC_Wipe(void *pData, size_t nSize)
+{
+    volatile uint8_t *pByte = (volatile uint8_t*)pData;
+    while (nSize--) *pByte++ = 0;
+}
+
 XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pData, size_t nLength, const uint8_t *pKey, size_t nKeyLen)
 {
     XCHECK((nSize >= XSHA256_DIGEST_SIZE &&
@@ -32,6 +40,7 @@ XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pData, size_
 
         memcpy(kIpad, key, XSHA256_DIGEST_SIZE);
         memcpy(kOpad, key, XSHA256_DIGEST_SIZE);
+        XHMAC_Wipe(key, sizeof(key));
     }
     else
     {
@@ -58,6 +67,10 @@ XSTATUS XHMAC_SHA256(uint8_t *pOutput, size_t nSize, const uint8_t *pData, size_
     XSHA256_Update(&xsha, digest, sizeof(digest));
     XSHA256_Final(&xsha, pOutput);
 
+    XHMAC_Wipe(kIpad, sizeof(kIpad));
+    XHMAC_Wipe(kOpad, sizeof(kOpad));
+    XHMAC_Wipe(digest, sizeof(digest));
+    XHMAC_Wipe(&xsha, sizeof(xsha));
     return XSTDOK;
 }
 
@@ -65,6 +78,7 @@ XSTATUS XHMAC_SHA256_HEX(char *pOutput, size_t nSize, const uint8_t *pData, size
 {
     if (pOutput == NULL || nSize < XSHA256_LENGTH + 1)
         return XSTDERR;
+    static const char sHex[] = "0123456789abcdef";
     uint8_t i, hash[XSHA256_DIGEST_SIZE];
 
     if (XHMAC_SHA256(hash, sizeof(hash), pData, nLength, pKey, nKeyLen) != XSTDOK)
@@ -74,7 +88,10 @@ XSTATUS XHMAC_SHA256_HEX(char *pOutput, size_t nSize, const uint8_t *pData, size
     }
 
     for (i = 0; i < sizeof(hash); i++)
-        xstrncpyf(pOutput + i * 2, 3, "%02x", (unsigned int)hash[i]);
+    {
+        pOutput[i * 2] = sHex[hash[i] >> 4];
+        pOutput[i * 2 + 1] = sHex[hash[i] & 0x0f];
+    }
 
     pOutput[XSHA256_LENGTH] = '\0';
     return XSTDOK;
@@ -126,6 +143,7 @@ XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLen
 
         memcpy(kIpad, key, XMD5_DIGEST_SIZE);
         memcpy(kOpad, key, XMD5_DIGEST_SIZE);
+        XHMAC_Wipe(key, sizeof(key));
     }
     else
     {
@@ -143,25 +161,36 @@ XSTATUS XHMAC_MD5(char *pOutput, size_t nSize, const uint8_t *pData, size_t nLen
     /* Perform inner MD5 */
     size_t nBufLen = sizeof(kIpad) + nLength;
     uint8_t *pPadBuf = (uint8_t *)malloc(nBufLen);
-    XCHECK(pPadBuf, XSTDERR);
+    if (pPadBuf == NULL)
+    {
+        XHMAC_Wipe(kIpad, sizeof(kIpad));
+        XHMAC_Wipe(kOpad, sizeof(kOpad));
+        return XSTDERR;
+    }
 
     memcpy(pPadBuf, kIpad, sizeof(kIpad));
     if (nLength) memcpy(&pPadBuf[sizeof(kIpad)], pData, nLength);
 
     int status = XMD5_Compute(digest, sizeof(digest), pPadBuf, nBufLen);
+    XHMAC_Wipe(pPadBuf, sizeof(kIpad));
+    XHMAC_Wipe(kIpad, sizeof(kIpad));
     free(pPadBuf);
-    if (status != XSTDOK) return XSTDERR;
 
-    /* Perform outer MD5 */
-    nBufLen = sizeof(kOpad) + sizeof(digest);
-    pPadBuf = (uint8_t *)malloc(nBufLen);
-    XCHECK(pPadBuf, XSTDERR);
+    if (status != XSTDOK)
+    {
+        XHMAC_Wipe(kOpad, sizeof(kOpad));
+        return XSTDERR;
+    }
 
-    memcpy(pPadBuf, kOpad, sizeof(kOpad));
-    memcpy(&pPadBuf[sizeof(kOpad)], digest, sizeof(digest));
+    /* Perform outer MD5, on the stack: the buffer is one block and a digest */
+    uint8_t outerBuf[XMD5_BLOCK_SIZE + XMD5_DIGEST_SIZE];
+    memcpy(outerBuf, kOpad, sizeof(kOpad));
+    memcpy(&outerBuf[sizeof(kOpad)], digest, sizeof(digest));
 
-    status = XMD5_Compute(hash, sizeof(hash), pPadBuf, nBufLen);
-    free(pPadBuf);
+    status = XMD5_Compute(hash, sizeof(hash), outerBuf, sizeof(outerBuf));
+    XHMAC_Wipe(outerBuf, sizeof(outerBuf));
+    XHMAC_Wipe(kOpad, sizeof(kOpad));
+    XHMAC_Wipe(digest, sizeof(digest));
     if (status != XSTDOK) return XSTDERR;
 
     xstrncpyf(pOutput, nSize,

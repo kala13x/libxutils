@@ -774,6 +774,51 @@ static int XTest_terminal_input(void)
     return 0;
 }
 
+static int XTest_read_bounds(void)
+{
+    /* A read into a buffer of more than one byte leaves room for its
+       terminator, so a read that fills it never writes past its end. A one
+       byte buffer takes exactly one byte and no terminator. */
+    struct { char sBuffer[8]; char sGuard[8]; } bounded;
+    cli_capture_t in;
+
+    for (size_t nSize = 2; nSize <= sizeof(bounded.sBuffer); nSize++)
+    {
+        memset(&bounded, 'G', sizeof(bounded));
+        CHECK(stdin_begin(&in, "0123456789abcdef") == XSTDOK, "Redirect stdin");
+        XSTATUS nRead = XCLI_ReadStdin(bounded.sBuffer, nSize, XFALSE);
+        stdin_end(&in);
+
+        CHECK(nRead == (XSTATUS)(nSize - 1), "A full read takes one byte less than the buffer");
+        CHECK(bounded.sBuffer[nSize - 1] == '\0' && !strncmp(bounded.sBuffer, "0123456789abcdef", nSize - 1),
+            "What was read is terminated");
+        for (size_t i = nSize; i < sizeof(bounded); i++)
+            CHECK(((char*)&bounded)[i] == 'G', "Nothing past the buffer is written");
+    }
+
+    memset(&bounded, 'G', sizeof(bounded));
+    CHECK(stdin_begin(&in, "xyz") == XSTDOK, "Redirect stdin");
+    XSTATUS nOne = XCLI_ReadStdin(bounded.sBuffer, 1, XFALSE);
+    stdin_end(&in);
+    CHECK(nOne == 1 && bounded.sBuffer[0] == 'x' && bounded.sBuffer[1] == 'G', "A one byte read takes one byte, unterminated");
+
+    memset(&bounded, 'G', sizeof(bounded));
+    CHECK(XCLI_ReadStdin(bounded.sBuffer, 0, XFALSE) == XSTDINV, "A zero sized buffer is refused");
+    CHECK(XCLI_ReadStdin(NULL, 8, XFALSE) == XSTDINV, "A missing buffer is refused");
+    CHECK(XCLI_GetInput(NULL, bounded.sBuffer, 0, XTRUE) == XSTDINV, "A zero sized input buffer is refused");
+    CHECK(bounded.sBuffer[0] == 'G', "And nothing is written into it");
+    CHECK(XCLI_GetInput(NULL, NULL, 8, XTRUE) == XSTDINV, "A missing input buffer is refused");
+
+    /* Input that exactly fills the buffer is cut, never overrun */
+    memset(&bounded, 'G', sizeof(bounded));
+    CHECK(stdin_begin(&in, "1234567\n") == XSTDOK, "Redirect stdin");
+    XSTATUS nInput = XCLI_GetInput(NULL, bounded.sBuffer, sizeof(bounded.sBuffer), XTRUE);
+    stdin_end(&in);
+    CHECK(nInput == XSTDOK && strcmp(bounded.sBuffer, "1234567") == 0, "A line that fills the buffer is read whole");
+    for (size_t i = 0; i < sizeof(bounded.sGuard); i++) CHECK(bounded.sGuard[i] == 'G', "The guard is untouched");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(window_size),
     XTEST_CASE(window_lines),
@@ -784,5 +829,6 @@ XTEST_MAIN(
     XTEST_CASE(progress_animation),
     XTEST_CASE(input),
     XTEST_CASE(terminal_modes),
-    XTEST_CASE(terminal_input)
+    XTEST_CASE(terminal_input),
+    XTEST_CASE(read_bounds)
 )

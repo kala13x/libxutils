@@ -16,6 +16,16 @@
 #include "crypt.h"
 #include "xfs.h"
 #include "xtime.h"
+#include "sha256.h"
+#include "sha1.h"
+#include "md5.h"
+#include "hmac.h"
+#include "aes.h"
+
+#ifdef _XUTILS_USE_SSL
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#endif
 
 
 /* A cursor over the input, so a target can take a few parameters off the
@@ -552,6 +562,257 @@ int LLVMFuzzerTestOneInput(const uint8_t *pData, size_t nSize)
 
         free(pPattern);
         free(pSubject);
+    }
+    else if (nTarget == XFUZZ_TARGET_HTTP_HEADERS)
+    {
+        /* Whatever the header holds, parsing leaves the caller's bytes as they
+           were, and every stored field is a lower case name with a value that
+           has no whitespace around it. */
+        uint8_t *pCopy = (uint8_t*)malloc(nSize + 1);
+        if (pCopy == NULL) return 0;
+        if (nSize) memcpy(pCopy, pData, nSize);
+        pCopy[nSize] = 0;
+
+        xhttp_t http;
+        XHTTP_Init(&http, XHTTP_DUMMY, XSTDNON);
+        XByteBuffer_SetData(&http.rawData, pCopy, nSize);
+        XHTTP_Parse(&http);
+
+        if (nSize && memcmp(pCopy, pData, nSize)) abort();
+        xmap_t *pMap = &http.headerMap;
+
+        for (uint32_t i = 0; pMap->pPairs != NULL && i < pMap->nTableSize; i++)
+        {
+            xmap_pair_t *pPair = &pMap->pPairs[i];
+            if (pPair->eStatus != XMAP_PAIR_USED) continue;
+
+            const char *pName = (const char*)pPair->pKey;
+            const char *pValue = (const char*)pPair->pData;
+            size_t nName = strlen(pName), nValue = strlen(pValue);
+
+            if (!nName || !nValue || strchr(pName, ':') != NULL) abort();
+            for (size_t j = 0; j < nName; j++) if (pName[j] >= 'A' && pName[j] <= 'Z') abort();
+            if (pValue[0] == ' ' || pValue[0] == '\t' || pValue[nValue - 1] == ' ' || pValue[nValue - 1] == '\t') abort();
+            if (strstr(pName, "\r\n") != NULL || strstr(pValue, "\r\n") != NULL) abort();
+        }
+
+        XHTTP_Clear(&http);
+        free(pCopy);
+    }
+    else if (nTarget == XFUZZ_TARGET_DIGEST)
+    {
+        /* A message fed in pieces of fuzzed sizes digests like the whole of it,
+           and with OpenSSL to ask, like OpenSSL does. So does its HMAC. */
+        xfuzz_reader_t reader;
+        XFuzz_ReaderInit(&reader, pData, nSize);
+
+        size_t nPieces[4];
+        for (size_t i = 0; i < 4; i++) nPieces[i] = (size_t)XFuzz_Byte(&reader) + 1;
+        size_t nKey = XFuzz_Byte(&reader);
+
+        const uint8_t *pMessage = XFuzz_Rest(&reader);
+        size_t nMessage = XFuzz_Left(&reader);
+        if (nKey > nMessage) nKey = nMessage;
+
+        uint8_t whole[XSHA256_DIGEST_SIZE], pieces[XSHA256_DIGEST_SIZE];
+        XSHA256_Compute(whole, sizeof(whole), pMessage, nMessage);
+
+        xsha256_t sha;
+        XSHA256_Init(&sha);
+        size_t nAt = 0, nRound = 0;
+
+        while (nAt < nMessage)
+        {
+            size_t nPiece = nPieces[nRound++ % 4];
+            if (nPiece > nMessage - nAt) nPiece = nMessage - nAt;
+            XSHA256_Update(&sha, pMessage + nAt, nPiece);
+            nAt += nPiece;
+        }
+
+        XSHA256_Final(&sha, pieces);
+        if (memcmp(whole, pieces, sizeof(whole))) abort();
+
+        uint8_t mac[XSHA256_DIGEST_SIZE];
+        XHMAC_SHA256(mac, sizeof(mac), pMessage, nMessage, pMessage, nKey);
+
+        uint8_t sha1[XSHA1_DIGEST_SIZE], md5[XMD5_DIGEST_SIZE];
+        XSHA1_Compute(sha1, sizeof(sha1), pMessage, nMessage);
+        XMD5_Compute(md5, sizeof(md5), pMessage, nMessage);
+
+#ifdef _XUTILS_USE_SSL
+        uint8_t expected[EVP_MAX_MD_SIZE];
+        unsigned int nExpected = 0;
+
+        if (EVP_Digest(pMessage, nMessage, expected, &nExpected, EVP_sha256(), NULL) == 1 &&
+            memcmp(whole, expected, sizeof(whole))) abort();
+
+        if (EVP_Digest(pMessage, nMessage, expected, &nExpected, EVP_sha1(), NULL) == 1 &&
+            memcmp(sha1, expected, sizeof(sha1))) abort();
+
+        if (EVP_Digest(pMessage, nMessage, expected, &nExpected, EVP_md5(), NULL) == 1 &&
+            memcmp(md5, expected, sizeof(md5))) abort();
+
+        if (HMAC(EVP_sha256(), pMessage, (int)nKey, pMessage, nMessage, expected, &nExpected) != NULL &&
+            memcmp(mac, expected, sizeof(mac))) abort();
+#endif
+    }
+    else if (nTarget == XFUZZ_TARGET_AES)
+    {
+        /* Keys, nonce and data all from the input. SIV decrypts its own output
+           and refuses it with any byte changed, the block modes decrypt what
+           they encrypt, and with OpenSSL to ask, a block and a SIV message are
+           what OpenSSL makes of them. */
+        if (nSize < 81) return 0;
+        uint8_t nMode = pData[0];
+        const uint8_t *pMacKey = pData + 1;
+        const uint8_t *pCtrKey = pData + 33;
+        const uint8_t *pNonce = pData + 65;
+        const uint8_t *pPlain = pData + 81;
+        size_t nPlain = XSTD_MIN(nSize - 81, (size_t)4096);
+        size_t nBits = 128 + (size_t)(nMode % 3) * 64;
+
+        xaes_key_t key;
+        xaes_t aes;
+        XAES_InitSIVKey(&key, pMacKey, pCtrKey, nBits);
+        if (XAES_Init(&aes, &key, (nMode & 4) ? XAES_MODE_SIV_NONCE : XAES_MODE_SIV) <= 0) abort();
+        if (nMode & 4) XAES_SetSIVNonce(&aes, pNonce, XAES_BLOCK_SIZE);
+
+        size_t nCipher = nPlain;
+        uint8_t *pCipher = nPlain ? XAES_Encrypt(&aes, pPlain, &nCipher) : NULL;
+
+        if (pCipher != NULL)
+        {
+            if (nCipher != nPlain + XAES_BLOCK_SIZE) abort();
+
+            size_t nBack = nCipher;
+            uint8_t *pBack = XAES_Decrypt(&aes, pCipher, &nBack);
+            if (pBack == NULL || nBack != nPlain || memcmp(pBack, pPlain, nPlain)) abort();
+            free(pBack);
+
+            size_t nFlip = (size_t)pNonce[0] % nCipher;
+            pCipher[nFlip] ^= (uint8_t)(1 + nMode % 255);
+            nBack = nCipher;
+            if (XAES_Decrypt(&aes, pCipher, &nBack) != NULL) abort();
+            pCipher[nFlip] ^= (uint8_t)(1 + nMode % 255);
+
+#if defined(_XUTILS_USE_SSL) && OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(LIBRESSL_VERSION_NUMBER)
+            const char *pName = nBits == 128 ? "AES-128-SIV" : nBits == 192 ? "AES-192-SIV" : "AES-256-SIV";
+            EVP_CIPHER *pSiv = EVP_CIPHER_fetch(NULL, pName, NULL);
+            EVP_CIPHER_CTX *pCtx = EVP_CIPHER_CTX_new();
+            uint8_t sJoined[64], sTag[16];
+            uint8_t *pOut = (uint8_t*)malloc(nPlain + 16);
+            int nOut = 0, nFinal = 0;
+
+            memcpy(sJoined, pMacKey, nBits / 8);
+            memcpy(sJoined + nBits / 8, pCtrKey, nBits / 8);
+
+            if (pSiv != NULL && pCtx != NULL && pOut != NULL &&
+                EVP_EncryptInit_ex2(pCtx, pSiv, sJoined, NULL, NULL) == 1 &&
+                (!(nMode & 4) || EVP_EncryptUpdate(pCtx, NULL, &nOut, pNonce, XAES_BLOCK_SIZE) == 1) &&
+                EVP_EncryptUpdate(pCtx, pOut, &nOut, pPlain, (int)nPlain) == 1 &&
+                EVP_EncryptFinal_ex(pCtx, pOut + nOut, &nFinal) == 1 &&
+                EVP_CIPHER_CTX_ctrl(pCtx, EVP_CTRL_AEAD_GET_TAG, 16, sTag) == 1)
+            {
+                if (memcmp(pCipher, sTag, 16) || memcmp(pCipher + 16, pOut, nPlain)) abort();
+            }
+
+            free(pOut);
+            EVP_CIPHER_CTX_free(pCtx);
+            EVP_CIPHER_free(pSiv);
+#endif
+            free(pCipher);
+        }
+
+        /* The raw block cipher, both ways */
+        XAES_InitKey(&key, pMacKey, nBits, NULL, XFALSE);
+        if (XAES_Init(&aes, &key, XAES_MODE_CBC) <= 0) abort();
+
+        uint8_t block[XAES_BLOCK_SIZE];
+        memcpy(block, pNonce, sizeof(block));
+        XAES_ECB_Crypt(&aes, block);
+
+#ifdef _XUTILS_USE_SSL
+        const EVP_CIPHER *pEcb = nBits == 128 ? EVP_aes_128_ecb() : nBits == 192 ? EVP_aes_192_ecb() : EVP_aes_256_ecb();
+        EVP_CIPHER_CTX *pEcbCtx = EVP_CIPHER_CTX_new();
+        uint8_t expected[32];
+        int nEcb = 0;
+
+        if (pEcbCtx != NULL && EVP_EncryptInit_ex(pEcbCtx, pEcb, NULL, pMacKey, NULL) == 1 &&
+            EVP_CIPHER_CTX_set_padding(pEcbCtx, 0) == 1 &&
+            EVP_EncryptUpdate(pEcbCtx, expected, &nEcb, pNonce, XAES_BLOCK_SIZE) == 1 && nEcb == XAES_BLOCK_SIZE &&
+            memcmp(block, expected, XAES_BLOCK_SIZE)) abort();
+
+        EVP_CIPHER_CTX_free(pEcbCtx);
+#endif
+
+        XAES_ECB_Decrypt(&aes, block);
+        if (memcmp(block, pNonce, sizeof(block))) abort();
+
+        size_t nCbc = nPlain;
+        uint8_t *pCbc = nPlain ? XAES_Encrypt(&aes, pPlain, &nCbc) : NULL;
+        if (pCbc != NULL)
+        {
+            if (XAES_Init(&aes, &key, XAES_MODE_CBC) <= 0) abort();
+            size_t nBack = nCbc;
+            uint8_t *pBack = XAES_Decrypt(&aes, pCbc, &nBack);
+            if (pBack == NULL || nBack != nPlain || memcmp(pBack, pPlain, nPlain)) abort();
+            free(pBack);
+            free(pCbc);
+        }
+    }
+    else if (nTarget == XFUZZ_TARGET_FORMAT)
+    {
+        /* The formatting helpers against the C library's own snprintf, on
+           strings of every length, including across their internal buffers,
+           and with an argument that points into the buffer being appended to. */
+        if (nSize < 1) return 0;
+        size_t nBody = nSize - 1;
+        size_t nSplit = nBody ? (size_t)pData[0] % (nBody + 1) : 0;
+
+        char *pFirst = (char*)malloc(nSplit + 1);
+        char *pSecond = (char*)malloc(nBody - nSplit + 1);
+        if (pFirst == NULL || pSecond == NULL)
+        {
+            free(pFirst);
+            free(pSecond);
+            return 0;
+        }
+
+        for (size_t i = 0; i < nSplit; i++) pFirst[i] = pData[1 + i] ? (char)pData[1 + i] : '.';
+        for (size_t i = nSplit; i < nBody; i++) pSecond[i - nSplit] = pData[1 + i] ? (char)pData[1 + i] : '.';
+        pFirst[nSplit] = 0;
+        pSecond[nBody - nSplit] = 0;
+
+        int nExpected = snprintf(NULL, 0, "%s|%s|%zu", pFirst, pSecond, nBody);
+        char *pExpected = (char*)malloc((size_t)nExpected + 1);
+
+        if (pExpected != NULL)
+        {
+            snprintf(pExpected, (size_t)nExpected + 1, "%s|%s|%zu", pFirst, pSecond, nBody);
+
+            size_t nLength = 0;
+            char *pOut = xstracpyn(&nLength, "%s|%s|%zu", pFirst, pSecond, nBody);
+            if (pOut == NULL || nLength != (size_t)nExpected || strcmp(pOut, pExpected)) abort();
+            free(pOut);
+
+            xbyte_buffer_t buffer;
+            XByteBuffer_Init(&buffer, 0, XFALSE);
+            if (XByteBuffer_Add(&buffer, (const uint8_t*)pFirst, nSplit) < 0) abort();
+
+            if (XByteBuffer_AddFmt(&buffer, "%s|%s|%zu", pFirst, pSecond, nBody) > 0 &&
+                (buffer.nUsed != nSplit + (size_t)nExpected || strcmp((char*)buffer.pData + nSplit, pExpected))) abort();
+
+            /* Appending the buffer to itself doubles it */
+            size_t nBefore = buffer.nUsed;
+            if (nBefore && XByteBuffer_AddFmt(&buffer, "%s", (char*)buffer.pData) > 0 &&
+                (buffer.nUsed != nBefore * 2 || memcmp(buffer.pData, buffer.pData + nBefore, nBefore))) abort();
+
+            XByteBuffer_Clear(&buffer);
+            free(pExpected);
+        }
+
+        free(pFirst);
+        free(pSecond);
     }
     else
     {

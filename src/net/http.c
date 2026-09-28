@@ -844,58 +844,77 @@ static size_t XHTTP_ParseUrl(xhttp_t *pHttp)
     return xstrncpy(pHttp->sUri, sizeof(pHttp->sUri), &sTmpUrl[nPosit]);
 }
 
+/* Stores one "Name: value" line. Field names are kept lowercase and the first
+   occurrence of a name wins; a line without a name or without a value, once
+   the whitespace around it is gone (RFC 7230, 3.2.4), carries nothing. */
+static int XHTTP_ParseHeaderLine(xhttp_t *pHttp, const char *pLine, size_t nLength)
+{
+    const char *pColon = (const char*)memchr(pLine, ':', nLength);
+    if (pColon == NULL || pColon == pLine) return XSTDOK;
+
+    size_t nNameLen = (size_t)(pColon - pLine);
+    size_t nValuePos = nNameLen;
+
+    while ((nValuePos < nLength) &&
+           (pLine[nValuePos] == ' ' ||
+            pLine[nValuePos] == '\t' ||
+            pLine[nValuePos] == ':')) nValuePos++;
+
+    while ((nLength > nValuePos) &&
+           (pLine[nLength - 1] == ' ' ||
+            pLine[nLength - 1] == '\t')) nLength--;
+
+    if (nValuePos >= nLength) return XSTDOK;
+    char *pName = (char*)malloc(nNameLen + 1);
+    if (pName == NULL) return XSTDERR;
+
+    xstrncases(pName, nNameLen + 1, XSTR_LOWER, pLine, nNameLen);
+
+    if (XMap_Get(&pHttp->headerMap, pName) != NULL)
+    {
+        free(pName);
+        return XSTDOK;
+    }
+
+    size_t nValueLen = nLength - nValuePos;
+    char *pValue = (char*)malloc(nValueLen + 1);
+
+    if (pValue == NULL)
+    {
+        free(pName);
+        return XSTDERR;
+    }
+
+    memcpy(pValue, pLine + nValuePos, nValueLen);
+    pValue[nValueLen] = XSTR_NUL;
+
+    if (XMap_Put(&pHttp->headerMap, pName, pValue) != XMAP_OK)
+    {
+        free(pName);
+        free(pValue);
+        return XSTDERR;
+    }
+
+    return XSTDOK;
+}
+
+/* The header lines follow the start line, one per CRLF */
 static int XHTTP_ParseHeaders(xhttp_t *pHttp)
 {
-    const char *pHeader = (const char *)pHttp->rawData.pData;
-    xarray_t *pArr = xstrsplit(pHeader, "\r\n");
-    if (pArr == NULL) return XSTDERR;
-
+    const char *pLine = strstr((const char *)pHttp->rawData.pData, "\r\n");
     int nStatus = XSTDOK;
-    unsigned int i;
 
-    for (i = 0; i < pArr->nUsed; i++)
+    while (pLine != NULL && nStatus == XSTDOK)
     {
-        char *pData = (char*)XArray_GetData(pArr, i);
-        if (pData != NULL)
-        {
-            int nPosit = xstrsrc(pData, ":");
-            if (nPosit <= 0) continue;
+        pLine += 2;
+        const char *pEnd = strstr(pLine, "\r\n");
+        size_t nLength = pEnd != NULL ? (size_t)(pEnd - pLine) : strlen(pLine);
 
-            char* pHeaderStr = xstracasen(pData, XSTR_LOWER, nPosit);
-            if (pHeaderStr == NULL)
-            {
-                nStatus = XSTDERR;
-                break;
-            }
-
-            if (XMap_Get(&pHttp->headerMap, pHeaderStr) != NULL)
-            {
-                free(pHeaderStr);
-                continue;
-            }
-
-            while (pData[nPosit] == ' ' || pData[nPosit] == ':') nPosit++;
-            char *pValue = xstracut(pData, nPosit, strlen(pData) - nPosit);
-
-            if (pValue == NULL)
-            {
-                free(pHeaderStr);
-                continue;
-            }
-
-            if (pValue[0] == XSTR_SPACE_CHAR) xstrnrm(pValue, 0, 1);
-            if (XMap_Put(&pHttp->headerMap, pHeaderStr, pValue) != XMAP_OK)
-            {
-                nStatus = XSTDERR;
-                free(pHeaderStr);
-                free(pValue);
-                break;
-            }
-        }
+        nStatus = XHTTP_ParseHeaderLine(pHttp, pLine, nLength);
+        pLine = pEnd;
     }
 
     pHttp->nHeaderCount = (uint16_t)pHttp->headerMap.nCount;
-    XArray_Destroy(pArr);
     return nStatus;
 }
 
@@ -912,38 +931,44 @@ int XHTTP_InitParser(xhttp_t *pHttp, uint8_t* pData, size_t nSize)
     return nSize > 0 && nStatus <= 0 ? XSTDERR : XSTDOK;
 }
 
+/* Parses the header, which the caller has made a string of its own */
+static xhttp_status_t XHTTP_ParseHeader(xhttp_t *pHttp)
+{
+    pHttp->eType = XHTTP_ParseType(pHttp);
+    if (!XHTTP_ParseVersion(pHttp)) return XHTTP_INVALID;
+
+    if (pHttp->eType == XHTTP_RESPONSE)
+    {
+        pHttp->nStatusCode = XHTTP_ParseCode(pHttp);
+        if (pHttp->nStatusCode < XHTTP_CODE_MIN ||
+            pHttp->nStatusCode > XHTTP_CODE_MAX)
+            return XHTTP_INVALID;
+    }
+    else if (pHttp->eType == XHTTP_REQUEST)
+        pHttp->eMethod = XHTTP_ParseMethod(pHttp);
+
+    if (!XHTTP_ParseUrl(pHttp)) return XHTTP_INVALID;
+    if (XHTTP_ParseHeaders(pHttp) == XSTDERR) return XHTTP_EALLOC;
+
+    pHttp->nContentLength = XHTTP_GetContentLength(pHttp);
+    pHttp->nKeepAlive = XHTTP_GetKeepAlive(pHttp);
+    return XHTTP_NONE;
+}
+
 xhttp_status_t XHTTP_Parse(xhttp_t *pHttp)
 {
     const char *prawData = (const char*)pHttp->rawData.pData;
     size_t nHeaderLength = XHTTP_ParseHeaderLength(prawData);
     if (!nHeaderLength) return XHTTP_INCOMPLETE;
 
+    /* The last byte of the header is its terminator while it is parsed. The buffer
+       may be the caller's own, so the byte goes back whatever the outcome. */
     pHttp->rawData.pData[nHeaderLength - 1] = '\0';
     pHttp->nHeaderLength = nHeaderLength;
-    pHttp->eType = XHTTP_ParseType(pHttp);
 
-    if (!XHTTP_ParseVersion(pHttp))
-        return XHTTP_StatusCb(pHttp, XHTTP_INVALID);
-
-    if (pHttp->eType == XHTTP_RESPONSE)
-    {
-        pHttp->nStatusCode = XHTTP_ParseCode(pHttp);
-        if (pHttp->nStatusCode < 100 ||
-            pHttp->nStatusCode > 599)
-            return XHTTP_StatusCb(pHttp, XHTTP_INVALID);
-    }
-    else if (pHttp->eType == XHTTP_REQUEST)
-        pHttp->eMethod = XHTTP_ParseMethod(pHttp);
-
-    if (!XHTTP_ParseUrl(pHttp))
-        return XHTTP_StatusCb(pHttp, XHTTP_INVALID);
-
-    if (XHTTP_ParseHeaders(pHttp) == XSTDERR)
-        return XHTTP_StatusCb(pHttp, XHTTP_EALLOC);
-
-    pHttp->nContentLength = XHTTP_GetContentLength(pHttp);
-    pHttp->nKeepAlive = XHTTP_GetKeepAlive(pHttp);
+    xhttp_status_t eError = XHTTP_ParseHeader(pHttp);
     pHttp->rawData.pData[nHeaderLength - 1] = '\n';
+    if (eError != XHTTP_NONE) return XHTTP_StatusCb(pHttp, eError);
 
     xhttp_status_t nStatus = XHTTP_StatusCb(pHttp, XHTTP_PARSED);
     if (nStatus == XHTTP_TERMINATED) return XHTTP_TERMINATED;

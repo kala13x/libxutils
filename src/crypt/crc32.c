@@ -69,7 +69,7 @@ uint32_t XCRC32_Compute(const uint8_t *pInput, size_t nLength)
 {
     if (pInput == NULL || !nLength) return 0;
     uint32_t nCRC = 0;
-    unsigned int i;
+    size_t i;
 
     for (i = 0;  i < nLength; i++)
     {
@@ -84,7 +84,7 @@ uint32_t XCRC32_ComputeB(const uint8_t *pInput, size_t nLength)
 {
     if (pInput == NULL || !nLength) return 0;
     uint32_t nCRC = 0xFFFFFFFF;
-    unsigned int i;
+    size_t i;
 
     for (i = 0;  i < nLength; i++)
     {

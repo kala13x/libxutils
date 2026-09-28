@@ -255,9 +255,19 @@ int XByteBuffer_AddStr(xbyte_buffer_t *pBuffer, xstring_t *pStr)
 
 int XByteBuffer_AddFmt(xbyte_buffer_t *pBuffer, const char *pFmt, ...)
 {
-    size_t nBytes = 0;
+    /* A short result is formatted on the stack and copied in. It is never
+       formatted into the buffer itself, an argument may point into it. */
+    char sStack[XSTR_MIN];
     va_list args;
 
+    va_start(args, pFmt);
+    int nFormatted = vsnprintf(sStack, sizeof(sStack), pFmt, args);
+    va_end(args);
+
+    if (nFormatted > 0 && (size_t)nFormatted < sizeof(sStack))
+        return XByteBuffer_Add(pBuffer, (const uint8_t*)sStack, (size_t)nFormatted);
+
+    size_t nBytes = 0;
     va_start(args, pFmt);
     char *pDest = xstracpyargs(pFmt, args, &nBytes);
     va_end(args);

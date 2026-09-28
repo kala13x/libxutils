@@ -1,6 +1,11 @@
 /* libxutils: byte-exact framing at length boundaries and hostile/truncated wire input. */
 #include "test.h"
 #include "ws.h"
+#include "thread.h"
+#ifndef _WIN32
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 static int XTest_lengths(void)
 {
@@ -553,6 +558,123 @@ static int XTest_append_frame(void)
     return 0;
 }
 
+/* The mask key of the next masked frame this thread builds */
+static uint32_t ws_next_key(void)
+{
+    xws_frame_t frame;
+    if (XWebFrame_Create(&frame, (const uint8_t*)"k", 1, XWS_BINARY, XTRUE, XTRUE) != XWS_ERR_NONE) return 0;
+
+    uint32_t nKey = 0;
+    memcpy(&nKey, frame.buffer.pData + frame.nHeaderSize - 4, sizeof(nKey));
+    XWebFrame_Clear(&frame);
+    return nKey;
+}
+
+static int ws_compare_keys(const void *pFirst, const void *pSecond)
+{
+    uint32_t nFirst = *(const uint32_t*)pFirst, nSecond = *(const uint32_t*)pSecond;
+    return (nFirst > nSecond) - (nFirst < nSecond);
+}
+
+static size_t ws_distinct(uint32_t *pKeys, size_t nCount)
+{
+    qsort(pKeys, nCount, sizeof(*pKeys), ws_compare_keys);
+    size_t nDistinct = nCount ? 1 : 0;
+    for (size_t i = 1; i < nCount; i++) if (pKeys[i] != pKeys[i - 1]) nDistinct++;
+    return nDistinct;
+}
+
+typedef struct {
+    uint32_t keys[500];
+} ws_key_run_t;
+
+static void *ws_key_thread(void *pContext)
+{
+    ws_key_run_t *pRun = (ws_key_run_t*)pContext;
+    for (size_t i = 0; i < sizeof(pRun->keys) / sizeof(*pRun->keys); i++) pRun->keys[i] = ws_next_key();
+    return NULL;
+}
+
+static int XTest_mask_keys(void)
+{
+    /* Every masked frame gets a key of its own. Keys are drawn from the
+       CSPRNG in batches, yet none repeats across a batch boundary, between
+       threads, or between a process and a child it forks. With 32 bit random
+       keys a repeat in a few thousand is a one in ten thousand event, so the
+       bounds below leave room for one and never for a reused batch. */
+    uint32_t keys[1000];
+    for (size_t i = 0; i < 1000; i++) keys[i] = ws_next_key();
+    CHECK(ws_distinct(keys, 1000) >= 998, "A thousand frames in a row get a thousand keys");
+
+    /* The masked payload is the key applied to the bytes, with the key on the wire */
+    xbyte_buffer_t wire;
+    XByteBuffer_Init(&wire, 0, XFALSE);
+    for (int i = 0; i < 200; i++)
+        CHECK(XWS_AppendFrame(&wire, (const uint8_t*)"abcd", 4, XWS_TEXT, XTRUE, XTRUE) == XWS_ERR_NONE, "Append a frame");
+
+    uint32_t appended[200];
+    for (size_t i = 0; i < 200; i++)
+    {
+        const uint8_t *pFrame = wire.pData + i * 10;
+        CHECK(pFrame[1] == (0x80 | 4), "Every appended frame is masked and four bytes long");
+        memcpy(&appended[i], pFrame + 2, sizeof(uint32_t));
+        for (int j = 0; j < 4; j++) CHECK((uint8_t)(pFrame[6 + j] ^ pFrame[2 + j]) == "abcd"[j], "The key masks the payload");
+    }
+
+    CHECK(ws_distinct(appended, 200) >= 199, "Appended frames get keys of their own");
+    XByteBuffer_Clear(&wire);
+
+    /* Threads draw from batches of their own */
+    ws_key_run_t runs[2];
+    xthread_t threads[2];
+    for (int i = 0; i < 2; i++) CHECK(XThread_Create(&threads[i], ws_key_thread, &runs[i], XFALSE) == XSTDOK, "Start a thread");
+    for (int i = 0; i < 2; i++) XThread_Join(&threads[i]);
+
+    uint32_t both[1000];
+    memcpy(both, runs[0].keys, sizeof(runs[0].keys));
+    memcpy(both + 500, runs[1].keys, sizeof(runs[1].keys));
+    CHECK(ws_distinct(both, 1000) >= 998, "Two threads never hand out the same keys");
+
+#ifndef _WIN32
+    /* A child forked with half a batch in hand does not reuse it */
+    (void)ws_next_key();
+    int pipeFds[2];
+    CHECK(pipe(pipeFds) == 0, "Create a pipe to the child");
+
+    pid_t nChild = fork();
+    CHECK(nChild >= 0, "Fork a child");
+
+    if (nChild == 0)
+    {
+        uint32_t childKeys[32];
+        for (size_t i = 0; i < 32; i++) childKeys[i] = ws_next_key();
+        ssize_t nWritten = write(pipeFds[1], childKeys, sizeof(childKeys));
+        _exit(nWritten == (ssize_t)sizeof(childKeys) ? 0 : 1);
+    }
+
+    uint32_t mixed[64];
+    for (size_t i = 0; i < 32; i++) mixed[i] = ws_next_key();
+
+    size_t nRead = 0;
+    while (nRead < 32 * sizeof(uint32_t))
+    {
+        ssize_t nBytes = read(pipeFds[0], (uint8_t*)&mixed[32] + nRead, 32 * sizeof(uint32_t) - nRead);
+        if (nBytes <= 0) break;
+        nRead += (size_t)nBytes;
+    }
+
+    int nStatus = 0;
+    waitpid(nChild, &nStatus, 0);
+    close(pipeFds[0]);
+    close(pipeFds[1]);
+
+    CHECK(nRead == 32 * sizeof(uint32_t) && WIFEXITED(nStatus) && WEXITSTATUS(nStatus) == 0, "The child reports its keys");
+    CHECK(ws_distinct(mixed, 64) >= 63, "The parent and its child never mask with the same keys");
+#endif
+
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(lengths),
     XTEST_CASE(partial),
@@ -565,5 +687,6 @@ XTEST_MAIN(
     XTEST_CASE(extra_data),
     XTEST_CASE(allocation),
     XTEST_CASE(mask_lengths),
-    XTEST_CASE(append_frame)
+    XTEST_CASE(append_frame),
+    XTEST_CASE(mask_keys)
 )

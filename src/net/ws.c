@@ -160,16 +160,16 @@ uint8_t XWS_OpCode(xws_frame_type_t eType)
     return 0;
 }
 
-static xbool_t XWS_GenerateMaskKey(uint32_t *pKey)
+static xbool_t XWS_FillRandom(uint8_t *pBuffer, size_t nSize)
 {
 #ifdef _XUTILS_USE_SSL
-    return RAND_bytes((unsigned char*)pKey, sizeof(*pKey)) == 1;
+    return RAND_bytes((unsigned char*)pBuffer, (int)nSize) == 1;
 #elif defined(_WIN32)
     HCRYPTPROV provider;
     if (!CryptAcquireContext(&provider, NULL, NULL, PROV_RSA_FULL,
         CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) return XFALSE;
 
-    BOOL ok = CryptGenRandom(provider, sizeof(*pKey), (BYTE*)pKey);
+    BOOL ok = CryptGenRandom(provider, (DWORD)nSize, (BYTE*)pBuffer);
     CryptReleaseContext(provider, 0);
     return ok ? XTRUE : XFALSE;
 #else
@@ -181,17 +181,55 @@ static xbool_t XWS_GenerateMaskKey(uint32_t *pKey)
     if (fd < 0) return XFALSE;
     size_t offset = 0;
 
-    while (offset < sizeof(*pKey))
+    while (offset < nSize)
     {
-        ssize_t count = read(fd, (unsigned char*)pKey + offset, sizeof(*pKey) - offset);
+        ssize_t count = read(fd, pBuffer + offset, nSize - offset);
         if (count < 0 && errno == EINTR) continue;
         if (count <= 0) break;
         offset += (size_t)count;
     }
 
     close(fd);
-    return offset == sizeof(*pKey);
+    return offset == nSize;
 #endif
+}
+
+/* Masking keys are drawn from the system CSPRNG a batch at a time. Asking it for
+   four bytes is a locked call into the DRBG, or three syscalls without OpenSSL,
+   and a client pays for one with every frame it sends. The batch belongs to the
+   calling thread, and a forked child drops the one it inherited, so two
+   processes never mask with the same keys. */
+#define XWS_KEY_BATCH 64
+
+#if defined(_MSC_VER)
+#define XWS_THREAD_LOCAL __declspec(thread)
+#else
+#define XWS_THREAD_LOCAL __thread
+#endif
+
+static XWS_THREAD_LOCAL uint32_t g_wsMaskKeys[XWS_KEY_BATCH];
+static XWS_THREAD_LOCAL size_t g_nWsMaskKeys = 0;
+
+#ifndef _WIN32
+static pthread_once_t g_wsForkOnce = PTHREAD_ONCE_INIT;
+static void XWS_DropMaskKeys(void) { g_nWsMaskKeys = 0; }
+static void XWS_RegisterForkHandler(void) { pthread_atfork(NULL, NULL, XWS_DropMaskKeys); }
+#endif
+
+static xbool_t XWS_GenerateMaskKey(uint32_t *pKey)
+{
+#ifndef _WIN32
+    pthread_once(&g_wsForkOnce, XWS_RegisterForkHandler);
+#endif
+
+    if (!g_nWsMaskKeys)
+    {
+        if (!XWS_FillRandom((uint8_t*)g_wsMaskKeys, sizeof(g_wsMaskKeys))) return XFALSE;
+        g_nWsMaskKeys = XWS_KEY_BATCH;
+    }
+
+    *pKey = g_wsMaskKeys[--g_nWsMaskKeys];
+    return XTRUE;
 }
 
 static xbool_t XWS_CheckFrame(const uint8_t *pPayload, size_t nLength, uint8_t nOpCode, xbool_t bFin)

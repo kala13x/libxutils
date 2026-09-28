@@ -418,6 +418,86 @@ static int XTest_udp(void)
     return 0;
 }
 
+static int XTest_failed_create_state(void)
+{
+    /* A socket that could not be created holds nothing: no descriptor and no
+       TLS state, so dropping it without a close leaks nothing, and a close is
+       still safe whatever the structure held before. */
+    xsock_t sock;
+    CHECK(XSock_Create(&sock, XSOCK_SSL | XSOCK_TCP | XSOCK_CLIENT, NULL, 443) == XSOCK_INVALID,
+        "A TLS client without an address is refused");
+    CHECK(sock.pPrivate == NULL && sock.nFD == XSOCK_INVALID, "It holds no descriptor and no TLS state");
+    CHECK(XSock_Status(&sock) == XSOCK_ERR_ARGS, "The refusal names the arguments");
+
+    CHECK(XSock_Create(&sock, XSOCK_SSL | XSOCK_TCP | XSOCK_CLIENT, "127.0.0.1", 0) == XSOCK_INVALID,
+        "A TLS client without a port is refused");
+    CHECK(sock.pPrivate == NULL && sock.nFD == XSOCK_INVALID, "It holds nothing either");
+
+    CHECK(XSock_Create(&sock, XSOCK_SSL | XSOCK_TCP | XSOCK_CLIENT, "", 443) == XSOCK_INVALID,
+        "An empty address is refused");
+    CHECK(sock.pPrivate == NULL, "It holds no TLS state");
+    XSock_Close(&sock);
+
+    /* A structure full of garbage is initialized by a failed open, so the close is safe */
+    xsock_info_t info;
+    XSock_InitInfo(&info);
+    memset(&sock, 0xA5, sizeof(sock));
+    CHECK(XSock_Open(&sock, XSOCK_TCP_CLIENT, &info) == XSOCK_INVALID, "An open without an address is refused");
+    CHECK(sock.nFD == XSOCK_INVALID && sock.pPrivate == NULL && XSock_Status(&sock) == XSOCK_ERR_ARGS,
+        "It leaves an initialized, closed socket");
+    XSock_Close(&sock);
+
+    xstrncpy(info.sAddr, sizeof(info.sAddr), "127.0.0.1");
+    memset(&sock, 0xA5, sizeof(sock));
+    CHECK(XSock_Open(&sock, XSOCK_TCP_CLIENT, &info) == XSOCK_INVALID, "An open without a port is refused");
+    CHECK(sock.nFD == XSOCK_INVALID && sock.pPrivate == NULL, "It leaves an initialized, closed socket too");
+    XSock_Close(&sock);
+
+    memset(&sock, 0xA5, sizeof(sock));
+    CHECK(XSock_Setup(&sock, XSOCK_TCP_CLIENT, "no.such.host.invalid:80") == XSOCK_INVALID,
+        "A setup that cannot resolve is refused");
+    CHECK(sock.nFD == XSOCK_INVALID && sock.pPrivate == NULL && XSock_Status(&sock) == XSOCK_ERR_ADDR,
+        "It leaves an initialized, closed socket");
+    XSock_Close(&sock);
+    return 0;
+}
+
+static int XTest_address_port_range(void)
+{
+    /* A port is a number from 1 to 65535. Anything outside that is no port,
+       rather than one wrapped around into the range. */
+    struct { const char *pHost; XSTATUS nStatus; uint16_t nPort; } cases[] = {
+        { "127.0.0.1:80", XSOCK_SUCCESS, 80 },
+        { "127.0.0.1:1", XSOCK_SUCCESS, 1 },
+        { "127.0.0.1:65535", XSOCK_SUCCESS, 65535 },
+        { "127.0.0.1:65536", XSOCK_NONE, 0 },
+        { "127.0.0.1:70000", XSOCK_NONE, 0 },
+        { "127.0.0.1:4294967376", XSOCK_NONE, 0 },
+        { "127.0.0.1:99999999999999999999999", XSOCK_NONE, 0 },
+        { "127.0.0.1:-1", XSOCK_NONE, 0 },
+        { "127.0.0.1:0", XSOCK_NONE, 0 },
+        { "127.0.0.1:abc", XSOCK_NONE, 0 },
+        { "127.0.0.1:", XSOCK_NONE, 0 },
+        { "127.0.0.1", XSOCK_NONE, 0 },
+        { "127.0.0.1:8080abc", XSOCK_SUCCESS, 8080 }
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); i++)
+    {
+        xsock_info_t info;
+        int nErrno = EDOM;
+        errno = nErrno;
+        CHECK(XSock_GetAddrInfo(&info, cases[i].pHost) == cases[i].nStatus, "The port decides the status");
+        CHECK(info.nPort == cases[i].nPort, "Only a port in range is kept");
+        CHECK(strcmp(info.sAddr, "127.0.0.1") == 0, "The address resolves whatever the port");
+        CHECK(errno == nErrno, "Parsing the port leaves errno alone");
+    }
+
+    xsock_info_t info;
+    CHECK(XSock_GetAddrInfo(&info, NULL) == XSOCK_ERROR, "A missing host is an error");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(address_conversion),
     XTEST_CASE(address_info),
@@ -426,5 +506,7 @@ XTEST_MAIN(
     XTEST_CASE(buffers),
     XTEST_CASE(listener),
     XTEST_CASE(create_guards),
-    XTEST_CASE(udp)
+    XTEST_CASE(udp),
+    XTEST_CASE(failed_create_state),
+    XTEST_CASE(address_port_range)
 )

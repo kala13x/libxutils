@@ -753,6 +753,54 @@ static int XTest_link_entries(void)
     return 0;
 }
 
+static int XTest_nocase_binary(void)
+{
+    /* A case-insensitive text search folds the whole file, so text after a
+       NUL byte in a binary file is found like text anywhere else. */
+    srch_fixture_t fixture;
+    memset(&fixture, 0, sizeof(fixture));
+    snprintf(fixture.sRoot, sizeof(fixture.sRoot), "/tmp/xutils-srch-XXXXXX");
+    CHECK(mkdtemp(fixture.sRoot) != NULL, "Create the fixture directory");
+    fixture.nCreated = 1;
+
+    const uint8_t binary[] = { 'h', 'e', 'a', 'd', 0, 1, 2, 0xff, ' ', 'N', 'E', 'E', 'D', 'L', 'E', 0, 't', 'a', 'i', 'l' };
+    char sPath[512];
+    snprintf(sPath, sizeof(sPath), "%s/blob.bin", fixture.sRoot);
+    FILE *pFile = fopen(sPath, "wb");
+    CHECK(pFile != NULL && fwrite(binary, 1, sizeof(binary), pFile) == sizeof(binary), "Write the binary file");
+    fclose(pFile);
+
+    CHECK(srch_write(&fixture, "text.txt", "a NeEdLe here\n", 0644) == XSTDOK, "Write the text file");
+    CHECK(srch_write(&fixture, "other.txt", "no match\n", 0644) == XSTDOK, "Write a file without the text");
+
+    const char *pPatterns[] = { "needle", "NEEDLE", "NeEdLe" };
+    for (size_t i = 0; i < sizeof(pPatterns) / sizeof(*pPatterns); i++)
+    {
+        xsearch_t search;
+        XSearch_Init(&search, "*");
+        search.bInsensitive = XTRUE;
+        search.bMatchOnly = XTRUE;
+        xstrncpy(search.sText, sizeof(search.sText), pPatterns[i]);
+
+        CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "A case-insensitive search runs");
+        CHECK(XArray_Used(&search.fileArray) == 2, "Both files with the text match, whatever its case");
+        CHECK(srch_has(&search, "blob.bin") && srch_has(&search, "text.txt"), "Including the binary one");
+        XSearch_Destroy(&search);
+    }
+
+    /* A case-sensitive search still tells the spellings apart */
+    xsearch_t search;
+    XSearch_Init(&search, "*");
+    search.bMatchOnly = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "NEEDLE");
+    CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "A case-sensitive search runs");
+    CHECK(XArray_Used(&search.fileArray) == 1 && srch_has(&search, "blob.bin"), "Only the exact spelling matches");
+    XSearch_Destroy(&search);
+
+    srch_destroy(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(deep_tree),
     XTEST_CASE(name_matching),
@@ -764,5 +812,6 @@ XTEST_MAIN(
     XTEST_CASE(guards),
     XTEST_CASE(text_shapes),
     XTEST_CASE(line_bounds),
-    XTEST_CASE(link_entries)
+    XTEST_CASE(link_entries),
+    XTEST_CASE(nocase_binary)
 )

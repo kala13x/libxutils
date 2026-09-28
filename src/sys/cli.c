@@ -100,7 +100,8 @@ XSTATUS XCLI_ReadStdin(char *pBuffer, size_t nSize, xbool_t bAsync)
             fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
     }
 
-    nLength = read(STDIN_FILENO, pBuffer, nSize);
+    /* A buffer of more than one byte is terminated, so the read leaves room for it */
+    nLength = read(STDIN_FILENO, pBuffer, nSize > 1 ? nSize - 1 : nSize);
     if (nLength < 0)
     {
         if (errno == EWOULDBLOCK ||
@@ -210,6 +211,7 @@ XSTATUS XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
 XSTATUS XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNewLine)
 {
     XCHECK(pInput, XSTDINV);
+    XCHECK_NL((nSize > 0), XSTDINV);
     pInput[0] = XSTR_NUL;
 
     if (pText != NULL)

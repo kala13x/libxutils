@@ -65,7 +65,20 @@ static const xfuzz_seed_t g_fuzzSeeds[] = {
     XFUZZ_SEED("path", XFUZZ_TARGET_PATH, "/one/two/three/file.tar.gz"),
     XFUZZ_SEED("hex", XFUZZ_TARGET_HEX, "\x00" "binary bytes to hex and back"),
     XFUZZ_SEED("json-roundtrip", XFUZZ_TARGET_JSON_ROUNDTRIP,
-        "{\"a\":[1,2,3],\"b\":{\"c\":true,\"d\":null},\"e\":\"text\"}")
+        "{\"a\":[1,2,3],\"b\":{\"c\":true,\"d\":null},\"e\":\"text\"}"),
+
+    XFUZZ_SEED("http-headers", XFUZZ_TARGET_HTTP_HEADERS,
+        "GET /a:b HTTP/1.1\r\nHost: x\r\nX-Tab:\tv \r\nX-Empty: \r\nx-host: y\r\n\r\n"),
+
+    /* Four piece sizes and a key length come first, then the message */
+    XFUZZ_SEED("digest", XFUZZ_TARGET_DIGEST, "\x01\x3f\x40\x07\x14" "the quick brown fox jumps over the lazy dog"),
+
+    /* A mode byte, 32 bytes of MAC key, 32 of CTR key and 16 of nonce, then the data */
+    XFUZZ_SEED("aes", XFUZZ_TARGET_AES,
+        "\x05" "0123456789abcdef0123456789abcdef" "fedcba9876543210fedcba9876543210" "nonce-0123456789" "plain text"),
+
+    /* The first byte splits the rest into the two formatted arguments */
+    XFUZZ_SEED("format", XFUZZ_TARGET_FORMAT, "\x04" "leftright side")
 };
 
 #endif

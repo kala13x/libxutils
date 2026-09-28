@@ -198,11 +198,61 @@ static int XTest_accept_cloexec(void)
 #endif
 }
 
+static int XTest_accept_flags(void)
+{
+#ifdef _WIN32
+    return 77;
+#else
+    /* An accepted socket is always close-on-exec, and non-blocking exactly
+       when its listener is, with the flags word saying the same as the kernel. */
+    char sDir[] = "/tmp/xutils_sock_XXXXXX";
+    CHECK(mkdtemp(sDir) != NULL, "Create a private directory for the listeners");
+
+    for (int nBlocking = 0; nBlocking < 2; nBlocking++)
+    {
+        char sPath[64];
+        xstrncpyf(sPath, sizeof(sPath), "%s/listen%d.sock", sDir, nBlocking);
+
+        uint32_t nFlags = XSOCK_UNIX_SERVER | (nBlocking ? 0 : XSOCK_NB);
+        xsock_t listener, client, peer;
+        CHECK(XSock_Create(&listener, nFlags, sPath, 0) != XSOCK_INVALID, "Listen on a Unix socket");
+        CHECK(XSock_Create(&client, XSOCK_UNIX_CLIENT, sPath, 0) != XSOCK_INVALID, "Connect to the listener");
+        CHECK(XSock_Accept(&listener, &peer) != XSOCK_INVALID, "Accept the connection");
+
+        int nDescFlags = fcntl(peer.nFD, F_GETFD);
+        int nFileFlags = fcntl(peer.nFD, F_GETFL);
+        CHECK(nDescFlags >= 0 && (nDescFlags & FD_CLOEXEC), "An accepted socket is close-on-exec");
+        CHECK(nFileFlags >= 0 && !!(nFileFlags & O_NONBLOCK) == !nBlocking, "It blocks exactly when its listener does");
+        CHECK(XSock_IsNB(&peer) == !nBlocking, "And its flags say so");
+        CHECK(XFLAGS_CHECK(XSock_GetFlags(&peer), XSOCK_PEER) && !XFLAGS_CHECK(XSock_GetFlags(&peer), XSOCK_SERVER),
+            "It is a peer, not a server");
+
+        /* Nothing is waiting: a non-blocking listener says so instead of blocking */
+        if (!nBlocking)
+        {
+            xsock_t none;
+            CHECK(XSock_Accept(&listener, &none) == XSOCK_INVALID, "An empty queue accepts nothing");
+            CHECK(XSock_Status(&listener) == XSOCK_WANT_READ, "And asks to be called again when readable");
+            listener.eStatus = XSOCK_ERR_NONE;
+        }
+
+        XSock_Close(&peer);
+        XSock_Close(&client);
+        XSock_Close(&listener);
+        unlink(sPath);
+    }
+
+    rmdir(sDir);
+    return 0;
+#endif
+}
+
 XTEST_MAIN(
     XTEST_CASE(retry_read),
     XTEST_CASE(retry_write),
     XTEST_CASE(empty_and_eof),
     XTEST_CASE(keep_open),
     XTEST_CASE(interrupted_io),
-    XTEST_CASE(accept_cloexec)
+    XTEST_CASE(accept_cloexec),
+    XTEST_CASE(accept_flags)
 )

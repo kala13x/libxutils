@@ -444,13 +444,9 @@ int XMap_Put(xmap_t *pMap, char* pKey, void *pValue)
     pMap->pPairs[nHash].pKey = pKey;
     pMap->pPairs[nHash].eStatus = XMAP_PAIR_USED;
 
-    /* Tombstone pressure trigger */
-    if (pMap->nDeleted > pMap->nTableSize / 4)
-    {
-        int nStatus = XMap_Rehash(pMap);
-        if (nStatus < 0) return nStatus;
-    }
-
+    /* Tombstone pressure trigger. The pair is already stored and a failed
+       rehash keeps the old table, so the insertion has succeeded either way. */
+    if (pMap->nDeleted > pMap->nTableSize / 4) XMap_Rehash(pMap);
     return XMAP_OK;
 }
 

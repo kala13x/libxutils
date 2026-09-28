@@ -125,7 +125,7 @@ XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp
     }
 
     BIO *pBioPub = BIO_new(BIO_s_mem());
-    if (pBioPriv == NULL)
+    if (pBioPub == NULL)
     {
         RSA_free(pKeyPair);
         BIO_free(pBioPriv);
@@ -193,7 +193,9 @@ uint8_t* XRSA_Crypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size
 {
     XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
+
     RSA *pRSA = pCtx->pKeyPair;
+    XCHECK_NL((pRSA != NULL), NULL);
 
     int nRSASize = RSA_size(pRSA);
     XCHECK(nRSASize, NULL);
@@ -214,7 +216,9 @@ uint8_t* XRSA_PrivCrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, 
 {
     XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
+
     RSA *pRSA = pCtx->pKeyPair;
+    XCHECK_NL((pRSA != NULL), NULL);
 
     int nRSASize = RSA_size(pRSA);
     XCHECK(nRSASize, NULL);
@@ -235,7 +239,9 @@ uint8_t* XRSA_PubDecrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength,
 {
     XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
+
     RSA *pRSA = pCtx->pKeyPair;
+    XCHECK_NL((pRSA != NULL), NULL);
 
     int nRSASize = RSA_size(pRSA);
     XCHECK((nRSASize > 0), NULL);
@@ -257,18 +263,21 @@ uint8_t* XRSA_Decrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, si
     XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
     RSA *pRSA = pCtx->pKeyPair;
+    XCHECK_NL((pRSA != NULL), NULL);
 
-    uint8_t *pOutput = malloc(nLength + 1);
+    /* The plaintext can be as long as the modulus allows whatever the input
+       length is: a short ciphertext still decrypts to a full size block */
+    int nRSASize = RSA_size(pRSA);
+    XCHECK((nRSASize > 0), NULL);
+
+    uint8_t *pOutput = malloc((size_t)nRSASize + 1);
     XCHECK(pOutput, NULL);
 
     int nOutLength = RSA_private_decrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    XCHECK_FREE((nOutLength > 0), pOutput, NULL);
+    XCHECK_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
-    size_t nTermPos = (size_t)nOutLength < nLength ?
-                    (size_t)nOutLength : nLength;
-
-    pOutput[nTermPos] = '\0';
+    pOutput[nOutLength] = '\0';
     return pOutput;
 }
 

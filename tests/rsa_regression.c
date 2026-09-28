@@ -354,6 +354,49 @@ static int XTest_build_support(void)
     return 0;
 }
 
+static int XTest_short_ciphertext(void)
+{
+    /* A ciphertext shorter than the modulus still decrypts to a block as
+       wide as the modulus: without padding the value one decrypts to 255
+       zero bytes and a one. The output has room for that whatever the input
+       length is. */
+    xrsa_ctx_t key;
+    CHECK(XRSA_GenerateKeys(&key, 2048, 65537) == XSTDOK, "Generate a key");
+    key.nPadding = RSA_NO_PADDING;
+
+    const uint8_t one[] = { 0x01 };
+    size_t nPlain = 0;
+    uint8_t *pPlain = XRSA_Decrypt(&key, one, sizeof(one), &nPlain);
+    CHECK(pPlain != NULL && nPlain == 256, "A one byte ciphertext decrypts to a full block");
+
+    int bZeros = 1;
+    for (size_t i = 0; i < 255; i++) if (pPlain[i] != 0) bZeros = 0;
+    CHECK(bZeros && pPlain[255] == 0x01 && pPlain[256] == '\0', "The block is the value one, terminated");
+    free(pPlain);
+
+    /* A padded decrypt of a short input is refused or, where OpenSSL rejects
+       implicitly, answered with a synthetic message; either fits the output */
+    key.nPadding = RSA_PKCS1_PADDING;
+    const uint8_t shortInput[] = { 0x00, 0x02, 0x11, 0x22 };
+    nPlain = 7;
+    pPlain = XRSA_Decrypt(&key, shortInput, sizeof(shortInput), &nPlain);
+    CHECK(pPlain == NULL ? nPlain == 0 : (nPlain <= 256 - 11 && pPlain[nPlain] == '\0'),
+        "A short padded ciphertext never yields more than the modulus holds");
+    free(pPlain);
+    XRSA_Destroy(&key);
+
+    /* A context without a key has nothing to work with */
+    xrsa_ctx_t empty;
+    XRSA_Init(&empty);
+    size_t nOut = 7;
+    CHECK(XRSA_Crypt(&empty, one, sizeof(one), &nOut) == NULL && nOut == 0, "Encryption without a key is refused");
+    CHECK(XRSA_PrivCrypt(&empty, one, sizeof(one), &nOut) == NULL, "Signing without a key is refused");
+    CHECK(XRSA_PubDecrypt(&empty, one, sizeof(one), &nOut) == NULL, "Verifying without a key is refused");
+    CHECK(XRSA_Decrypt(&empty, one, sizeof(one), &nOut) == NULL, "Decryption without a key is refused");
+    XRSA_Destroy(&empty);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(signatures),
     XTEST_CASE(encryption),
@@ -364,5 +407,6 @@ XTEST_MAIN(
     XTEST_CASE(key_files),
     XTEST_CASE(context),
     XTEST_CASE(size_limits),
-    XTEST_CASE(build_support)
+    XTEST_CASE(build_support),
+    XTEST_CASE(short_ciphertext)
 )
