@@ -299,12 +299,15 @@ static int XTest_link_exchange(void)
     CHECK(XHTTP_LinkExchange(&request, &response, &link) == XHTTP_COMPLETE, "The link exchange completes");
     CHECK(response.nStatusCode == 200, "The server answered with its status");
     CHECK(XHTTP_GetBodySize(&response) == strlen(server.pBody), "The body arrived whole");
+    CHECK(memcmp(XHTTP_GetBody(&response), "link exchange body", strlen("link exchange body")) == 0,
+        "The link response contains the exact expected bytes");
 
     XHTTP_Clear(&response);
     XHTTP_Clear(&request);
     XThread_Join(&thread);
 
     CHECK(strcmp(server.sUri, "/link") == 0, "The server saw the link target");
+    CHECK(strcmp(server.sMethod, "GET") == 0 && !server.nBodyLen, "The server received the expected method and empty body");
     return 0;
 }
 
@@ -330,6 +333,7 @@ static int XTest_easy_exchange(void)
 
     CHECK(XHTTP_EasyExchange(&request, &response, sUrl) == XHTTP_COMPLETE, "The easy exchange completes");
     CHECK(response.nStatusCode == 200, "The server answered with its status");
+    CHECK(XHTTP_GetBodySize(&response) == strlen(server.pBody), "The easy response has the exact expected size");
     CHECK(memcmp(XHTTP_GetBody(&response), server.pBody, strlen(server.pBody)) == 0,
         "The easy exchange body arrived unchanged");
 
@@ -338,6 +342,7 @@ static int XTest_easy_exchange(void)
     XThread_Join(&thread);
 
     CHECK(strcmp(server.sUri, "/easy?q=1") == 0, "The query string reached the server");
+    CHECK(strcmp(server.sMethod, "GET") == 0 && !server.nBodyLen, "The easy request has the expected method and empty body");
     return 0;
 }
 
@@ -370,11 +375,13 @@ static int XTest_perform(void)
     CHECK(http.nStatusCode == 201, "The handle now carries the response status");
     CHECK(http.eType == XHTTP_RESPONSE, "The handle is now a response");
     CHECK(XHTTP_GetBodySize(&http) == strlen(server.pBody), "The response body arrived whole");
+    CHECK(memcmp(XHTTP_GetBody(&http), "created", 7) == 0, "The creation response has the exact expected bytes");
 
     XHTTP_Clear(&http);
     XThread_Join(&thread);
 
     CHECK(strcmp(server.sMethod, "POST") == 0, "The server saw a post");
+    CHECK(strcmp(server.sUri, "/perform") == 0, "The post reached the expected target");
     CHECK(server.nBodyLen == sizeof(body), "The server received the whole body");
     CHECK(memcmp(server.sBody, body, sizeof(body)) == 0, "Binary body bytes reached the server unchanged");
     return 0;
@@ -401,10 +408,13 @@ static int XTest_easy_perform(void)
     CHECK(XHTTP_EasyPerform(&http, sUrl, (const uint8_t*)"put-body", 8) == XHTTP_COMPLETE,
         "The easy perform completes");
     CHECK(http.nStatusCode == 200, "The easy perform carries the response status");
+    CHECK(XHTTP_GetBodySize(&http) == strlen("easy perform body") &&
+        !memcmp(XHTTP_GetBody(&http), "easy perform body", strlen("easy perform body")), "The PUT response bytes are exact");
     XHTTP_Clear(&http);
 
     CHECK(strcmp(server.sMethod, "PUT") == 0, "The server saw a put");
     CHECK(server.nBodyLen == 8, "The server received the put body");
+    CHECK(!memcmp(server.sBody, "put-body", 8) && !strcmp(server.sUri, "/easy-perform"), "The PUT target and body are exact");
 
     /* The solo form builds the request from the method and URL alone. */
     xhttp_t solo;
@@ -412,10 +422,12 @@ static int XTest_easy_perform(void)
         "The solo perform completes");
     CHECK(solo.nStatusCode == 200, "The solo perform carries the response status");
     CHECK(XHTTP_GetBodySize(&solo) == strlen(server.pBody), "The solo perform received the body");
+    CHECK(!memcmp(XHTTP_GetBody(&solo), "easy perform body", strlen("easy perform body")), "The DELETE response bytes are exact");
     XHTTP_Clear(&solo);
 
     XThread_Join(&thread);
     CHECK(strcmp(server.sMethod, "DELETE") == 0, "The server saw a delete");
+    CHECK(!strcmp(server.sUri, "/easy-perform") && !server.nBodyLen, "The DELETE target and empty body are exact");
     CHECK(XSYNC_ATOMIC_GET(&server.nServed) == 2, "Both requests were answered");
     return 0;
 }
@@ -445,11 +457,14 @@ static int XTest_auth_and_status(void)
     CHECK(http.nStatusCode == 404, "A not found status reaches the caller");
     CHECK(XHTTP_IsSuccessCode(&http) == XFALSE, "A not found status is not a success");
     CHECK(XHTTP_GetBodySize(&http) == strlen(server.pBody), "The error body reaches the caller");
+    CHECK(!memcmp(XHTTP_GetBody(&http), "not here", 8), "The error response contains the expected explanation");
     XHTTP_Clear(&http);
 
     XThread_Join(&thread);
     CHECK(strncmp(server.sAuth, "Basic ", 6) == 0, "The server saw the basic scheme");
     CHECK(strcmp(&server.sAuth[6], "dXNlcjpwYXNz") == 0, "The server saw the encoded credentials");
+    CHECK(!strcmp(server.sMethod, "GET") && !strcmp(server.sUri, "/secret") && !server.nBodyLen,
+        "Authentication accompanied the expected request");
     return 0;
 }
 

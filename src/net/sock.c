@@ -1457,7 +1457,12 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
         /* Every other descriptor this module creates is close-on-exec, and so is
            the XSock_AcceptNB() path; an accepted connection must not outlive the
            process either by leaking into a child it spawns. */
-        fcntl(pNewSock->nFD, F_SETFD, FD_CLOEXEC);
+        if (fcntl(pNewSock->nFD, F_SETFD, FD_CLOEXEC) < 0)
+        {
+            pNewSock->eStatus = XSOCK_ERR_SETFL;
+            XSock_Close(pNewSock);
+            return XSOCK_INVALID;
+        }
 #endif
 
         /* TLS negotiation must obey a nonblocking listener before SSL_accept reads

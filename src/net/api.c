@@ -24,14 +24,16 @@
 #include <sys/prctl.h>
 #endif
 
-#define XAPI_RX_MAX         (5000 * 1024)
-#define XAPI_RX_SIZE        4096
+#define XAPI_RX_MAX             (5000 * 1024)
+#define XAPI_RX_SIZE            4096
 
 /* How much one read may take off a socket. It lands in a buffer owned by the XAPI instance, not the session:
    a large frame used to cost one pass of the event loop per XAPI_RX_SIZE, while a session's own buffer still
    only ever holds what actually arrived, a peer that trickles bytes cannot make it hold a whole read's worth. */
-#define XAPI_READ_CHUNK     (128 * 1024)
-#define XAPI_SSL_DRAIN_MAX  64
+#define XAPI_READ_CHUNK         (128 * 1024)
+#define XAPI_SSL_DRAIN_MAX      64
+
+#define XAPI_DEFAULT_HTTP_VER   "1.1"
 
 typedef struct XAPIWorkerEvents {
     xevent_data_t **ppEvents;
@@ -1196,7 +1198,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     XCHECK((pSession != NULL), XSTDINV);
 
     xhttp_t handle;
-    XHTTP_InitResponse(&handle, 101, NULL);
+    XHTTP_InitResponse(&handle, 101, XAPI_DEFAULT_HTTP_VER);
 
     char *pSecKey = XAPI_GetWSKey(pApi, pSession);
     if (pSecKey == NULL)
@@ -1244,7 +1246,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     XCHECK((pSession != NULL), XSTDINV);
 
     xhttp_t handle;
-    XHTTP_InitRequest(&handle, XHTTP_GET, pSession->sUri, NULL);
+    XHTTP_InitRequest(&handle, XHTTP_GET, pSession->sUri, XAPI_DEFAULT_HTTP_VER);
 
     char sNonce[XWS_NONCE_LENGTH + 1];
     size_t nLength = XWS_NONCE_LENGTH;

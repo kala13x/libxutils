@@ -3,6 +3,8 @@
 #include "api.h"
 #include "thread.h"
 #include "xtime.h"
+#include "sha1.h"
+#include "base64.h"
 #include <unistd.h>
 #ifdef XSOCK_USE_SSL
 #include "tls_fixture.h"
@@ -29,6 +31,11 @@ ssize_t __wrap_write(int nFD, const void *pData, size_t nSize)
 
 typedef struct feature_ feature_t;
 
+enum {
+    FEATURE_VALID, FEATURE_REQUEST_BODY, FEATURE_RESPONSE_BODY, FEATURE_REQUEST_ORDER,
+    FEATURE_RESPONSE_ORDER, FEATURE_REQUEST_TYPE, FEATURE_RESPONSE_TYPE
+};
+
 typedef struct {
     feature_t *pTest;
     xsock_t sock;
@@ -37,6 +44,9 @@ typedef struct {
     xapi_session_t *pSession;
     xevent_data_t *pEvent;
     size_t nSeen;
+    size_t nDelivered;
+    size_t nControls;
+    int nCloseFrames;
     size_t nRead;
     size_t nWritten;
     int nSide;
@@ -57,19 +67,23 @@ struct feature_ {
     xevent_data_t *pListenEvent;
     xapi_type_t eType;
     int nLayer;
+    int nFault;
     int nAccepted;
     int nHandshakes;
     xatomic_t nErrors;
     int nInitialized;
     size_t nChunk;
     size_t nMessages;
+    size_t nClientID;
     xbool_t bHash;
     xbool_t bTLS;
     xsock_cert_t serverCert;
     xsock_cert_t clientCert;
     xbool_t bFragment;
+    xbool_t bControls;
     xatomic_t nStop;
     char sError[160];
+    char sUpgradeKey[64];
 };
 
 static const size_t g_sizes[] = {0, 1, 2, 125, 126, 127, 1023, 4096, 65535, 65536, 65537};
@@ -80,28 +94,42 @@ static int feature_fail(feature_t *pTest, const char *pError)
     return XSTDERR;
 }
 
-static uint8_t feature_byte(size_t nMessage, size_t nOffset, xbool_t bResponse)
+static uint8_t feature_byte(size_t nClientID, size_t nMessage, size_t nOffset, xbool_t bResponse)
 {
-    uint8_t nByte = (uint8_t)(nMessage * 29 + nOffset * 131 + (nOffset >> 8));
+    uint8_t nByte = (uint8_t)(nClientID * 47 + nMessage * 29 + nOffset * 131 + (nOffset >> 8));
     return bResponse ? (uint8_t)(nByte ^ 0xa7) : nByte;
 }
 
-static int feature_message(feature_peer_t *pPeer, size_t nMessage)
+static xws_status_t feature_ping(feature_peer_t *pPeer, size_t nMessage)
+{
+    uint8_t payload[] = {'p', 'i', 'n', 'g', 0, 0, 0, (uint8_t)nMessage};
+    return XWS_AppendFrame(&pPeer->tx, payload, sizeof(payload), XWS_PING, XTRUE, XTRUE);
+}
+
+static int feature_message(feature_peer_t *pPeer, size_t nMessage, const uint8_t *pRequest)
 {
     feature_t *pTest = pPeer->pTest;
     size_t nLength = g_sizes[nMessage];
     uint8_t *pPayload = (uint8_t*)malloc(nLength + 1);
     if (pPayload == NULL) return feature_fail(pTest, "Allocate message payload");
-    for (size_t i = 0; i < nLength; i++) pPayload[i] = feature_byte(nMessage, i, !pPeer->nSide);
+    for (size_t i = 0; i < nLength; i++)
+        pPayload[i] = pPeer->nSide ? feature_byte(pTest->nClientID, nMessage, i, XFALSE) : (uint8_t)(pRequest[i] ^ 0xa7);
+    xbool_t bMutate = nMessage == 2 && (pPeer->nSide ? pTest->nFault & 1 : pTest->nFault && !(pTest->nFault & 1));
+    xbool_t bBody = bMutate && pTest->nFault <= FEATURE_RESPONSE_BODY;
+    xbool_t bOrder = bMutate && pTest->nFault >= FEATURE_REQUEST_ORDER && pTest->nFault <= FEATURE_RESPONSE_ORDER;
+    xbool_t bType = bMutate && pTest->nFault >= FEATURE_REQUEST_TYPE;
+    if (bBody) pPayload[nLength / 2] ^= 1;
+    size_t nSequence = bOrder ? nMessage - 1 : nMessage;
 
     int nStatus = XSTDERR;
     if (pTest->eType == XAPI_HTTP)
     {
         xhttp_t http;
-        if (pPeer->nSide) XHTTP_InitRequest(&http, XHTTP_POST, "/feature", "1.1");
-        else XHTTP_InitResponse(&http, 201, "1.1");
+        if (pPeer->nSide) XHTTP_InitRequest(&http, bType ? XHTTP_PUT : XHTTP_POST, "/feature", "1.1");
+        else XHTTP_InitResponse(&http, bType ? 500 : 201, "1.1");
         XHTTP_AddHeader(&http, "Connection", "keep-alive");
-        XHTTP_AddHeader(&http, "X-Sequence", "%zu", nMessage);
+        XHTTP_AddHeader(&http, "X-Sequence", "%zu", nSequence);
+        XHTTP_AddHeader(&http, "X-Client-ID", "%zu", pTest->nClientID);
         XHTTP_AddHeader(&http, "Content-Type", "application/octet-stream");
         xbyte_buffer_t *pWire = XHTTP_Assemble(&http, pPayload, nLength);
         if (pWire != NULL) nStatus = XByteBuffer_AddBuff(&pPeer->tx, pWire);
@@ -113,10 +141,15 @@ static int feature_message(feature_peer_t *pPeer, size_t nMessage)
         {
             size_t nFirst = nLength / 2;
             nStatus = XWS_AppendFrame(&pPeer->tx, pPayload, nFirst, XWS_BINARY, XTRUE, XFALSE);
+            if (nStatus == XWS_ERR_NONE && pTest->bControls) nStatus = feature_ping(pPeer, nMessage);
             if (nStatus == XWS_ERR_NONE)
                 nStatus = XWS_AppendFrame(&pPeer->tx, pPayload + nFirst, nLength - nFirst, XWS_CONTINUATION, XTRUE, XTRUE);
         }
-        else nStatus = XWS_AppendFrame(&pPeer->tx, pPayload, nLength, XWS_BINARY, pPeer->nSide, XTRUE);
+        else
+        {
+            nStatus = XWS_AppendFrame(&pPeer->tx, pPayload, nLength, bType ? XWS_TEXT : XWS_BINARY, pPeer->nSide, XTRUE);
+            if (nStatus == XWS_ERR_NONE && pPeer->nSide && pTest->bControls) nStatus = feature_ping(pPeer, nMessage);
+        }
         nStatus = nStatus == XWS_ERR_NONE ? XSTDOK : XSTDERR;
     }
     else if (pTest->eType == XAPI_MDTP)
@@ -125,8 +158,10 @@ static int feature_message(feature_peer_t *pPeer, size_t nMessage)
         if (XPacket_Init(&packet, pPayload, (uint32_t)nLength) == XPACKET_ERR_NONE)
         {
             packet.header.eType = pPeer->nSide ? XPACKET_TYPE_DATA : XPACKET_TYPE_ACK;
-            packet.header.nPacketID = (uint32_t)nMessage;
-            packet.header.nSessionID = 0x12345678;
+            if (bType) packet.header.eType = pPeer->nSide ? XPACKET_TYPE_ACK : XPACKET_TYPE_DATA;
+            packet.header.nPacketID = (uint32_t)nSequence;
+            packet.header.nSessionID = 0x12345678 + (uint32_t)pTest->nClientID;
+            packet.header.nTimeStamp = 1700000000 + (uint32_t)nMessage;
             xstrncpy(packet.header.sPayloadType, sizeof(packet.header.sPayloadType), "application/octet-stream");
             xbyte_buffer_t *pWire = XPacket_Assemble(&packet);
             if (pWire != NULL) nStatus = XByteBuffer_AddBuff(&pPeer->tx, pWire);
@@ -135,7 +170,7 @@ static int feature_message(feature_peer_t *pPeer, size_t nMessage)
     }
     else
     {
-        uint32_t header[] = {htonl((uint32_t)nMessage), htonl((uint32_t)nLength)};
+        uint32_t header[] = {htonl((uint32_t)nSequence), htonl((uint32_t)nLength)};
         nStatus = XByteBuffer_Add(&pPeer->tx, (uint8_t*)header, sizeof(header));
         if (nStatus > 0 && nLength) nStatus = XByteBuffer_Add(&pPeer->tx, pPayload, nLength);
     }
@@ -147,7 +182,7 @@ static int feature_message(feature_peer_t *pPeer, size_t nMessage)
 static int feature_requests(feature_peer_t *pPeer)
 {
     for (size_t i = 0; i < pPeer->pTest->nMessages; i++)
-        if (feature_message(pPeer, i) < 0) return XSTDERR;
+        if (feature_message(pPeer, i, NULL) < 0) return XSTDERR;
     return XSTDOK;
 }
 
@@ -158,21 +193,28 @@ static int feature_verify(feature_peer_t *pPeer, const uint8_t *pData, size_t nL
         return feature_fail(pTest, "Each message arrives once and in order");
     if (nLength != g_sizes[pPeer->nSeen]) return feature_fail(pTest, "The complete payload length is preserved");
     for (size_t i = 0; i < nLength; i++)
-        if (pData[i] != feature_byte(nSequence, i, pPeer->nSide))
+        if (pData[i] != feature_byte(pTest->nClientID, nSequence, i, pPeer->nSide))
             return feature_fail(pTest, "Every request and response byte matches the independent model");
 
     pPeer->nSeen++;
-    if (!pPeer->nSide) return feature_message(pPeer, nSequence);
+    if (!pPeer->nSide) return feature_message(pPeer, nSequence, pData);
     return XSTDOK;
 }
 
 static int feature_http(feature_peer_t *pPeer, xhttp_t *pHttp)
 {
+    pPeer->nDelivered++;
     const char *pSequence = XHTTP_GetHeader(pHttp, "X-Sequence");
     char sSequence[32];
     snprintf(sSequence, sizeof(sSequence), "%zu", pPeer->nSeen);
     if (pSequence == NULL || strcmp(pSequence, sSequence)) return feature_fail(pPeer->pTest, "HTTP sequence header");
-    if (pPeer->nSide ? pHttp->nStatusCode != 201 : pHttp->eMethod != XHTTP_POST || strcmp(pHttp->sUri, "/feature"))
+    const char *pClientID = XHTTP_GetHeader(pHttp, "X-Client-ID");
+    char sClientID[32];
+    snprintf(sClientID, sizeof(sClientID), "%zu", pPeer->pTest->nClientID);
+    if (pClientID == NULL || strcmp(pClientID, sClientID)) return feature_fail(pPeer->pTest, "HTTP client identity");
+    if ((pPeer->nSide ? pHttp->eType != XHTTP_RESPONSE || pHttp->nStatusCode != 201 :
+        pHttp->eType != XHTTP_REQUEST || pHttp->eMethod != XHTTP_POST || strcmp(pHttp->sUri, "/feature")) ||
+        strcmp(pHttp->sVersion, "1.1"))
         return feature_fail(pPeer->pTest, "HTTP method, target and response status");
     const char *pType = XHTTP_GetHeader(pHttp, "Content-Type");
     if (pType == NULL || strcmp(pType, "application/octet-stream")) return feature_fail(pPeer->pTest, "HTTP content type");
@@ -182,11 +224,87 @@ static int feature_http(feature_peer_t *pPeer, xhttp_t *pHttp)
 
 static int feature_mdtp(feature_peer_t *pPeer, xpacket_t *pPacket)
 {
+    pPeer->nDelivered++;
     xpacket_type_t eExpected = pPeer->nSide ? XPACKET_TYPE_ACK : XPACKET_TYPE_DATA;
-    if (pPacket->header.eType != eExpected || pPacket->header.nSessionID != 0x12345678 ||
+    if (pPacket->header.eType != eExpected || pPacket->header.nSessionID != 0x12345678 + pPeer->pTest->nClientID ||
+        pPacket->header.nTimeStamp != 1700000000 + pPeer->nSeen || strcmp(pPacket->header.sVersion, "1.0") ||
         (pPacket->header.nPayloadSize && strcmp(pPacket->header.sPayloadType, "application/octet-stream")))
         return feature_fail(pPeer->pTest, "MDTP type, session and content type survive the exchange");
     return feature_verify(pPeer, XPacket_GetPayload(pPacket), pPacket->header.nPayloadSize, pPacket->header.nPacketID);
+}
+
+static int feature_ws(feature_peer_t *pPeer, xws_frame_t *pFrame)
+{
+    feature_t *pTest = pPeer->pTest;
+    const uint8_t *pPayload = XWebFrame_GetPayload(pFrame);
+    const uint8_t closeBody[] = {3, 232, 'd', 'o', 'n', 'e'};
+    if (pTest->bControls && pFrame->eType != XWS_BINARY)
+    {
+        if (!pFrame->bFin || pFrame->bMask || !!(pFrame->buffer.pData[1] & 0x80) != !pPeer->nSide)
+            return feature_fail(pTest, "Control frames preserve their final bit and client/server masking");
+        if (pFrame->eType == XWS_CLOSE)
+        {
+            if (pFrame->nPayloadLength != sizeof(closeBody) || memcmp(pPayload, closeBody, sizeof(closeBody)) ||
+                pPeer->nSeen != pTest->nMessages || pPeer->nControls != pTest->nMessages || pPeer->nCloseFrames)
+                return feature_fail(pTest, "Close code 1000 and reason arrive after all data and control replies");
+            pPeer->nCloseFrames++;
+            if (!pPeer->nSide &&
+                XWS_AppendFrame(&pPeer->tx, closeBody, sizeof(closeBody), XWS_CLOSE, XFALSE, XTRUE) != XWS_ERR_NONE)
+                return feature_fail(pTest, "Send the server close acknowledgment");
+            return XSTDOK;
+        }
+        uint8_t expected[] = {'p', 'i', 'n', 'g', 0, 0, 0, (uint8_t)pPeer->nControls};
+        if (pFrame->eType != (pPeer->nSide ? XWS_PONG : XWS_PING) || pFrame->nPayloadLength != sizeof(expected) ||
+            memcmp(pPayload, expected, sizeof(expected))) return feature_fail(pTest, "Each pong echoes its exact ping payload");
+        pPeer->nControls++;
+        if (!pPeer->nSide &&
+            XWS_AppendFrame(&pPeer->tx, pPayload, sizeof(expected), XWS_PONG, XFALSE, XTRUE) != XWS_ERR_NONE)
+            return feature_fail(pTest, "Queue the matching pong");
+    }
+    else
+    {
+        pPeer->nDelivered++;
+        if (pFrame->eType != XWS_BINARY || !pFrame->bFin)
+            return feature_fail(pTest, "WebSocket message type and final frame");
+        if (feature_verify(pPeer, pPayload, pFrame->nPayloadLength, pPeer->nSeen) < 0) return XSTDERR;
+    }
+    if (pTest->bControls && pPeer->nSide && pPeer->nSeen == pTest->nMessages && pPeer->nControls == pTest->nMessages &&
+        XWS_AppendFrame(&pPeer->tx, closeBody, sizeof(closeBody), XWS_CLOSE, XTRUE, XTRUE) != XWS_ERR_NONE)
+        return feature_fail(pTest, "Send the client close code and reason");
+    return XSTDOK;
+}
+
+static int feature_ws_headers(feature_peer_t *pPeer, xhttp_t *pHttp)
+{
+    const char *pUpgrade = XHTTP_GetHeader(pHttp, "Upgrade");
+    const char *pConnection = XHTTP_GetHeader(pHttp, "Connection");
+    if (!pUpgrade || strcmp(pUpgrade, "websocket") || !pConnection || strcmp(pConnection, "Upgrade") ||
+        strcmp(pHttp->sVersion, "1.1") || pHttp->nContentLength)
+        return feature_fail(pPeer->pTest, "The upgrade preserves HTTP version, connection and upgrade headers");
+    if (pHttp->eType == XHTTP_REQUEST)
+    {
+        const char *pVersion = XHTTP_GetHeader(pHttp, "Sec-WebSocket-Version");
+        const char *pKey = XHTTP_GetHeader(pHttp, "Sec-WebSocket-Key");
+        if (pHttp->eMethod != XHTTP_GET || strcmp(pHttp->sUri, "/feature") || !pVersion || strcmp(pVersion, "13") ||
+            !pKey || strlen(pKey) != 24) return feature_fail(pPeer->pTest, "WebSocket request target, version and nonce");
+        if (pPeer->nSide) xstrncpy(pPeer->pTest->sUpgradeKey, sizeof(pPeer->pTest->sUpgradeKey), pKey);
+        else if (strcmp(pKey, pPeer->pTest->sUpgradeKey)) return feature_fail(pPeer->pTest, "Server received the exact nonce");
+    }
+    else
+    {
+        const char *pAccept = XHTTP_GetHeader(pHttp, "Sec-WebSocket-Accept");
+        char key[128];
+        int nLength = snprintf(key, sizeof(key), "%s%s", pPeer->pTest->sUpgradeKey, XWS_GUID);
+        uint8_t digest[XSHA1_DIGEST_SIZE];
+        if (XSHA1_Compute(digest, sizeof(digest), (const uint8_t*)key, (size_t)nLength) < 0) return XSTDERR;
+        size_t nSize = sizeof(digest);
+        char *pExpected = XBase64_Encrypt(digest, &nSize);
+        xbool_t bMatches = pHttp->eType == XHTTP_RESPONSE && pHttp->nStatusCode == 101 &&
+            pAccept && pExpected && !strcmp(pAccept, pExpected);
+        free(pExpected);
+        if (!bMatches) return feature_fail(pPeer->pTest, "The 101 response matches the exact request nonce");
+    }
+    return XSTDOK;
 }
 
 static int feature_upgrade(feature_peer_t *pPeer)
@@ -202,7 +320,8 @@ static int feature_upgrade(feature_peer_t *pPeer)
 
     const char *pHeader = XHTTP_GetHeader(&http, pPeer->nSide ? "Sec-WebSocket-Accept" : "Sec-WebSocket-Key");
     const char *pExpected = pPeer->nSide ? "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=" : "dGhlIHNhbXBsZSBub25jZQ==";
-    int nStatus = pHeader != NULL && !strcmp(pHeader, pExpected) ? XSTDOK : XSTDERR;
+    int nStatus = feature_ws_headers(pPeer, &http);
+    if (pHeader == NULL || strcmp(pHeader, pExpected)) nStatus = XSTDERR;
     if (pPeer->nSide && http.nStatusCode != 101) nStatus = XSTDERR;
     if (!pPeer->nSide && (http.eMethod != XHTTP_GET || strcmp(http.sUri, "/feature"))) nStatus = XSTDERR;
     XByteBuffer_Advance(&pPeer->rx, XHTTP_GetPacketSize(&http));
@@ -247,8 +366,7 @@ static int feature_parse(feature_peer_t *pPeer)
             if (eStatus == XWS_FRAME_COMPLETE)
             {
                 nUsed = XWebFrame_GetFrameLength(&frame);
-                if (frame.eType != XWS_BINARY || !frame.bFin) nStatus = XSTDERR;
-                else nStatus = feature_verify(pPeer, XWebFrame_GetPayload(&frame), frame.nPayloadLength, pPeer->nSeen);
+                nStatus = feature_ws(pPeer, &frame);
             }
             else if (eStatus != XWS_FRAME_INCOMPLETE && eStatus != XWS_FRAME_PARSED) nStatus = XSTDERR;
             XWebFrame_Clear(&frame);
@@ -274,6 +392,7 @@ static int feature_parse(feature_peer_t *pPeer)
             if (nLength > 65537) return feature_fail(pTest, "Raw stream length prefix");
             if (pPeer->rx.nUsed < sizeof(header) + nLength) break;
             nUsed = sizeof(header) + nLength;
+            pPeer->nDelivered++;
             nStatus = feature_verify(pPeer, pPeer->rx.pData + sizeof(header), nLength, ntohl(header[0]));
         }
 
@@ -326,9 +445,14 @@ static int feature_api_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
         if (XAPI_SetEvents(pSession, XPOLLIN | (pPeer->tx.nUsed || pTest->eType == XAPI_WS ? XPOLLOUT : 0)) < 0)
             return feature_fail(pTest, "Register API peer events");
     }
-    if (pCtx->eCbType == XAPI_CB_HANDSHAKE_REQUEST && !pPeer->nSide) pTest->nHandshakes++;
+    if (pCtx->eCbType == XAPI_CB_HANDSHAKE_REQUEST)
+    {
+        if (feature_ws_headers(pPeer, pSession->pPacket) < 0) return XAPI_DISCONNECT;
+        if (!pPeer->nSide) pTest->nHandshakes++;
+    }
     if (pCtx->eCbType == XAPI_CB_HANDSHAKE_RESPONSE)
     {
+        if (feature_ws_headers(pPeer, pSession->pPacket) < 0) return XAPI_DISCONNECT;
         pTest->nHandshakes++;
         if (feature_requests(pPeer) < 0) return XAPI_DISCONNECT;
     }
@@ -337,11 +461,7 @@ static int feature_api_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
         int nStatus;
         if (pTest->eType == XAPI_HTTP) nStatus = feature_http(pPeer, (xhttp_t*)pSession->pPacket);
         else if (pTest->eType == XAPI_MDTP) nStatus = feature_mdtp(pPeer, (xpacket_t*)pSession->pPacket);
-        else if (pTest->eType == XAPI_WS)
-        {
-            xws_frame_t *pFrame = (xws_frame_t*)pSession->pPacket;
-            nStatus = feature_verify(pPeer, XWebFrame_GetPayload(pFrame), pFrame->nPayloadLength, pPeer->nSeen);
-        }
+        else if (pTest->eType == XAPI_WS) nStatus = feature_ws(pPeer, pSession->pPacket);
         else
         {
             xbyte_buffer_t *pBuffer = (xbyte_buffer_t*)pSession->pPacket;
@@ -591,6 +711,7 @@ static int feature_open(feature_t *pTest)
     XSock_NoDelay(&pClient->sock, XTRUE);
     if (pTest->eType == XAPI_WS)
     {
+        xstrncpy(pTest->sUpgradeKey, sizeof(pTest->sUpgradeKey), "dGhlIHNhbXBsZSBub25jZQ==");
         const char upgrade[] = "GET /feature HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
             "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
         if (XByteBuffer_Add(&pClient->tx, (const uint8_t*)upgrade, sizeof(upgrade) - 1) <= 0) return XSTDERR;
@@ -609,10 +730,13 @@ static int feature_open(feature_t *pTest)
     return XSTDOK;
 }
 
-static int feature_run(int nLayer, xapi_type_t eType, size_t nChunk, xbool_t bHash, xbool_t bFragment, xbool_t bTLS)
+static int feature_run_case(int nLayer, xapi_type_t eType, size_t nChunk, xbool_t bHash,
+    xbool_t bFragment, xbool_t bTLS, int nFault, xbool_t bControls)
 {
     feature_t test = {0};
     test.nLayer = nLayer;
+    test.nFault = nFault;
+    test.bControls = bControls;
     test.eType = eType;
     test.nChunk = nChunk;
     test.bHash = bHash;
@@ -636,12 +760,14 @@ static int feature_run(int nLayer, xapi_type_t eType, size_t nChunk, xbool_t bHa
 #endif
     test.bFragment = bFragment;
     test.nMessages = nChunk == 1 ? 7 : sizeof(g_sizes) / sizeof(*g_sizes);
+    if (nFault) test.nMessages = 4;
     int nStatus = feature_open(&test);
     size_t nMessages = test.nMessages;
     uint64_t nDeadline = XTime_GetMonoMs() + 60000;
-    while (nStatus > 0 && !test.nErrors && test.peers[1].nSeen < nMessages && XTime_GetMonoMs() < nDeadline)
+    while (nStatus > 0 && !test.nErrors && XTime_GetMonoMs() < nDeadline &&
+        (test.peers[1].nSeen < nMessages || (bControls && !test.peers[1].nCloseFrames)))
     {
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < 2 && !test.nErrors; i++)
         {
             if (nLayer == 0 && XAPI_Service(&test.api[i], 0) != XEVENTS_SUCCESS) nStatus = XSTDERR;
             else if (nLayer == 1 && XEvents_Service(&test.events[i], 0) != XEVENTS_SUCCESS) nStatus = XSTDERR;
@@ -668,14 +794,72 @@ static int feature_run(int nLayer, xapi_type_t eType, size_t nChunk, xbool_t bHa
 #ifdef XSOCK_USE_SSL
     tls_fixture_end(&identity);
 #endif
+    if (nFault)
+    {
+        const char *pExpected = "Every request and response byte matches the independent model";
+        if (nFault == FEATURE_REQUEST_ORDER || nFault == FEATURE_RESPONSE_ORDER)
+            pExpected = eType == XAPI_HTTP ? "HTTP sequence header" : "Each message arrives once and in order";
+        else if (nFault == FEATURE_REQUEST_TYPE || nFault == FEATURE_RESPONSE_TYPE)
+        {
+            if (eType == XAPI_HTTP) pExpected = "HTTP method, target and response status";
+            else if (eType == XAPI_WS) pExpected = "WebSocket message type and final frame";
+            else pExpected = "MDTP type, session and content type survive the exchange";
+        }
+        feature_peer_t *pReceiver = &test.peers[!(nFault & 1)];
+        CHECK(test.nErrors && !strcmp(test.sError, pExpected), "The receiving endpoint rejected the specific corruption");
+        CHECK(pReceiver->nDelivered == 3 && pReceiver->nSeen == 2, "A complete third message failed semantic validation");
+        CHECK(test.nAccepted == 1, "Corruption was delivered over an actual client/server connection");
+        if (nLayer != 2)
+            CHECK(test.peers[0].nClosed == 1 && test.peers[1].nClosed == 1, "Both connections were released after rejection");
+        return 0;
+    }
     if (test.nErrors) fprintf(stderr, "layer=%d protocol=%d: %s\n", nLayer, eType, test.sError);
     CHECK(nStatus > 0 && !test.nErrors, "Both endpoints complete without network or protocol errors");
     CHECK(test.nAccepted == 1, "Exactly one real connection was accepted");
     CHECK(test.peers[0].nSeen == nMessages, "The server validated every complete request");
     CHECK(test.peers[1].nSeen == nMessages, "The client validated every complete response");
     if (eType == XAPI_WS) CHECK(test.nHandshakes == 2, "Both ends completed the WebSocket upgrade");
+    if (bControls)
+    {
+        CHECK(test.peers[0].nControls == nMessages && test.peers[1].nControls == nMessages, "Every ping has its matching pong");
+        CHECK(test.peers[0].nCloseFrames == 1 && test.peers[1].nCloseFrames == 1, "Both peers validated the closing handshake");
+    }
     if (nLayer != 2)
         CHECK(test.peers[0].nClosed == 1 && test.peers[1].nClosed == 1, "Each connection was released exactly once");
+    return 0;
+}
+
+static int feature_run(int nLayer, xapi_type_t eType, size_t nChunk, xbool_t bHash, xbool_t bFragment, xbool_t bTLS)
+{
+    return feature_run_case(nLayer, eType, nChunk, bHash, bFragment, bTLS, FEATURE_VALID, XFALSE);
+}
+
+static int feature_reject(int nFault)
+{
+    const xapi_type_t types[] = {XAPI_HTTP, XAPI_WS, XAPI_MDTP, XAPI_SOCK};
+    for (int nLayer = 0; nLayer < 3; nLayer++)
+        for (size_t i = 0; i < sizeof(types) / sizeof(*types); i++)
+        {
+            if (types[i] == XAPI_WS && (nFault == FEATURE_REQUEST_ORDER || nFault == FEATURE_RESPONSE_ORDER)) continue;
+            if (types[i] == XAPI_SOCK && nFault >= FEATURE_REQUEST_TYPE) continue;
+            CHECK(feature_run_case(nLayer, types[i], 17, XTRUE, XFALSE, XFALSE, nFault, XFALSE) == 0,
+                "Each networking layer validates the message instead of accepting transport completion");
+        }
+    return 0;
+}
+
+static int XTest_reject_request_body(void) { return feature_reject(FEATURE_REQUEST_BODY); }
+static int XTest_reject_response_body(void) { return feature_reject(FEATURE_RESPONSE_BODY); }
+static int XTest_reject_request_order(void) { return feature_reject(FEATURE_REQUEST_ORDER); }
+static int XTest_reject_response_order(void) { return feature_reject(FEATURE_RESPONSE_ORDER); }
+static int XTest_reject_request_type(void) { return feature_reject(FEATURE_REQUEST_TYPE); }
+static int XTest_reject_response_type(void) { return feature_reject(FEATURE_RESPONSE_TYPE); }
+
+static int XTest_ws_controls(void)
+{
+    for (int nLayer = 0; nLayer < 3; nLayer++)
+        CHECK(feature_run_case(nLayer, XAPI_WS, 257, XTRUE, nLayer == 0, XFALSE, FEATURE_VALID, XTRUE) == 0,
+            "Upgrade, binary messages, ping/pong and close complete through every networking layer");
     return 0;
 }
 
@@ -740,12 +924,13 @@ static int feature_http_client(size_t nWriteLimit, xbool_t bPerform)
             size_t nLength = g_sizes[i];
             uint8_t *pBody = (uint8_t*)malloc(nLength + 1);
             if (pBody == NULL) { nStatus = XSTDERR; break; }
-            for (size_t j = 0; j < nLength; j++) pBody[j] = feature_byte(i, j, XFALSE);
+            for (size_t j = 0; j < nLength; j++) pBody[j] = feature_byte(test.nClientID, i, j, XFALSE);
             xhttp_t request, response;
             XHTTP_InitRequest(&request, XHTTP_POST, "/feature", "1.1");
             XHTTP_Init(&response, XHTTP_DUMMY, 0);
             XHTTP_AddHeader(&request, "Connection", "keep-alive");
             XHTTP_AddHeader(&request, "X-Sequence", "%zu", i);
+            XHTTP_AddHeader(&request, "X-Client-ID", "%zu", test.nClientID);
             XHTTP_AddHeader(&request, "Content-Type", "application/octet-stream");
             if (bPerform)
             {
@@ -868,6 +1053,7 @@ static int feature_concurrent(xapi_type_t eType, xbool_t bTLS)
         pTest->bTLS = bTLS;
         pTest->nChunk = 257 + i * 128;
         pTest->nMessages = sizeof(g_sizes) / sizeof(*g_sizes);
+        pTest->nClientID = i + 1;
 #ifdef XSOCK_USE_SSL
         XSock_InitCert(&pTest->serverCert);
         XSock_InitCert(&pTest->clientCert);
@@ -931,6 +1117,7 @@ XTEST_MAIN(
     XTEST_CASE(api_http),
     XTEST_CASE(api_ws),
     XTEST_CASE(api_ws_fragments),
+    XTEST_CASE(ws_controls),
     XTEST_CASE(api_mdtp),
     XTEST_CASE(api_socket),
     XTEST_CASE(event_http),
@@ -942,6 +1129,12 @@ XTEST_MAIN(
     XTEST_CASE(socket_mdtp),
     XTEST_CASE(socket_stream),
     XTEST_CASE(http_client),
+    XTEST_CASE(reject_request_body),
+    XTEST_CASE(reject_response_body),
+    XTEST_CASE(reject_request_order),
+    XTEST_CASE(reject_response_order),
+    XTEST_CASE(reject_request_type),
+    XTEST_CASE(reject_response_type),
     XTEST_CASE(concurrent),
     XTEST_CASE(concurrent_tls),
     XTEST_CASE(http_short_exchange),

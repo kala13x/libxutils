@@ -31,6 +31,13 @@ if(UNIX AND NOT APPLE)
     endforeach()
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    xutils_regression(sys_fault_regression net create nonblock accept api_setup api_timer)
+    target_link_options(sys_fault_regression PRIVATE -Wl,--wrap=socket -Wl,--wrap=listen -Wl,--wrap=connect
+        -Wl,--wrap=setsockopt -Wl,--wrap=fcntl -Wl,--wrap=accept -Wl,--wrap=accept4
+        -Wl,--wrap=epoll_create1 -Wl,--wrap=epoll_ctl -Wl,--wrap=timerfd_create -Wl,--wrap=timerfd_settime)
+endif()
+
 xutils_regression(jwt_regression data roundtrip wrong_secret tampering boundaries malformed
     algorithms segments rs256)
 
@@ -113,9 +120,13 @@ if(OPENSSL_FOUND)
     xutils_regression(digest_regression crypt boundaries sha256_raw_final hmac_variants)
 endif()
 if(UNIX)
-    xutils_regression(network_feature feature api_http api_ws api_ws_fragments api_mdtp api_socket
+    xutils_regression(http_flow_feature feature api_crud event_crud socket_crud
+        reject_status reject_body reject_type reject_id reject_request)
+    xutils_regression(network_feature feature api_http api_ws api_ws_fragments ws_controls api_mdtp api_socket
         event_http event_ws event_mdtp event_socket socket_http socket_ws socket_mdtp socket_stream
-        http_client http_short_exchange http_short_perform one_byte without_hash api_tls event_tls socket_tls concurrent concurrent_tls)
+        http_client http_short_exchange http_short_perform one_byte without_hash api_tls event_tls socket_tls concurrent
+        concurrent_tls reject_request_body reject_response_body reject_request_order reject_response_order reject_request_type
+        reject_response_type)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         target_compile_definitions(network_feature PRIVATE FEATURE_WRAP_SEND)
         target_link_options(network_feature PRIVATE -Wl,--wrap=send -Wl,--wrap=write)
@@ -126,6 +137,7 @@ if(UNIX)
             set_tests_properties(${feature_case} PROPERTIES TIMEOUT 120)
         endif()
     endforeach()
+    set_tests_properties(network_feature.concurrent network_feature.concurrent_tls PROPERTIES TIMEOUT 300)
     xutils_regression(http_client_regression net connect link_exchange easy_exchange perform
         easy_perform auth_and_status client_failures truncated_answer stream_callback buffered_stream stopped_stream
     terminated_stream content_limit callback_guards length_stream length_buffered
@@ -160,7 +172,8 @@ xutils_regression(buf_regression data aliasing borrowed pointer_ownership ring_m
     accessors ownership_transfer heap_buffer data_buffer ring_boundaries
     string_and_stdin read_stdin borrowed_reset)
 xutils_regression(str_regression data capacities dynamic split_replace)
-xutils_regression(xstring_regression data build edit transform substrings tokens construction colors borrowed_copy borrowed_resize)
+xutils_regression(xstring_regression data build edit transform substrings tokens construction colors borrowed_copy
+    borrowed_resize)
 xutils_regression(str_ops_regression data split split_scaling match_pathological bounded_copies match compare search replace
     cut tokens casing fill_and_trim duplicate concat colors random glob field_formatting append_remaining ansi_widths
     format_boundaries)
@@ -237,7 +250,8 @@ if(XUTILS_BUILD_FUZZERS)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     xutils_regression(allocation_regression allocation json_cleanup http_header buffer_preservation endpoint_ownership
-        mdtp_assemble map_rehash_failure http_parse_failure format_failure search_append_failure ws_fragment_failure borrowed_string_failure split_failure long_token_failure)
+        mdtp_assemble map_rehash_failure http_parse_failure format_failure search_append_failure ws_fragment_failure
+        borrowed_string_failure split_failure long_token_failure)
     target_link_options(allocation_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc)
 endif()
 

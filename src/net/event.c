@@ -338,7 +338,7 @@ static xevent_data_t* XEvents_AddTimerLinux(xevents_t *pEvents, void *pContext, 
     struct itimerspec its = {0};
     its.it_value.tv_sec  = nTimeoutMs / 1000;
     its.it_value.tv_nsec = (nTimeoutMs % 1000) * 1000000;
-    timerfd_settime(nTimerFD, 0, &its, NULL);
+    XCHECK_CALL((timerfd_settime(nTimerFD, 0, &its, NULL) == 0), close, nTimerFD, NULL);
 
     xevent_data_t* pTimerData = XEvents_NewData(pContext, nTimerFD, XEVENT_TYPE_TIMER);
     XCHECK_CALL((pTimerData != NULL), close, nTimerFD, NULL);

@@ -1225,7 +1225,8 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
     if (bIncludeDlmt)
     {
         nDlmtLen = (int)xstrncpy(sDelimiter, sizeof(sDelimiter), pDlmt);
-        if (xstrncmp(pString, sDelimiter, nDlmtLen) && XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1) < 0)
+        if (xstrncmp(pString, sDelimiter, nDlmtLen) &&
+            XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1) < 0)
             return xstrsplitrollback(pTokens, nUsed);
     }
 
@@ -1236,13 +1237,16 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
         {
             if (bIncludeEmpty && XArray_AddData(pTokens, XSTR_EMPTY, sizeof(char)) < 0)
                 return xstrsplitrollback(pTokens, nUsed);
+
             continue;
         }
 
-        if (XArray_AddData(pTokens, sToken, nLength + 1) < 0) return xstrsplitrollback(pTokens, nUsed);
-        if (nNext <= 0) break;
+        if (XArray_AddData(pTokens, sToken, nLength + 1) < 0)
+            return xstrsplitrollback(pTokens, nUsed);
 
+        if (nNext <= 0) break;
         int nOffset = nNext - nDlmtLen;
+
         if (bIncludeDlmt && nOffset >= 0)
         {
             if (xstrncmp(&pString[nOffset], sDelimiter, nDlmtLen) &&
