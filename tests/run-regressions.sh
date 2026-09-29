@@ -52,7 +52,7 @@ case "$MODE" in
     # Anything that runs a second thread belongs here, which now includes the
     # network cases that drive a client or a server alongside the test.
     tsan)
-        TEST_TSAN_PATTERN='(thread|type|sync|mon|sock_ext|sock_tls|sock_timeout|http_client'
+        TEST_TSAN_PATTERN='(thread|thread_fault|type|sync|mon|sock_ext|sock_tls|sock_timeout|http_client'
         TEST_TSAN_PATTERN+='|api_tls|api_events|worker_sock|ws)_regression|network_feature|http_flow_feature'
         ctest --test-dir "$TEST_BUILD" --output-on-failure -R "$TEST_TSAN_PATTERN" "$@"
         ;;

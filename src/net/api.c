@@ -1396,8 +1396,11 @@ static int XAPI_ServerHandshake(xapi_t *pApi, xapi_session_t *pSession)
     {
         const char *pUpgrade = XHTTP_GetHeader(&handle, "Upgrade");
         const char *pSecKey = XHTTP_GetHeader(&handle, "Sec-WebSocket-Key");
+        const char *pConnection = XHTTP_GetHeader(&handle, "Connection");
 
-        if (!XAPI_HeaderHasTokenCI(pUpgrade, "websocket"))
+        if (handle.eType != XHTTP_REQUEST || handle.eMethod != XHTTP_GET ||
+            !XAPI_HeaderHasTokenCI(pUpgrade, "websocket") ||
+            !XAPI_HeaderHasTokenCI(pConnection, "upgrade"))
         {
             XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_INVALID_REQUEST);
             XHTTP_Clear(&handle);
@@ -1474,8 +1477,11 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_session_t *pSession)
     {
         const char *pUpgrade = XHTTP_GetHeader(&handle, "Upgrade");
         const char *pSecKey = XHTTP_GetHeader(&handle, "Sec-WebSocket-Accept");
+        const char *pConnection = XHTTP_GetHeader(&handle, "Connection");
 
-        if (!XAPI_HeaderHasTokenCI(pUpgrade, "websocket"))
+        if (handle.eType != XHTTP_RESPONSE || handle.nStatusCode != 101 ||
+            !XAPI_HeaderHasTokenCI(pUpgrade, "websocket") ||
+            !XAPI_HeaderHasTokenCI(pConnection, "upgrade"))
         {
             XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_INVALID_RESPONSE);
             XHTTP_Clear(&handle);

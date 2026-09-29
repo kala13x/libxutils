@@ -2266,7 +2266,9 @@ XSOCKET XSock_InitSSLServer(xsock_t *pSock, int nVerifyFlags)
         nVerifyFlags : SSL_VERIFY_NONE;
 
     SSL_CTX_set_verify(pSSLCtx, nVerify, NULL);
-    return XSock_SetSSLCTX(pSock, pSSLCtx);
+    XSOCKET nFD = XSock_SetSSLCTX(pSock, pSSLCtx);
+    if (nFD == XSOCK_INVALID) SSL_CTX_free(pSSLCtx);
+    return nFD;
 #endif
 
     pSock->eStatus = XSOCK_ERR_NOSSL;

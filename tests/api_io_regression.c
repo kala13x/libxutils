@@ -17,6 +17,7 @@ typedef struct xtest_api_ {
     int nRead;
     int nErrors;
     int nHandshake;
+    int nHandshakeRequest;
     int nPing;
     int nLastError;
     xapi_type_t eErrorType;
@@ -40,6 +41,8 @@ static int XTest_Callback(xapi_ctx_t *pContext, xapi_session_t *pSession)
     }
     else if (pContext->eCbType == XAPI_CB_HANDSHAKE_RESPONSE)
         pTest->nHandshake++;
+    else if (pContext->eCbType == XAPI_CB_HANDSHAKE_REQUEST)
+        pTest->nHandshakeRequest++;
     else if (pContext->eCbType == XAPI_CB_CLOSED)
     {
         pTest->pSession = NULL;
@@ -369,7 +372,7 @@ static int XTest_handshake_trickle(void)
     pSession = test.pSession;
     pSession->eType = XAPI_WS;
     const char sBody[] = "GET / HTTP/1.1\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                         "Content-Length: 6\r\n\r\nabcde";
+                         "Connection: Upgrade\r\nContent-Length: 6\r\n\r\nabcde";
     CHECK(XTest_Trickle(pSession, sBody, sizeof(sBody) - 1) == XAPI_CONTINUE && !pSession->bHandshakeStart,
         "A header waiting for its body waits");
     CHECK(pSession->nHeaderWait == pSession->rxBuffer.nUsed + 1, "It waits for exactly the rest of the body");
@@ -736,6 +739,171 @@ static int XTest_client_handshake_edges(void)
         XByteBuffer_Clear(&test.received);
     }
 
+    return 0;
+}
+
+static int XTest_client_upgrade_validation(void)
+{
+    struct { int nCode; const char *pVersion; const char *pConnection; xbool_t bAccept; } cases[] = {
+        {101, "1.1", "Upgrade", XTRUE},
+        {101, "1.0", "Upgrade", XTRUE},
+        {101, "1.1", "upgrade", XTRUE},
+        {101, "1.1", "keep-alive, UPGRADE", XTRUE},
+        {101, "1.1", "Upgrade, keep-alive", XTRUE},
+        {101, "1.1", "  Upgrade  ", XTRUE},
+        {101, "1.1", NULL, XFALSE},
+        {101, "1.1", "keep-alive", XFALSE},
+        {101, "1.1", "notupgrade", XFALSE},
+        {101, "1.1", "upgradeish", XFALSE},
+        {101, "1.1", "up grade", XFALSE},
+        {100, "1.1", "Upgrade", XFALSE},
+        {200, "1.1", "Upgrade", XFALSE},
+        {204, "1.1", "Upgrade", XFALSE},
+        {301, "1.1", "Upgrade", XFALSE},
+        {400, "1.1", "Upgrade", XFALSE},
+        {401, "1.1", "Upgrade", XFALSE},
+        {403, "1.1", "Upgrade", XFALSE},
+        {500, "1.1", "Upgrade", XFALSE},
+        {503, "1.1", "Upgrade", XFALSE}
+    };
+    for (int nTrickle = 0; nTrickle < 2; nTrickle++)
+        for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); i++)
+        {
+            xtest_api_t test = {0};
+            xapi_t api;
+            xsock_t peer;
+            CHECK(XTest_Open(&api, &test, &peer) == 0, "Create a response validation fixture");
+            xapi_session_t *pSession = test.pSession;
+            XTest_ClientSession(pSession);
+            xbyte_buffer_t wire;
+            XByteBuffer_Init(&wire, 0, XTRUE);
+            CHECK(XByteBuffer_AddFmt(&wire, "HTTP/%s %d %s\r\nUpgrade: websocket\r\n",
+                cases[i].pVersion, cases[i].nCode, XHTTP_GetCodeStr(cases[i].nCode)) > 0, "Build the response line");
+            if (cases[i].pConnection)
+                CHECK(XByteBuffer_AddFmt(&wire, "Connection: %s\r\n", cases[i].pConnection) > 0, "Build the connection field");
+            CHECK(XByteBuffer_AddFmt(&wire, "Sec-WebSocket-Accept: %s\r\n\r\n", XTEST_WS_ACCEPT) > 0,
+                "Every response includes the correct accept key");
+            if (nTrickle)
+            {
+                CHECK(XTest_Trickle(pSession, (const char*)wire.pData, wire.nUsed - 1) == XAPI_CONTINUE,
+                    "An incomplete header does not complete a handshake");
+                XByteBuffer_Advance(&wire, wire.nUsed - 1);
+            }
+            CHECK(XWS_AppendFrame(&wire, (const uint8_t*)"verified", 8, XWS_BINARY, XFALSE, XTRUE) == XWS_ERR_NONE,
+                "A complete frame follows the response in the same read");
+            CHECK(XByteBuffer_AddBuff(&pSession->rxBuffer, &wire) > 0, "Deliver the response and frame");
+            int nStatus = XAPI_ProcessBuffered(pSession);
+            xbool_t bAccepted = pSession->bHandshakeDone;
+            xbool_t bFrameMatches = test.received.nUsed == 8 && !memcmp(test.received.pData, "verified", 8);
+            XByteBuffer_Clear(&wire);
+            XSock_Close(&peer);
+            XAPI_Destroy(&api);
+            XByteBuffer_Clear(&test.received);
+            if (cases[i].bAccept)
+            {
+                CHECK(nStatus == XAPI_CONTINUE && bAccepted && test.nHandshake == 1 && !test.nErrors,
+                    "A real upgrade accepts case-insensitive connection tokens and the legacy HTTP version");
+                CHECK(test.nRead == 1 && bFrameMatches, "The first frame is delivered once with its exact body");
+            }
+            else
+            {
+                CHECK(nStatus == XAPI_DISCONNECT && !bAccepted && !test.nHandshake && !test.nRead,
+                    "A failed upgrade never delivers a handshake or the coalesced frame");
+                CHECK(test.nErrors == 1 && test.eErrorType == XAPI_WS && test.nLastError == XWS_INVALID_RESPONSE,
+                    "An invalid response produces the precise protocol error");
+            }
+        }
+    return 0;
+}
+
+static int XTest_server_upgrade_validation(void)
+{
+    struct { const char *pStart; const char *pConnection; xbool_t bAccept; } cases[] = {
+        {"POST /stream HTTP/1.1", "Upgrade", XFALSE},
+        {"GET /stream HTTP/1.1", "Upgrade", XTRUE},
+        {"GET /stream HTTP/1.0", "Upgrade", XTRUE},
+        {"GET /stream HTTP/1.1", "upgrade", XTRUE},
+        {"GET /stream HTTP/1.1", "keep-alive, UPGRADE", XTRUE},
+        {"GET /stream HTTP/1.1", "Upgrade, keep-alive", XTRUE},
+        {"GET /stream HTTP/1.1", "  Upgrade  ", XTRUE},
+        {"GET /stream HTTP/1.1", NULL, XFALSE},
+        {"GET /stream HTTP/1.1", "keep-alive", XFALSE},
+        {"GET /stream HTTP/1.1", "notupgrade", XFALSE},
+        {"GET /stream HTTP/1.1", "upgradeish", XFALSE},
+        {"GET /stream HTTP/1.1", "up grade", XFALSE},
+        {"PUT /stream HTTP/1.1", "Upgrade", XFALSE},
+        {"DELETE /stream HTTP/1.1", "Upgrade", XFALSE},
+        {"OPTIONS /stream HTTP/1.1", "Upgrade", XFALSE},
+        {"HTTP/1.1 101 Switching Protocols", "Upgrade", XFALSE},
+        {"HTTP/1.1 500 Internal Server Error", "Upgrade", XFALSE}
+    };
+    for (int nTrickle = 0; nTrickle < 2; nTrickle++)
+        for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); i++)
+        {
+            xtest_api_t test = {0};
+            xapi_t api;
+            xsock_t peer;
+            CHECK(XTest_Open(&api, &test, &peer) == 0, "Create a request validation fixture");
+            api.events.nEventMax = 4;
+            xapi_session_t *pSession = test.pSession;
+            pSession->eType = XAPI_WS;
+            xbyte_buffer_t wire;
+            XByteBuffer_Init(&wire, 0, XTRUE);
+            CHECK(XByteBuffer_AddFmt(&wire, "%s\r\nHost: localhost\r\nUpgrade: websocket\r\n", cases[i].pStart) > 0,
+                "Build the request line and upgrade header");
+            if (cases[i].pConnection)
+                CHECK(XByteBuffer_AddFmt(&wire, "Connection: %s\r\n", cases[i].pConnection) > 0, "Add connection tokens");
+            CHECK(XByteBuffer_AddFmt(&wire, "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: "
+                "dGhlIHNhbXBsZSBub25jZQ==\r\nContent-Length: 0\r\n\r\n") > 0, "Supply a valid key in every case");
+            if (nTrickle)
+            {
+                CHECK(XTest_Trickle(pSession, (const char*)wire.pData, wire.nUsed - 1) == XAPI_CONTINUE,
+                    "An incomplete request waits for its final header byte");
+                XByteBuffer_Advance(&wire, wire.nUsed - 1);
+            }
+            CHECK(XWS_AppendFrame(&wire, (const uint8_t*)"verified", 8, XWS_BINARY, XTRUE, XTRUE) == XWS_ERR_NONE,
+                "The client sends its first masked frame behind the request");
+            CHECK(XByteBuffer_AddBuff(&pSession->rxBuffer, &wire) > 0, "Deliver the request and optimistic frame");
+            int nStatus = XAPI_ProcessBuffered(pSession);
+            xbool_t bAccepted = pSession->bHandshakeStart;
+            xbool_t bReply = pSession->txBuffer.nUsed != 0;
+            xbool_t bValidReply = XFALSE;
+            if (bAccepted)
+            {
+                xhttp_t reply;
+                XHTTP_Init(&reply, XHTTP_DUMMY, 0);
+                if (XHTTP_ParseBuff(&reply, &pSession->txBuffer) == XHTTP_COMPLETE)
+                {
+                    const char *pAccept = XHTTP_GetHeader(&reply, "Sec-WebSocket-Accept");
+                    const char *pUpgrade = XHTTP_GetHeader(&reply, "Upgrade");
+                    const char *pConnection = XHTTP_GetHeader(&reply, "Connection");
+                    bValidReply = reply.eType == XHTTP_RESPONSE && reply.nStatusCode == 101 &&
+                        !strcmp(reply.sVersion, "1.1") && pAccept && !strcmp(pAccept, XTEST_WS_ACCEPT) &&
+                        pUpgrade && !strcmp(pUpgrade, "websocket") && pConnection && !strcmp(pConnection, "Upgrade");
+                }
+                XHTTP_Clear(&reply);
+                CHECK(test.nRead == 0, "No application frame arrives before the upgrade response is written");
+                for (int j = 0; j < 10 && !test.nRead; j++) XAPI_Service(&api, 5);
+            }
+            xbool_t bFrameMatches = test.received.nUsed == 8 && !memcmp(test.received.pData, "verified", 8);
+            XByteBuffer_Clear(&wire);
+            XSock_Close(&peer);
+            XAPI_Destroy(&api);
+            XByteBuffer_Clear(&test.received);
+            if (cases[i].bAccept)
+            {
+                CHECK(nStatus == XAPI_CONTINUE && bAccepted && bValidReply && test.nHandshakeRequest == 1 && !test.nErrors,
+                    "A valid request gets the exact 101 response and its independently known accept key");
+                CHECK(test.nRead == 1 && bFrameMatches, "The coalesced request frame arrives once with its exact bytes");
+            }
+            else
+            {
+                CHECK(nStatus == XAPI_DISCONNECT && !bAccepted && !bReply && !test.nHandshakeRequest && !test.nRead,
+                    "An invalid request neither upgrades nor delivers its coalesced application frame");
+                CHECK(test.nErrors == 1 && test.eErrorType == XAPI_WS && test.nLastError == XWS_INVALID_REQUEST,
+                    "Invalid request type, method and connection tokens report the precise protocol error");
+            }
+        }
     return 0;
 }
 
@@ -1252,6 +1420,8 @@ XTEST_MAIN(
     XTEST_CASE(handshake_trickle),
     XTEST_CASE(client_handshake),
     XTEST_CASE(client_handshake_edges),
+    XTEST_CASE(client_upgrade_validation),
+    XTEST_CASE(server_upgrade_validation),
     XTEST_CASE(http_trickle),
     XTEST_CASE(websocket_control),
     XTEST_CASE(websocket_sequence_errors),

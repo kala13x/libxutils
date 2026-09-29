@@ -70,6 +70,13 @@ struct feature_ {
     int nFault;
     int nAccepted;
     int nHandshakes;
+    int nUpgradeRejected;
+    int nUnexpectedUpgrade;
+    uint16_t nUpgradeStatus;
+    const char *pUpgradeConnection;
+    xbool_t bRejectUpgrade;
+    xbool_t bRejectRequest;
+    xhttp_method_t eUpgradeMethod;
     xatomic_t nErrors;
     int nInitialized;
     size_t nChunk;
@@ -423,7 +430,17 @@ static int feature_api_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
         if (pPeer->pSession) return feature_fail(pPeer->pTest, "Every accepted connection has its own state");
     }
     feature_t *pTest = pPeer->pTest;
-    if (pCtx->eCbType == XAPI_CB_ERROR) return feature_fail(pTest, XAPI_GetStatus(pCtx));
+    if (pCtx->eCbType == XAPI_CB_ERROR)
+    {
+        if (pCtx->eStatType == XAPI_WS &&
+            ((pTest->bRejectUpgrade && pPeer->nSide && pCtx->nStatus == XWS_INVALID_RESPONSE) ||
+             (pTest->bRejectRequest && !pPeer->nSide && pCtx->nStatus == XWS_INVALID_REQUEST)))
+        {
+            pTest->nUpgradeRejected++;
+            return XAPI_CONTINUE;
+        }
+        return feature_fail(pTest, XAPI_GetStatus(pCtx));
+    }
     if (pCtx->eCbType == XAPI_CB_REGISTERED || pCtx->eCbType == XAPI_CB_LISTENING)
     {
         if (pSession->eRole == XAPI_SERVER) pTest->pListener = pSession;
@@ -447,14 +464,36 @@ static int feature_api_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
     }
     if (pCtx->eCbType == XAPI_CB_HANDSHAKE_REQUEST)
     {
+        if (pTest->bRejectRequest && !pPeer->nSide) { pTest->nUnexpectedUpgrade++; return XAPI_DISCONNECT; }
         if (feature_ws_headers(pPeer, pSession->pPacket) < 0) return XAPI_DISCONNECT;
         if (!pPeer->nSide) pTest->nHandshakes++;
+        if (pTest->bRejectRequest && pPeer->nSide)
+        {
+            xhttp_t *pHttp = pSession->pPacket;
+            pHttp->eMethod = pTest->eUpgradeMethod;
+            pHttp->nAllowUpdate = XTRUE;
+            if (pTest->pUpgradeConnection) XHTTP_AddHeader(pHttp, "Connection", "%s", pTest->pUpgradeConnection);
+            else XMap_Remove(&pHttp->headerMap, "Connection");
+            pHttp->nComplete = XFALSE;
+            if (!XHTTP_Assemble(pHttp, NULL, 0)) return feature_fail(pTest, "Assemble the deliberately invalid request");
+        }
     }
     if (pCtx->eCbType == XAPI_CB_HANDSHAKE_RESPONSE)
     {
+        if (pTest->bRejectUpgrade) { pTest->nUnexpectedUpgrade++; return XAPI_DISCONNECT; }
         if (feature_ws_headers(pPeer, pSession->pPacket) < 0) return XAPI_DISCONNECT;
         pTest->nHandshakes++;
         if (feature_requests(pPeer) < 0) return XAPI_DISCONNECT;
+    }
+    if (pCtx->eCbType == XAPI_CB_HANDSHAKE_ANSWER && pTest->bRejectUpgrade)
+    {
+        xhttp_t *pHttp = pSession->pPacket;
+        pHttp->nStatusCode = pTest->nUpgradeStatus;
+        pHttp->nAllowUpdate = XTRUE;
+        if (pTest->pUpgradeConnection) XHTTP_AddHeader(pHttp, "Connection", "%s", pTest->pUpgradeConnection);
+        else XMap_Remove(&pHttp->headerMap, "Connection");
+        pHttp->nComplete = XFALSE;
+        if (!XHTTP_Assemble(pHttp, NULL, 0)) return feature_fail(pTest, "Assemble the deliberately invalid upgrade");
     }
     if (pCtx->eCbType == XAPI_CB_READ)
     {
@@ -863,6 +902,80 @@ static int XTest_ws_controls(void)
     return 0;
 }
 
+static int feature_reject_upgrade(uint16_t nStatusCode, const char *pConnection)
+{
+    feature_t test = {0};
+    test.eType = XAPI_WS;
+    test.bHash = XTRUE;
+    test.bRejectUpgrade = XTRUE;
+    test.nUpgradeStatus = nStatusCode;
+    test.pUpgradeConnection = pConnection;
+    test.nChunk = 17;
+    test.nMessages = sizeof(g_sizes) / sizeof(*g_sizes);
+    int nStatus = feature_open(&test);
+    uint64_t nDeadline = XTime_GetMonoMs() + 10000;
+    while (nStatus > 0 && !test.nErrors && !test.peers[1].nClosed && XTime_GetMonoMs() < nDeadline)
+        for (int i = 0; i < 2; i++)
+            if (XAPI_Service(&test.api[i], 1) != XEVENTS_SUCCESS) nStatus = XSTDERR;
+    xbool_t bDisconnected = test.peers[1].nClosed == 1;
+    feature_clear(&test);
+    CHECK(nStatus > 0 && !test.nErrors && test.nAccepted == 1, "The complete upgrade request reached the actual server");
+    CHECK(test.nUpgradeRejected == 1 && !test.nUnexpectedUpgrade && bDisconnected,
+        "XAPI rejected the response before reporting a successful handshake to the application");
+    CHECK(test.nHandshakes == 1 && !test.peers[0].nSeen && !test.peers[1].nSeen, "No data flows after a refused upgrade");
+    CHECK(test.peers[0].nClosed == 1 && test.peers[1].nClosed == 1, "Both upgrade connections were released exactly once");
+    return 0;
+}
+
+static int XTest_ws_reject_status(void)
+{
+    const uint16_t statuses[] = {200, 204, 301, 400, 401, 403, 500, 503};
+    for (size_t i = 0; i < sizeof(statuses) / sizeof(*statuses); i++)
+        CHECK(feature_reject_upgrade(statuses[i], "Upgrade") == 0, "The accept key cannot turn an HTTP error into an upgrade");
+    return 0;
+}
+
+static int XTest_ws_reject_connection(void)
+{
+    const char *connections[] = {NULL, "keep-alive", "notupgrade", "upgradeish", "up grade"};
+    for (size_t i = 0; i < sizeof(connections) / sizeof(*connections); i++)
+        CHECK(feature_reject_upgrade(101, connections[i]) == 0, "A 101 response needs the actual Connection upgrade token");
+    return 0;
+}
+
+static int XTest_ws_reject_request(void)
+{
+    struct { xhttp_method_t eMethod; const char *pConnection; } cases[] = {
+        {XHTTP_POST, "Upgrade"}, {XHTTP_PUT, "Upgrade"}, {XHTTP_DELETE, "Upgrade"},
+        {XHTTP_OPTIONS, "Upgrade"}, {XHTTP_GET, NULL},
+        {XHTTP_GET, "keep-alive"}, {XHTTP_GET, "notupgrade"}, {XHTTP_GET, "upgradeish"}, {XHTTP_GET, "up grade"}
+    };
+    for (size_t j = 0; j < sizeof(cases) / sizeof(*cases); j++)
+    {
+        feature_t test = {0};
+        test.eType = XAPI_WS;
+        test.bHash = XTRUE;
+        test.bRejectRequest = XTRUE;
+        test.eUpgradeMethod = cases[j].eMethod;
+        test.pUpgradeConnection = cases[j].pConnection;
+        test.nChunk = 17;
+        test.nMessages = sizeof(g_sizes) / sizeof(*g_sizes);
+        int nStatus = feature_open(&test);
+        uint64_t nDeadline = XTime_GetMonoMs() + 10000;
+        while (nStatus > 0 && !test.nErrors && !test.peers[0].nClosed && XTime_GetMonoMs() < nDeadline)
+            for (int i = 0; i < 2; i++)
+                if (XAPI_Service(&test.api[i], 1) != XEVENTS_SUCCESS) nStatus = XSTDERR;
+        xbool_t bDisconnected = test.peers[0].nClosed == 1;
+        feature_clear(&test);
+        CHECK(nStatus > 0 && !test.nErrors && test.nAccepted == 1, "The client connects to the actual API server");
+        CHECK(test.nUpgradeRejected == 1 && !test.nUnexpectedUpgrade && bDisconnected,
+            "The server rejects the invalid request before its application handshake callback");
+        CHECK(!test.nHandshakes && !test.peers[0].nSeen && !test.peers[1].nSeen, "A refused request cannot carry data");
+        CHECK(test.peers[0].nClosed == 1 && test.peers[1].nClosed == 1, "Both request connections close exactly once");
+    }
+    return 0;
+}
+
 static void *feature_serve(void *pArg)
 {
     feature_t *pTest = (feature_t*)pArg;
@@ -1118,6 +1231,9 @@ XTEST_MAIN(
     XTEST_CASE(api_ws),
     XTEST_CASE(api_ws_fragments),
     XTEST_CASE(ws_controls),
+    XTEST_CASE(ws_reject_status),
+    XTEST_CASE(ws_reject_connection),
+    XTEST_CASE(ws_reject_request),
     XTEST_CASE(api_mdtp),
     XTEST_CASE(api_socket),
     XTEST_CASE(event_http),

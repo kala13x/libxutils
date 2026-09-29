@@ -32,10 +32,32 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    xutils_regression(thread_fault_regression sys start mutex fatal task)
+    target_link_options(thread_fault_regression PRIVATE -Wl,--wrap=pthread_attr_init -Wl,--wrap=pthread_attr_destroy
+        -Wl,--wrap=pthread_attr_setstacksize -Wl,--wrap=pthread_attr_setdetachstate -Wl,--wrap=pthread_create
+        -Wl,--wrap=pthread_mutexattr_init -Wl,--wrap=pthread_mutexattr_destroy -Wl,--wrap=pthread_mutexattr_settype
+        -Wl,--wrap=pthread_mutex_init -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_mutex_destroy
+        -Wl,--wrap=pthread_rwlock_init -Wl,--wrap=pthread_rwlock_rdlock -Wl,--wrap=pthread_rwlock_wrlock
+        -Wl,--wrap=pthread_rwlock_unlock -Wl,--wrap=pthread_rwlock_destroy -Wl,--wrap=exit)
+    xutils_regression(xfs_fault_regression sys metadata load copy remove types flags)
+    target_link_options(xfs_fault_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=open -Wl,--wrap=fstat
+        -Wl,--wrap=read -Wl,--wrap=write)
     xutils_regression(sys_fault_regression net create nonblock accept api_setup api_timer)
     target_link_options(sys_fault_regression PRIVATE -Wl,--wrap=socket -Wl,--wrap=listen -Wl,--wrap=connect
         -Wl,--wrap=setsockopt -Wl,--wrap=fcntl -Wl,--wrap=accept -Wl,--wrap=accept4
         -Wl,--wrap=epoll_create1 -Wl,--wrap=epoll_ctl -Wl,--wrap=timerfd_create -Wl,--wrap=timerfd_settime)
+    if(OPENSSL_FOUND)
+        xutils_regression(rsa_fault_regression crypt generate import replace errors)
+        target_link_options(rsa_fault_regression PRIVATE -Wl,--wrap=BN_new -Wl,--wrap=BN_set_word -Wl,--wrap=RSA_new
+            -Wl,--wrap=RSA_generate_key_ex -Wl,--wrap=BIO_new -Wl,--wrap=BIO_read -Wl,--wrap=BIO_new_mem_buf
+            -Wl,--wrap=PEM_write_bio_RSAPrivateKey -Wl,--wrap=PEM_write_bio_RSAPublicKey -Wl,--wrap=malloc)
+        set_tests_properties(rsa_fault_regression.generate rsa_fault_regression.import PROPERTIES TIMEOUT 300)
+        xutils_regression(tls_fault_regression net context identity certificates accept)
+        target_link_options(tls_fault_regression PRIVATE -Wl,--wrap=TLS_client_method -Wl,--wrap=TLS_server_method
+            -Wl,--wrap=SSL_CTX_new -Wl,--wrap=SSL_new -Wl,--wrap=SSL_CTX_free -Wl,--wrap=SSL_free -Wl,--wrap=SSL_ctrl
+            -Wl,--wrap=X509_VERIFY_PARAM_set1_host -Wl,--wrap=X509_VERIFY_PARAM_set1_ip_asc
+            -Wl,--wrap=SSL_CTX_use_certificate -Wl,--wrap=SSL_CTX_use_PrivateKey -Wl,--wrap=SSL_CTX_use_certificate_chain_file)
+    endif()
 endif()
 
 xutils_regression(jwt_regression data roundtrip wrong_secret tampering boundaries malformed
@@ -122,7 +144,8 @@ endif()
 if(UNIX)
     xutils_regression(http_flow_feature feature api_crud event_crud socket_crud
         reject_status reject_body reject_type reject_id reject_request)
-    xutils_regression(network_feature feature api_http api_ws api_ws_fragments ws_controls api_mdtp api_socket
+    xutils_regression(network_feature feature api_http api_ws api_ws_fragments ws_controls ws_reject_status ws_reject_connection
+        ws_reject_request api_mdtp api_socket
         event_http event_ws event_mdtp event_socket socket_http socket_ws socket_mdtp socket_stream
         http_client http_short_exchange http_short_perform one_byte without_hash api_tls event_tls socket_tls concurrent
         concurrent_tls reject_request_body reject_response_body reject_request_order reject_response_order reject_request_type
@@ -155,7 +178,9 @@ xutils_regression(list_regression data links rings stack_head push removal singl
 xutils_regression(api_io_regression net partial_io callback_disconnect peer_eof peer_eof_forked websocket_fragments
     unexpected_continuation
     buffered_upgrade websocket_burst websocket_burst_invalid eof_with_data read_chunk handshake_trickle client_handshake
-    client_handshake_edges http_trickle websocket_control websocket_sequence_errors websocket_limits websocket_tls_hello
+    client_handshake_edges client_upgrade_validation server_upgrade_validation http_trickle websocket_control
+    websocket_sequence_errors websocket_limits
+    websocket_tls_hello
     real_ip http_endless handshake_body_limit mdtp_limit crossed_events reloop)
 xutils_regression(api_http_regression net http_partial http_pipeline http_pipeline_burst auth_key auth_basic auth_short)
 if(UNIX)
@@ -191,13 +216,15 @@ xutils_regression(crypt_regression crypt hex transforms dispatch cipher_names ke
     keyed_roundtrip digests casear multy hex_columns hex_decode_agreement hex_scaling)
 if(OPENSSL_FOUND)
     xutils_regression(rsa_regression crypt signatures encryption invalid_keys key_sizes cross_key
-        key_import key_files context size_limits build_support short_ciphertext)
+        key_import key_files context size_limits build_support short_ciphertext
+        length_overflow key_length_overflow partial_key_files)
 
     # RSA key generation searches for primes, so how long it takes is
     # probabilistic and on a shared runner the tail is long. These cases are
     # fast in the common case; the limit is there for the tail, not the mean.
     foreach(rsa_case signatures encryption invalid_keys key_sizes cross_key
-            key_import key_files context size_limits build_support short_ciphertext)
+            key_import key_files context size_limits build_support short_ciphertext
+            length_overflow key_length_overflow partial_key_files)
         set_tests_properties("rsa_regression.${rsa_case}" PROPERTIES TIMEOUT 300)
     endforeach()
 endif()
@@ -251,7 +278,7 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     xutils_regression(allocation_regression allocation json_cleanup http_header buffer_preservation endpoint_ownership
         mdtp_assemble map_rehash_failure http_parse_failure format_failure search_append_failure ws_fragment_failure
-        borrowed_string_failure split_failure long_token_failure)
+        borrowed_string_failure split_failure long_token_failure tls_context_failure)
     target_link_options(allocation_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc)
 endif()
 

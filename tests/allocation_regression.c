@@ -443,6 +443,41 @@ static int XTest_ws_fragment_failure(void)
     return 0;
 }
 
+static int XTest_tls_context_failure(void)
+{
+#ifndef XSOCK_USE_SSL
+    return 77;
+#else
+    for (int nClient = 0; nClient < 2; nClient++)
+    {
+        int pair[2];
+        CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0, "Create a transport before TLS is installed");
+        xsock_t sock;
+        CHECK(XSock_Init(&sock, XSOCK_TCP_PEER | XSOCK_ASYNC, pair[0]) == XSOCK_SUCCESS, "Wrap the plaintext transport");
+        g_nCalls = 0;
+        g_nFailAt = 1;
+        XSOCKET nResult = nClient ? XSock_InitSSLClient(&sock, "localhost") : XSock_InitSSLServer(&sock, 0);
+        g_nFailAt = 0;
+        xbool_t bClosed = fcntl(pair[0], F_GETFD) < 0 && errno == EBADF;
+        xsock_status_t eStatus = sock.eStatus;
+        xbool_t bEmpty = sock.pPrivate == NULL && XSock_GetSSLCTX(&sock) == NULL && XSock_GetSSL(&sock) == NULL;
+        XSock_Close(&sock);
+        close(pair[1]);
+        CHECK(g_nCalls == 1 && nResult == XSOCK_INVALID && eStatus == XSOCK_ERR_ALLOC, "TLS reports its allocation failure");
+        CHECK(bClosed && bEmpty, "A failed TLS upgrade releases its transport and all TLS state");
+        CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0, "Create a fresh transport for the same object");
+        CHECK(XSock_Init(&sock, XSOCK_TCP_PEER | XSOCK_ASYNC, pair[0]) == XSOCK_SUCCESS, "Reinitialize after the failure");
+        CHECK(XSock_NonBlock(&sock, XTRUE) >= 0, "The retry cannot block on the remote peer");
+        nResult = nClient ? XSock_InitSSLClient(&sock, "localhost") : XSock_InitSSLServer(&sock, 0);
+        xbool_t bReady = nResult >= 0 && XSock_GetSSLCTX(&sock) != NULL;
+        XSock_Close(&sock);
+        close(pair[1]);
+        CHECK(bReady, "The TLS context can be installed after memory is available again");
+    }
+    return 0;
+#endif
+}
+
 static int XTest_borrowed_string_failure(void)
 {
     char source[] = "borrowed";
@@ -524,6 +559,7 @@ static int XTest_long_token_failure(void)
 }
 
 XTEST_MAIN(
+    XTEST_CASE(tls_context_failure),
     XTEST_CASE(borrowed_string_failure),
     XTEST_CASE(split_failure),
     XTEST_CASE(long_token_failure),
