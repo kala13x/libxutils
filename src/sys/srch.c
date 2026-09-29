@@ -345,7 +345,11 @@ static XSTATUS XSearch_Text(xsearch_t *pSearch, const char *pPath, const char *p
     xbyte_buffer_t buffer;
 
     nStatus = XSearch_LoadData(pSearch, &buffer, pPath, pName);
-    if (nStatus <= XSTDNON) return XSTDNON;
+    if (nStatus <= XSTDNON)
+    {
+        XByteBuffer_Clear(&buffer);
+        return XSTDNON;
+    }
 
     /* The whole buffer: a binary file can hold NUL bytes before the text searched for */
     if (pSearch->bInsensitive)

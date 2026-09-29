@@ -703,6 +703,31 @@ static int XTest_many_header_lines(void)
     return 0;
 }
 
+static int XTest_header_delimiters(void)
+{
+    const char wire[] =
+        "GET / HTTP/1.1\r\n"
+        "X-Inner: a\rb\nc\r\rd\n\ne\r\n"
+        "X-Tail: value\r\r\n"
+        "X-Last: yes\r\n"
+        "Content-Length: 15\r\n\r\n"
+        "X-Body: no\r\n\r\nx";
+
+    xhttp_t http;
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)wire, sizeof(wire) - 1) == XHTTP_COMPLETE, "Headers end only at a CRLF pair");
+    CHECK(http.nHeaderCount == 4, "Only header lines before the body are counted");
+    const char *pValue = XHTTP_GetHeader(&http, "X-Inner");
+    CHECK(pValue != NULL && !strcmp(pValue, "a\rb\nc\r\rd\n\ne"), "Unpaired line delimiters stay in the value");
+    pValue = XHTTP_GetHeader(&http, "X-Tail");
+    CHECK(pValue != NULL && !strcmp(pValue, "value\r"), "A carriage return before the delimiter stays in the value");
+    pValue = XHTTP_GetHeader(&http, "X-Last");
+    CHECK(pValue != NULL && !strcmp(pValue, "yes"), "The final named header is parsed");
+    CHECK(XHTTP_GetHeader(&http, "X-Body") == NULL, "Body lines are not parsed as headers");
+    CHECK(!memcmp(http.rawData.pData, wire, sizeof(wire)), "Parsing preserves every byte of the message");
+    XHTTP_Clear(&http);
+    return 0;
+}
+
 static int XTest_start_line_colon(void)
 {
     /* The start line is not a header whatever it holds: a colon in a request
@@ -870,6 +895,7 @@ XTEST_MAIN(
     XTEST_CASE(lifecycle),
     XTEST_CASE(unix_and_auth),
     XTEST_CASE(many_header_lines),
+    XTEST_CASE(header_delimiters),
     XTEST_CASE(start_line_colon),
     XTEST_CASE(long_header_line),
     XTEST_CASE(header_whitespace),

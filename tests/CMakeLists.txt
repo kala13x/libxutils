@@ -95,7 +95,7 @@ xutils_regression(ws_regression net lengths partial coalesced invalid_wire creat
     masking control_frames extra_data allocation mask_lengths append_frame mask_keys)
 xutils_regression(http_regression net partial pipeline headers basic_auth long_basic_auth reuse empty_body
     code_strings content_length start_line assemble header_lookup limits callbacks lifecycle unix_and_auth
-    many_header_lines start_line_colon long_header_line header_whitespace parse_restores_buffer)
+    many_header_lines header_delimiters start_line_colon long_header_line header_whitespace parse_restores_buffer)
 
 xutils_regression(map_regression data lifecycle reference_model operations iteration growth hashing
     pair_transfer)
@@ -162,7 +162,7 @@ xutils_regression(sync_regression sys mutex recursive rwlock barrier task task_s
 xutils_regression(time_regression sys calendar serialization http_year formats parse_guards
     conversions differences normalize clock fraction_bounds)
 xutils_regression(crypt_regression crypt hex transforms dispatch cipher_names keyless_roundtrip
-    keyed_roundtrip digests casear multy hex_columns hex_scaling)
+    keyed_roundtrip digests casear multy hex_columns hex_decode_agreement hex_scaling)
 if(OPENSSL_FOUND)
     xutils_regression(rsa_regression crypt signatures encryption invalid_keys key_sizes cross_key
         key_import key_files context size_limits build_support short_ciphertext)
@@ -180,7 +180,7 @@ if(UNIX)
     xutils_regression(xfs_ops_regression sys file_io handles lines load paths directories ownership path_bounds
         short_write read_bounds remove_large_dir)
     xutils_regression(srch_regression sys deep_tree name_matching recursion criteria text_search callback entries guards
-        text_shapes line_bounds link_entries nocase_binary stdin_search binary_lines)
+        text_shapes line_bounds link_entries nocase_binary stdin_search empty_stdin binary_lines)
     xutils_regression(cli_regression sys window_size window_lines window_align window_display
         progress_bounds progress_output progress_animation input terminal_modes terminal_input read_bounds)
     xutils_regression(sig_regression sys register exit_handler errexit backtrace daemonize)

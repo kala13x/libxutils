@@ -661,6 +661,39 @@ static int scn_search(void)
     return 0;
 }
 
+static int scn_search_empty_stdin(void)
+{
+    int pipeFds[2];
+    if (pipe(pipeFds) < 0) return 1;
+    close(pipeFds[1]);
+
+    int nSaved = dup(STDIN_FILENO);
+    if (nSaved < 0 || dup2(pipeFds[0], STDIN_FILENO) < 0)
+    {
+        close(pipeFds[0]);
+        if (nSaved >= 0) close(nSaved);
+        return 1;
+    }
+
+    close(pipeFds[0]);
+    clearerr(stdin);
+
+    xsearch_t search;
+    XSearch_Init(&search, "*");
+    search.bReadStdin = XTRUE;
+    search.bMatchOnly = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "needle");
+
+    int nStatus = XSearch(&search, NULL);
+    size_t nFound = XArray_Used(&search.fileArray);
+    XSearch_Destroy(&search);
+
+    int nRestored = dup2(nSaved, STDIN_FILENO);
+    close(nSaved);
+    clearerr(stdin);
+    return nRestored < 0 || nStatus != XSTDNON || nFound != 0;
+}
+
 static int scn_logger(void)
 {
     char sPath[256];
@@ -851,6 +884,7 @@ static const alloc_case_t g_scenarios[] = {
     {"file-io",        scn_file_io},
     {"path-parse",     scn_path_parse},
     {"search",         scn_search},
+    {"search-stdin",   scn_search_empty_stdin},
     {"logger",         scn_logger},
     {"xstring-ops",    scn_xstring_ops},
     {"array-copy",     scn_array_copy},

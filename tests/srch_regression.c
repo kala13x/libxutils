@@ -896,6 +896,35 @@ static int XTest_stdin_search(void)
     return 0;
 }
 
+static int XTest_empty_stdin(void)
+{
+    for (int nMode = 0; nMode < 3; nMode++)
+    {
+        for (int nInsensitive = 0; nInsensitive < 2; nInsensitive++)
+        {
+            xsearch_t search;
+            XSearch_Init(&search, "*");
+            search.bMatchOnly = nMode == 0;
+            search.bSearchLines = nMode == 1;
+            search.bInsensitive = nInsensitive;
+            xstrncpy(search.sText, sizeof(search.sText), "needle");
+
+            for (int i = 0; i < 2; i++)
+            {
+                CHECK(srch_stdin(&search, NULL, 0) == XSTDNON, "Empty input matches nothing in every search mode");
+                CHECK(XArray_Used(&search.fileArray) == 0, "Empty input creates no entries");
+                CHECK(!XSYNC_ATOMIC_GET(search.pInterrupted), "End of input does not interrupt the search");
+            }
+
+            CHECK(srch_stdin(&search, "needle\n", 7) >= XSTDNON, "The search accepts input after an empty read");
+            CHECK(XArray_Used(&search.fileArray) == 1, "The reused search reports the matching input once");
+            XSearch_Destroy(&search);
+        }
+    }
+
+    return 0;
+}
+
 static int XTest_binary_lines(void)
 {
     /* A line search of a file whose only match is past a NUL byte reports the file as a binary match */
@@ -949,5 +978,6 @@ XTEST_MAIN(
     XTEST_CASE(link_entries),
     XTEST_CASE(nocase_binary),
     XTEST_CASE(stdin_search),
+    XTEST_CASE(empty_stdin),
     XTEST_CASE(binary_lines)
 )

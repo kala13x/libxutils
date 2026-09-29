@@ -902,13 +902,18 @@ static int XHTTP_ParseHeaderLine(xhttp_t *pHttp, const char *pLine, size_t nLeng
 static int XHTTP_ParseHeaders(xhttp_t *pHttp)
 {
     const char *pLine = strstr((const char *)pHttp->rawData.pData, "\r\n");
+    const char *pLimit = (const char *)pHttp->rawData.pData + pHttp->nHeaderLength - 1;
     int nStatus = XSTDOK;
 
     while (pLine != NULL && nStatus == XSTDOK)
     {
         pLine += 2;
-        const char *pEnd = strstr(pLine, "\r\n");
-        size_t nLength = pEnd != NULL ? (size_t)(pEnd - pLine) : strlen(pLine);
+        const char *pEnd = (const char*)memchr(pLine, '\r', (size_t)(pLimit - pLine));
+
+        while (pEnd != NULL && pEnd[1] != '\n')
+            pEnd = (const char*)memchr(pEnd + 1, '\r', (size_t)(pLimit - pEnd - 1));
+
+        size_t nLength = (size_t)((pEnd != NULL ? pEnd : pLimit) - pLine);
 
         nStatus = XHTTP_ParseHeaderLine(pHttp, pLine, nLength);
         pLine = pEnd;

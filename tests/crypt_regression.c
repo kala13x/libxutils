@@ -433,6 +433,52 @@ static int XTest_hex_columns(void)
     return 0;
 }
 
+static int crypt_hex_compare(const uint8_t *pInput, size_t nLength)
+{
+    uint8_t sExpected[32];
+    size_t nExpected = 0;
+    const char *pRead = (const char*)pInput;
+    unsigned int nValue = 0;
+    int nOffset = 0;
+
+    while (sscanf(pRead, "%02x%n", &nValue, &nOffset) == 1)
+    {
+        CHECK(nOffset > 0 && nExpected < sizeof(sExpected), "The reference decoder advances within the output");
+        sExpected[nExpected++] = (uint8_t)nValue;
+        pRead += nOffset;
+    }
+
+    for (int nLower = 0; nLower < 2; nLower++)
+    {
+        size_t nDecoded = nLength;
+        uint8_t *pDecoded = XDecrypt_HEX(pInput, &nDecoded, nLower);
+        CHECK(pDecoded != NULL && nDecoded == nExpected, "Hex decoding keeps the reference output length");
+        CHECK(!memcmp(pDecoded, sExpected, nExpected), "Hex decoding agrees with the reference byte for byte");
+        free(pDecoded);
+    }
+
+    return 0;
+}
+
+static int XTest_hex_decode_agreement(void)
+{
+    for (unsigned int i = 0; i <= UINT16_MAX; i++)
+    {
+        uint8_t sInput[] = { (uint8_t)(i >> 8), (uint8_t)i, ' ', '7', '\0' };
+        CHECK(crypt_hex_compare(sInput, sizeof(sInput) - 1) == 0, "Every byte pair preserves hex decoding");
+    }
+
+    const char *pInputs[] = {
+        "0x12 0Xff 00", "+1 -1 +a -F", "a b c D E F", "123456789abcdefABCDEF0",
+        " \t\r\n\v\f01 23\t45\n67\r89\vab\fCD ef", "00 ff zz 11", "00 + 11", "00 - 11"
+    };
+
+    for (size_t i = 0; i < sizeof(pInputs) / sizeof(*pInputs); i++)
+        CHECK(crypt_hex_compare((const uint8_t*)pInputs[i], strlen(pInputs[i])) == 0, "Mixed hex tokens preserve decoding");
+
+    return 0;
+}
+
 static int XTest_hex_scaling(void)
 {
     /* Hex decoding ran sscanf() on the rest of the input for every byte, and
@@ -482,5 +528,6 @@ XTEST_MAIN(
     XTEST_CASE(casear),
     XTEST_CASE(multy),
     XTEST_CASE(hex_columns),
+    XTEST_CASE(hex_decode_agreement),
     XTEST_CASE(hex_scaling)
 )

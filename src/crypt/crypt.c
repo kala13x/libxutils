@@ -99,6 +99,14 @@ uint8_t* XCrypt_HEX(const uint8_t *pInput, size_t *pLength, const char* pSpace, 
     return pOutput;
 }
 
+static int XCrypt_HexDigit(uint8_t nChar)
+{
+    if (nChar >= '0' && nChar <= '9') return nChar - '0';
+    if (nChar >= 'a' && nChar <= 'f') return nChar - 'a' + 10;
+    if (nChar >= 'A' && nChar <= 'F') return nChar - 'A' + 10;
+    return XSTDERR;
+}
+
 uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
 {
     if (pInput == NULL || pLength == NULL || !(*pLength)) return NULL;
@@ -126,11 +134,22 @@ uint8_t* XDecrypt_HEX(const uint8_t *pInput, size_t *pLength, xbool_t bLowCase)
         sPair[1] = sPair[0] != '\0' ? pData[nSpace + 1] : '\0';
         sPair[2] = '\0';
 
+        int nHigh = XCrypt_HexDigit((uint8_t)sPair[0]);
+        int nLow = XCrypt_HexDigit((uint8_t)sPair[1]);
+
+        if (nHigh >= 0 && nLow >= 0)
+        {
+            nVal = (unsigned int)((nHigh << 4) | nLow);
+            nOffset = 2;
+        }
+        else
+        {
 #ifdef _WIN32
-        if (sscanf_s(sPair, pFmt, &nVal, &nOffset) != 1) break;
+            if (sscanf_s(sPair, pFmt, &nVal, &nOffset) != 1) break;
 #else
-        if (sscanf(sPair, pFmt, &nVal, &nOffset) != 1) break;
+            if (sscanf(sPair, pFmt, &nVal, &nOffset) != 1) break;
 #endif
+        }
 
         if (XByteBuffer_AddByte(&buffer, (uint8_t)nVal) <= 0)
         {
