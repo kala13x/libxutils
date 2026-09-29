@@ -11,6 +11,19 @@
 #include "sync.h"
 #include "thread.h"
 #include "xtime.h"
+#ifndef _WIN32
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+#if defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define SYNC_TSAN 1
+#endif
+#endif
+#if defined(__SANITIZE_THREAD__) && !defined(SYNC_TSAN)
+#define SYNC_TSAN 1
+#endif
 
 #define SYNC_THREADS    4
 #define SYNC_ROUNDS     4000
@@ -380,6 +393,90 @@ static int XTest_task_start_state(void)
     return 0;
 }
 
+#if !defined(_WIN32) && !defined(SYNC_TSAN)
+static void sync_destroy_locked(void)
+{
+    xsync_mutex_t lock;
+    XSync_Init(&lock);
+    XSync_Lock(&lock);
+    XSync_Destroy(&lock);
+}
+
+static void sync_unlock_unowned(void)
+{
+    xsync_mutex_t lock;
+    XSync_InitRecursive(&lock);
+    XSync_Unlock(&lock);
+}
+
+static void sync_write_twice(void)
+{
+    xsync_rw_t lock;
+    XRWSync_Init(&lock);
+    XRWSync_WriteLock(&lock);
+    XRWSync_WriteLock(&lock);
+}
+
+static void sync_read_while_writing(void)
+{
+    xsync_rw_t lock;
+    XRWSync_Init(&lock);
+    XRWSync_WriteLock(&lock);
+    XRWSync_ReadLock(&lock);
+}
+
+/* Runs pMisuse in a child and returns its exit status, with what it wrote to stderr in pOutput */
+static int sync_run_child(void(*pMisuse)(void), char *pOutput, size_t nSize)
+{
+    int pipeFds[2];
+    if (pipe(pipeFds) < 0) return -1;
+
+    pid_t nPid = fork();
+    if (nPid < 0) return -1;
+
+    if (nPid == 0)
+    {
+        dup2(pipeFds[1], STDERR_FILENO);
+        close(pipeFds[0]);
+        pMisuse();
+        _exit(0);
+    }
+
+    close(pipeFds[1]);
+    size_t nUsed = 0;
+    ssize_t nRead;
+    while (nUsed + 1 < nSize && (nRead = read(pipeFds[0], pOutput + nUsed, nSize - 1 - nUsed)) > 0) nUsed += (size_t)nRead;
+    pOutput[nUsed] = '\0';
+    close(pipeFds[0]);
+
+    int nStatus = 0;
+    if (waitpid(nPid, &nStatus, 0) != nPid || !WIFEXITED(nStatus)) return -1;
+    return WEXITSTATUS(nStatus);
+}
+#endif
+
+static int XTest_misuse(void)
+{
+#if !defined(_WIN32) && !defined(SYNC_TSAN)
+    /* A lock that is used wrongly ends the process, and says why with the error the lock returned */
+    struct { void(*pMisuse)(void); const char *pWhat; int nError; } cases[] = {
+        { sync_destroy_locked, "Can not deinitialize mutex", EBUSY },
+        { sync_unlock_unowned, "Can not unlock mutex", EPERM },
+        { sync_write_twice, "Can not write lock rwlock", EDEADLK },
+        { sync_read_while_writing, "Can not read lock rwlock", EDEADLK }
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); i++)
+    {
+        char sOutput[512], sExpected[128];
+        snprintf(sExpected, sizeof(sExpected), "%s: %d\n", cases[i].pWhat, cases[i].nError);
+        CHECK(sync_run_child(cases[i].pMisuse, sOutput, sizeof(sOutput)) == EXIT_FAILURE, "The misuse ends the process");
+        CHECK(strstr(sOutput, sExpected) != NULL, "The report names the misuse and the error the lock returned");
+    }
+#endif
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(mutex),
     XTEST_CASE(recursive),
@@ -388,5 +485,6 @@ XTEST_MAIN(
     XTEST_CASE(task),
     XTEST_CASE(task_start_state),
     XTEST_CASE(sleep),
-    XTEST_CASE(atomics)
+    XTEST_CASE(atomics),
+    XTEST_CASE(misuse)
 )

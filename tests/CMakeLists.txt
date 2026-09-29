@@ -121,7 +121,8 @@ if(UNIX)
         options buffers_and_alloc datagram_options address_accessors flag_guards)
     xutils_regression(sock_timeout_regression net boundaries)
     xutils_regression(sock_api_regression net address_conversion address_info status_strings
-        accessors buffers listener create_guards udp failed_create_state address_port_range)
+        accessors buffers listener create_guards udp failed_create_state address_port_range option_failures
+        connect_refused forced_bind_failure)
 endif()
 
 xutils_regression(hash_regression data collisions ownership operations distribution pairs)
@@ -157,7 +158,7 @@ if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "3.0")
 endif()
 xutils_regression(pool_regression sys alignment_growth reallocation overflow accounting exhaustion heap_pool)
 xutils_regression(thread_regression sys contention recursive invalid_start)
-xutils_regression(sync_regression sys mutex recursive rwlock barrier task task_start_state sleep atomics)
+xutils_regression(sync_regression sys mutex recursive rwlock barrier task task_start_state sleep atomics misuse)
 xutils_regression(time_regression sys calendar serialization http_year formats parse_guards
     conversions differences normalize clock fraction_bounds)
 xutils_regression(crypt_regression crypt hex transforms dispatch cipher_names keyless_roundtrip
@@ -179,7 +180,7 @@ if(UNIX)
     xutils_regression(xfs_ops_regression sys file_io handles lines load paths directories ownership path_bounds
         short_write read_bounds remove_large_dir)
     xutils_regression(srch_regression sys deep_tree name_matching recursion criteria text_search callback entries guards
-        text_shapes line_bounds link_entries nocase_binary)
+        text_shapes line_bounds link_entries nocase_binary stdin_search binary_lines)
     xutils_regression(cli_regression sys window_size window_lines window_align window_display
         progress_bounds progress_output progress_animation input terminal_modes terminal_input read_bounds)
     xutils_regression(sig_regression sys register exit_handler errexit backtrace daemonize)
@@ -202,7 +203,7 @@ xutils_regression(mdtp_regression net type_mapping assemble_parse parse_guards p
     header_fields create_guards lifecycle hostile_header parse_into_stale
     header_combinations header_refusals)
 xutils_regression(sock_regression net retry_read retry_write empty_and_eof keep_open interrupted_io accept_cloexec
-    accept_flags)
+    accept_flags empty_datagram)
 xutils_regression(log_regression sys filtering large_message severities flag_mask config
     formatting file_output rotation throw callback_veto enabled)
 xutils_regression(type_regression sys float_bits concurrent printable byte_units kb_units version)
@@ -221,7 +222,7 @@ if(XUTILS_BUILD_FUZZERS)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     xutils_regression(allocation_regression allocation json_cleanup http_header buffer_preservation endpoint_ownership
-        mdtp_assemble map_rehash_failure http_parse_failure format_failure search_append_failure)
+        mdtp_assemble map_rehash_failure http_parse_failure format_failure search_append_failure ws_fragment_failure)
     target_link_options(allocation_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc)
 endif()
 
@@ -230,7 +231,7 @@ if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "1.1.0")
     xutils_regression(tls_regression net pending_record wrong_hostname untrusted)
     if(UNIX)
         xutils_regression(sock_tls_regression net handshake stale_error_queue pkcs12_identity pkcs12_ownership untrusted
-            cert_guards peer_endings closed_session_io status_strings write_after_reset ssl_teardown)
+            cert_guards peer_endings closed_session_io status_strings write_after_reset plain_calls ssl_teardown)
         xutils_regression(api_tls_regression net handshake async_client async_stalled pkcs12_listener partial_writes
             plaintext_client missing_identity)
 
@@ -241,7 +242,7 @@ if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "1.1.0")
         endforeach()
 
         foreach(sock_tls_case handshake pkcs12_identity pkcs12_ownership untrusted cert_guards
-                peer_endings closed_session_io status_strings write_after_reset ssl_teardown)
+                peer_endings closed_session_io status_strings write_after_reset plain_calls ssl_teardown)
             set_tests_properties("sock_tls_regression.${sock_tls_case}" PROPERTIES TIMEOUT 300)
         endforeach()
     endif()

@@ -395,7 +395,8 @@ static int XTest_ws_fragment_failure(void)
     {
         alloc_ws_t test;
         memset(&test, 0, sizeof(test));
-        XByteBuffer_Init(&test.received, 0, XFALSE);
+        CHECK(XByteBuffer_Init(&test.received, 64, XFALSE) >= 0 && test.received.nSize >= 64,
+            "Reserve room for the message, so that only the session allocates");
 
         xapi_t api;
         CHECK(XAPI_Init(&api, alloc_ws_callback, &test) == XSTDOK, "Initialize API");
@@ -421,7 +422,7 @@ static int XTest_ws_fragment_failure(void)
         {
             CHECK(test.nRead == 1 && test.received.nUsed == 10 && !memcmp(test.received.pData, "fragmented", 10),
                 "A message that could be kept is delivered whole");
-            CHECK(!test.nErrors, "Without an error");
+            CHECK(!test.nErrors && !test.pSession->rxBuffer.nUsed, "Without an error, and with every frame consumed");
         }
         else
         {
@@ -436,7 +437,8 @@ static int XTest_ws_fragment_failure(void)
         XByteBuffer_Clear(&test.received);
     }
 
-    CHECK(nAllocations >= 3 && nFailures == nAllocations, "Every allocation the message needs is failed once, and ends it");
+    /* Three fragments kept and one message put together. Releasing the consumed bytes needs no allocation to succeed. */
+    CHECK(nFailures >= 4 && nFailures <= nAllocations, "Every allocation the message needs ends it when it fails");
     XByteBuffer_Clear(&wire);
     return 0;
 }

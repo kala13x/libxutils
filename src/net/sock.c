@@ -1244,6 +1244,9 @@ int XSock_Recv(xsock_t *pSock, void* pData, size_t nSize)
         return nRecvSize;
     }
 
+    /* A datagram socket has no end of stream, an empty read is an empty datagram */
+    if (!nRecvSize && pSock->nType == SOCK_DGRAM) return nRecvSize;
+
     if (nRecvSize <= 0)
     {
         if (!nRecvSize) pSock->eStatus = XSOCK_EOF;
@@ -1346,6 +1349,8 @@ int XSock_Read(xsock_t *pSock, void *pData, size_t nSize)
         pSock->eStatus = XSOCK_WANT_READ;
         return nReadSize;
     }
+
+    if (!nReadSize && pSock->nType == SOCK_DGRAM) return nReadSize;
 
     if (nReadSize <= 0)
     {

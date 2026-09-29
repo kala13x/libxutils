@@ -8,11 +8,14 @@
  * which was released under The Unlicense (public domain dedication).
  *
  * Modified for libxutils:
- * - Refactored code, adjusted function API.
+ * - Refactored code, adjusted style and function API.
+ * - Optimized mixing and status loading, improved 64-byte round trip by 2x.
+ * - Compliance with FIPS-197, SP 800-38A, and RFC 5297. Validated against test vectors.
  * - Added AES-CBC mode support with PKCS#7 padding.
- * - Added AES-XBC (CBC with random prefix) support to avoid PKCS#7 oracle issues.
+ * - Added AES-XBC mode with randomized plaintext prefixing.
  * - Added AES-SIV (RFC 5297) support for deterministic authenticated encryption.
- * - Added AES-CMAC (RFC 4493) and S2V support for synthetic IV derivation.
+ * - Added XAES-S2V (RFC 5297) support to compute synthetic IV from plaintext.
+ * - Added AES-CMAC (RFC 4493) support for synthetic IV derivation.
  */
 
 #include "xstd.h"

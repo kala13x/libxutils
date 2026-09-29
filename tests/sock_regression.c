@@ -247,6 +247,50 @@ static int XTest_accept_flags(void)
 #endif
 }
 
+static int XTest_empty_datagram(void)
+{
+#ifdef _WIN32
+    return 0;
+#else
+    /* A datagram socket has no end of stream. An empty datagram, which anyone can send, is read as nothing,
+       the socket stays open, and the datagram after it is read as usual. */
+    for (int nRecv = 0; nRecv < 2; nRecv++)
+    {
+        int nReader = socket(AF_INET, SOCK_DGRAM, 0);
+        int nWriter = socket(AF_INET, SOCK_DGRAM, 0);
+        CHECK(nReader >= 0 && nWriter >= 0, "Create datagram sockets");
+
+        struct sockaddr_in addr;
+        socklen_t nAddrLen = sizeof(addr);
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        CHECK(bind(nReader, (struct sockaddr*)&addr, sizeof(addr)) == 0, "Bind the reader to loopback");
+        CHECK(getsockname(nReader, (struct sockaddr*)&addr, &nAddrLen) == 0, "Learn its port");
+
+        xsock_t reader;
+        CHECK(XSock_Init(&reader, XSOCK_UDP_CLIENT, nReader) != XSOCK_ERROR, "Wrap the reader");
+        CHECK(XSock_GetSockType(&reader) == SOCK_DGRAM, "As a datagram socket");
+
+        CHECK(sendto(nWriter, "", 0, 0, (struct sockaddr*)&addr, sizeof(addr)) == 0, "Send an empty datagram");
+        CHECK(sendto(nWriter, "data", 4, 0, (struct sockaddr*)&addr, sizeof(addr)) == 4, "And one with data");
+
+        char sData[16];
+        int nBytes = nRecv ? XSock_Recv(&reader, sData, sizeof(sData)) : XSock_Read(&reader, sData, sizeof(sData));
+        CHECK(nBytes == 0, "The empty datagram is read as nothing");
+        CHECK(reader.nFD == nReader && reader.eStatus != XSOCK_EOF, "It is not the end, and the socket stays open");
+
+        nBytes = nRecv ? XSock_Recv(&reader, sData, sizeof(sData)) : XSock_Read(&reader, sData, sizeof(sData));
+        CHECK(nBytes == 4 && !memcmp(sData, "data", 4), "The next datagram is read whole");
+
+        XSock_Close(&reader);
+        close(nWriter);
+    }
+
+    return 0;
+#endif
+}
+
 XTEST_MAIN(
     XTEST_CASE(retry_read),
     XTEST_CASE(retry_write),
@@ -254,5 +298,6 @@ XTEST_MAIN(
     XTEST_CASE(keep_open),
     XTEST_CASE(interrupted_io),
     XTEST_CASE(accept_cloexec),
-    XTEST_CASE(accept_flags)
+    XTEST_CASE(accept_flags),
+    XTEST_CASE(empty_datagram)
 )
