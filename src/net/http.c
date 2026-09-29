@@ -628,7 +628,7 @@ xbyte_buffer_t* XHTTP_Assemble(xhttp_t *pHttp, const uint8_t *pContent, size_t n
     if (nStatus == XSTDERR) return NULL;
     xbool_t nAllowUpdate = pHttp->nAllowUpdate;
 
-    if (nLength > 0)
+    if (pContent != NULL)
     {
         pHttp->nAllowUpdate = XTRUE;
         nStatus = XHTTP_AddHeader(pHttp, "Content-Length", "%zu", nLength);
@@ -1150,24 +1150,31 @@ xhttp_status_t XHTTP_Receive(xhttp_t *pHttp, xsock_t *pSock)
     return XHTTP_ReadContent(pHttp, pSock);
 }
 
+static xhttp_status_t XHTTP_WriteRequest(xhttp_t *pHttp, xsock_t *pSock)
+{
+    xbyte_buffer_t *pBuff = &pHttp->rawData;
+    if (!pBuff->nUsed) return XHTTP_StatusCb(pHttp, XHTTP_EWRITE);
+    size_t nOffset = 0;
+
+    do
+    {
+        int nWritten = XSock_Write(pSock, pBuff->pData + nOffset, pBuff->nUsed - nOffset);
+        if (nWritten <= 0) return XHTTP_StatusCb(pHttp, XHTTP_EWRITE);
+        nOffset += (size_t)nWritten;
+    }
+    while (nOffset < pBuff->nUsed);
+
+    int nStatus = XHTTP_Callback(pHttp, XHTTP_WRITE, pBuff->pData, pBuff->nUsed);
+    return nStatus == XSTDERR ? XHTTP_TERMINATED : XHTTP_COMPLETE;
+}
+
 xhttp_status_t XHTTP_Exchange(xhttp_t *pRequest, xhttp_t *pResponse, xsock_t *pSock)
 {
     if (XSock_IsNB(pSock)) return XHTTP_StatusCb(pRequest, XHTTP_EFDMODE);
     XHTTP_Init(pResponse, XHTTP_DUMMY, XSTDNON);
-    xbyte_buffer_t *pBuff = &pRequest->rawData;
 
-    int nStatus = XSock_WriteBuff(pSock, pBuff);
-    if (nStatus <= 0) return XHTTP_StatusCb(pRequest, XHTTP_EWRITE);
-
-    nStatus = XHTTP_Callback(
-        pRequest,
-        XHTTP_WRITE,
-        pBuff->pData,
-        pBuff->nUsed
-    );
-
-    if (nStatus == XSTDERR)
-        return XHTTP_TERMINATED;
+    xhttp_status_t eStatus = XHTTP_WriteRequest(pRequest, pSock);
+    if (eStatus != XHTTP_COMPLETE) return eStatus;
 
     XHTTP_SetCallback(
         pResponse,
@@ -1285,18 +1292,8 @@ xhttp_status_t XHTTP_Perform(xhttp_t *pHttp, xsock_t *pSock, const uint8_t *pBod
     xbyte_buffer_t *pBuff = XHTTP_Assemble(pHttp, pBody, nLength);
     if (pBuff == NULL) return XHTTP_StatusCb(pHttp, XHTTP_EASSEMBLE);
 
-    int nStatus = XSock_WriteBuff(pSock, pBuff);
-    if (nStatus <= 0) return XHTTP_StatusCb(pHttp, XHTTP_EWRITE);
-
-    nStatus = XHTTP_Callback(
-        pHttp,
-        XHTTP_WRITE,
-        pBuff->pData,
-        pBuff->nUsed
-    );
-
-    if (nStatus == XSTDERR)
-        return XHTTP_TERMINATED;
+    xhttp_status_t eStatus = XHTTP_WriteRequest(pHttp, pSock);
+    if (eStatus != XHTTP_COMPLETE) return eStatus;
 
     XHTTP_Reset(pHttp, XFALSE);
     return XHTTP_Receive(pHttp, pSock);

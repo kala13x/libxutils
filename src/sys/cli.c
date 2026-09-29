@@ -335,10 +335,18 @@ XSTATUS XCLIWin_AddLineFmt(xcli_win_t *pWin, const char *pFmt, ...)
     XSTRCPYFMT(pDest, pFmt, &nLength);
     if (pDest == NULL) return XSTDERR;
 
-    if (XArray_PushData(pLines, pDest, nLength) < 0)
+    xarray_data_t *pData = XArray_NewData(pLines, pDest, 0, 0);
+    if (pData == NULL)
     {
         XArray_Clear(pLines);
         free(pDest);
+        return XSTDERR;
+    }
+
+    pData->nSize = nLength;
+    if (XArray_Add(pLines, pData) < 0)
+    {
+        XArray_Clear(pLines);
         return XSTDERR;
     }
 

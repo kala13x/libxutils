@@ -1375,7 +1375,11 @@ int XSock_Write(xsock_t *pSock, const void *pData, size_t nLength)
     nBytes = XSock_Send(pSock, pData, nLength);
 #else
     if (nLength > (size_t)INT_MAX) nLength = (size_t)INT_MAX;
-    do nBytes = write(pSock->nFD, pData, nLength);
+    do
+    {
+        nBytes = send(pSock->nFD, pData, nLength, XMSG_NOSIGNAL);
+        if (nBytes < 0 && errno == ENOTSOCK) nBytes = write(pSock->nFD, pData, nLength);
+    }
     while (nBytes < 0 && errno == EINTR);
 
     if (nBytes < 0 && XSock_IsNB(pSock) && XSOCK_WOULDBLOCK(XSOCK_ERRNO()))

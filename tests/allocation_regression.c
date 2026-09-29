@@ -443,7 +443,90 @@ static int XTest_ws_fragment_failure(void)
     return 0;
 }
 
+static int XTest_borrowed_string_failure(void)
+{
+    char source[] = "borrowed";
+    xstring_t string;
+    XString_Init(&string, 0, XFALSE);
+    XString_Set(&string, source, sizeof(source) - 1);
+    g_nCalls = 0;
+    g_nFailAt = 1;
+    int nStatus = XString_Resize(&string, 64);
+    g_nFailAt = 0;
+    CHECK(nStatus == XSTDERR, "A failed ownership transfer reports allocation failure");
+    CHECK(string.pData == source && string.nLength == sizeof(source) - 1 && !string.nSize,
+        "Allocation failure preserves the borrowed data and its explicit length");
+    CHECK(XString_Resize(&string, 64) == 64, "The same string can be resized after memory becomes available");
+    CHECK(string.pData != source && !strcmp(string.pData, source), "The successful retry owns the complete copy");
+    XString_Clear(&string);
+    return 0;
+}
+
+static int XTest_split_failure(void)
+{
+    size_t nFailures = 0;
+    for (int nFlags = 0; nFlags < 4; nFlags++)
+    {
+        for (size_t nAt = 1; nAt <= 32; nAt++)
+        {
+            xarray_t tokens;
+            XArray_Init(&tokens, NULL, 1, XFALSE);
+            CHECK(XArray_AddData(&tokens, "existing", 9) == 0, "Start with a caller-owned token");
+            g_nCalls = 0;
+            g_nFailAt = nAt;
+            size_t nCount = xstrsplita(",a,,b", ",", &tokens, nFlags & 1, nFlags & 2);
+            g_nFailAt = 0;
+            int nCorrect = !strcmp(XArray_GetData(&tokens, 0), "existing");
+            if (g_nCalls >= nAt)
+            {
+                nFailures++;
+                nCorrect = nCorrect && nCount == 0 && tokens.nUsed == 1;
+            }
+            else nCorrect = nCorrect && nCount == (size_t)3 + (nFlags & 1 ? 2 : 0) + (nFlags & 2 ? 2 : 0);
+            XArray_Destroy(&tokens);
+            CHECK(nCorrect, "A split either appends all fields or preserves the original token array");
+        }
+    }
+    CHECK(nFailures > 20, "Fail token, payload and growing-array allocations");
+    return 0;
+}
+
+static int XTest_long_token_failure(void)
+{
+    char source[4110];
+    memcpy(source, "first,", 6);
+    memset(source + 6, 'x', 4096);
+    memcpy(source + 4102, ",last", 6);
+    size_t nFailures = 0;
+    for (size_t nAt = 1; nAt < 64; nAt++)
+    {
+        g_nCalls = 0;
+        g_nFailAt = nAt;
+        xarray_t *pTokens = XString_Split(source, ",");
+        g_nFailAt = 0;
+        int nCorrect = 1;
+        if (pTokens == NULL) nFailures++;
+        else
+        {
+            xstring_t *pFirst = XArray_GetData(pTokens, 0);
+            xstring_t *pLarge = XArray_GetData(pTokens, 1);
+            xstring_t *pLast = XArray_GetData(pTokens, 2);
+            nCorrect = pTokens->nUsed == 3 && pFirst && pLarge && pLast &&
+                pFirst->nLength == 5 && !strcmp(pFirst->pData, "first") &&
+                pLarge->nLength == 4096 && !memcmp(pLarge->pData, source + 6, 4096) &&
+                pLast->nLength == 4 && !strcmp(pLast->pData, "last");
+        }
+        XArray_Destroy(pTokens);
+        CHECK(nCorrect, "A failed token growth cannot appear as a successful partial split");
+    }
+    CHECK(nFailures > 6, "The split refuses failures at different ownership transitions");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(borrowed_string_failure),
+    XTEST_CASE(split_failure),
+    XTEST_CASE(long_token_failure),
     XTEST_CASE(json_cleanup),
     XTEST_CASE(http_header),
     XTEST_CASE(buffer_preservation),

@@ -405,6 +405,31 @@ static int XTest_borrowed_copy(void)
     return 0;
 }
 
+static int XTest_borrowed_resize(void)
+{
+    char raw[] = {'a', 'b', 'c'};
+    char longer[] = "abc ignored";
+    char *sources[] = {raw, longer};
+    const size_t sizes[] = {1, 2, 3, 4, 32};
+    for (size_t i = 0; i < sizeof(sources) / sizeof(*sources); i++)
+    {
+        for (size_t j = 0; j < sizeof(sizes) / sizeof(*sizes); j++)
+        {
+            xstring_t string;
+            XString_Init(&string, 0, XFALSE);
+            XString_Set(&string, sources[i], 3);
+            CHECK(XString_Resize(&string, sizes[j]) == (int)sizes[j], "Borrowed bytes can become owned storage");
+            size_t nExpected = XSTD_MIN(3, sizes[j] - 1);
+            int nCorrect = string.nLength == nExpected && string.pData != sources[i] &&
+                !memcmp(string.pData, raw, nExpected) && string.pData[nExpected] == 0;
+            XString_Clear(&string);
+            CHECK(nCorrect, "A borrowed string copies only its explicit length and terminates in bounds");
+        }
+    }
+    CHECK(!memcmp(raw, "abc", 3) && !strcmp(longer, "abc ignored"), "Resizing leaves caller-owned bytes untouched");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(build),
     XTEST_CASE(edit),
@@ -413,5 +438,6 @@ XTEST_MAIN(
     XTEST_CASE(tokens),
     XTEST_CASE(construction),
     XTEST_CASE(colors),
-    XTEST_CASE(borrowed_copy)
+    XTEST_CASE(borrowed_copy),
+    XTEST_CASE(borrowed_resize)
 )

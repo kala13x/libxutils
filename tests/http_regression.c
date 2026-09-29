@@ -135,6 +135,36 @@ static int XTest_empty_body(void)
     return 0;
 }
 
+static int XTest_assemble_empty_body(void)
+{
+    for (int nResponse = 0; nResponse < 2; nResponse++)
+    {
+        xhttp_t http;
+        if (nResponse) XHTTP_InitResponse(&http, 200, "1.1");
+        else XHTTP_InitRequest(&http, XHTTP_POST, "/empty", "1.1");
+        CHECK(XHTTP_AddHeader(&http, "Content-Type", "application/octet-stream") > 0, "Set the body type");
+        CHECK(XHTTP_AddHeader(&http, "Content-Length", "9") > 0, "An explicit body replaces a stale length");
+        CHECK(XHTTP_AddHeader(&http, "Connection", "keep-alive") > 0, "Use a persistent connection");
+        xbyte_buffer_t *pWire = XHTTP_Assemble(&http, (const uint8_t*)"", 0);
+        CHECK(pWire != NULL, "Assemble an explicitly empty body");
+        const char *pLength = XHTTP_GetHeader(&http, "Content-Length");
+        CHECK(pLength != NULL && !strcmp(pLength, "0"), "An explicit empty body is length delimited");
+        xhttp_t parsed;
+        CHECK(XHTTP_ParseData(&parsed, pWire->pData, pWire->nUsed) == XHTTP_COMPLETE, "The empty message completes");
+        CHECK(parsed.nContentLength == 0 && XHTTP_GetBodySize(&parsed) == 0, "No body bytes are invented");
+        XHTTP_Clear(&parsed);
+        XHTTP_Clear(&http);
+    }
+
+    xhttp_t stream;
+    XHTTP_InitResponse(&stream, 200, "1.1");
+    CHECK(XHTTP_AddHeader(&stream, "Content-Type", "application/octet-stream") > 0, "Prepare a streaming response");
+    CHECK(XHTTP_Assemble(&stream, NULL, 0) != NULL, "Assemble headers without providing a body");
+    CHECK(XHTTP_GetHeader(&stream, "Content-Length") == NULL, "An unspecified streaming body retains its framing");
+    XHTTP_Clear(&stream);
+    return 0;
+}
+
 
 static int XTest_code_strings(void)
 {
@@ -885,6 +915,7 @@ XTEST_MAIN(
     XTEST_CASE(long_basic_auth),
     XTEST_CASE(reuse),
     XTEST_CASE(empty_body),
+    XTEST_CASE(assemble_empty_body),
     XTEST_CASE(code_strings),
     XTEST_CASE(content_length),
     XTEST_CASE(start_line),

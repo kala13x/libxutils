@@ -247,6 +247,69 @@ static int XTest_accept_flags(void)
 #endif
 }
 
+#ifndef _WIN32
+static volatile sig_atomic_t g_nPipeSignals;
+
+static void XTest_PipeSignal(int nSignal)
+{
+    if (nSignal == SIGPIPE) g_nPipeSignals++;
+}
+#endif
+
+static int XTest_closed_write(void)
+{
+#ifndef _WIN32
+    struct sigaction action = {0}, previous;
+    action.sa_handler = XTest_PipeSignal;
+    sigemptyset(&action.sa_mask);
+    CHECK(sigaction(SIGPIPE, &action, &previous) == 0, "Observe unexpected pipe signals");
+    g_nPipeSignals = 0;
+    int nErrors = 0;
+    for (int nSend = 0; nSend < 2; nSend++)
+    {
+        for (int nKeep = 0; nKeep < 2; nKeep++)
+        {
+            for (int nUnix = 0; nUnix < 2; nUnix++)
+            {
+                XSOCKET pair[2];
+                if (XSock_CreatePair(pair) != XSTDOK) { nErrors++; continue; }
+                xsock_t writer;
+                uint32_t nFlags = nUnix ? XSOCK_UNIX_PEER : XSOCK_TCP_PEER;
+                if (nKeep) nFlags |= XSOCK_KEEPOPEN;
+                if (XSock_Init(&writer, nFlags, pair[0]) == XSOCK_ERROR) nErrors++;
+                xclosesock(pair[1]);
+                int nSent = nSend ? XSock_Send(&writer, "x", 1) : XSock_Write(&writer, "x", 1);
+                if (nSent >= 0) nErrors++;
+                if (writer.eStatus != (nSend ? XSOCK_ERR_SEND : XSOCK_ERR_WRITE)) nErrors++;
+                if (writer.nFD != (nKeep ? pair[0] : XSOCK_INVALID)) nErrors++;
+                XSock_Close(&writer);
+            }
+        }
+    }
+    sigaction(SIGPIPE, &previous, NULL);
+    CHECK(nErrors == 0, "A closed peer reports a write error and obeys descriptor ownership");
+    CHECK(g_nPipeSignals == 0, "A disconnected socket must not signal or terminate its caller");
+#endif
+    return 0;
+}
+
+static int XTest_pipe_write(void)
+{
+#ifndef _WIN32
+    int nPipe[2];
+    CHECK(pipe(nPipe) == 0, "Create a non-socket event descriptor");
+    xsock_t writer;
+    CHECK(XSock_Init(&writer, XSOCK_EVENT | XSOCK_TCP, nPipe[1]) != XSOCK_ERROR, "Wrap the writable pipe");
+    int nSent = XSock_Write(&writer, "a\0b", 3);
+    char data[3] = {0};
+    int nRead = nSent == 3 ? (int)read(nPipe[0], data, sizeof(data)) : 0;
+    XSock_Close(&writer);
+    close(nPipe[0]);
+    CHECK(nSent == 3 && nRead == 3 && !memcmp(data, "a\0b", 3), "Writing generic event descriptors stays supported");
+#endif
+    return 0;
+}
+
 static int XTest_empty_datagram(void)
 {
 #ifdef _WIN32
@@ -299,5 +362,7 @@ XTEST_MAIN(
     XTEST_CASE(interrupted_io),
     XTEST_CASE(accept_cloexec),
     XTEST_CASE(accept_flags),
-    XTEST_CASE(empty_datagram)
+    XTEST_CASE(empty_datagram),
+    XTEST_CASE(closed_write),
+    XTEST_CASE(pipe_write)
 )

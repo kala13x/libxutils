@@ -728,8 +728,10 @@ uint8_t* XAES_CBC_Crypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
     XCHECK((pLength != NULL && *pLength > 0), NULL);
 
     size_t nOriginalLen = *pLength;
-    size_t nNewLength = ((nOriginalLen / XAES_BLOCK_SIZE) + 1) * XAES_BLOCK_SIZE;
+    size_t nPaddingLen = XAES_BLOCK_SIZE - nOriginalLen % XAES_BLOCK_SIZE;
     size_t nPrefix = pAES->key.nContainIV ? XAES_BLOCK_SIZE : 0;
+    if (nOriginalLen > SIZE_MAX - nPrefix - nPaddingLen - 1) return NULL;
+    size_t nNewLength = nOriginalLen + nPaddingLen;
     size_t nOutLen = nPrefix + nNewLength;
 
     uint8_t *pOutput = (uint8_t*)malloc(nOutLen + 1);
@@ -851,10 +853,11 @@ uint8_t* XAES_XBC_Crypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
     XCHECK((pLength != NULL && *pLength > 0), NULL);
 
     size_t nPlainLen = *pLength;
-    size_t nKnownLen = (XAES_XBC_HDR_SIZE + nPlainLen) % XAES_BLOCK_SIZE;
+    size_t nKnownLen = (XAES_XBC_HDR_SIZE + nPlainLen % XAES_BLOCK_SIZE) % XAES_BLOCK_SIZE;
     size_t nRandLen = (XAES_BLOCK_SIZE - nKnownLen) % XAES_BLOCK_SIZE;
-    size_t nTotalLen = XAES_XBC_HDR_SIZE + nRandLen + nPlainLen;
     size_t nPrefix = pAES->key.nContainIV ? XAES_BLOCK_SIZE : 0;
+    if (nPlainLen > SIZE_MAX - nPrefix - XAES_XBC_HDR_SIZE - nRandLen - 1) return NULL;
+    size_t nTotalLen = XAES_XBC_HDR_SIZE + nRandLen + nPlainLen;
     size_t nOutLen = nPrefix + nTotalLen;
 
     uint8_t *pOutput = (uint8_t*)malloc(nOutLen + 1);
@@ -966,7 +969,7 @@ uint8_t* XAES_XBC_Decrypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
                         (uint32_t)pDecrypted[3];
 
     /* Validate: random prefix must fit within the decrypted data */
-    if (XAES_XBC_HDR_SIZE + nRandLen > nInputLength)
+    if (nRandLen > nInputLength - XAES_XBC_HDR_SIZE)
     {
         free(pDecrypted);
         return NULL;

@@ -578,8 +578,72 @@ static int XTest_block_roundtrip(void)
     return 0;
 }
 
+static int XTest_xbc_prefix(void)
+{
+    const uint8_t key[16] = {1}, iv[16] = {2};
+    const uint32_t lengths[] = {0, 1, 11, 12, 13, 15, 16, 255, UINT32_MAX - 4, UINT32_MAX - 3, UINT32_MAX};
+    for (int nCarried = 0; nCarried < 2; nCarried++)
+    {
+        for (size_t i = 0; i < sizeof(lengths) / sizeof(*lengths); i++)
+        {
+            uint8_t wire[32], block[16];
+            uint32_t nPrefix = lengths[i];
+            memset(block, 0xa7, sizeof(block));
+            block[0] = (uint8_t)(nPrefix >> 24);
+            block[1] = (uint8_t)(nPrefix >> 16);
+            block[2] = (uint8_t)(nPrefix >> 8);
+            block[3] = (uint8_t)nPrefix;
+            xaes_key_t aesKey;
+            xaes_t aes;
+            XAES_InitKey(&aesKey, key, 128, iv, nCarried);
+            CHECK(XAES_Init(&aes, &aesKey, XAES_MODE_XBC) > 0, "Initialize prefix-boundary fixture");
+            for (size_t j = 0; j < sizeof(block); j++) block[j] ^= iv[j];
+            XAES_ECB_Crypt(&aes, block);
+            size_t nOffset = nCarried ? 16 : 0;
+            if (nCarried) memcpy(wire, iv, 16);
+            memcpy(wire + nOffset, block, 16);
+            size_t nLength = nOffset + 16;
+            uint8_t *pPlain = XAES_XBC_Decrypt(&aes, wire, &nLength);
+            xbool_t bValid = nPrefix <= 12;
+            int nCorrect = bValid ? pPlain != NULL && nLength == 12 - nPrefix : pPlain == NULL;
+            if (bValid && pPlain)
+                for (size_t j = 0; j < nLength; j++) if (pPlain[j] != 0xa7) nCorrect = 0;
+            free(pPlain);
+            CHECK(nCorrect, "The prefix must fit its ciphertext even when its length would overflow");
+        }
+    }
+    return 0;
+}
+
+static int XTest_length_overflow(void)
+{
+    const uint8_t key[16] = {1}, iv[16] = {2}, input[1] = {3};
+    for (int nMode = XAES_MODE_CBC; nMode <= XAES_MODE_SIV_NONCE; nMode++)
+    {
+        for (int nCarried = 0; nCarried < 2; nCarried++)
+        {
+            xaes_key_t aesKey;
+            xaes_t aes;
+            if (nMode >= XAES_MODE_SIV) XAES_InitSIVKey(&aesKey, key, key, 128);
+            else XAES_InitKey(&aesKey, key, 128, iv, nCarried);
+            CHECK(XAES_Init(&aes, &aesKey, (xaes_mode_t)nMode) > 0, "Initialize length-boundary fixture");
+            for (size_t i = 0; i < 16; i++)
+            {
+                size_t nLength = SIZE_MAX - i;
+                uint8_t *pOutput = XAES_Encrypt(&aes, input, &nLength);
+                int nRejected = pOutput == NULL && nLength == SIZE_MAX - i;
+                free(pOutput);
+                CHECK(nRejected, "Unrepresentable ciphertext sizes fail before reading or modifying input");
+            }
+        }
+    }
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(ecb_vector),
+    XTEST_CASE(xbc_prefix),
+    XTEST_CASE(length_overflow),
     XTEST_CASE(modes),
     XTEST_CASE(siv_tampering),
     XTEST_CASE(generated_iv),

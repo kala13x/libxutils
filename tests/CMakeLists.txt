@@ -93,7 +93,7 @@ xutils_regression(event_regression net lifecycle modify callback_delete timers t
     capacity lookup event_fd service_guards timer_lifecycle interrupted write_byte)
 xutils_regression(ws_regression net lengths partial coalesced invalid_wire creation_guards frame_types
     masking control_frames extra_data allocation mask_lengths append_frame mask_keys)
-xutils_regression(http_regression net partial pipeline headers basic_auth long_basic_auth reuse empty_body
+xutils_regression(http_regression net partial pipeline headers basic_auth long_basic_auth reuse empty_body assemble_empty_body
     code_strings content_length start_line assemble header_lookup limits callbacks lifecycle unix_and_auth
     many_header_lines header_delimiters start_line_colon long_header_line header_whitespace parse_restores_buffer)
 
@@ -113,6 +113,19 @@ if(OPENSSL_FOUND)
     xutils_regression(digest_regression crypt boundaries sha256_raw_final hmac_variants)
 endif()
 if(UNIX)
+    xutils_regression(network_feature feature api_http api_ws api_ws_fragments api_mdtp api_socket
+        event_http event_ws event_mdtp event_socket socket_http socket_ws socket_mdtp socket_stream
+        http_client http_short_exchange http_short_perform one_byte without_hash api_tls event_tls socket_tls concurrent concurrent_tls)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_compile_definitions(network_feature PRIVATE FEATURE_WRAP_SEND)
+        target_link_options(network_feature PRIVATE -Wl,--wrap=send -Wl,--wrap=write)
+    endif()
+    get_property(feature_cases DIRECTORY PROPERTY TESTS)
+    foreach(feature_case IN LISTS feature_cases)
+        if(feature_case MATCHES "^network_feature\\.")
+            set_tests_properties(${feature_case} PROPERTIES TIMEOUT 120)
+        endif()
+    endforeach()
     xutils_regression(http_client_regression net connect link_exchange easy_exchange perform
         easy_perform auth_and_status client_failures truncated_answer stream_callback buffered_stream stopped_stream
     terminated_stream content_limit callback_guards length_stream length_buffered
@@ -147,12 +160,12 @@ xutils_regression(buf_regression data aliasing borrowed pointer_ownership ring_m
     accessors ownership_transfer heap_buffer data_buffer ring_boundaries
     string_and_stdin read_stdin borrowed_reset)
 xutils_regression(str_regression data capacities dynamic split_replace)
-xutils_regression(xstring_regression data build edit transform substrings tokens construction colors borrowed_copy)
+xutils_regression(xstring_regression data build edit transform substrings tokens construction colors borrowed_copy borrowed_resize)
 xutils_regression(str_ops_regression data split split_scaling match_pathological bounded_copies match compare search replace
     cut tokens casing fill_and_trim duplicate concat colors random glob field_formatting append_remaining ansi_widths
     format_boundaries)
 xutils_regression(aes_regression crypt ecb_vector modes siv_tampering generated_iv malformed_ciphertext unpredictable_random
-    fips_vectors siv_vectors block_roundtrip)
+    fips_vectors siv_vectors block_roundtrip xbc_prefix length_overflow)
 if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "3.0")
     xutils_regression(aes_siv_regression crypt openssl_vectors)
 endif()
@@ -186,6 +199,8 @@ if(UNIX)
     xutils_regression(sig_regression sys register exit_handler errexit backtrace daemonize)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         xutils_regression(cpu_regression sys count affinity guards)
+        xutils_regression(cpu_fallback_regression sys count recovery)
+        target_link_options(cpu_fallback_regression PRIVATE -Wl,--wrap=sysconf -Wl,--wrap=XPath_LoadBuffer)
         xutils_regression(mon_regression sys lifecycle sampling restart target_pid)
     endif()
     xutils_regression(worker_sock_regression net listener_inheritance)
@@ -203,7 +218,7 @@ xutils_regression(mdtp_regression net type_mapping assemble_parse parse_guards p
     header_fields create_guards lifecycle hostile_header parse_into_stale
     header_combinations header_refusals)
 xutils_regression(sock_regression net retry_read retry_write empty_and_eof keep_open interrupted_io accept_cloexec
-    accept_flags empty_datagram)
+    accept_flags empty_datagram closed_write pipe_write)
 xutils_regression(log_regression sys filtering large_message severities flag_mask config
     formatting file_output rotation throw callback_veto enabled)
 xutils_regression(type_regression sys float_bits concurrent printable byte_units kb_units version)
@@ -222,7 +237,7 @@ if(XUTILS_BUILD_FUZZERS)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     xutils_regression(allocation_regression allocation json_cleanup http_header buffer_preservation endpoint_ownership
-        mdtp_assemble map_rehash_failure http_parse_failure format_failure search_append_failure ws_fragment_failure)
+        mdtp_assemble map_rehash_failure http_parse_failure format_failure search_append_failure ws_fragment_failure borrowed_string_failure split_failure long_token_failure)
     target_link_options(allocation_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc)
 endif()
 

@@ -1198,6 +1198,17 @@ int xstrntokat(char *pDst, size_t nSize, const char *pStr, size_t nLen, size_t n
     return (int)(nPosit + nOffset + nDlmtLen);
 }
 
+static size_t xstrsplitrollback(xarray_t *pTokens, size_t nUsed)
+{
+    while (pTokens->nUsed > nUsed)
+    {
+        xarray_data_t *pToken = XArray_Remove(pTokens, pTokens->nUsed - 1);
+        XArray_ClearData(pTokens, pToken);
+    }
+    pTokens->eStatus = XARRAY_STATUS_NO_MEMORY;
+    return XSTDNON;
+}
+
 size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbool_t bIncludeDlmt, xbool_t bIncludeEmpty)
 {
     if (!xstrused(pString) || !xstrused(pDlmt) || pTokens == NULL) return XSTDNON;
@@ -1205,6 +1216,7 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
     char sDelimiter[XSTR_MID];
     char sToken[XSTR_MAX];
 
+    size_t nUsed = pTokens->nUsed;
     size_t nStrLength = strlen(pString);
     size_t nSearchLength = strlen(pDlmt);
     int nDlmtLen = 0;
@@ -1213,7 +1225,8 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
     if (bIncludeDlmt)
     {
         nDlmtLen = (int)xstrncpy(sDelimiter, sizeof(sDelimiter), pDlmt);
-        if (xstrncmp(pString, sDelimiter, nDlmtLen)) XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1);
+        if (xstrncmp(pString, sDelimiter, nDlmtLen) && XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1) < 0)
+            return xstrsplitrollback(pTokens, nUsed);
     }
 
     while((nNext = xstrntokat(sToken, sizeof(sToken), pString, nStrLength, (size_t)nNext, pDlmt, nSearchLength)) >= 0)
@@ -1221,18 +1234,20 @@ size_t xstrsplita(const char *pString, const char *pDlmt, xarray_t *pTokens, xbo
         size_t nLength = strlen(sToken);
         if (!nLength)
         {
-            if (bIncludeEmpty) XArray_AddData(pTokens, XSTR_EMPTY, sizeof(char));
+            if (bIncludeEmpty && XArray_AddData(pTokens, XSTR_EMPTY, sizeof(char)) < 0)
+                return xstrsplitrollback(pTokens, nUsed);
             continue;
         }
 
-        XArray_AddData(pTokens, sToken, nLength + 1);
+        if (XArray_AddData(pTokens, sToken, nLength + 1) < 0) return xstrsplitrollback(pTokens, nUsed);
         if (nNext <= 0) break;
 
         int nOffset = nNext - nDlmtLen;
         if (bIncludeDlmt && nOffset >= 0)
         {
-            if (xstrncmp(&pString[nOffset], sDelimiter, nDlmtLen))
-                XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1);
+            if (xstrncmp(&pString[nOffset], sDelimiter, nDlmtLen) &&
+                XArray_AddData(pTokens, sDelimiter, nDlmtLen + 1) < 0)
+                return xstrsplitrollback(pTokens, nUsed);
         }
     }
 
@@ -1309,15 +1324,16 @@ int XString_Resize(xstring_t *pString, size_t nSize)
     else if (!pString->nSize && nSize)
     {
         char *pOldBuff = pString->pData;
-        pString->pData = (char*)malloc(nSize);
+        char *pNewBuff = (char*)malloc(nSize);
 
-        if (pString->pData == NULL)
+        if (pNewBuff == NULL)
         {
             pString->nStatus = XSTDERR;
             return pString->nStatus;
         }
 
-        pString->nLength = xstrncpyf(pString->pData, nSize, "%s", pOldBuff);
+        pString->nLength = xstrncpys(pNewBuff, nSize, pOldBuff, pString->nLength);
+        pString->pData = pNewBuff;
         pString->nSize = nSize;
         return (int)nSize;
     }
@@ -1669,11 +1685,11 @@ int XString_Token(xstring_t *pString, xstring_t *pDst, size_t nPosit, const char
     if (nOffset <= 0)
     {
         size_t nLength = pString->nLength - nPosit;
-        XString_Add(pDst, &pString->pData[nPosit], nLength);
+        if (XString_Add(pDst, &pString->pData[nPosit], nLength) < 0) return XSTDERR;
         return 0;
     }
 
-    XString_Add(pDst, &pString->pData[nPosit], nOffset);
+    if (XString_Add(pDst, &pString->pData[nPosit], nOffset) < 0) return XSTDERR;
     return (int)nPosit + nOffset + (int)strlen(pDlmt);
 }
 
@@ -1918,6 +1934,13 @@ xarray_t* XString_SplitStr(xstring_t *pString, const char *pDlmt)
             XArray_Destroy(pArray);
             return NULL;
         }
+    }
+
+    if (pToken != NULL && pToken->nStatus == XSTDERR)
+    {
+        XString_Clear(pToken);
+        XArray_Destroy(pArray);
+        return NULL;
     }
 
     XString_Clear(pToken);
