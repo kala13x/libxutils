@@ -593,7 +593,7 @@ xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvent
     XCHECK((pData->nFD != XSOCK_INVALID), XEVENTS_EINVALID);
 
 #if defined(_XEVENTS_USE_EPOLL)
-    struct epoll_event event;
+    struct epoll_event event = {0};
     event.data.ptr = pData;
     event.events = nEvents;
 
@@ -641,7 +641,7 @@ xevent_status_t XEvents_Modify(xevents_t *pEvents, xevent_data_t *pData, int nEv
     XCHECK((pData != NULL), XEVENTS_EINVALID);
 
 #if defined(_XEVENTS_USE_EPOLL)
-    struct epoll_event event;
+    struct epoll_event event = {0};
     event.data.ptr = pData;
     event.events = nEvents;
 

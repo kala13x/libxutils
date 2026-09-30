@@ -821,11 +821,27 @@ static int XTest_timer_read(void)
                 int nStatus = XEvents_Service(&events, 1000);
                 int nHits = g_nHits;
                 xbool_t bRemoved = !events.nEventCount && test.nCleared == 1 && fault_closed(g_nReadFD);
+
+                fprintf(stderr,
+                    "timer_read: hash=%d defer=%d action=%d "
+                    "fd=%d status=%d hits=%d errors=%d read=%d "
+                    "eventCount=%u cleared=%d bRemoved=%d\n",
+                    nHash,
+                    nDefer,
+                    actions[i],
+                    g_nReadFD,
+                    nStatus,
+                    nHits,
+                    test.nErrors,
+                    test.nRead,
+                    events.nEventCount,
+                    test.nCleared,
+                    bRemoved);
+
                 fault_arm(FAULT_NONE);
                 g_nReadFD = -1;
                 XEvents_Destroy(&events);
-                CHECK(nHits == 1 && test.nErrors == 1 && !test.nRead,
-                    "A timer read failure reaches the error callback exactly once");
+                CHECK(nHits == 1 && test.nErrors == 1 && !test.nRead, "A timer read failure reaches the error callback exactly once");
                 CHECK(bRemoved && test.nCleared == 1, "The failed timer is released once for every callback response");
                 CHECK(test.nUser == (nDefer ? 2 : 0), "Deferred error handling completes the requested user callback sequence");
                 CHECK(nStatus == (actions[i] == XEVENTS_BREAK ? XEVENTS_EBREAK : XEVENTS_SUCCESS),
