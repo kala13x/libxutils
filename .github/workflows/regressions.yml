@@ -7,7 +7,7 @@ permissions:
 jobs:
   regressions:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -37,7 +37,7 @@ jobs:
       - name: Run standalone library regressions
         env:
           CC: ${{ matrix.compiler }}
-          FUZZ_TIME: 600
+          FUZZ_TIME: 1200
         run: ./tests/run-regressions.sh "${{ matrix.mode }}"
       - name: Report line and branch coverage
         if: matrix.mode == 'coverage'

@@ -49,11 +49,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(xfs_fault_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=open -Wl,--wrap=fstat
         -Wl,--wrap=read -Wl,--wrap=write)
     xutils_regression(sys_fault_regression net create nonblock accept api_setup api_timer event_destroy api_destroy
-        timer_read user_actions api_connect ntp_failure worker_rebuild worker_parent worker_limits worker_peak worker_flags)
+        timer_read read_paths user_actions api_connect ntp_failure worker_rebuild worker_parent worker_limits worker_peak
+        worker_flags)
     target_link_options(sys_fault_regression PRIVATE -Wl,--wrap=socket -Wl,--wrap=listen -Wl,--wrap=connect
         -Wl,--wrap=setsockopt -Wl,--wrap=fcntl -Wl,--wrap=accept -Wl,--wrap=accept4
         -Wl,--wrap=epoll_create1 -Wl,--wrap=epoll_ctl -Wl,--wrap=timerfd_create -Wl,--wrap=timerfd_settime
-        -Wl,--wrap=read -Wl,--wrap=send -Wl,--wrap=sendto -Wl,--wrap=chmod -Wl,--wrap=calloc -Wl,--wrap=free)
+        -Wl,--wrap=read -Wl,--wrap=__read_chk -Wl,--wrap=send -Wl,--wrap=sendto -Wl,--wrap=chmod -Wl,--wrap=calloc
+        -Wl,--wrap=free)
     if(OPENSSL_FOUND)
         xutils_regression(rsa_fault_regression crypt generate import replace errors)
         target_link_options(rsa_fault_regression PRIVATE -Wl,--wrap=BN_new -Wl,--wrap=BN_set_word -Wl,--wrap=RSA_new

@@ -57,6 +57,10 @@ int __real_epoll_ctl(int, int, int, struct epoll_event*);
 int __real_timerfd_create(int, int);
 int __real_timerfd_settime(int, int, const struct itimerspec*, struct itimerspec*);
 ssize_t __real_read(int, void*, size_t);
+#ifdef __GLIBC__
+ssize_t __real___read_chk(int, void*, size_t, size_t);
+ssize_t __read_chk(int, void*, size_t, size_t);
+#endif
 ssize_t __real_send(int, const void*, size_t, int);
 ssize_t __real_sendto(int, const void*, size_t, int, const struct sockaddr*, socklen_t);
 int __real_chmod(const char*, mode_t);
@@ -95,6 +99,15 @@ ssize_t __wrap_read(int nFD, void *pData, size_t nSize)
     if (nFD == g_nReadFD && fault_hit(FAULT_READ)) return -1;
     return __real_read(nFD, pData, nSize);
 }
+
+#ifdef __GLIBC__
+/* Fortified read() calls use glibc's checked entry point. */
+ssize_t __wrap___read_chk(int nFD, void *pData, size_t nSize, size_t nCapacity)
+{
+    if (nFD == g_nReadFD && fault_hit(FAULT_READ)) return -1;
+    return __real___read_chk(nFD, pData, nSize, nCapacity);
+}
+#endif
 
 int __wrap_socket(int nDomain, int nType, int nProtocol)
 {
@@ -168,6 +181,53 @@ int __wrap_timerfd_settime(int nFD, int nFlags, const struct itimerspec *pValue,
 static xbool_t fault_closed(int nFD)
 {
     return nFD < 0 || (__real_fcntl(nFD, F_GETFD) < 0 && errno == EBADF);
+}
+
+static ssize_t fault_read_path(int nFD, void *pData, size_t nSize, xbool_t bChecked)
+{
+#ifdef __GLIBC__
+    if (bChecked) return __read_chk(nFD, pData, nSize, nSize);
+#else
+    (void)bChecked;
+#endif
+    return read(nFD, pData, nSize);
+}
+
+static int XTest_read_paths(void)
+{
+    int nPaths = 1;
+#ifdef __GLIBC__
+    nPaths = 2;
+#endif
+    const uint8_t expected[] = {0, 0x90, 0xff, 'r'};
+    for (int i = 0; i < nPaths; i++)
+    {
+        int pipes[2][2];
+        CHECK(!pipe(pipes[0]) && !pipe(pipes[1]), "Create target and unrelated read descriptors");
+        for (int j = 0; j < 2; j++)
+        {
+            CHECK(__real_fcntl(pipes[j][0], F_SETFL, O_NONBLOCK) == 0, "Keep a missed fault from blocking the fixture");
+            CHECK(write(pipes[j][1], expected, sizeof(expected)) == sizeof(expected), "Queue exact binary data on both pipes");
+        }
+        uint8_t other[sizeof(expected)] = {0}, target[sizeof(expected)] = {0};
+        g_nReadFD = pipes[0][0];
+        fault_arm(FAULT_READ);
+        ssize_t nOther = fault_read_path(pipes[1][0], other, sizeof(other), i);
+        int nOtherHits = g_nHits;
+        ssize_t nFailed = fault_read_path(pipes[0][0], target, sizeof(target), i);
+        int nError = errno, nHits = g_nHits;
+        fault_arm(FAULT_NONE);
+        g_nReadFD = -1;
+        ssize_t nRecovered = fault_read_path(pipes[0][0], target, sizeof(target), i);
+        for (int j = 0; j < 2; j++) { close(pipes[j][0]); close(pipes[j][1]); }
+        CHECK(nOther == sizeof(expected) && !nOtherHits && !memcmp(other, expected, sizeof(expected)),
+            "An armed read failure leaves unrelated descriptors and their data intact");
+        CHECK(nFailed == -1 && nError == EIO && nHits == 1,
+            "Both ordinary and fortified reads reach fault injection exactly once");
+        CHECK(nRecovered == sizeof(expected) && !memcmp(target, expected, sizeof(expected)),
+            "The failed read consumes no data and the real read recovers after disarming");
+    }
+    return 0;
 }
 
 static int XTest_create(void)
@@ -821,23 +881,6 @@ static int XTest_timer_read(void)
                 int nStatus = XEvents_Service(&events, 1000);
                 int nHits = g_nHits;
                 xbool_t bRemoved = !events.nEventCount && test.nCleared == 1 && fault_closed(g_nReadFD);
-
-                fprintf(stderr,
-                    "timer_read: hash=%d defer=%d action=%d "
-                    "fd=%d status=%d hits=%d errors=%d read=%d "
-                    "eventCount=%u cleared=%d bRemoved=%d\n",
-                    nHash,
-                    nDefer,
-                    actions[i],
-                    g_nReadFD,
-                    nStatus,
-                    nHits,
-                    test.nErrors,
-                    test.nRead,
-                    events.nEventCount,
-                    test.nCleared,
-                    bRemoved);
-
                 fault_arm(FAULT_NONE);
                 g_nReadFD = -1;
                 XEvents_Destroy(&events);
@@ -895,5 +938,6 @@ XTEST_MAIN(
     XTEST_CASE(event_destroy),
     XTEST_CASE(api_destroy),
     XTEST_CASE(timer_read),
+    XTEST_CASE(read_paths),
     XTEST_CASE(user_actions)
 )

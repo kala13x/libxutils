@@ -155,11 +155,6 @@ int XEvent_ReadU64(xevent_data_t *pData, uint64_t *pVal)
     int nRet = (int)read(pData->nFD, &nVal, sizeof(uint64_t));
 #endif
 
-    fprintf(stderr,
-    "TODO read: fd=%d ret=%d\n",
-    pData->nFD,
-    nRet);
-
     if (nRet > 0 && pVal != NULL) *pVal = nVal;
     return nRet;
 }
@@ -830,32 +825,12 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
 
     for (i = 0; i < nCount; i++)
     {
-        fprintf(stderr,
-        "TODO: epoll event[%d]: ptr=%p events=0x%x\n",
-        i,
-        pEvents->pEventArray[i].data.ptr,
-        pEvents->pEventArray[i].events);
-
         if (pEvents->pEventArray[i].data.ptr == NULL) continue;
 
         xevent_data_t *pData = (xevent_data_t*)pEvents->pEventArray[i].data.ptr;
         uint32_t nEvents = pEvents->pEventArray[i].events;
 
-
-        fprintf(stderr,
-        "TODO: pData=%p fd=%d type=%d nEvents=0x%x dataEvents=0x%x\n",
-        (void*)pData,
-        pData->nFD,
-        pData->nType,       /* რასაც შენთან type ჰქვია */
-        nEvents,
-        pData->nEvents);
-
         nRet = XEvents_ServiceCb(pEvents, pData, pData->nFD, nEvents);
-
-        fprintf(stderr,
-        "TODO: ServiceCb ret=%d\n",
-        nRet);
-
         if (nRet != XEVENTS_CONTINUE) break;
     }
 
