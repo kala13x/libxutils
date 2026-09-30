@@ -155,6 +155,11 @@ int XEvent_ReadU64(xevent_data_t *pData, uint64_t *pVal)
     int nRet = (int)read(pData->nFD, &nVal, sizeof(uint64_t));
 #endif
 
+    fprintf(stderr,
+    "TODO read: fd=%d ret=%d\n",
+    pData->nFD,
+    nRet);
+
     if (nRet > 0 && pVal != NULL) *pVal = nVal;
     return nRet;
 }
