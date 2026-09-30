@@ -785,6 +785,12 @@ xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
 
 #if defined(_XEVENTS_USE_EPOLL)
     nCount = epoll_wait(pEvents->nEventFd, pEvents->pEventArray, pEvents->nEventMax, nTimeout);
+
+        fprintf(stderr,
+        "TODO: epoll_wait: timeout=%d count=%d errno=%d\n",
+        nTimeout,
+        nCount,
+        errno);
 #elif defined(_XEVENTS_USE_WSAPOLL)
     /* WSAPoll() rejects an empty descriptor set with WSAEINVAL instead of
        sleeping like poll(); emulate the poll() timeout behavior to avoid
