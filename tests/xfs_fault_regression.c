@@ -262,7 +262,8 @@ static int XTest_flags(void)
     CHECK(XFile_Open(&file, path, "r?d", NULL) >= 0 && (fcntl(file.nFD, F_GETFL) & O_NONBLOCK),
         "Nonblocking open tolerates an unknown flag character");
     memset(data, 0, sizeof(data));
-    CHECK(XFile_Read(&file, data, sizeof(data)) == 3 && !memcmp(data, "a\0b", 3), "Refused creation preserved the original bytes");
+    CHECK(XFile_Read(&file, data, sizeof(data)) == 3 && !memcmp(data, "a\0b", 3),
+        "Refused creation preserved the original bytes");
     XFile_Close(&file);
     unlink(path);
     rmdir(root);

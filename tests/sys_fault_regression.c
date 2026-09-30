@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 enum { FAULT_NONE, FAULT_SOCKET, FAULT_LISTEN, FAULT_CONNECT, FAULT_OPTION,
-    FAULT_GETFL, FAULT_SETFL, FAULT_SETFD, FAULT_ACCEPT, FAULT_EPOLL, FAULT_CONTROL, FAULT_TIMER, FAULT_ARM };
+    FAULT_GETFL, FAULT_SETFL, FAULT_SETFD, FAULT_ACCEPT, FAULT_EPOLL, FAULT_CONTROL, FAULT_TIMER, FAULT_ARM, FAULT_READ };
 
 static int g_nFault;
 static int g_nHits;
@@ -17,6 +17,7 @@ static int g_nTimer = -1;
 static int g_nOption;
 static int g_nOperation;
 static xbool_t g_bFallback;
+static int g_nReadFD = -1;
 
 static void fault_arm(int nFault)
 {
@@ -44,6 +45,13 @@ int __real_epoll_create1(int);
 int __real_epoll_ctl(int, int, int, struct epoll_event*);
 int __real_timerfd_create(int, int);
 int __real_timerfd_settime(int, int, const struct itimerspec*, struct itimerspec*);
+ssize_t __real_read(int, void*, size_t);
+
+ssize_t __wrap_read(int nFD, void *pData, size_t nSize)
+{
+    if (nFD == g_nReadFD && fault_hit(FAULT_READ)) return -1;
+    return __real_read(nFD, pData, nSize);
+}
 
 int __wrap_socket(int nDomain, int nType, int nProtocol)
 {
@@ -211,13 +219,15 @@ static int XTest_accept(void)
     return 0;
 }
 
-typedef struct { int nErrors; xapi_session_t *pSession; } fault_api_t;
+typedef struct { int nErrors; int nClosed; int nDestroyed; xapi_session_t *pSession; } fault_api_t;
 
 static int fault_api_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
     fault_api_t *pTest = pCtx->pApi->pUserCtx;
     if (pCtx->eCbType == XAPI_CB_ERROR) pTest->nErrors++;
-    if (pCtx->eCbType == XAPI_CB_LISTENING) pTest->pSession = pSession;
+    if (pCtx->eCbType == XAPI_CB_LISTENING || pCtx->eCbType == XAPI_CB_REGISTERED) pTest->pSession = pSession;
+    if (pCtx->eCbType == XAPI_CB_CLOSED) { pTest->pSession = NULL; pTest->nClosed++; }
+    if (pCtx->eCbType == XAPI_CB_STATUS && pCtx->nStatus == XAPI_DESTROY) pTest->nDestroyed++;
     return XAPI_CONTINUE;
 }
 
@@ -305,10 +315,184 @@ static int XTest_api_timer(void)
     return 0;
 }
 
+static int fault_event_cb(void *pLoop, void *pData, XSOCKET nFD, xevent_cb_type_t eType)
+{
+    (void)pData;
+    (void)nFD;
+    xevents_t *pEvents = pLoop;
+    int *pDestroyed = pEvents->pUserSpace;
+    if (eType == XEVENT_CB_DESTROY) (*pDestroyed)++;
+    return XEVENTS_CONTINUE;
+}
+
+static int fault_destroy(xbool_t bAPI)
+{
+    int nSaved = dup(STDIN_FILENO);
+    int nGuard = open("/dev/null", O_RDONLY);
+    CHECK(nGuard >= 0, "Keep an unrelated descriptor open across repeated destruction");
+    if (nGuard == STDIN_FILENO) nGuard = dup(nGuard);
+    CHECK(nGuard >= 0, "Retain a separate copy of the unrelated descriptor");
+    xbool_t bPreserved = XTRUE, bOnce = XTRUE, bInactive = XTRUE;
+    for (int nHash = 0; nHash < 2; nHash++)
+    {
+        CHECK(dup2(nGuard, STDIN_FILENO) == STDIN_FILENO, "Give descriptor zero an unrelated owner");
+        if (bAPI)
+        {
+            xapi_t api;
+            fault_api_t test = {0};
+            int pair[2];
+            CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0, "Create the API lifecycle transport");
+            CHECK(XAPI_Init(&api, fault_api_cb, &test) == XSTDOK, "Initialize the lifecycle API");
+            api.bUseHashMap = nHash;
+            xapi_endpoint_t endpoint;
+            XAPI_InitEndpoint(&endpoint);
+            endpoint.eType = XAPI_SOCK;
+            endpoint.eRole = XAPI_PEER;
+            endpoint.nFD = pair[0];
+            endpoint.nEvents = XPOLLIN;
+            CHECK(XAPI_AddEvent(&api, &endpoint) == XSTDOK && test.pSession, "Register an owned API peer");
+            api.events.nEventMax = 4;
+            if (!nHash) CHECK(XEvents_Delete(&api.events, test.pSession->pEvData) == XEVENTS_SUCCESS,
+                "Without a hash map the caller explicitly releases its registration");
+            XAPI_Destroy(&api);
+            XAPI_Destroy(&api);
+            if (test.nClosed != 1 || test.nDestroyed != 1 || !fault_closed(pair[0])) bOnce = XFALSE;
+            if (api.bHaveEvents || XAPI_Service(&api, 0) != XEVENTS_EINVALID) bInactive = XFALSE;
+            close(pair[1]);
+        }
+        else
+        {
+            xevents_t events;
+            int nDestroyed = 0;
+            CHECK(XEvents_Create(&events, 4, &nDestroyed, fault_event_cb, nHash) == XEVENTS_SUCCESS,
+                "Create the lifecycle event loop");
+            xevent_data_t *pTimer = XEvents_AddTimer(&events, NULL, 60000);
+            CHECK(pTimer != NULL, "Create an owned timer");
+            int nTimer = pTimer->nFD;
+            if (!nHash) CHECK(XEvents_Delete(&events, pTimer) == XEVENTS_SUCCESS,
+                "Without a hash map the caller explicitly removes its timer");
+            XEvents_Destroy(&events);
+            XEvents_Destroy(&events);
+            if (nDestroyed != 1 || !fault_closed(nTimer)) bOnce = XFALSE;
+            if (events.nEventFd != XSOCK_INVALID || events.nEventCount) bInactive = XFALSE;
+        }
+        if (fcntl(STDIN_FILENO, F_GETFD) < 0) bPreserved = XFALSE;
+    }
+    if (nSaved >= 0) { dup2(nSaved, STDIN_FILENO); close(nSaved); }
+    else close(STDIN_FILENO);
+    close(nGuard);
+    CHECK(bPreserved, "Repeated event or API destruction must never close an unrelated descriptor zero");
+    CHECK(bOnce, "Owned registrations and the destruction callback are released exactly once");
+    CHECK(bInactive, "A destroyed loop exposes no live backend or event registrations");
+    return 0;
+}
+
+static int XTest_event_destroy(void) { return fault_destroy(XFALSE); }
+static int XTest_api_destroy(void) { return fault_destroy(XTRUE); }
+
+typedef struct {
+    int nAction;
+    int nErrors;
+    int nCleared;
+    int nRead;
+    int nUser;
+    xbool_t bDefer;
+    xbool_t bFailed;
+} fault_dispatch_t;
+
+static int fault_dispatch_cb(void *pLoop, void *pData, XSOCKET nFD, xevent_cb_type_t eType)
+{
+    (void)pData;
+    xevents_t *pEvents = pLoop;
+    fault_dispatch_t *pTest = pEvents->pUserSpace;
+    if (eType == XEVENT_CB_CLEAR) pTest->nCleared++;
+    if (eType == XEVENT_CB_READ)
+    {
+        char cByte = 0;
+        pTest->nRead++;
+        if (read(nFD, &cByte, 1) != 1 || cByte != 'x') pTest->bFailed = XTRUE;
+        return XEVENTS_USERCALL;
+    }
+    if (eType == XEVENT_CB_USER)
+    {
+        pTest->nUser++;
+        return pTest->nUser == 1 ? XEVENTS_USERCALL : pTest->nAction;
+    }
+    if (eType == XEVENT_CB_ERROR)
+    {
+        pTest->nErrors++;
+        return pTest->bDefer ? XEVENTS_USERCALL : pTest->nAction;
+    }
+    return XEVENTS_CONTINUE;
+}
+
+static int XTest_timer_read(void)
+{
+    const int actions[] = {XEVENTS_DISCONNECT, XEVENTS_CONTINUE, XEVENTS_BREAK};
+    for (int nHash = 0; nHash < 2; nHash++)
+        for (int nDefer = 0; nDefer < 2; nDefer++)
+            for (size_t i = 0; i < sizeof(actions) / sizeof(*actions); i++)
+            {
+                xevents_t events;
+                fault_dispatch_t test = {0};
+                test.nAction = actions[i];
+                test.bDefer = nDefer;
+                CHECK(XEvents_Create(&events, 4, &test, fault_dispatch_cb, nHash) == XEVENTS_SUCCESS, "Create the failing timer loop");
+                xevent_data_t *pTimer = XEvents_AddTimer(&events, NULL, 1);
+                CHECK(pTimer != NULL, "Arm a real timerfd");
+                g_nReadFD = pTimer->nFD;
+                fault_arm(FAULT_READ);
+                int nStatus = XEvents_Service(&events, 1000);
+                int nHits = g_nHits;
+                xbool_t bRemoved = !events.nEventCount && test.nCleared == 1 && fault_closed(g_nReadFD);
+                fault_arm(FAULT_NONE);
+                g_nReadFD = -1;
+                XEvents_Destroy(&events);
+                CHECK(nHits == 1 && test.nErrors == 1 && !test.nRead, "A timer read failure reaches the error callback exactly once");
+                CHECK(bRemoved && test.nCleared == 1, "The failed timer is released once for every callback response");
+                CHECK(test.nUser == (nDefer ? 2 : 0), "Deferred error handling completes the requested user callback sequence");
+                CHECK(nStatus == (actions[i] == XEVENTS_BREAK ? XEVENTS_EBREAK : XEVENTS_SUCCESS),
+                    "The loop preserves an error callback's request to stop service");
+            }
+    return 0;
+}
+
+static int XTest_user_actions(void)
+{
+    const int actions[] = {XEVENTS_DISCONNECT, XEVENTS_CONTINUE, XEVENTS_BREAK, XEVENTS_ACCEPT};
+    for (int nHash = 0; nHash < 2; nHash++)
+        for (size_t i = 0; i < sizeof(actions) / sizeof(*actions); i++)
+        {
+            int pair[2];
+            CHECK(pipe(pair) == 0, "Create a real readable event");
+            xevents_t events;
+            fault_dispatch_t test = {0};
+            test.nAction = actions[i];
+            CHECK(XEvents_Create(&events, 4, &test, fault_dispatch_cb, nHash) == XEVENTS_SUCCESS, "Create the user callback loop");
+            xevent_data_t *pEvent = XEvents_RegisterEvent(&events, NULL, pair[0], XPOLLIN, XEVENT_TYPE_CUSTOM);
+            CHECK(pEvent && write(pair[1], "x", 1) == 1, "Publish the exact event byte");
+            int nStatus = XEvents_Service(&events, 1000);
+            xbool_t bRemoved = test.nCleared == 1 && !events.nEventCount;
+            if (!nHash && !test.nCleared) XEvents_Delete(&events, pEvent);
+            XEvents_Destroy(&events);
+            close(pair[0]);
+            close(pair[1]);
+            CHECK(test.nRead == 1 && test.nUser == 2 && !test.nErrors && !test.bFailed, "The event and both requested user calls run once");
+            CHECK(bRemoved == (actions[i] == XEVENTS_DISCONNECT), "A deferred disconnect removes its event during service");
+            CHECK(test.nCleared == 1 && nStatus == (actions[i] == XEVENTS_BREAK ? XEVENTS_EBREAK : XEVENTS_SUCCESS),
+                "Deferred actions retain their meaning and clear ownership exactly once");
+        }
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(create),
     XTEST_CASE(nonblock),
     XTEST_CASE(accept),
     XTEST_CASE(api_setup),
-    XTEST_CASE(api_timer)
+    XTEST_CASE(api_timer),
+    XTEST_CASE(event_destroy),
+    XTEST_CASE(api_destroy),
+    XTEST_CASE(timer_read),
+    XTEST_CASE(user_actions)
 )

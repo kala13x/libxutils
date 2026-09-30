@@ -2327,6 +2327,7 @@ void XAPI_Destroy(xapi_t *pApi)
     {
         xevents_t *pEvents = &pApi->events;
         XEvents_Destroy(pEvents);
+        pApi->bHaveEvents = XFALSE;
     }
 
     free(pApi->pReadBuffer);

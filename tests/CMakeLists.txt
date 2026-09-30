@@ -36,16 +36,18 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(thread_fault_regression PRIVATE -Wl,--wrap=pthread_attr_init -Wl,--wrap=pthread_attr_destroy
         -Wl,--wrap=pthread_attr_setstacksize -Wl,--wrap=pthread_attr_setdetachstate -Wl,--wrap=pthread_create
         -Wl,--wrap=pthread_mutexattr_init -Wl,--wrap=pthread_mutexattr_destroy -Wl,--wrap=pthread_mutexattr_settype
-        -Wl,--wrap=pthread_mutex_init -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_mutex_destroy
+        -Wl,--wrap=pthread_mutex_init -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock
+        -Wl,--wrap=pthread_mutex_destroy
         -Wl,--wrap=pthread_rwlock_init -Wl,--wrap=pthread_rwlock_rdlock -Wl,--wrap=pthread_rwlock_wrlock
         -Wl,--wrap=pthread_rwlock_unlock -Wl,--wrap=pthread_rwlock_destroy -Wl,--wrap=exit)
     xutils_regression(xfs_fault_regression sys metadata load copy remove types flags)
     target_link_options(xfs_fault_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=open -Wl,--wrap=fstat
         -Wl,--wrap=read -Wl,--wrap=write)
-    xutils_regression(sys_fault_regression net create nonblock accept api_setup api_timer)
+    xutils_regression(sys_fault_regression net create nonblock accept api_setup api_timer event_destroy api_destroy
+        timer_read user_actions)
     target_link_options(sys_fault_regression PRIVATE -Wl,--wrap=socket -Wl,--wrap=listen -Wl,--wrap=connect
         -Wl,--wrap=setsockopt -Wl,--wrap=fcntl -Wl,--wrap=accept -Wl,--wrap=accept4
-        -Wl,--wrap=epoll_create1 -Wl,--wrap=epoll_ctl -Wl,--wrap=timerfd_create -Wl,--wrap=timerfd_settime)
+        -Wl,--wrap=epoll_create1 -Wl,--wrap=epoll_ctl -Wl,--wrap=timerfd_create -Wl,--wrap=timerfd_settime -Wl,--wrap=read)
     if(OPENSSL_FOUND)
         xutils_regression(rsa_fault_regression crypt generate import replace errors)
         target_link_options(rsa_fault_regression PRIVATE -Wl,--wrap=BN_new -Wl,--wrap=BN_set_word -Wl,--wrap=RSA_new
@@ -242,6 +244,9 @@ if(UNIX)
         xutils_regression(cpu_fallback_regression sys count recovery)
         target_link_options(cpu_fallback_regression PRIVATE -Wl,--wrap=sysconf -Wl,--wrap=XPath_LoadBuffer)
         xutils_regression(mon_regression sys lifecycle sampling restart target_pid)
+        xutils_regression(mon_fixture_regression sys temperature_labels temperature_names temperature_bounds
+            sensor_index cpu_counters cpu_wide process_names network_rates network_members memory)
+        target_link_options(mon_fixture_regression PRIVATE -Wl,--wrap=open -Wl,--wrap=opendir)
     endif()
     xutils_regression(worker_sock_regression net listener_inheritance)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

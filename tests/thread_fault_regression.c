@@ -9,11 +9,11 @@ enum { THREAD_FAULT_NONE, THREAD_FAULT_ATTR, THREAD_FAULT_STACK, THREAD_FAULT_DE
     MUTEX_FAULT_ATTR, MUTEX_FAULT_TYPE, MUTEX_FAULT_INIT, MUTEX_FAULT_LOCK, MUTEX_FAULT_UNLOCK, MUTEX_FAULT_DESTROY,
     RW_FAULT_INIT, RW_FAULT_READ, RW_FAULT_WRITE, RW_FAULT_UNLOCK, RW_FAULT_DESTROY };
 
-static int g_nFault;
-static int g_nHits;
-static int g_nAttrs;
-static int g_nMutexAttrs;
-static xbool_t g_bFatal;
+static _Thread_local int g_nFault;
+static _Thread_local int g_nHits;
+static _Thread_local int g_nAttrs;
+static _Thread_local int g_nMutexAttrs;
+static _Thread_local xbool_t g_bFatal;
 
 static int thread_fault(int nFault)
 {
