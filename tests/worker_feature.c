@@ -1,8 +1,12 @@
-/* Real HTTP traffic through direct, forked and restarted XAPI workers. */
+/* Real HTTP and HTTPS traffic through direct, forked and restarted XAPI workers. */
 #include "test.h"
 #include "api.h"
 #include "cpu.h"
+#ifdef XSOCK_USE_SSL
+#include "tls_fixture.h"
+#endif
 #include <pthread.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <sys/eventfd.h>
@@ -27,6 +31,8 @@ typedef struct {
     int nErrors;
     int nAccepted;
     int nClosed;
+    int nTimers;
+    int nTimersClosed;
     int nTimeout;
     uint16_t nPort;
     xbool_t bExclusive;
@@ -34,6 +40,12 @@ typedef struct {
     xbool_t bChurn;
     xbool_t bRestart;
     xbool_t bBenchmark;
+    xbool_t bTLS;
+    xbool_t bShutdown;
+    xbool_t bPending;
+    xsock_cert_t cert;
+    xapi_session_t *pListener;
+    xapi_session_t *pHeld;
     char sPath[108];
     worker_ready_t ready[8];
 } worker_test_t;
@@ -53,6 +65,7 @@ typedef struct {
 static volatile sig_atomic_t g_nStop;
 static int g_nReapErrors;
 static pid_t g_nExpectedKill;
+static const char g_partial[] = "POST /worker HTTP/1.1\r\nContent-Length: 4096\r\n\r\n\x00\xff\x31";
 xevent_status_t XAPI_RebuildWorkerEvents(xapi_t*);
 pid_t __real_waitpid(pid_t, int*, int);
 
@@ -107,6 +120,9 @@ static int worker_number(xhttp_t *pHttp, const char *pName, int *pValue)
 static int worker_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
     worker_test_t *pTest = pCtx->pApi->pUserCtx;
+    if (pCtx->eCbType == XAPI_CB_REGISTERED && pSession->eRole == XAPI_SERVER) pTest->pListener = pSession;
+    if (pCtx->eCbType == XAPI_CB_STATUS && pCtx->eStatType == XAPI_SELF && pCtx->nStatus == XAPI_TIMER_DESTROY)
+        pTest->nTimersClosed++;
     if (pCtx->eCbType == XAPI_CB_ERROR)
     {
         pTest->nErrors++;
@@ -126,6 +142,7 @@ static int worker_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
         free(pSession->pSessionData);
         pSession->pSessionData = NULL;
         pTest->nClosed++;
+        if (pTest->pHeld == pSession) pTest->pHeld = NULL;
     }
     if (pCtx->eCbType != XAPI_CB_READ) return XAPI_CONTINUE;
 
@@ -145,6 +162,16 @@ static int worker_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
             if (pBody[i] != worker_byte(nClient, nSequence, i)) bValid = XFALSE;
     if (!bValid) { pTest->nErrors++; return XAPI_DISCONNECT; }
 
+    if (pTest->bShutdown && nClient >= pTest->nClients + 16)
+    {
+        if (pTest->pHeld || XAPI_AddTimer(pSession, 600000) != XSTDOK)
+        {
+            pTest->nErrors++;
+            return XAPI_DISCONNECT;
+        }
+        pTest->pHeld = pSession;
+        pTest->nTimers++;
+    }
     pState->nClient = nClient;
     pState->nNext++;
     uint8_t body[4096];
@@ -168,9 +195,31 @@ static void worker_serve(xapi_t *pApi, worker_test_t *pTest, int nStartStatus)
     if (pTest->bBenchmark && worker_pin("XUTILS_BENCH_SERVER_CPU")) nStartStatus = XSTDERR;
     worker_ready_t ready = {XAPI_GetWorkerIndex(pApi), getpid(), nStartStatus};
     if (write(pTest->nReadyFD, &ready, sizeof(ready)) != sizeof(ready)) nStartStatus = XSTDERR;
-    while (nStartStatus >= 0 && !g_nStop && !pTest->nErrors) XAPI_Service(pApi, 50);
+    while (nStartStatus >= 0 && !g_nStop && !pTest->nErrors)
+    {
+        XAPI_Service(pApi, 50);
+        if (pTest->pHeld && !pTest->bPending && pTest->pHeld->rxBuffer.nUsed >= sizeof(g_partial) - 1)
+        {
+            xbyte_buffer_t *pBuffer = &pTest->pHeld->rxBuffer;
+            if (pBuffer->nUsed != sizeof(g_partial) - 1 || memcmp(pBuffer->pData, g_partial, sizeof(g_partial) - 1))
+                pTest->nErrors++;
+            else
+            {
+                pTest->bPending = XTRUE;
+                if (write(pTest->nReadyFD, &ready, sizeof(ready)) != sizeof(ready)) pTest->nErrors++;
+            }
+        }
+    }
+    xbool_t bLive = !pTest->bShutdown || (pTest->bPending && pTest->pHeld && pTest->pHeld->pTimer &&
+        pTest->nAccepted - pTest->nClosed == 1 && pTest->nTimers == 1);
+    int descriptors[] = {pTest->nListenerFD, pApi->bHaveEvents ? pApi->events.nEventFd : -1,
+        pTest->pHeld ? pTest->pHeld->sock.nFD : -1,
+        pTest->pHeld && pTest->pHeld->pTimer ? pTest->pHeld->pTimer->nFD : -1};
     XAPI_Destroy(pApi);
-    xbool_t bValid = nStartStatus >= 0 && !pTest->nErrors && pTest->nAccepted == pTest->nClosed;
+    xbool_t bValid = nStartStatus >= 0 && !pTest->nErrors && bLive && pTest->nAccepted == pTest->nClosed &&
+        pTest->nTimers == pTest->nTimersClosed;
+    for (size_t i = 0; i < sizeof(descriptors) / sizeof(*descriptors); i++)
+        if (descriptors[i] >= 0 && (fcntl(descriptors[i], F_GETFD) != -1 || errno != EBADF)) bValid = XFALSE;
     if (!bValid)
     {
         ready.nStatus = XSTDERR;
@@ -196,10 +245,17 @@ static void worker_supervisor(worker_test_t *pTest)
     endpoint.eRole = XAPI_SERVER;
     endpoint.bExclusive = pTest->bExclusive;
     endpoint.bUnix = pTest->bUnix;
+    endpoint.bTLS = pTest->bTLS;
     endpoint.pAddr = pTest->sPath;
     endpoint.nFD = pTest->nListenerFD;
     endpoint.nEvents = XPOLLIN | (pTest->bExclusive ? EPOLLEXCLUSIVE : 0);
     int nStatus = pTest->bUnix ? XAPI_Listen(&api, &endpoint) : XAPI_AddEvent(&api, &endpoint);
+    if (nStatus >= 0 && pTest->bTLS)
+    {
+        xsock_t *pSock = pTest->pListener ? &pTest->pListener->sock : NULL;
+        if (!pSock || XSock_InitSSLServer(pSock, 0) == XSOCK_INVALID ||
+            XSock_SetSSLCert(pSock, &pTest->cert) == XSOCK_INVALID) nStatus = XSTDERR;
+    }
     if (nStatus < 0) worker_serve(&api, pTest, nStatus);
     api.events.nEventMax = 256;
     if (!pTest->nWorkers) worker_serve(&api, pTest, XSTDOK);
@@ -229,6 +285,19 @@ static int worker_connect(worker_test_t *pTest, xsock_t *pSock)
     if (!pTest->bUnix) XSock_NoDelay(pSock, XTRUE);
     XSock_TimeOutR(pSock, pTest->nTimeout / 1000, 0);
     XSock_TimeOutS(pSock, pTest->nTimeout / 1000, 0);
+#ifdef XSOCK_USE_SSL
+    if (pTest->bTLS)
+    {
+        pSock->nFlags |= XSOCK_SSL;
+        CHECK(XSock_InitSSLClient(pSock, "localhost") != XSOCK_INVALID, "Complete a verified TLS handshake with the worker");
+        SSL *pSSL = XSock_GetSSL(pSock);
+        X509 *pCert = pSSL ? SSL_get_peer_certificate(pSSL) : NULL;
+        xbool_t bValid = pCert && (SSL_get_verify_mode(pSSL) & SSL_VERIFY_PEER) &&
+            SSL_get_verify_result(pSSL) == X509_V_OK;
+        X509_free(pCert);
+        CHECK(bValid, "The worker presents a trusted certificate for the requested host");
+    }
+#endif
     return 0;
 }
 
@@ -340,26 +409,33 @@ static int worker_compare(const void *pLeft, const void *pRight)
     return (a > b) - (a < b);
 }
 
+static int worker_open(worker_test_t *pTest, xsock_t *pSockets, worker_client_t *pClients)
+{
+    int nCount = pTest->nWorkers ? pTest->nWorkers : 1;
+    int nFailed = 0;
+    for (int i = 0; i < nCount; i++)
+    {
+        XSock_Init(&pSockets[i], XSOCK_UNDEFINED, XSOCK_INVALID);
+        if (worker_pause(pTest->ready[i].nPID, pTest->nTimeout)) nFailed = 1;
+    }
+    for (int i = 0; !nFailed && i < nCount; i++)
+    {
+        pClients[i].pTest = pTest;
+        pClients[i].nClient = pTest->nClients + 16 + i;
+        pClients[i].nExpectedWorker = pTest->ready[i].nIndex;
+        if (kill(pTest->ready[i].nPID, SIGCONT) || worker_connect(pTest, &pSockets[i]) ||
+            worker_exchange(&pClients[i], &pSockets[i], 0)) nFailed = 1;
+        if (worker_pause(pTest->ready[i].nPID, pTest->nTimeout)) nFailed = 1;
+    }
+    for (int i = 0; i < nCount; i++) kill(pTest->ready[i].nPID, SIGCONT);
+    return nFailed;
+}
+
 static int worker_restart(worker_test_t *pTest, int nReadyFD)
 {
     xsock_t sockets[8];
     worker_client_t clients[8] = {0};
-    int nFailed = 0;
-    for (int i = 0; i < pTest->nWorkers; i++)
-    {
-        XSock_Init(&sockets[i], XSOCK_UNDEFINED, XSOCK_INVALID);
-        if (worker_pause(pTest->ready[i].nPID, pTest->nTimeout)) nFailed = 1;
-    }
-    for (int i = 0; !nFailed && i < pTest->nWorkers; i++)
-    {
-        clients[i].pTest = pTest;
-        clients[i].nClient = pTest->nClients + 16 + i;
-        clients[i].nExpectedWorker = i;
-        if (kill(pTest->ready[i].nPID, SIGCONT) || worker_connect(pTest, &sockets[i]) ||
-            worker_exchange(&clients[i], &sockets[i], 0)) nFailed = 1;
-        if (worker_pause(pTest->ready[i].nPID, pTest->nTimeout)) nFailed = 1;
-    }
-    for (int i = 0; i < pTest->nWorkers; i++) kill(pTest->ready[i].nPID, SIGCONT);
+    int nFailed = worker_open(pTest, sockets, clients);
     pid_t nPrevious = pTest->ready[0].nPID;
     if (!nFailed && kill(nPrevious, SIGKILL)) nFailed = 1;
     if (!nFailed)
@@ -380,6 +456,27 @@ static int worker_restart(worker_test_t *pTest, int nReadyFD)
     for (int i = 0; i < pTest->nWorkers; i++) XSock_Close(&sockets[i]);
     CHECK(!nFailed, "Only the terminated worker loses its connection; sibling PIDs, sessions and sequence remain intact");
     return worker_probe(pTest);
+}
+
+static int worker_pending(worker_test_t *pTest, xsock_t *pSockets, int nReadyFD)
+{
+    worker_client_t clients[8] = {0};
+    int nCount = pTest->nWorkers ? pTest->nWorkers : 1;
+    int nFailed = worker_open(pTest, pSockets, clients);
+    for (int i = 0; !nFailed && i < nCount; i++)
+        if (XSock_Write(&pSockets[i], g_partial, sizeof(g_partial) - 1) != sizeof(g_partial) - 1) nFailed = 1;
+    unsigned int nSeen = 0;
+    for (int i = 0; !nFailed && i < nCount; i++)
+    {
+        worker_ready_t ready;
+        if (worker_read_ready(nReadyFD, &ready, pTest->nTimeout)) { nFailed = 1; break; }
+        int nSlot = pTest->nWorkers ? ready.nIndex : 0;
+        if (nSlot < 0 || nSlot >= nCount || ready.nPID != pTest->ready[nSlot].nPID || (nSeen & (1u << nSlot))) nFailed = 1;
+        else nSeen |= 1u << nSlot;
+    }
+    CHECK(!nFailed && nSeen == (1u << nCount) - 1,
+        "Every worker holds the exact incomplete request on its verified connection before shutdown");
+    return 0;
 }
 
 static int worker_run(worker_test_t *pTest)
@@ -447,11 +544,23 @@ static int worker_run(worker_test_t *pTest)
         if (pthread_join(threads[i], NULL) || clients[i].nResult) nFailed = 1;
     }
     uint64_t nElapsed = worker_now() - nStart;
+    xsock_t held[8];
+    for (int i = 0; i < nCount; i++) XSock_Init(&held[i], XSOCK_UNDEFINED, XSOCK_INVALID);
+    if (!nFailed && pTest->bShutdown) nFailed = worker_pending(pTest, held, readyPipe[0]);
     for (int i = 0; i < nCount; i++)
         if (pTest->ready[i].nPID > 0) kill(pTest->ready[i].nPID, SIGCONT);
     kill(nSupervisor, SIGTERM);
     int nStatus = 0;
     if (waitpid(nSupervisor, &nStatus, 0) != nSupervisor || !WIFEXITED(nStatus) || WEXITSTATUS(nStatus)) nFailed = 1;
+    for (int i = 0; i < nCount; i++)
+    {
+        if (held[i].nFD >= 0)
+        {
+            char cByte;
+            if (XSock_Read(&held[i], &cByte, sizeof(cByte)) != 0 || XSock_Status(&held[i]) != XSOCK_EOF) nFailed = 1;
+        }
+        XSock_Close(&held[i]);
+    }
     worker_ready_t extra;
     while (read(readyPipe[0], &extra, sizeof(extra)) == sizeof(extra))
         if (extra.nStatus < 0) nFailed = 1;
@@ -489,6 +598,72 @@ static int XTest_unix(void) { return worker_case(4, XTRUE, XTRUE, XFALSE, XFALSE
 static int XTest_restart_one(void) { return worker_case(1, XTRUE, XFALSE, XTRUE, XFALSE); }
 static int XTest_restart_four(void) { return worker_case(4, XTRUE, XFALSE, XTRUE, XFALSE); }
 static int XTest_churn(void) { return worker_case(4, XTRUE, XFALSE, XFALSE, XTRUE); }
+
+static int worker_tls_case(int nWorkers, xbool_t bExclusive, xbool_t bRestart, xbool_t bChurn, xbool_t bShutdown)
+{
+#ifdef XSOCK_USE_SSL
+    tls_fixture_t identity;
+    int nStatus = tls_fixture_begin(&identity);
+    if (nStatus != XSTDOK) { tls_fixture_end(&identity); return 1; }
+    const char *pNames[] = {"SSL_CERT_FILE", "SSL_CERT_DIR"};
+    const char *pValues[] = {identity.sCert, identity.sRoot};
+    char *saved[2] = {NULL, NULL};
+    int nChanged = 0;
+    /* Install the private trust store before a blocking client starts its handshake. */
+    for (int i = 0; i < 2; i++)
+    {
+        const char *pValue = getenv(pNames[i]);
+        if (pValue && !(saved[i] = strdup(pValue))) { nStatus = XSTDERR; break; }
+        if (setenv(pNames[i], pValues[i], 1)) { nStatus = XSTDERR; break; }
+        nChanged++;
+    }
+    if (nStatus == XSTDOK)
+    {
+        worker_test_t test = {.nWorkers = nWorkers, .nClients = 16, .nRounds = 12, .nBytes = 4096,
+            .bExclusive = bExclusive, .bRestart = bRestart, .bChurn = bChurn, .bTLS = XTRUE, .bShutdown = bShutdown};
+        XSock_InitCert(&test.cert);
+        test.cert.pCertPath = identity.sCert;
+        test.cert.pKeyPath = identity.sKey;
+        nStatus = worker_run(&test) ? XSTDERR : XSTDOK;
+    }
+    for (int i = 0; i < 2; i++)
+    {
+        if (i < nChanged && (saved[i] ? setenv(pNames[i], saved[i], 1) : unsetenv(pNames[i]))) nStatus = XSTDERR;
+        free(saved[i]);
+    }
+    tls_fixture_end(&identity);
+    CHECK(nStatus == XSTDOK, "TLS requests, responses, worker ownership and cleanup are valid");
+    return 0;
+#else
+    (void)nWorkers;
+    (void)bExclusive;
+    (void)bRestart;
+    (void)bChurn;
+    (void)bShutdown;
+    return 77;
+#endif
+}
+
+static int XTest_tls_direct(void) { return worker_tls_case(0, XTRUE, XFALSE, XFALSE, XFALSE); }
+static int XTest_tls_one(void) { return worker_tls_case(1, XTRUE, XFALSE, XFALSE, XFALSE); }
+static int XTest_tls_four(void) { return worker_tls_case(4, XTRUE, XFALSE, XFALSE, XFALSE); }
+static int XTest_tls_shared(void) { return worker_tls_case(4, XFALSE, XFALSE, XFALSE, XFALSE); }
+static int XTest_tls_restart_one(void) { return worker_tls_case(1, XTRUE, XTRUE, XFALSE, XFALSE); }
+static int XTest_tls_restart_four(void) { return worker_tls_case(4, XTRUE, XTRUE, XFALSE, XFALSE); }
+static int XTest_tls_churn(void) { return worker_tls_case(4, XTRUE, XFALSE, XTRUE, XFALSE); }
+static int XTest_tls_shutdown_one(void) { return worker_tls_case(1, XTRUE, XFALSE, XFALSE, XTRUE); }
+static int XTest_tls_shutdown_four(void) { return worker_tls_case(4, XTRUE, XFALSE, XFALSE, XTRUE); }
+
+static int worker_shutdown_case(int nWorkers)
+{
+    worker_test_t test = {.nWorkers = nWorkers, .nClients = 16, .nRounds = 24, .nBytes = 257,
+        .bExclusive = XTRUE, .bShutdown = XTRUE};
+    return worker_run(&test);
+}
+
+static int XTest_shutdown_direct(void) { return worker_shutdown_case(0); }
+static int XTest_shutdown_one(void) { return worker_shutdown_case(1); }
+static int XTest_shutdown_four(void) { return worker_shutdown_case(4); }
 
 typedef struct { int nRead; int nClosed; int nErrors; } worker_rebuild_t;
 
@@ -584,6 +759,10 @@ int main(int argc, char **argv)
     }
     const xtest_case_t cases[] = {XTEST_CASE(direct), XTEST_CASE(one), XTEST_CASE(two), XTEST_CASE(four), XTEST_CASE(eight),
         XTEST_CASE(shared), XTEST_CASE(unix), XTEST_CASE(restart_one), XTEST_CASE(restart_four), XTEST_CASE(churn),
+        XTEST_CASE(tls_direct), XTEST_CASE(tls_one), XTEST_CASE(tls_four), XTEST_CASE(tls_shared),
+        XTEST_CASE(tls_restart_one), XTEST_CASE(tls_restart_four), XTEST_CASE(tls_churn),
+        XTEST_CASE(shutdown_direct), XTEST_CASE(shutdown_one), XTEST_CASE(shutdown_four),
+        XTEST_CASE(tls_shutdown_one), XTEST_CASE(tls_shutdown_four),
         XTEST_CASE(repeated), XTEST_CASE(capacity)};
     return XTest_Run(argc, argv, cases, sizeof(cases) / sizeof(*cases));
 }

@@ -32,11 +32,16 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    xutils_regression(worker_feature feature direct one two four eight shared unix restart_one restart_four churn repeated capacity)
+    xutils_regression(worker_feature feature direct one two four eight shared unix restart_one restart_four churn
+        repeated capacity tls_direct tls_one tls_four tls_shared tls_restart_one tls_restart_four tls_churn
+        shutdown_direct shutdown_one shutdown_four tls_shutdown_one tls_shutdown_four)
     target_link_options(worker_feature PRIVATE -Wl,--wrap=waitpid)
     set_tests_properties(worker_feature.direct worker_feature.one worker_feature.two worker_feature.four
         worker_feature.eight worker_feature.shared worker_feature.unix worker_feature.restart_one
-        worker_feature.restart_four worker_feature.churn PROPERTIES TIMEOUT 120)
+        worker_feature.restart_four worker_feature.churn worker_feature.tls_direct worker_feature.tls_one
+        worker_feature.tls_four worker_feature.tls_shared worker_feature.tls_restart_one worker_feature.tls_restart_four
+        worker_feature.tls_churn worker_feature.shutdown_direct worker_feature.shutdown_one worker_feature.shutdown_four
+        worker_feature.tls_shutdown_one worker_feature.tls_shutdown_four PROPERTIES TIMEOUT 120)
     xutils_regression(thread_fault_regression sys start mutex fatal task)
     target_link_options(thread_fault_regression PRIVATE -Wl,--wrap=pthread_attr_init -Wl,--wrap=pthread_attr_destroy
         -Wl,--wrap=pthread_attr_setstacksize -Wl,--wrap=pthread_attr_setdetachstate -Wl,--wrap=pthread_create
