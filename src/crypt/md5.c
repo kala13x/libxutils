@@ -40,87 +40,98 @@ static const uint32_t g_radians[] =
 
 #define XMD5_LEFTROTATE(x, c) (((x) << (c)) | ((x) >> (32 - (c))))
 
+/* Processes one 64 byte block into the four state words */
+static void XMD5_Block(uint32_t *pHash, const uint8_t *pBlock)
+{
+    uint32_t w[16];
+    uint32_t i, f, g;
+
+    for (i = 0; i < 16; i++)
+    {
+        const uint8_t *p = pBlock + i * 4;
+        w[i] = (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+    }
+
+    uint32_t a = pHash[0];
+    uint32_t b = pHash[1];
+    uint32_t c = pHash[2];
+    uint32_t d = pHash[3];
+
+    for(i = 0; i < 64; i++)
+    {
+        if (i < 16)
+        {
+            f = (b & c) | ((~b) & d);
+            g = i;
+        }
+        else if (i < 32)
+        {
+            f = (d & b) | ((~d) & c);
+            g = (5 * i + 1) % 16;
+        }
+        else if (i < 48)
+        {
+            f = b ^ c ^ d;
+            g = (3 * i + 5) % 16;
+        }
+        else
+        {
+            f = c ^ (b | (~d));
+            g = (7 * i) % 16;
+        }
+
+        uint32_t temp = d;
+        d = c;
+        c = b;
+
+        uint32_t nX = a + f + g_intRadians[i] + w[g];
+        b = b + XMD5_LEFTROTATE(nX, g_radians[i]);
+        a = temp;
+    }
+
+    pHash[0] += a;
+    pHash[1] += b;
+    pHash[2] += c;
+    pHash[3] += d;
+}
+
 XSTATUS XMD5_Compute(uint8_t *pOutput, size_t nSize, const uint8_t *pInput, size_t nLength)
 {
     XCHECK((nSize >= XMD5_DIGEST_SIZE &&
-        pOutput && (pInput || !nLength) && nLength <= SIZE_MAX - 72), XSTDINV);
+        pOutput && (pInput || !nLength) &&
+        nLength <= SIZE_MAX - 72), XSTDINV);
 
-    uint32_t hash0 = 0x67452301;
-    uint32_t hash1 = 0xefcdab89;
-    uint32_t hash2 = 0x98badcfe;
-    uint32_t hash3 = 0x10325476;
-    size_t nNewLen = nLength + (119 - nLength % 64) % 64 + 1;
-    uint8_t *pMessage = (uint8_t*)calloc(nNewLen + 8, 1);
-    XCHECK(pMessage, XSTDERR);
+    uint32_t hash[4] = { 0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476 };
+    size_t nOffset, nFull = nLength - nLength % 64;
+    uint32_t i;
 
-    if (nLength) memcpy(pMessage, pInput, nLength);
-    pMessage[nLength] = 128;
+    /* Whole blocks are read where they are; only the tail and the padding
+       need a buffer, one or two blocks on the stack */
+    for (nOffset = 0; nOffset < nFull; nOffset += 64) XMD5_Block(hash, pInput + nOffset);
+
+    uint8_t last[128];
+    size_t nTail = nLength - nFull;
+    size_t nLast = nTail < 56 ? 64 : 128;
+
+    memset(last, 0, sizeof(last));
+    if (nTail) memcpy(last, pInput + nFull, nTail);
+    last[nTail] = 128;
 
     uint64_t nBitsLen = (uint64_t)nLength * 8;
-    for (unsigned i = 0; i < 8; i++) pMessage[nNewLen + i] = (uint8_t)(nBitsLen >> (8 * i));
+    for (i = 0; i < 8; i++) last[nLast - 8 + i] = (uint8_t)(nBitsLen >> (8 * i));
 
-    uint32_t i, f, g;
-    size_t nOffset = 0;
+    XMD5_Block(hash, last);
+    if (nLast > 64) XMD5_Block(hash, last + 64);
 
-    for (nOffset = 0; (size_t)nOffset < nNewLen; nOffset += (512 / 8))
-    {
-        uint32_t w[16];
-        for (unsigned j = 0; j < 16; j++)
-        {
-            const uint8_t *p = pMessage + nOffset + j * 4;
-            w[j] = (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
-                ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-        }
+    for (i = 0; i < 4; i++) pOutput[i] = (uint8_t)(hash[0] >> (8 * i));
+    for (i = 0; i < 4; i++) pOutput[i + 4] = (uint8_t)(hash[1] >> (8 * i));
+    for (i = 0; i < 4; i++) pOutput[i + 8] = (uint8_t)(hash[2] >> (8 * i));
+    for (i = 0; i < 4; i++) pOutput[i + 12] = (uint8_t)(hash[3] >> (8 * i));
 
-        uint32_t a = hash0;
-        uint32_t b = hash1;
-        uint32_t c = hash2;
-        uint32_t d = hash3;
-
-        for(i = 0; i < 64; i++)
-        {
-            if (i < 16)
-            {
-                f = (b & c) | ((~b) & d);
-                g = i;
-            }
-            else if (i < 32)
-            {
-                f = (d & b) | ((~d) & c);
-                g = (5 * i + 1) % 16;
-            }
-            else if (i < 48)
-            {
-                f = b ^ c ^ d;
-                g = (3 * i + 5) % 16;
-            }
-            else
-            {
-                f = c ^ (b | (~d));
-                g = (7 * i) % 16;
-            }
-
-            uint32_t temp = d;
-            d = c;
-            c = b;
-
-            uint32_t nX = a + f + g_intRadians[i] + w[g];
-            b = b + XMD5_LEFTROTATE(nX, g_radians[i]);
-            a = temp;
-        }
-
-        hash0 += a;
-        hash1 += b;
-        hash2 += c;
-        hash3 += d;
-    }
-
-    for (i = 0; i < 4; i++) pOutput[i] = (uint8_t)(hash0 >> (8 * i));
-    for (i = 0; i < 4; i++) pOutput[i + 4] = (uint8_t)(hash1 >> (8 * i));
-    for (i = 0; i < 4; i++) pOutput[i + 8] = (uint8_t)(hash2 >> (8 * i));
-    for (i = 0; i < 4; i++) pOutput[i + 12] = (uint8_t)(hash3 >> (8 * i));
-
-    free(pMessage);
+    /* The tail can hold key derived bytes when this runs under an HMAC */
+    volatile uint8_t *pWipe = last;
+    for (i = 0; i < sizeof(last); i++) pWipe[i] = 0;
     return XSTDOK;
 }
 

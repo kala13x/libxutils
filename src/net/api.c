@@ -24,14 +24,16 @@
 #include <sys/prctl.h>
 #endif
 
-#define XAPI_RX_MAX         (5000 * 1024)
-#define XAPI_RX_SIZE        4096
+#define XAPI_RX_MAX             (5000 * 1024)
+#define XAPI_RX_SIZE            4096
 
 /* How much one read may take off a socket. It lands in a buffer owned by the XAPI instance, not the session:
    a large frame used to cost one pass of the event loop per XAPI_RX_SIZE, while a session's own buffer still
    only ever holds what actually arrived, a peer that trickles bytes cannot make it hold a whole read's worth. */
-#define XAPI_READ_CHUNK     (128 * 1024)
-#define XAPI_SSL_DRAIN_MAX  64
+#define XAPI_READ_CHUNK         (128 * 1024)
+#define XAPI_SSL_DRAIN_MAX      64
+
+#define XAPI_DEFAULT_HTTP_VER   "1.1"
 
 typedef struct XAPIWorkerEvents {
     xevent_data_t **ppEvents;
@@ -43,6 +45,10 @@ static void XAPI_CloseEventBackend(xevents_t *pEvents);
 XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex);
 XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers);
 XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal);
+
+/* Declared ahead: the handshake below and plain HTTP share the waiting logic */
+static xbool_t XAPI_HandshakeChanged(xapi_session_t *pSession, const xbyte_buffer_t *pBuffer);
+static void XAPI_HandshakeWait(xapi_session_t *pSession, xhttp_t *pHandle, xhttp_status_t eStatus);
 
 #ifndef _WIN32
 static int XAPI_FindWorker(xapi_t *pApi, xpid_t nPID);
@@ -434,18 +440,6 @@ static int XAPI_WorkerEventCb(xhash_pair_t *pPair, void *pCtx)
     return XSTDNON;
 }
 
-static void XAPI_DetachWorkerEventMap(xevents_t *pEvents)
-{
-    XCHECK_VOID_NL((pEvents != NULL));
-    XCHECK_VOID_NL(pEvents->bUseHash);
-
-    pEvents->eventsMap.clearCb = NULL;
-    pEvents->eventsMap.pUserContext = NULL;
-
-    XHash_Destroy(&pEvents->eventsMap);
-    pEvents->bUseHash = XFALSE;
-}
-
 static void XAPI_CloseEventBackend(xevents_t *pEvents)
 {
     XCHECK_VOID_NL((pEvents != NULL));
@@ -463,16 +457,6 @@ static void XAPI_CloseEventBackend(xevents_t *pEvents)
         pEvents->nEventFd = XSOCK_INVALID;
     }
 #endif
-}
-
-static void XAPI_ResetWorkerEvents(xevents_t *pEvents)
-{
-    XCHECK_VOID_NL((pEvents != NULL));
-
-    XAPI_CloseEventBackend(pEvents);
-    XAPI_DetachWorkerEventMap(pEvents);
-    pEvents->nEventCount = XSTDNON;
-    pEvents->bResync = XFALSE;
 }
 
 xevent_status_t XAPI_RebuildWorkerEvents(xapi_t *pApi)
@@ -502,38 +486,56 @@ xevent_status_t XAPI_RebuildWorkerEvents(xapi_t *pApi)
     }
 
     const uint32_t nEventMax = pEvents->nEventMax;
-    const xbool_t bUseHash = pEvents->bUseHash;
     void *pUserSpace = pEvents->pUserSpace;
     xevent_cb_t callback = pEvents->eventCallback;
 
-    // Reset the event map to avoid duplicate events
-    XAPI_ResetWorkerEvents(pEvents);
+    XAPI_CloseEventBackend(pEvents);
+    xevents_t workerBackend;
 
-    xevent_status_t eStatus = XEvents_Create(pEvents, nEventMax, pUserSpace, callback, bUseHash);
+    xevent_status_t eStatus = XEvents_Create(&workerBackend, nEventMax, pUserSpace, callback, XTRUE);
     if (eStatus != XEVENTS_SUCCESS)
     {
+        XEvents_Destroy(pEvents);
         pApi->bHaveEvents = XFALSE;
         free(ppEvents);
         return eStatus;
     }
 
+    /* The original map retains ownership while the new backend registers its descriptors. */
+    workerBackend.bUseHash = XFALSE;
     size_t i = 0;
+
     for (i = 0; i < workerEvents.nCount; i++)
     {
         xevent_data_t *pEvData = ppEvents[i];
         if (pEvData == NULL || pEvData->nFD == XSOCK_INVALID) continue;
 
         pEvData->nIndex = -1;
-        eStatus = XEvents_Add(pEvents, pEvData, pEvData->nEvents);
-        if (eStatus != XEVENTS_SUCCESS)
-        {
-            XAPI_ResetWorkerEvents(pEvents);
-            pApi->bHaveEvents = XFALSE;
+        uint32_t nEvents = pEvData->nEvents;
 
-            free(ppEvents);
-            return eStatus;
-        }
+        eStatus = XEvents_Add(&workerBackend, pEvData, nEvents);
+        if (eStatus != XEVENTS_SUCCESS) break;
+
+        pEvData->nEvents = nEvents;
     }
+
+    if (eStatus != XEVENTS_SUCCESS)
+    {
+        XAPI_CloseEventBackend(&workerBackend);
+        XEvents_Destroy(pEvents);
+        pApi->bHaveEvents = XFALSE;
+        free(ppEvents);
+        return eStatus;
+    }
+
+    pEvents->pEventArray = workerBackend.pEventArray;
+    pEvents->nEventMax = workerBackend.nEventMax;
+    pEvents->nEventCount = workerBackend.nEventCount;
+    pEvents->bResync = workerBackend.bResync;
+#if defined(_XEVENTS_USE_EPOLL)
+    pEvents->nEventFd = workerBackend.nEventFd;
+    pEvents->nWaitCount = 0;
+#endif
 
     free(ppEvents);
     return XEVENTS_SUCCESS;
@@ -1076,6 +1078,17 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_session_t *pSession)
     int nRetVal = XEVENTS_CONTINUE;
     size_t nOffset = 0;
 
+    /* The request at the front of the buffer is parsed again only once it can parse differently.
+       An unfinished header is bounded by the size, and so is a header that no body can complete. */
+    if (!XAPI_HandshakeChanged(pSession, pBuffer))
+    {
+        if (pBuffer->nUsed <= pApi->nRxSize) return XEVENTS_CONTINUE;
+        if (pSession->nHeaderWait && pSession->nHeaderWait != SIZE_MAX) return XEVENTS_CONTINUE;
+
+        XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, XHTTP_BIGCNT);
+        return XEVENTS_DISCONNECT;
+    }
+
     while (nRetVal == XEVENTS_CONTINUE && nOffset < pBuffer->nUsed)
     {
         size_t nLeft = pBuffer->nUsed - nOffset;
@@ -1089,6 +1102,13 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_session_t *pSession)
             (eStatus == XHTTP_COMPLETE ||
              eStatus == XHTTP_PARSED))
             XAPI_DetectRealIP(pSession, &handle);
+
+        /* The request left pending here is at the front once the buffer advances */
+        pSession->nHeaderScan = XSTDNON;
+        pSession->nHeaderWait = XSTDNON;
+
+        if (eStatus == XHTTP_INCOMPLETE || eStatus == XHTTP_PARSED)
+            XAPI_HandshakeWait(pSession, &handle, eStatus);
 
         if (eStatus == XHTTP_COMPLETE)
         {
@@ -1106,7 +1126,7 @@ static int XAPI_HandleHTTP(xapi_t *pApi, xapi_session_t *pSession)
             XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, eStatus);
             nRetVal = XEVENTS_DISCONNECT;
         }
-        else if (eStatus == XHTTP_INCOMPLETE && nLeft > pApi->nRxSize)
+        else if (nLeft > pApi->nRxSize && (eStatus == XHTTP_INCOMPLETE || pSession->nHeaderWait == SIZE_MAX))
         {
             XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, XHTTP_BIGCNT);
             nRetVal = XEVENTS_DISCONNECT;
@@ -1174,7 +1194,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     XCHECK((pSession != NULL), XSTDINV);
 
     xhttp_t handle;
-    XHTTP_InitResponse(&handle, 101, NULL);
+    XHTTP_InitResponse(&handle, 101, XAPI_DEFAULT_HTTP_VER);
 
     char *pSecKey = XAPI_GetWSKey(pApi, pSession);
     if (pSecKey == NULL)
@@ -1222,7 +1242,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     XCHECK((pSession != NULL), XSTDINV);
 
     xhttp_t handle;
-    XHTTP_InitRequest(&handle, XHTTP_GET, pSession->sUri, NULL);
+    XHTTP_InitRequest(&handle, XHTTP_GET, pSession->sUri, XAPI_DEFAULT_HTTP_VER);
 
     char sNonce[XWS_NONCE_LENGTH + 1];
     size_t nLength = XWS_NONCE_LENGTH;
@@ -1372,8 +1392,11 @@ static int XAPI_ServerHandshake(xapi_t *pApi, xapi_session_t *pSession)
     {
         const char *pUpgrade = XHTTP_GetHeader(&handle, "Upgrade");
         const char *pSecKey = XHTTP_GetHeader(&handle, "Sec-WebSocket-Key");
+        const char *pConnection = XHTTP_GetHeader(&handle, "Connection");
 
-        if (!XAPI_HeaderHasTokenCI(pUpgrade, "websocket"))
+        if (handle.eType != XHTTP_REQUEST || handle.eMethod != XHTTP_GET ||
+            !XAPI_HeaderHasTokenCI(pUpgrade, "websocket") ||
+            !XAPI_HeaderHasTokenCI(pConnection, "upgrade"))
         {
             XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_INVALID_REQUEST);
             XHTTP_Clear(&handle);
@@ -1431,16 +1454,30 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_session_t *pSession)
     xhttp_status_t eStatus = XHTTP_NONE;
     int nRetVal = XEVENTS_CONTINUE;
 
+    /* The response is waited for the same way the server waits for a request */
+    if (!XAPI_HandshakeChanged(pSession, pBuffer))
+    {
+        if (pBuffer->nUsed <= pApi->nRxSize) return XEVENTS_CONTINUE;
+        XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, XHTTP_BIGCNT);
+        return XEVENTS_DISCONNECT;
+    }
+
     xhttp_t handle;
     XHTTP_Init(&handle, XHTTP_DUMMY, XSTDNON);
     eStatus = XHTTP_ParseBuff(&handle, pBuffer);
+
+    if (eStatus == XHTTP_INCOMPLETE || eStatus == XHTTP_PARSED)
+        XAPI_HandshakeWait(pSession, &handle, eStatus);
 
     if (eStatus == XHTTP_COMPLETE)
     {
         const char *pUpgrade = XHTTP_GetHeader(&handle, "Upgrade");
         const char *pSecKey = XHTTP_GetHeader(&handle, "Sec-WebSocket-Accept");
+        const char *pConnection = XHTTP_GetHeader(&handle, "Connection");
 
-        if (!XAPI_HeaderHasTokenCI(pUpgrade, "websocket"))
+        if (handle.eType != XHTTP_RESPONSE || handle.nStatusCode != 101 ||
+            !XAPI_HeaderHasTokenCI(pUpgrade, "websocket") ||
+            !XAPI_HeaderHasTokenCI(pConnection, "upgrade"))
         {
             XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_INVALID_RESPONSE);
             XHTTP_Clear(&handle);
@@ -1456,7 +1493,7 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_session_t *pSession)
                 return XEVENTS_DISCONNECT;
             }
 
-            if (!xstrncmp(pLocalKey, pSecKey, strlen(pLocalKey)))
+            if (!xstrcmp(pLocalKey, pSecKey))
             {
                 XAPI_ErrorCb(pApi, pSession, XAPI_WS, XWS_INVALID_SEC_KEY);
                 XHTTP_Clear(&handle);
@@ -1500,8 +1537,9 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_session_t *pSession)
         XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, eStatus);
         nRetVal = XEVENTS_DISCONNECT;
     }
-    else if (eStatus == XHTTP_INCOMPLETE && pBuffer->nUsed > pApi->nRxSize)
+    else if (pBuffer->nUsed > pApi->nRxSize)
     {
+        /* A complete response header waiting for a body is bounded too */
         XAPI_ErrorCb(pApi, pSession, XAPI_HTTP, XHTTP_BIGCNT);
         nRetVal = XEVENTS_DISCONNECT;
     }
@@ -1840,7 +1878,7 @@ static int XAPI_Accept(xapi_t *pApi, xapi_session_t *pSession)
         return XEVENTS_CONTINUE;
     }
 
-    if (XSock_NonBlock(pNewSock, XTRUE) == XSOCK_INVALID)
+    if (!XSock_IsNB(pNewSock) && XSock_NonBlock(pNewSock, XTRUE) == XSOCK_INVALID)
     {
         XAPI_ErrorCb(pApi, pPeerData, XAPI_SOCK, pNewSock->eStatus);
         XAPI_FreeData(&pPeerData);
@@ -2160,9 +2198,7 @@ xevents_t* XAPI_GetOrCreateEvents(xapi_t *pApi)
     if (pApi->bHaveEvents) return pEvents;
 
     xevent_status_t status;
-    status = XEvents_Create(pEvents, XSTDNON, pApi,
-             XAPI_EventCallback, pApi->bUseHashMap);
-
+    status = XEvents_Create(pEvents, XSTDNON, pApi, XAPI_EventCallback, pApi->bUseHashMap);
     if (status != XEVENTS_SUCCESS)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_EVENT, status);
@@ -2285,6 +2321,7 @@ void XAPI_Destroy(xapi_t *pApi)
     {
         xevents_t *pEvents = &pApi->events;
         XEvents_Destroy(pEvents);
+        pApi->bHaveEvents = XFALSE;
     }
 
     free(pApi->pReadBuffer);

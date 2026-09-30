@@ -10,6 +10,7 @@
 #include "thread.h"
 #include <unistd.h>
 #include <sys/stat.h>
+#include <limits.h>
 
 typedef struct {
     char sRoot[128];
@@ -753,6 +754,216 @@ static int XTest_link_entries(void)
     return 0;
 }
 
+static int XTest_nocase_binary(void)
+{
+    /* A case-insensitive text search folds the whole file, so text after a
+       NUL byte in a binary file is found like text anywhere else. */
+    srch_fixture_t fixture;
+    memset(&fixture, 0, sizeof(fixture));
+    snprintf(fixture.sRoot, sizeof(fixture.sRoot), "/tmp/xutils-srch-XXXXXX");
+    CHECK(mkdtemp(fixture.sRoot) != NULL, "Create the fixture directory");
+    fixture.nCreated = 1;
+
+    const uint8_t binary[] = { 'h', 'e', 'a', 'd', 0, 1, 2, 0xff, ' ', 'N', 'E', 'E', 'D', 'L', 'E', 0, 't', 'a', 'i', 'l' };
+    char sPath[512];
+    snprintf(sPath, sizeof(sPath), "%s/blob.bin", fixture.sRoot);
+    FILE *pFile = fopen(sPath, "wb");
+    CHECK(pFile != NULL && fwrite(binary, 1, sizeof(binary), pFile) == sizeof(binary), "Write the binary file");
+    fclose(pFile);
+
+    CHECK(srch_write(&fixture, "text.txt", "a NeEdLe here\n", 0644) == XSTDOK, "Write the text file");
+    CHECK(srch_write(&fixture, "other.txt", "no match\n", 0644) == XSTDOK, "Write a file without the text");
+
+    const char *pPatterns[] = { "needle", "NEEDLE", "NeEdLe" };
+    for (size_t i = 0; i < sizeof(pPatterns) / sizeof(*pPatterns); i++)
+    {
+        xsearch_t search;
+        XSearch_Init(&search, "*");
+        search.bInsensitive = XTRUE;
+        search.bMatchOnly = XTRUE;
+        xstrncpy(search.sText, sizeof(search.sText), pPatterns[i]);
+
+        CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "A case-insensitive search runs");
+        CHECK(XArray_Used(&search.fileArray) == 2, "Both files with the text match, whatever its case");
+        CHECK(srch_has(&search, "blob.bin") && srch_has(&search, "text.txt"), "Including the binary one");
+        XSearch_Destroy(&search);
+    }
+
+    /* A case-sensitive search still tells the spellings apart */
+    xsearch_t search;
+    XSearch_Init(&search, "*");
+    search.bMatchOnly = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "NEEDLE");
+    CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "A case-sensitive search runs");
+    CHECK(XArray_Used(&search.fileArray) == 1 && srch_has(&search, "blob.bin"), "Only the exact spelling matches");
+    XSearch_Destroy(&search);
+
+    srch_destroy(&fixture);
+    return 0;
+}
+
+/* Runs a search over stdin, with pData as all of it */
+static int srch_stdin(xsearch_t *pSearch, const char *pData, size_t nSize)
+{
+    int pipeFds[2];
+    if (pipe(pipeFds) < 0) return INT_MIN;
+
+    ssize_t nWritten = nSize ? write(pipeFds[1], pData, nSize) : 0;
+    close(pipeFds[1]);
+
+    int nSaved = dup(STDIN_FILENO);
+    if (nWritten != (ssize_t)nSize || nSaved < 0 || dup2(pipeFds[0], STDIN_FILENO) < 0)
+    {
+        close(pipeFds[0]);
+        if (nSaved >= 0) close(nSaved);
+        return INT_MIN;
+    }
+
+    close(pipeFds[0]);
+    clearerr(stdin);
+    pSearch->bReadStdin = XTRUE;
+    int nStatus = XSearch(pSearch, NULL);
+
+    dup2(nSaved, STDIN_FILENO);
+    close(nSaved);
+    clearerr(stdin);
+    return nStatus;
+}
+
+static int XTest_stdin_search(void)
+{
+    /* A match-only search of the input reports it once */
+    xsearch_t search;
+    XSearch_Init(&search, "*");
+    search.bMatchOnly = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "needle");
+    const char sInput[] = "one needle\ntwo\nthree needle\n";
+    CHECK(srch_stdin(&search, sInput, sizeof(sInput) - 1) == XSTDOK, "The input is searched");
+    CHECK(XArray_Used(&search.fileArray) == 1, "It matches once");
+    xsearch_entry_t *pEntry = XSearch_GetEntry(&search, 0);
+    CHECK(pEntry != NULL && !strcmp(pEntry->sName, "stdin") && !strcmp(pEntry->sLine, "Stdin input matches"),
+        "As the input");
+    XSearch_Destroy(&search);
+
+    /* Input without the text, and no input at all, match nothing */
+    const char *pMisses[] = { "no match here\n", "" };
+    for (size_t i = 0; i < sizeof(pMisses) / sizeof(*pMisses); i++)
+    {
+        XSearch_Init(&search, "*");
+        search.bMatchOnly = XTRUE;
+        xstrncpy(search.sText, sizeof(search.sText), "needle");
+        CHECK(srch_stdin(&search, pMisses[i], strlen(pMisses[i])) == XSTDNON, "Input without the text matches nothing");
+        CHECK(XArray_Used(&search.fileArray) == 0, "And reports nothing");
+        XSearch_Destroy(&search);
+    }
+
+    /* A line search of the input reports every matching line with its number */
+    XSearch_Init(&search, "*");
+    search.bSearchLines = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "needle");
+    CHECK(srch_stdin(&search, sInput, sizeof(sInput) - 1) >= XSTDNON, "The input is searched by line");
+    CHECK(XArray_Used(&search.fileArray) == 2, "Both lines match");
+    pEntry = XSearch_GetEntry(&search, 0);
+    CHECK(pEntry != NULL && pEntry->nLineNum == 1 && !strcmp(pEntry->sLine, "one needle"), "The first line");
+    pEntry = XSearch_GetEntry(&search, 1);
+    CHECK(pEntry != NULL && pEntry->nLineNum == 3 && !strcmp(pEntry->sLine, "three needle"), "The third line");
+    XSearch_Destroy(&search);
+
+    /* Text that is only past a NUL byte is in no line, so the input is reported as a binary match */
+    const char sBinary[] = "head\0needle\ntail\n";
+    XSearch_Init(&search, "*");
+    search.bSearchLines = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "needle");
+    CHECK(srch_stdin(&search, sBinary, sizeof(sBinary) - 1) >= XSTDNON, "Binary input is searched by line");
+    CHECK(XArray_Used(&search.fileArray) == 1, "It matches once");
+    pEntry = XSearch_GetEntry(&search, 0);
+    CHECK(pEntry != NULL && !strcmp(pEntry->sLine, "Binary input matches"), "As binary input");
+    XSearch_Destroy(&search);
+
+    /* The case of the input and of the text do not matter to a case-insensitive search */
+    XSearch_Init(&search, "*");
+    search.bMatchOnly = XTRUE;
+    search.bInsensitive = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "NeEdLe");
+    CHECK(srch_stdin(&search, "A NEEDLE\n", 9) == XSTDOK && XArray_Used(&search.fileArray) == 1, "Any case matches");
+    XSearch_Destroy(&search);
+
+    /* There is nothing to search the input for without a text */
+    XSearch_Init(&search, "*");
+    CHECK(srch_stdin(&search, sInput, sizeof(sInput) - 1) == XSTDERR, "A search of the input needs a text");
+    CHECK(XArray_Used(&search.fileArray) == 0, "And reports nothing");
+    XSearch_Destroy(&search);
+    return 0;
+}
+
+static int XTest_empty_stdin(void)
+{
+    for (int nMode = 0; nMode < 3; nMode++)
+    {
+        for (int nInsensitive = 0; nInsensitive < 2; nInsensitive++)
+        {
+            xsearch_t search;
+            XSearch_Init(&search, "*");
+            search.bMatchOnly = nMode == 0;
+            search.bSearchLines = nMode == 1;
+            search.bInsensitive = nInsensitive;
+            xstrncpy(search.sText, sizeof(search.sText), "needle");
+
+            for (int i = 0; i < 2; i++)
+            {
+                CHECK(srch_stdin(&search, NULL, 0) == XSTDNON, "Empty input matches nothing in every search mode");
+                CHECK(XArray_Used(&search.fileArray) == 0, "Empty input creates no entries");
+                CHECK(!XSYNC_ATOMIC_GET(search.pInterrupted), "End of input does not interrupt the search");
+            }
+
+            CHECK(srch_stdin(&search, "needle\n", 7) >= XSTDNON, "The search accepts input after an empty read");
+            CHECK(XArray_Used(&search.fileArray) == 1, "The reused search reports the matching input once");
+            XSearch_Destroy(&search);
+        }
+    }
+
+    return 0;
+}
+
+static int XTest_binary_lines(void)
+{
+    /* A line search of a file whose only match is past a NUL byte reports the file as a binary match */
+    srch_fixture_t fixture;
+    memset(&fixture, 0, sizeof(fixture));
+    snprintf(fixture.sRoot, sizeof(fixture.sRoot), "/tmp/xutils-srch-XXXXXX");
+    CHECK(mkdtemp(fixture.sRoot) != NULL, "Create the fixture directory");
+    fixture.nCreated = 1;
+
+    const char binary[] = "head\0the needle\nnext line\n";
+    char sPath[512];
+    snprintf(sPath, sizeof(sPath), "%s/blob.bin", fixture.sRoot);
+    FILE *pFile = fopen(sPath, "wb");
+    CHECK(pFile != NULL && fwrite(binary, 1, sizeof(binary) - 1, pFile) == sizeof(binary) - 1, "Write the binary file");
+    fclose(pFile);
+    CHECK(srch_write(&fixture, "text.txt", "first\nthe needle\n", 0644) == XSTDOK, "Write a text file");
+
+    xsearch_t search;
+    XSearch_Init(&search, "*");
+    search.bSearchLines = XTRUE;
+    xstrncpy(search.sText, sizeof(search.sText), "needle");
+    CHECK(XSearch(&search, fixture.sRoot) >= XSTDNON, "The files are searched by line");
+    CHECK(XArray_Used(&search.fileArray) == 2, "Each file matches once");
+
+    for (size_t i = 0; i < 2; i++)
+    {
+        xsearch_entry_t *pEntry = XSearch_GetEntry(&search, (int)i);
+        CHECK(pEntry != NULL, "Every match has an entry");
+        if (!strcmp(pEntry->sName, "blob.bin"))
+            CHECK(!strcmp(pEntry->sLine, "Binary file matches"), "The binary file is a binary match");
+        else
+            CHECK(pEntry->nLineNum == 2 && !strcmp(pEntry->sLine, "the needle"), "The text file matches on its line");
+    }
+
+    XSearch_Destroy(&search);
+    srch_destroy(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(deep_tree),
     XTEST_CASE(name_matching),
@@ -764,5 +975,9 @@ XTEST_MAIN(
     XTEST_CASE(guards),
     XTEST_CASE(text_shapes),
     XTEST_CASE(line_bounds),
-    XTEST_CASE(link_entries)
+    XTEST_CASE(link_entries),
+    XTEST_CASE(nocase_binary),
+    XTEST_CASE(stdin_search),
+    XTEST_CASE(empty_stdin),
+    XTEST_CASE(binary_lines)
 )

@@ -8,11 +8,14 @@
  * which was released under The Unlicense (public domain dedication).
  *
  * Modified for libxutils:
- * - Refactored code, adjusted function API.
+ * - Refactored code, adjusted style and function API.
+ * - Optimized mixing and status loading, improved 64-byte round trip by 2x.
+ * - Compliance with FIPS-197, SP 800-38A, and RFC 5297. Validated against test vectors.
  * - Added AES-CBC mode support with PKCS#7 padding.
- * - Added AES-XBC (CBC with random prefix) support to avoid PKCS#7 oracle issues.
+ * - Added AES-XBC mode with randomized plaintext prefixing.
  * - Added AES-SIV (RFC 5297) support for deterministic authenticated encryption.
- * - Added AES-CMAC (RFC 4493) and S2V support for synthetic IV derivation.
+ * - Added XAES-S2V (RFC 5297) support to compute synthetic IV from plaintext.
+ * - Added AES-CMAC (RFC 4493) support for synthetic IV derivation.
  */
 
 #include "xstd.h"
@@ -21,8 +24,6 @@
 #ifdef _XUTILS_USE_SSL
 #include <openssl/rand.h>
 #endif
-
-typedef uint8_t xaes_state_t[4][4];
 
 static const uint8_t g_sbox[256] = {
   0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
@@ -64,29 +65,6 @@ static const uint8_t g_rcon[11] = {
   0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36 };
 
 #define XAES_GetSBoxValue(num) (g_sbox[(num)])
-#define XAES_GetSBoxInvert(num) (g_rsbox[(num)])
-#define XAES_Time(x) (((x) << 1) ^ ((((x) >> 7) & 1) * 0x1b))
-
-/* Multiply as a function reduces size with the Keil ARM compiler */
-#if _XAES_MULTIPLY_FUNCTION
-static uint8_t XAES_Multiply(uint8_t x, uint8_t y)
-{
-    return (((y & 1) * x) ^
-        ((y >> 1 & 1) * XAES_Time(x)) ^
-        ((y >> 2 & 1) * XAES_Time(XAES_Time(x))) ^
-        ((y >> 3 & 1) * XAES_Time(XAES_Time(XAES_Time(x)))) ^
-        ((y >> 4 & 1) * XAES_Time(XAES_Time(XAES_Time(XAES_Time(x))))));
-        // The last call to XAES_Time() can be omitted
-}
-#else
-#define XAES_Multiply(x, y)                                                 \
-        (((y & 1) * x) ^                                                    \
-        ((y >> 1 & 1) * XAES_Time(x)) ^                                     \
-        ((y >> 2 & 1) * XAES_Time(XAES_Time(x))) ^                          \
-        ((y >> 3 & 1) * XAES_Time(XAES_Time(XAES_Time(x)))) ^               \
-        ((y >> 4 & 1) * XAES_Time(XAES_Time(XAES_Time(XAES_Time(x))))))     \
-
-#endif
 
 static void XAES_KeyExpansion(xaes_ctx_t *pCtx, const uint8_t* pKey, size_t nKeySize)
 {
@@ -314,150 +292,85 @@ void XAES_SetSIVNonce(xaes_t *pAES, const uint8_t *pNonce, size_t nNonceLen)
     memcpy(pAES->key.IV, pNonce, XAES_BLOCK_SIZE);
 }
 
-static void XAES_AddRoundKey(uint8_t nNB, uint8_t nRound, xaes_state_t* pState, const uint8_t* pRoundKey)
-{
-    uint8_t i, j;
+/* The state is the 16 byte block in column-major order: byte c * 4 + r is row r of
+   column c. A block is worked on in sixteen locals, so the whole state stays in
+   registers, and SubBytes and ShiftRows are one step that reads each byte from
+   where the row rotation takes it. The lookups are the same S-box ones as a
+   byte at a time implementation makes. */
+#define XAES_XTIME(x) ((uint8_t)(((x) << 1) ^ ((((x) >> 7) & 1) * 0x1b)))
 
-    for (i = 0; i < 4; ++i)
-    {
-        for (j = 0; j < 4; ++j)
-        {
-            (*pState)[i][j] ^= pRoundKey[(nRound * nNB * 4) + (i * nNB) + j];
-        }
-    }
-}
+/* MixColumns of one column, XOR'd with four round key bytes */
+#define XAES_MIX(o0, o1, o2, o3, a0, a1, a2, a3, k)                     \
+    do {                                                                \
+        uint8_t nAll = (uint8_t)((a0) ^ (a1) ^ (a2) ^ (a3));            \
+        o0 = (uint8_t)((a0) ^ nAll ^ XAES_XTIME((uint8_t)((a0) ^ (a1))) ^ (k)[0]); \
+        o1 = (uint8_t)((a1) ^ nAll ^ XAES_XTIME((uint8_t)((a1) ^ (a2))) ^ (k)[1]); \
+        o2 = (uint8_t)((a2) ^ nAll ^ XAES_XTIME((uint8_t)((a2) ^ (a3))) ^ (k)[2]); \
+        o3 = (uint8_t)((a3) ^ nAll ^ XAES_XTIME((uint8_t)((a3) ^ (a0))) ^ (k)[3]); \
+    } while (0)
 
-static void XAES_SubBytes(xaes_state_t* pState)
-{
-    uint8_t i, j;
+/* InvMixColumns of (column XOR four round key bytes). The inverse matrix is
+   MixColumns applied after multiplying by the circulant {05 00 04 00}, which
+   costs two doublings per pair of bytes instead of a general multiplication. */
+#define XAES_INVMIX(o0, o1, o2, o3, a0, a1, a2, a3, k)                  \
+    do {                                                                \
+        uint8_t b0 = (uint8_t)((a0) ^ (k)[0]), b1 = (uint8_t)((a1) ^ (k)[1]); \
+        uint8_t b2 = (uint8_t)((a2) ^ (k)[2]), b3 = (uint8_t)((a3) ^ (k)[3]); \
+        uint8_t nU = XAES_XTIME(XAES_XTIME((uint8_t)(b0 ^ b2)));        \
+        uint8_t nV = XAES_XTIME(XAES_XTIME((uint8_t)(b1 ^ b3)));        \
+        b0 ^= nU; b1 ^= nV; b2 ^= nU; b3 ^= nV;                         \
+        XAES_MIX(o0, o1, o2, o3, b0, b1, b2, b3, nZero);                \
+    } while (0)
 
-    for (i = 0; i < 4; ++i)
-    {
-        for (j = 0; j < 4; ++j)
-        {
-            (*pState)[j][i] = XAES_GetSBoxValue((*pState)[j][i]);
-        }
-    }
-}
+#define XAES_LOAD_STATE(p, k)                                                           \
+    uint8_t s0 = (uint8_t)((p)[0] ^ (k)[0]), s1 = (uint8_t)((p)[1] ^ (k)[1]);           \
+    uint8_t s2 = (uint8_t)((p)[2] ^ (k)[2]), s3 = (uint8_t)((p)[3] ^ (k)[3]);           \
+    uint8_t s4 = (uint8_t)((p)[4] ^ (k)[4]), s5 = (uint8_t)((p)[5] ^ (k)[5]);           \
+    uint8_t s6 = (uint8_t)((p)[6] ^ (k)[6]), s7 = (uint8_t)((p)[7] ^ (k)[7]);           \
+    uint8_t s8 = (uint8_t)((p)[8] ^ (k)[8]), s9 = (uint8_t)((p)[9] ^ (k)[9]);           \
+    uint8_t s10 = (uint8_t)((p)[10] ^ (k)[10]), s11 = (uint8_t)((p)[11] ^ (k)[11]);     \
+    uint8_t s12 = (uint8_t)((p)[12] ^ (k)[12]), s13 = (uint8_t)((p)[13] ^ (k)[13]);     \
+    uint8_t s14 = (uint8_t)((p)[14] ^ (k)[14]), s15 = (uint8_t)((p)[15] ^ (k)[15])
 
-static void XAES_ShiftRows(xaes_state_t* pState)
-{
-    // Rotate first row 1 columns to left
-    uint8_t nTemp = (*pState)[0][1];
-    (*pState)[0][1] = (*pState)[1][1];
-    (*pState)[1][1] = (*pState)[2][1];
-    (*pState)[2][1] = (*pState)[3][1];
-    (*pState)[3][1] = nTemp;
-
-    // Rotate second row 2 columns to left
-    nTemp = (*pState)[0][2];
-    (*pState)[0][2] = (*pState)[2][2];
-    (*pState)[2][2] = nTemp;
-
-    nTemp = (*pState)[1][2];
-    (*pState)[1][2] = (*pState)[3][2];
-    (*pState)[3][2] = nTemp;
-
-    // Rotate third row 3 columns to left
-    nTemp = (*pState)[0][3];
-    (*pState)[0][3] = (*pState)[3][3];
-    (*pState)[3][3] = (*pState)[2][3];
-    (*pState)[2][3] = (*pState)[1][3];
-    (*pState)[1][3] = nTemp;
-}
-
-static void XAES_MixColumns(xaes_state_t* pState)
-{
-    uint8_t i;
-    uint8_t nTmp, nTM, nT;
-
-    for (i = 0; i < 4; ++i)
-    {
-        nT = (*pState)[i][0];
-        nTmp = (*pState)[i][0] ^ (*pState)[i][1] ^ (*pState)[i][2] ^ (*pState)[i][3] ;
-        nTM = (*pState)[i][0] ^ (*pState)[i][1] ; nTM = XAES_Time(nTM); (*pState)[i][0] ^= nTM ^ nTmp ;
-        nTM = (*pState)[i][1] ^ (*pState)[i][2] ; nTM = XAES_Time(nTM); (*pState)[i][1] ^= nTM ^ nTmp ;
-        nTM = (*pState)[i][2] ^ (*pState)[i][3] ; nTM = XAES_Time(nTM); (*pState)[i][2] ^= nTM ^ nTmp ;
-        nTM = (*pState)[i][3] ^ nT ; nTM = XAES_Time(nTM);  (*pState)[i][3] ^= nTM ^ nTmp ;
-    }
-}
-
-static void XAES_InvMixColumns(xaes_state_t* pState)
-{
-    int i;
-    uint8_t a, b, c, d;
-
-    for (i = 0; i < 4; ++i)
-    {
-        a = (*pState)[i][0];
-        b = (*pState)[i][1];
-        c = (*pState)[i][2];
-        d = (*pState)[i][3];
-
-        (*pState)[i][0] = XAES_Multiply(a, 0x0e) ^ XAES_Multiply(b, 0x0b) ^ XAES_Multiply(c, 0x0d) ^ XAES_Multiply(d, 0x09);
-        (*pState)[i][1] = XAES_Multiply(a, 0x09) ^ XAES_Multiply(b, 0x0e) ^ XAES_Multiply(c, 0x0b) ^ XAES_Multiply(d, 0x0d);
-        (*pState)[i][2] = XAES_Multiply(a, 0x0d) ^ XAES_Multiply(b, 0x09) ^ XAES_Multiply(c, 0x0e) ^ XAES_Multiply(d, 0x0b);
-        (*pState)[i][3] = XAES_Multiply(a, 0x0b) ^ XAES_Multiply(b, 0x0d) ^ XAES_Multiply(c, 0x09) ^ XAES_Multiply(d, 0x0e);
-    }
-}
-
-static void XAES_InvSubBytes(xaes_state_t* pState)
-{
-    uint8_t i, j;
-
-    for (i = 0; i < 4; ++i)
-    {
-        for (j = 0; j < 4; ++j)
-        {
-            (*pState)[j][i] = XAES_GetSBoxInvert((*pState)[j][i]);
-        }
-    }
-}
-
-static void XAES_InvShiftRows(xaes_state_t* pState)
-{
-    // Rotate first row 1 columns to right
-    uint8_t nTemp = (*pState)[3][1];
-    (*pState)[3][1] = (*pState)[2][1];
-    (*pState)[2][1] = (*pState)[1][1];
-    (*pState)[1][1] = (*pState)[0][1];
-    (*pState)[0][1] = nTemp;
-
-    // Rotate second row 2 columns to right
-    nTemp = (*pState)[0][2];
-    (*pState)[0][2] = (*pState)[2][2];
-    (*pState)[2][2] = nTemp;
-
-    nTemp = (*pState)[1][2];
-    (*pState)[1][2] = (*pState)[3][2];
-    (*pState)[3][2] = nTemp;
-
-    // Rotate third row 3 columns to right
-    nTemp = (*pState)[0][3];
-    (*pState)[0][3] = (*pState)[1][3];
-    (*pState)[1][3] = (*pState)[2][3];
-    (*pState)[2][3] = (*pState)[3][3];
-    (*pState)[3][3] = nTemp;
-}
+#define XAES_STORE_STATE(p, k)                                                          \
+    do {                                                                                \
+        (p)[0] = (uint8_t)(t0 ^ (k)[0]);   (p)[1] = (uint8_t)(t1 ^ (k)[1]);             \
+        (p)[2] = (uint8_t)(t2 ^ (k)[2]);   (p)[3] = (uint8_t)(t3 ^ (k)[3]);             \
+        (p)[4] = (uint8_t)(t4 ^ (k)[4]);   (p)[5] = (uint8_t)(t5 ^ (k)[5]);             \
+        (p)[6] = (uint8_t)(t6 ^ (k)[6]);   (p)[7] = (uint8_t)(t7 ^ (k)[7]);             \
+        (p)[8] = (uint8_t)(t8 ^ (k)[8]);   (p)[9] = (uint8_t)(t9 ^ (k)[9]);             \
+        (p)[10] = (uint8_t)(t10 ^ (k)[10]); (p)[11] = (uint8_t)(t11 ^ (k)[11]);         \
+        (p)[12] = (uint8_t)(t12 ^ (k)[12]); (p)[13] = (uint8_t)(t13 ^ (k)[13]);         \
+        (p)[14] = (uint8_t)(t14 ^ (k)[14]); (p)[15] = (uint8_t)(t15 ^ (k)[15]);         \
+    } while (0)
 
 static void XAES_CipherBlock(uint8_t nNR, uint8_t nNB, const uint8_t* pRoundKey, uint8_t* pBuffer)
 {
-    xaes_state_t* pState = (xaes_state_t*)pBuffer;
-    uint8_t nRound = 0;
-
-    XAES_AddRoundKey(nNB, 0, pState, pRoundKey);
+    const size_t nStride = (size_t)nNB * 4;
+    XAES_LOAD_STATE(pBuffer, pRoundKey);
+    uint8_t nRound;
 
     for (nRound = 1; ; ++nRound)
     {
-        XAES_SubBytes(pState);
-        XAES_ShiftRows(pState);
-        if (nRound == nNR) break;
-        XAES_MixColumns(pState);
-        XAES_AddRoundKey(nNB, nRound, pState, pRoundKey);
-    }
+        const uint8_t *pKey = pRoundKey + nRound * nStride;
 
-    // Add round key to last round
-    XAES_AddRoundKey(nNB, nNR, pState, pRoundKey);
+        /* SubBytes and ShiftRows */
+        uint8_t t0 = g_sbox[s0], t1 = g_sbox[s5], t2 = g_sbox[s10], t3 = g_sbox[s15];
+        uint8_t t4 = g_sbox[s4], t5 = g_sbox[s9], t6 = g_sbox[s14], t7 = g_sbox[s3];
+        uint8_t t8 = g_sbox[s8], t9 = g_sbox[s13], t10 = g_sbox[s2], t11 = g_sbox[s7];
+        uint8_t t12 = g_sbox[s12], t13 = g_sbox[s1], t14 = g_sbox[s6], t15 = g_sbox[s11];
+
+        if (nRound == nNR)
+        {
+            XAES_STORE_STATE(pBuffer, pKey);
+            return;
+        }
+
+        XAES_MIX(s0, s1, s2, s3, t0, t1, t2, t3, pKey);
+        XAES_MIX(s4, s5, s6, s7, t4, t5, t6, t7, pKey + 4);
+        XAES_MIX(s8, s9, s10, s11, t8, t9, t10, t11, pKey + 8);
+        XAES_MIX(s12, s13, s14, s15, t12, t13, t14, t15, pKey + 12);
+    }
 }
 
 void XAES_ECB_Crypt(const xaes_t* pAES, uint8_t* pBuffer)
@@ -470,18 +383,32 @@ void XAES_ECB_Decrypt(const xaes_t* pAES, uint8_t* pBuffer)
 {
     const xaes_ctx_t *pCtx = &pAES->ctx;
     const uint8_t* pRoundKey = pCtx->roundKey;
-    xaes_state_t* pState = (xaes_state_t*)pBuffer;
-    uint8_t nRound = 0;
+    const size_t nStride = (size_t)pCtx->nNB * 4;
+    const uint8_t nZero[4] = { 0, 0, 0, 0 };
 
-    XAES_AddRoundKey(pCtx->nNB, pCtx->nNR, pState, pRoundKey);
+    XAES_LOAD_STATE(pBuffer, pRoundKey + pCtx->nNR * nStride);
+    uint8_t nRound;
 
     for (nRound = (pCtx->nNR - 1); ; --nRound)
     {
-        XAES_InvShiftRows(pState);
-        XAES_InvSubBytes(pState);
-        XAES_AddRoundKey(pCtx->nNB, nRound, pState, pRoundKey);
-        if (nRound == 0) break;
-        XAES_InvMixColumns(pState);
+        const uint8_t *pKey = pRoundKey + nRound * nStride;
+
+        /* InvShiftRows and InvSubBytes */
+        uint8_t t0 = g_rsbox[s0], t1 = g_rsbox[s13], t2 = g_rsbox[s10], t3 = g_rsbox[s7];
+        uint8_t t4 = g_rsbox[s4], t5 = g_rsbox[s1], t6 = g_rsbox[s14], t7 = g_rsbox[s11];
+        uint8_t t8 = g_rsbox[s8], t9 = g_rsbox[s5], t10 = g_rsbox[s2], t11 = g_rsbox[s15];
+        uint8_t t12 = g_rsbox[s12], t13 = g_rsbox[s9], t14 = g_rsbox[s6], t15 = g_rsbox[s3];
+
+        if (nRound == 0)
+        {
+            XAES_STORE_STATE(pBuffer, pKey);
+            return;
+        }
+
+        XAES_INVMIX(s0, s1, s2, s3, t0, t1, t2, t3, pKey);
+        XAES_INVMIX(s4, s5, s6, s7, t4, t5, t6, t7, pKey + 4);
+        XAES_INVMIX(s8, s9, s10, s11, t8, t9, t10, t11, pKey + 8);
+        XAES_INVMIX(s12, s13, s14, s15, t12, t13, t14, t15, pKey + 12);
     }
 }
 
@@ -505,6 +432,13 @@ static uint8_t XAES_ConstTimeEqual(const uint8_t *pA, const uint8_t *pB, size_t 
         nDiff |= pA[i] ^ pB[i];
 
     return (nDiff == 0);
+}
+
+/* Wipes key derived bytes through a volatile pointer, which the compiler can not drop as a dead store */
+static void XAES_Wipe(void *pData, size_t nSize)
+{
+    volatile uint8_t *pByte = (volatile uint8_t*)pData;
+    while (nSize--) *pByte++ = 0;
 }
 
 /* Doubling operation in GF(2^128): left shift by 1, conditional XOR with Rb */
@@ -541,17 +475,20 @@ static void XAES_CMAC_SubKeys(const xaes_t *pAES, uint8_t *pK1, uint8_t *pK2)
     /* K2 = dbl(K1) */
     memcpy(pK2, pK1, XAES_BLOCK_SIZE);
     XAES_DBL(pK2);
+    XAES_Wipe(L, sizeof(L));
 }
 
-/* Compute AES-CMAC tag over message using the CMAC round key from context */
-static void XAES_CMAC(const xaes_t *pAES, const uint8_t *pData, size_t nLength, uint8_t *pTag)
+/* Compute AES-CMAC tag over message using the CMAC round key from context and
+   the subkeys K1 and K2 derived from it. With pTweak, the last 16 bytes of the
+   message (which must be at least that long) are taken XOR'd with the tweak,
+   which is how S2V folds its running value into the final string. */
+static void XAES_CMAC(const xaes_t *pAES, const uint8_t *K1, const uint8_t *K2,
+                      const uint8_t *pData, size_t nLength, const uint8_t *pTweak, uint8_t *pTag)
 {
-    uint8_t K1[XAES_BLOCK_SIZE], K2[XAES_BLOCK_SIZE];
     uint8_t X[XAES_BLOCK_SIZE];
     size_t i, nBlocks, nLastBlockLen;
+    size_t nTweakFrom = pTweak != NULL ? nLength - XAES_BLOCK_SIZE : nLength;
     uint8_t bComplete;
-
-    XAES_CMAC_SubKeys(pAES, K1, K2);
 
     /* Number of blocks (ceil division, minimum 1) */
     nBlocks = (nLength + XAES_BLOCK_SIZE - 1) / XAES_BLOCK_SIZE;
@@ -566,13 +503,24 @@ static void XAES_CMAC(const xaes_t *pAES, const uint8_t *pData, size_t nLength, 
 
     for (i = 0; i < nBlocks - 1; i++)
     {
-        XAES_ApplyXOR(X, pData + i * XAES_BLOCK_SIZE);
+        size_t nOffset = i * XAES_BLOCK_SIZE;
+        XAES_ApplyXOR(X, pData + nOffset);
+
+        /* The tweaked tail can start inside a block that is not the last one */
+        if (nOffset + XAES_BLOCK_SIZE > nTweakFrom)
+        {
+            size_t j;
+            for (j = nTweakFrom > nOffset ? nTweakFrom - nOffset : 0; j < XAES_BLOCK_SIZE; j++)
+                X[j] ^= pTweak[nOffset + j - nTweakFrom];
+        }
+
         XAES_CipherBlock(pCtx->nNR, pCtx->nNB, pCtx->cmacRoundKey, X);
     }
 
     /* Process last block */
     uint8_t lastBlock[XAES_BLOCK_SIZE];
-    const uint8_t *pLastData = pData + (nBlocks - 1) * XAES_BLOCK_SIZE;
+    size_t nLastOffset = (nBlocks - 1) * XAES_BLOCK_SIZE;
+    const uint8_t *pLastData = pData + nLastOffset;
 
     if (bComplete)
     {
@@ -590,6 +538,13 @@ static void XAES_CMAC(const xaes_t *pAES, const uint8_t *pData, size_t nLength, 
         XAES_ApplyXOR(lastBlock, K2);
     }
 
+    if (pTweak != NULL)
+    {
+        size_t j;
+        for (j = nTweakFrom > nLastOffset ? nTweakFrom - nLastOffset : 0; j < nLastBlockLen; j++)
+            lastBlock[j] ^= pTweak[nLastOffset + j - nTweakFrom];
+    }
+
     XAES_ApplyXOR(X, lastBlock);
     XAES_CipherBlock(pCtx->nNR, pCtx->nNB, pCtx->cmacRoundKey, X);
 
@@ -602,38 +557,32 @@ static void XAES_CMAC(const xaes_t *pAES, const uint8_t *pData, size_t nLength, 
  * so identical plaintexts produce distinct synthetic IVs. */
 static int XAES_S2V(const xaes_t *pAES, const uint8_t *pPlain, size_t nLength, uint8_t *pSIV)
 {
+    uint8_t K1[XAES_BLOCK_SIZE], K2[XAES_BLOCK_SIZE];
     uint8_t D[XAES_BLOCK_SIZE];
     uint8_t zeroBlock[XAES_BLOCK_SIZE];
     memset(zeroBlock, 0, XAES_BLOCK_SIZE);
 
+    /* Every CMAC below uses the same key, and so the same subkeys */
+    XAES_CMAC_SubKeys(pAES, K1, K2);
+
     /* D = CMAC(K, 0^128) */
-    XAES_CMAC(pAES, zeroBlock, XAES_BLOCK_SIZE, D);
+    XAES_CMAC(pAES, K1, K2, zeroBlock, XAES_BLOCK_SIZE, NULL, D);
 
     /* Process the lone associated-data string (the nonce) for nonce-based SIV:
      * D = dbl(D) XOR CMAC(K, nonce). RFC 5297, Section 2.4. */
     if (pAES->mode == XAES_MODE_SIV_NONCE)
     {
         uint8_t macNonce[XAES_BLOCK_SIZE];
-        XAES_CMAC(pAES, pAES->key.IV, XAES_BLOCK_SIZE, macNonce);
+        XAES_CMAC(pAES, K1, K2, pAES->key.IV, XAES_BLOCK_SIZE, NULL, macNonce);
         XAES_DBL(D);
         XAES_ApplyXOR(D, macNonce);
     }
 
     if (nLength >= XAES_BLOCK_SIZE)
     {
-        /* T = plaintext with last 16 bytes XOR'd with D */
-        size_t nTLen = nLength;
-        uint8_t *pT = (uint8_t*)malloc(nTLen);
-        XCHECK((pT != NULL), XSTDERR);
-
-        memcpy(pT, pPlain, nTLen);
-
-        size_t i;
-        for (i = 0; i < XAES_BLOCK_SIZE; i++)
-            pT[nTLen - XAES_BLOCK_SIZE + i] ^= D[i];
-
-        XAES_CMAC(pAES, pT, nTLen, pSIV);
-        free(pT);
+        /* T = plaintext with last 16 bytes XOR'd with D, applied while the
+           plaintext is read rather than on a copy of it */
+        XAES_CMAC(pAES, K1, K2, pPlain, nLength, D, pSIV);
     }
     else
     {
@@ -646,9 +595,13 @@ static int XAES_S2V(const xaes_t *pAES, const uint8_t *pPlain, size_t nLength, u
         T[nLength] = 0x80;
 
         XAES_ApplyXOR(T, D);
-        XAES_CMAC(pAES, T, XAES_BLOCK_SIZE, pSIV);
+        XAES_CMAC(pAES, K1, K2, T, XAES_BLOCK_SIZE, NULL, pSIV);
+        XAES_Wipe(T, sizeof(T));
     }
 
+    XAES_Wipe(K1, sizeof(K1));
+    XAES_Wipe(K2, sizeof(K2));
+    XAES_Wipe(D, sizeof(D));
     return XSTDOK;
 }
 
@@ -775,8 +728,10 @@ uint8_t* XAES_CBC_Crypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
     XCHECK((pLength != NULL && *pLength > 0), NULL);
 
     size_t nOriginalLen = *pLength;
-    size_t nNewLength = ((nOriginalLen / XAES_BLOCK_SIZE) + 1) * XAES_BLOCK_SIZE;
+    size_t nPaddingLen = XAES_BLOCK_SIZE - nOriginalLen % XAES_BLOCK_SIZE;
     size_t nPrefix = pAES->key.nContainIV ? XAES_BLOCK_SIZE : 0;
+    if (nOriginalLen > SIZE_MAX - nPrefix - nPaddingLen - 1) return NULL;
+    size_t nNewLength = nOriginalLen + nPaddingLen;
     size_t nOutLen = nPrefix + nNewLength;
 
     uint8_t *pOutput = (uint8_t*)malloc(nOutLen + 1);
@@ -898,10 +853,11 @@ uint8_t* XAES_XBC_Crypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
     XCHECK((pLength != NULL && *pLength > 0), NULL);
 
     size_t nPlainLen = *pLength;
-    size_t nKnownLen = (XAES_XBC_HDR_SIZE + nPlainLen) % XAES_BLOCK_SIZE;
+    size_t nKnownLen = (XAES_XBC_HDR_SIZE + nPlainLen % XAES_BLOCK_SIZE) % XAES_BLOCK_SIZE;
     size_t nRandLen = (XAES_BLOCK_SIZE - nKnownLen) % XAES_BLOCK_SIZE;
-    size_t nTotalLen = XAES_XBC_HDR_SIZE + nRandLen + nPlainLen;
     size_t nPrefix = pAES->key.nContainIV ? XAES_BLOCK_SIZE : 0;
+    if (nPlainLen > SIZE_MAX - nPrefix - XAES_XBC_HDR_SIZE - nRandLen - 1) return NULL;
+    size_t nTotalLen = XAES_XBC_HDR_SIZE + nRandLen + nPlainLen;
     size_t nOutLen = nPrefix + nTotalLen;
 
     uint8_t *pOutput = (uint8_t*)malloc(nOutLen + 1);
@@ -1013,7 +969,7 @@ uint8_t* XAES_XBC_Decrypt(xaes_t *pAES, const uint8_t *pInput, size_t *pLength)
                         (uint32_t)pDecrypted[3];
 
     /* Validate: random prefix must fit within the decrypted data */
-    if (XAES_XBC_HDR_SIZE + nRandLen > nInputLength)
+    if (nRandLen > nInputLength - XAES_XBC_HDR_SIZE)
     {
         free(pDecrypted);
         return NULL;

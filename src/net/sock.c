@@ -1244,6 +1244,9 @@ int XSock_Recv(xsock_t *pSock, void* pData, size_t nSize)
         return nRecvSize;
     }
 
+    /* A datagram socket has no end of stream, an empty read is an empty datagram */
+    if (!nRecvSize && pSock->nType == SOCK_DGRAM) return nRecvSize;
+
     if (nRecvSize <= 0)
     {
         if (!nRecvSize) pSock->eStatus = XSOCK_EOF;
@@ -1347,6 +1350,8 @@ int XSock_Read(xsock_t *pSock, void *pData, size_t nSize)
         return nReadSize;
     }
 
+    if (!nReadSize && pSock->nType == SOCK_DGRAM) return nReadSize;
+
     if (nReadSize <= 0)
     {
         if (!nReadSize) pSock->eStatus = XSOCK_EOF;
@@ -1370,7 +1375,11 @@ int XSock_Write(xsock_t *pSock, const void *pData, size_t nLength)
     nBytes = XSock_Send(pSock, pData, nLength);
 #else
     if (nLength > (size_t)INT_MAX) nLength = (size_t)INT_MAX;
-    do nBytes = write(pSock->nFD, pData, nLength);
+    do
+    {
+        nBytes = send(pSock->nFD, pData, nLength, XMSG_NOSIGNAL);
+        if (nBytes < 0 && errno == ENOTSOCK) nBytes = write(pSock->nFD, pData, nLength);
+    }
     while (nBytes < 0 && errno == EINTR);
 
     if (nBytes < 0 && XSock_IsNB(pSock) && XSOCK_WOULDBLOCK(XSOCK_ERRNO()))
@@ -1415,8 +1424,20 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
 
     xsockaddr_t* pSockAddr = XSock_GetSockAddr(pNewSock);
     xsocklen_t nAddrLen = XSock_GetAddrLen(pNewSock);
+    xbool_t bFlagsSet = XFALSE;
 
+#if defined(__linux__) && defined(_GNU_SOURCE) && defined(SOCK_CLOEXEC) && defined(SOCK_NONBLOCK)
+    /* Both flags in the same call: the descriptor is never inheritable and
+       never blocking, and the accept costs one syscall instead of four. */
+    int nAcceptFlags = XSock_IsNB(pSock) ? (SOCK_CLOEXEC | SOCK_NONBLOCK) : SOCK_CLOEXEC;
+    pNewSock->nFD = accept4(pSock->nFD, pSockAddr, &nAddrLen, nAcceptFlags);
+
+    if (pNewSock->nFD != XSOCK_INVALID) bFlagsSet = XTRUE;
+    else if (errno == ENOSYS) pNewSock->nFD = accept(pSock->nFD, pSockAddr, &nAddrLen);
+#else
     pNewSock->nFD = accept(pSock->nFD, pSockAddr, &nAddrLen);
+#endif
+
     if (pNewSock->nFD == XSOCK_INVALID)
     {
         if (XSOCK_ACCEPT_AGAIN(XSOCK_ERRNO())) pSock->eStatus = XSOCK_WANT_READ;
@@ -1426,16 +1447,29 @@ XSOCKET XSock_Accept(xsock_t *pSock, xsock_t *pNewSock)
         return XSOCK_INVALID;
     }
 
+    if (bFlagsSet)
+    {
+        if (XSock_IsNB(pSock)) XFLAGS_ENABLE(pNewSock->nFlags, XSOCK_NB);
+    }
+    else
+    {
 #if !defined(_WIN32) && defined(FD_CLOEXEC)
-    /* Every other descriptor this module creates is close-on-exec, and so is
-       the XSock_AcceptNB() path; an accepted connection must not outlive the
-       process either by leaking into a child it spawns. */
-    fcntl(pNewSock->nFD, F_SETFD, FD_CLOEXEC);
+        /* Every other descriptor this module creates is close-on-exec, and so is
+           the XSock_AcceptNB() path; an accepted connection must not outlive the
+           process either by leaking into a child it spawns. */
+        if (fcntl(pNewSock->nFD, F_SETFD, FD_CLOEXEC) < 0)
+        {
+            pNewSock->eStatus = XSOCK_ERR_SETFL;
+            XSock_Close(pNewSock);
+            return XSOCK_INVALID;
+        }
 #endif
 
-    /* TLS negotiation must obey a nonblocking listener before SSL_accept reads
-       any ClientHello bytes; otherwise one stalled client stops the worker. */
-    if (XSock_IsNB(pSock) && XSock_NonBlock(pNewSock, XTRUE) == XSOCK_INVALID) return XSOCK_INVALID;
+        /* TLS negotiation must obey a nonblocking listener before SSL_accept reads
+           any ClientHello bytes; otherwise one stalled client stops the worker. */
+        if (XSock_IsNB(pSock) && XSock_NonBlock(pNewSock, XTRUE) == XSOCK_INVALID)
+            return XSOCK_INVALID;
+    }
 
 #ifdef XSOCK_USE_SSL
     SSL_CTX* pSSLCtx = XSock_GetSSLCTX(pSock);
@@ -1629,7 +1663,15 @@ XSTATUS XSock_GetAddrInfo(xsock_info_t *pAddr, const char *pHost)
     if (nStatus <= 0) return XSOCK_ERROR;
 
     ptr = xstrtok(NULL, ":", &savePtr);
-    if (ptr != NULL) pAddr->nPort = (uint16_t)atoi(ptr);
+    if (ptr != NULL)
+    {
+        /* A number outside the port range is no port, not a truncated one */
+        int nSavedErrno = errno;
+        long nPort = strtol(ptr, NULL, 10);
+        if (nPort > 0 && nPort <= UINT16_MAX) pAddr->nPort = (uint16_t)nPort;
+        errno = nSavedErrno;
+    }
+
     return pAddr->nPort ? XSOCK_SUCCESS : XSOCK_NONE;
 }
 
@@ -2224,7 +2266,9 @@ XSOCKET XSock_InitSSLServer(xsock_t *pSock, int nVerifyFlags)
         nVerifyFlags : SSL_VERIFY_NONE;
 
     SSL_CTX_set_verify(pSSLCtx, nVerify, NULL);
-    return XSock_SetSSLCTX(pSock, pSSLCtx);
+    XSOCKET nFD = XSock_SetSSLCTX(pSock, pSSLCtx);
+    if (nFD == XSOCK_INVALID) SSL_CTX_free(pSSLCtx);
+    return nFD;
 #endif
 
     pSock->eStatus = XSOCK_ERR_NOSSL;
@@ -2511,6 +2555,7 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
     {
         pSock->eStatus = XSOCK_ERR_ARGS;
         pSock->nFD = XSOCK_INVALID;
+        XSock_Close(pSock);
         return XSOCK_INVALID;
     }
 
@@ -2529,6 +2574,7 @@ XSOCKET XSock_CreateAdv(xsock_t *pSock, uint32_t nFlags, size_t nFdMax, const ch
     if (pSock->nFD == XSOCK_INVALID)
     {
         pSock->eStatus = XSOCK_ERR_CREATE;
+        XSock_Close(pSock);
         return XSOCK_INVALID;
     }
 
@@ -2570,8 +2616,8 @@ XSOCKET XSock_Open(xsock_t *pSock, uint32_t nFlags, xsock_info_t *pAddr)
 {
     if (!xstrused(pAddr->sAddr) || (!pAddr->nPort && !XFLAGS_CHECK(nFlags, XSOCK_UNIX)))
     {
+        XSock_Init(pSock, XSOCK_UNDEFINED, XSOCK_INVALID);
         pSock->eStatus = XSOCK_ERR_ARGS;
-        pSock->nFD = XSOCK_INVALID;
         return XSOCK_INVALID;
     }
 
@@ -2586,8 +2632,8 @@ XSOCKET XSock_Setup(xsock_t *pSock, uint32_t nFlags, const char *pAddr)
     xsock_info_t addrInfo;
     if (XSock_GetAddrInfo(&addrInfo, pAddr) <= 0)
     {
+        XSock_Init(pSock, XSOCK_UNDEFINED, XSOCK_INVALID);
         pSock->eStatus = XSOCK_ERR_ADDR;
-        pSock->nFD = XSOCK_INVALID;
         return XSOCK_INVALID;
     }
 

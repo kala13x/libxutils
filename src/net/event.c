@@ -95,18 +95,17 @@ static void XEvents_ClearCb(void *pCtx, void *pData, int nKey)
 static int XEvents_EventCb(xevents_t *pEvents, xevent_data_t *pData, XSOCKET nFD, xevent_cb_type_t nReason)
 {
     int nRetVal = pEvents->eventCallback(pEvents, pData, nFD, nReason);
-    if (nRetVal == XEVENTS_ACCEPT) return XEVENTS_ACTION;
+
+    while (nRetVal == XEVENTS_USERCALL)
+        nRetVal = pEvents->eventCallback(pEvents, pData, nFD, XEVENT_CB_USER);
+
+    if (nRetVal == XEVENTS_ACCEPT)
+        return XEVENTS_ACTION;
 
     if (nRetVal <= XEVENTS_DISCONNECT)
     {
         XEvents_Delete(pEvents, pData);
         return XEVENTS_DISCONNECT;
-    }
-
-    while (nRetVal == XEVENTS_USERCALL)
-    {
-        // Provide user callback until it is asked
-        nRetVal = pEvents->eventCallback(pEvents, pData, nFD, XEVENT_CB_USER);
     }
 
     return nRetVal;
@@ -338,7 +337,7 @@ static xevent_data_t* XEvents_AddTimerLinux(xevents_t *pEvents, void *pContext, 
     struct itimerspec its = {0};
     its.it_value.tv_sec  = nTimeoutMs / 1000;
     its.it_value.tv_nsec = (nTimeoutMs % 1000) * 1000000;
-    timerfd_settime(nTimerFD, 0, &its, NULL);
+    XCHECK_CALL((timerfd_settime(nTimerFD, 0, &its, NULL) == 0), close, nTimerFD, NULL);
 
     xevent_data_t* pTimerData = XEvents_NewData(pContext, nTimerFD, XEVENT_TYPE_TIMER);
     XCHECK_CALL((pTimerData != NULL), close, nTimerFD, NULL);
@@ -375,10 +374,10 @@ static int XEvents_TimerService(xevents_t *pEvents, xevent_data_t *pData, XSOCKE
     if ((nEvents & XPOLLIN) && XEvent_ReadU64(pData, NULL) > 0)
         return XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_TIMEOUT);
 
-    XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_ERROR);
-    XEvents_Delete(pEvents, pData);
+    int nStatus = XEvents_EventCb(pEvents, pData, nFD, XEVENT_CB_ERROR);
+    if (nStatus != XEVENTS_DISCONNECT) XEvents_Delete(pEvents, pData);
 
-    return XEVENTS_RELOOP;
+    return nStatus == XEVENTS_BREAK ? XEVENTS_BREAK : XEVENTS_RELOOP;
 }
 #endif
 
@@ -489,8 +488,9 @@ void XEvents_Destroy(xevents_t *pEvents)
     if (pEvents->nEventFd >= 0)
     {
         close(pEvents->nEventFd);
-        pEvents->nEventFd = 0;
+        pEvents->nEventFd = XSOCK_INVALID;
     }
+    pEvents->nWaitCount = 0;
 #endif
 
 #if defined(_XEVENTS_USE_EVENT_LIST)
@@ -498,7 +498,11 @@ void XEvents_Destroy(xevents_t *pEvents)
 #endif
 
     XEvents_DestroyEventMap(pEvents);
-    pEvents->eventCallback(pEvents, NULL, XSOCK_INVALID, XEVENT_CB_DESTROY);
+    pEvents->nEventCount = 0;
+    xevent_cb_t callback = pEvents->eventCallback;
+    pEvents->eventCallback = NULL;
+
+    if (callback != NULL) callback(pEvents, NULL, XSOCK_INVALID, XEVENT_CB_DESTROY);
 }
 
 xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, xevent_cb_t callBack, xbool_t bUseHash)
@@ -536,6 +540,8 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     if (pEvents->bUseHash) XHash_Init(&pEvents->eventsMap, XEvents_ClearCb, pEvents);
 
 #if defined(_XEVENTS_USE_EPOLL)
+    pEvents->nEventFd = XSOCK_INVALID;
+    pEvents->nWaitCount = 0;
     struct epoll_event *pEventArray = calloc(pEvents->nEventMax, sizeof(struct epoll_event));
     XCHECK_CALL((pEventArray != NULL), XEvents_DestroyEventMap, pEvents, XEVENTS_EALLOC);
 
@@ -546,7 +552,6 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
         XEVENTS_ECREATE);
 
     pEvents->pEventArray = pEventArray;
-    pEvents->nWaitCount = 0;
 #else
     pEvents->pEventArray = calloc(pEvents->nEventMax, sizeof(struct pollfd));
     XCHECK_CALL((pEvents->pEventArray != NULL), XEvents_DestroyEventMap, pEvents, XEVENTS_EALLOC);
@@ -588,7 +593,7 @@ xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t* pData, int nEvent
     XCHECK((pData->nFD != XSOCK_INVALID), XEVENTS_EINVALID);
 
 #if defined(_XEVENTS_USE_EPOLL)
-    struct epoll_event event;
+    struct epoll_event event = {0};
     event.data.ptr = pData;
     event.events = nEvents;
 
@@ -636,7 +641,7 @@ xevent_status_t XEvents_Modify(xevents_t *pEvents, xevent_data_t *pData, int nEv
     XCHECK((pData != NULL), XEVENTS_EINVALID);
 
 #if defined(_XEVENTS_USE_EPOLL)
-    struct epoll_event event;
+    struct epoll_event event = {0};
     event.data.ptr = pData;
     event.events = nEvents;
 
@@ -756,6 +761,8 @@ xevent_data_t* XEvents_GetData(xevents_t *pEvents, XSOCKET nFD)
 xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)
 {
     XCHECK(pEvents, XEVENTS_EINVALID);
+    XCHECK(pEvents->eventCallback, XEVENTS_EINVALID);
+
     int i = 0, nCount = 0, nRet = 0;
     int nTimeout = nTimeoutMs;
 

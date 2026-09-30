@@ -38,6 +38,9 @@ extern "C" {
 #define XHTTP_SSL_PORT          443
 #define XHTTP_DEF_PORT          80
 
+#define XHTTP_CODE_MIN          100
+#define XHTTP_CODE_MAX          599
+
 typedef enum {
     XHTTP_DUMMY = 0,
     XHTTP_PUT,

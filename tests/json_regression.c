@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "json.h"
+#include "map.h"
 #include "log.h"
 
 #include "test.h"
@@ -587,6 +588,142 @@ static int XTest_root_array_and_api_boundaries(void)
     return 0;
 }
 
+static int XTest_empty_objects(void)
+{
+    /* An empty object has an empty list of members, which is not a failure:
+       only something that is not an object has no list at all. */
+    const char data[] = "{\"empty\":{},\"array\":[],\"one\":{\"key\":1},\"two\":{\"a\":true,\"b\":null}}";
+
+    for (int nPool = 0; nPool < 2; nPool++)
+    {
+        xpool_t *pPool = nPool ? XPool_Create(256) : NULL;
+        CHECK(!nPool || pPool != NULL, "Create a pool for the second pass");
+
+        xjson_t json;
+        CHECK(XJSON_Parse(&json, pPool, data, sizeof(data) - 1) == XJSON_SUCCESS, "The document parses");
+
+        xarray_t *pEmpty = XJSON_GetObjects(XJSON_GetObject(json.pRootObj, "empty"));
+        CHECK(pEmpty != NULL && XArray_Used(pEmpty) == 0, "An empty object lists no members");
+        XArray_Destroy(pEmpty);
+
+        xarray_t *pOne = XJSON_GetObjects(XJSON_GetObject(json.pRootObj, "one"));
+        CHECK(pOne != NULL && XArray_Used(pOne) == 1, "An object with one member lists it");
+        xmap_pair_t *pPair = (xmap_pair_t*)XArray_GetData(pOne, 0);
+        CHECK(pPair != NULL && strcmp(pPair->pKey, "key") == 0 && XJSON_GetInt((xjson_obj_t*)pPair->pData) == 1,
+            "The listed member is the pair itself");
+        XArray_Destroy(pOne);
+
+        xarray_t *pTwo = XJSON_GetObjects(XJSON_GetObject(json.pRootObj, "two"));
+        CHECK(pTwo != NULL && XArray_Used(pTwo) == 2, "Every member is listed");
+        XArray_Destroy(pTwo);
+
+        xarray_t *pRoot = XJSON_GetObjects(json.pRootObj);
+        CHECK(pRoot != NULL && XArray_Used(pRoot) == 4, "The root lists its members");
+        XArray_Destroy(pRoot);
+
+        CHECK(XJSON_GetObjects(XJSON_GetObject(json.pRootObj, "array")) == NULL, "An array is not an object");
+        CHECK(XJSON_GetObjects(XJSON_GetObject(json.pRootObj, "missing")) == NULL, "A missing member has no list");
+
+        /* An object emptied by the builder API lists nothing as well */
+        xjson_obj_t *pBuilt = XJSON_NewObject(pPool, NULL, XFALSE);
+        CHECK(pBuilt != NULL, "Build an empty object");
+        xarray_t *pBuiltList = XJSON_GetObjects(pBuilt);
+        CHECK(pBuiltList != NULL && XArray_Used(pBuiltList) == 0, "A built empty object lists no members");
+        XArray_Destroy(pBuiltList);
+        XJSON_FreeObject(pBuilt);
+
+        XJSON_Destroy(&json);
+        XPool_Destroy(pPool);
+    }
+
+    return 0;
+}
+
+static int XTest_pair_names(void)
+{
+    /* Member names are kept exactly as they appear between the quotes, for
+       values, objects and arrays alike, however long or short they are. */
+    size_t nLongName = 5000;
+    size_t nSize = nLongName + 512;
+    char *pData = (char*)malloc(nSize);
+    char *pLongName = (char*)malloc(nLongName + 1);
+    CHECK(pData != NULL && pLongName != NULL, "Allocate the document");
+
+    for (size_t i = 0; i < nLongName; i++) pLongName[i] = (char)('a' + i % 26);
+    pLongName[nLongName] = '\0';
+
+    int nLength = snprintf(pData, nSize, "{\"%s\":1,\"\":{\"\":[]},\"a\\\"b\":\"x\",\"\\u00e9\":true,"
+        "\"nested\":{\"inner\":{\"deep\":[{\"x\":null}]}},\"k\":[1,{\"k\":2}]}", pLongName);
+    CHECK(nLength > 0 && (size_t)nLength < nSize, "Build the document");
+
+    for (int nPool = 0; nPool < 2; nPool++)
+    {
+        xpool_t *pPool = nPool ? XPool_Create(1024) : NULL;
+        CHECK(!nPool || pPool != NULL, "Create a pool for the second pass");
+
+        xjson_t json;
+        CHECK(XJSON_Parse(&json, pPool, pData, (size_t)nLength) == XJSON_SUCCESS, "The document parses");
+        xjson_obj_t *pRoot = json.pRootObj;
+
+        xjson_obj_t *pLong = XJSON_GetObject(pRoot, pLongName);
+        CHECK(pLong != NULL && XJSON_GetInt(pLong) == 1, "A very long name is found");
+        CHECK(pLong->pName != NULL && strcmp(pLong->pName, pLongName) == 0, "And is kept whole");
+
+        xjson_obj_t *pEmpty = XJSON_GetObject(pRoot, "");
+        CHECK(pEmpty != NULL && pEmpty->nType == XJSON_TYPE_OBJECT, "An empty name is a name");
+        xjson_obj_t *pInner = XJSON_GetObject(pEmpty, "");
+        CHECK(pInner != NULL && pInner->nType == XJSON_TYPE_ARRAY && XJSON_GetArrayLength(pInner) == 0,
+            "Even for a nested array");
+
+        CHECK(strcmp(XJSON_GetString(XJSON_GetObject(pRoot, "a\\\"b")), "x") == 0, "An escaped quote stays in the name");
+        CHECK(XJSON_GetBool(XJSON_GetObject(pRoot, "\\u00e9")) == 1, "A unicode escape stays in the name as written");
+
+        xjson_obj_t *pDeep = XJSON_GetObject(XJSON_GetObject(XJSON_GetObject(pRoot, "nested"), "inner"), "deep");
+        CHECK(pDeep != NULL && XJSON_GetArrayLength(pDeep) == 1, "Nested names are found at every level");
+        xjson_obj_t *pItem = XJSON_GetArrayItem(pDeep, 0);
+        CHECK(pItem != NULL && pItem->pName == NULL, "An array item has no name");
+        CHECK(XJSON_GetObject(pItem, "x") != NULL && XJSON_GetObject(pItem, "x")->nType == XJSON_TYPE_NULL,
+            "A member of an object inside an array keeps its name");
+
+        xjson_obj_t *pK = XJSON_GetObject(pRoot, "k");
+        CHECK(pK != NULL && XJSON_GetInt(XJSON_GetObject(XJSON_GetArrayItem(pK, 1), "k")) == 2,
+            "The same name at different levels names different members");
+
+        /* What is written back parses to the same names */
+        size_t nDumped = 0;
+        char *pDump = XJSON_DumpObj(pRoot, 0, &nDumped);
+        CHECK(pDump != NULL && nDumped > nLongName, "The document dumps");
+
+        xjson_t again;
+        CHECK(XJSON_Parse(&again, NULL, pDump, nDumped) == XJSON_SUCCESS, "The dump parses");
+        CHECK(XJSON_GetInt(XJSON_GetObject(again.pRootObj, pLongName)) == 1, "The long name survives the round trip");
+        CHECK(strcmp(XJSON_GetString(XJSON_GetObject(again.pRootObj, "a\\\"b")), "x") == 0, "So does the escaped one");
+        XJSON_Destroy(&again);
+        if (!nPool) free(pDump);
+
+        XJSON_Destroy(&json);
+        XPool_Destroy(pPool);
+    }
+
+    /* The same name twice in one object is refused, wherever it is */
+    const char *pDuplicates[] = { "{\"a\":1,\"a\":2}", "{\"o\":{\"b\":[],\"b\":{}}}", "[{\"c\":1,\"d\":2,\"c\":3}]" };
+    for (size_t i = 0; i < sizeof(pDuplicates) / sizeof(*pDuplicates); i++)
+    {
+        xjson_t json;
+        CHECK(XJSON_Parse(&json, NULL, pDuplicates[i], strlen(pDuplicates[i])) == XJSON_FAILURE, "A duplicate is refused");
+        CHECK(json.nError == XJSON_ERR_EXITS && json.pRootObj == NULL, "As a duplicate, with nothing left behind");
+
+        char sError[128];
+        CHECK(XJSON_GetErrorStr(&json, sError, sizeof(sError)) > 0 && strstr(sError, "Duplicate") != NULL,
+            "The error names the duplicate");
+        XJSON_Destroy(&json);
+    }
+
+    free(pLongName);
+    free(pData);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(parse_matrix),
     XTEST_CASE(parse_boundaries),
@@ -595,5 +732,7 @@ XTEST_MAIN(
     XTEST_CASE(byte_boundaries),
     XTEST_CASE(error_states),
     XTEST_CASE(pool_and_stress),
-    XTEST_CASE(root_array_and_api_boundaries)
+    XTEST_CASE(root_array_and_api_boundaries),
+    XTEST_CASE(empty_objects),
+    XTEST_CASE(pair_names)
 )

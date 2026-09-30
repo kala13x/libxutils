@@ -90,6 +90,7 @@ XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp
 {
     XCHECK(pCtx, XSTDINV);
     XRSA_Init(pCtx);
+    XCHECK((nKeyLength <= INT_MAX), XSTDINV);
 
     BIGNUM *pBigNum = BN_new();
     XCHECK(pBigNum, XSTDERR);
@@ -125,7 +126,7 @@ XSTATUS XRSA_GenerateKeys(xrsa_ctx_t *pCtx, size_t nKeyLength, size_t nPubKeyExp
     }
 
     BIO *pBioPub = BIO_new(BIO_s_mem());
-    if (pBioPriv == NULL)
+    if (pBioPub == NULL)
     {
         RSA_free(pKeyPair);
         BIO_free(pBioPriv);
@@ -193,7 +194,10 @@ uint8_t* XRSA_Crypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size
 {
     XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
+    XCHECK((nLength <= INT_MAX), NULL);
+
     RSA *pRSA = pCtx->pKeyPair;
+    XCHECK_NL((pRSA != NULL), NULL);
 
     int nRSASize = RSA_size(pRSA);
     XCHECK(nRSASize, NULL);
@@ -214,7 +218,10 @@ uint8_t* XRSA_PrivCrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, 
 {
     XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
+    XCHECK((nLength <= INT_MAX), NULL);
+
     RSA *pRSA = pCtx->pKeyPair;
+    XCHECK_NL((pRSA != NULL), NULL);
 
     int nRSASize = RSA_size(pRSA);
     XCHECK(nRSASize, NULL);
@@ -235,7 +242,10 @@ uint8_t* XRSA_PubDecrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength,
 {
     XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
+    XCHECK((nLength <= INT_MAX), NULL);
+
     RSA *pRSA = pCtx->pKeyPair;
+    XCHECK_NL((pRSA != NULL), NULL);
 
     int nRSASize = RSA_size(pRSA);
     XCHECK((nRSASize > 0), NULL);
@@ -256,25 +266,30 @@ uint8_t* XRSA_Decrypt(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, si
 {
     XCHECK((pCtx && pData && nLength), NULL);
     if (pOutLength) *pOutLength = 0;
+    XCHECK((nLength <= INT_MAX), NULL);
     RSA *pRSA = pCtx->pKeyPair;
+    XCHECK_NL((pRSA != NULL), NULL);
 
-    uint8_t *pOutput = malloc(nLength + 1);
+    /* The plaintext can be as long as the modulus allows whatever the input
+       length is: a short ciphertext still decrypts to a full size block */
+    int nRSASize = RSA_size(pRSA);
+    XCHECK((nRSASize > 0), NULL);
+
+    uint8_t *pOutput = malloc((size_t)nRSASize + 1);
     XCHECK(pOutput, NULL);
 
     int nOutLength = RSA_private_decrypt((int)nLength, pData, pOutput, pRSA, pCtx->nPadding);
-    XCHECK_FREE((nOutLength > 0), pOutput, NULL);
+    XCHECK_FREE((nOutLength > 0 && nOutLength <= nRSASize), pOutput, NULL);
 
     if (pOutLength) *pOutLength = (size_t)nOutLength;
-    size_t nTermPos = (size_t)nOutLength < nLength ?
-                    (size_t)nOutLength : nLength;
-
-    pOutput[nTermPos] = '\0';
+    pOutput[nOutLength] = '\0';
     return pOutput;
 }
 
 XSTATUS XRSA_LoadPrivKey(xrsa_ctx_t *pCtx)
 {
     XCHECK((pCtx && pCtx->pPrivateKey && pCtx->nPrivKeyLen), XSTDINV);
+    XCHECK((pCtx->nPrivKeyLen <= INT_MAX), XSTDINV);
 
     if (pCtx->pKeyPair == NULL)
     {
@@ -295,6 +310,7 @@ XSTATUS XRSA_LoadPrivKey(xrsa_ctx_t *pCtx)
 XSTATUS XRSA_LoadPubKey(xrsa_ctx_t *pCtx)
 {
     XCHECK((pCtx && pCtx->pPublicKey && pCtx->nPubKeyLen), XSTDINV);
+    XCHECK((pCtx->nPubKeyLen <= INT_MAX), XSTDINV);
 
     if (pCtx->pKeyPair == NULL)
     {
@@ -314,14 +330,14 @@ XSTATUS XRSA_LoadPubKey(xrsa_ctx_t *pCtx)
 
 XSTATUS XRSA_SetPubKey(xrsa_ctx_t *pCtx, const char *pPubKey, size_t nLength)
 {
-    XCHECK((pCtx && pPubKey && nLength), XSTDINV);
-    if (pCtx->pPublicKey) free(pCtx->pPublicKey);
+    XCHECK((pCtx && pPubKey && nLength && nLength <= INT_MAX), XSTDINV);
+    char *pNewKey = (char*)malloc(nLength + 1);
+    XCHECK(pNewKey, XSTDERR);
 
-    pCtx->pPublicKey = (char*)malloc(nLength + 1);
-    XCHECK(pCtx->pPublicKey, XSTDERR);
-
-    memcpy(pCtx->pPublicKey, pPubKey, nLength);
-    pCtx->pPublicKey[nLength] = '\0';
+    memcpy(pNewKey, pPubKey, nLength);
+    pNewKey[nLength] = '\0';
+    free(pCtx->pPublicKey);
+    pCtx->pPublicKey = pNewKey;
     pCtx->nPubKeyLen = nLength;
 
     return XRSA_LoadPubKey(pCtx);
@@ -329,14 +345,14 @@ XSTATUS XRSA_SetPubKey(xrsa_ctx_t *pCtx, const char *pPubKey, size_t nLength)
 
 XSTATUS XRSA_SetPrivKey(xrsa_ctx_t *pCtx, const char *pPrivKey, size_t nLength)
 {
-    XCHECK((pCtx && pPrivKey && nLength), XSTDINV);
-    if (pCtx->pPrivateKey) free(pCtx->pPrivateKey);
+    XCHECK((pCtx && pPrivKey && nLength && nLength <= INT_MAX), XSTDINV);
+    char *pNewKey = (char*)malloc(nLength + 1);
+    XCHECK(pNewKey, XSTDERR);
 
-    pCtx->pPrivateKey = (char*)malloc(nLength + 1);
-    XCHECK(pCtx->pPrivateKey, XSTDERR);
-
-    memcpy(pCtx->pPrivateKey, pPrivKey, nLength);
-    pCtx->pPrivateKey[nLength] = '\0';
+    memcpy(pNewKey, pPrivKey, nLength);
+    pNewKey[nLength] = '\0';
+    free(pCtx->pPrivateKey);
+    pCtx->pPrivateKey = pNewKey;
     pCtx->nPrivKeyLen = nLength;
 
     return XRSA_LoadPrivKey(pCtx);
@@ -380,7 +396,7 @@ XSTATUS XRSA_LoadKeyFiles(xrsa_ctx_t *pCtx, const char *pPrivPath, const char *p
     XSTATUS nStatus = XSTDNON;
 
     if (pPrivPath != NULL) nStatus = XRSA_LoadPrivKeyFile(pCtx, pPrivPath);
-    if (pPubPath != NULL) nStatus = XRSA_LoadPubKeyFile(pCtx, pPubPath);
+    if (pPubPath != NULL && (pPrivPath == NULL || nStatus == XSTDOK)) nStatus = XRSA_LoadPubKeyFile(pCtx, pPubPath);
     if (nStatus != XSTDOK) XRSA_Destroy(pCtx);
 
     return nStatus;

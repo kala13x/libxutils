@@ -550,6 +550,53 @@ static int XTest_cert_guards(void)
     }
     tls_fixture_end(&fixture);
 
+    /* A certificate that loads with a key that does not, and the other way round */
+    if (tls_fixture_begin(&fixture) == XSTDOK)
+    {
+        const char *pPaths[][2] = { { fixture.sCert, "/no/such/key.pem" }, { fixture.sKey, fixture.sKey } };
+        xsock_status_t eExpected[] = { XSOCK_ERR_SSLKEY, XSOCK_ERR_SSLCRT };
+
+        for (int i = 0; i < 2; i++)
+        {
+            CHECK(XSock_CreatePair(pair) == XSTDOK, "A socket pair is created");
+            CHECK(XSock_Init(&sock, XSOCK_TCP_PEER, pair[0]) != XSOCK_ERROR, "The socket wraps");
+            sock.nFlags |= XSOCK_SSL;
+            CHECK(XSock_InitSSLServer(&sock, 0) != XSOCK_INVALID, "The TLS server context is created");
+
+            XSock_InitCert(&cert);
+            cert.pCertPath = pPaths[i][0];
+            cert.pKeyPath = pPaths[i][1];
+            CHECK(XSock_SetSSLCert(&sock, &cert) == XSOCK_INVALID, "A pair that does not load is refused");
+            CHECK(XSock_Status(&sock) == eExpected[i] && sock.nFD == XSOCK_INVALID, "Naming the half that did not load");
+            xclosesock(pair[1]);
+        }
+    }
+    tls_fixture_end(&fixture);
+
+    /* A server name longer than a TLS name can be is refused before it reaches the wire */
+    CHECK(XSock_CreatePair(pair) == XSTDOK, "A socket pair is created");
+    CHECK(XSock_Init(&sock, XSOCK_TCP_PEER, pair[0]) != XSOCK_ERROR, "The socket wraps");
+    CHECK(XSock_NonBlock(&sock, XTRUE) != XSOCK_INVALID, "The socket is made non blocking");
+    sock.nFlags |= XSOCK_SSL;
+    CHECK(XSock_InitSSLClient(&sock, "localhost") != XSOCK_INVALID, "The TLS client context is created");
+    char sLongName[300];
+    memset(sLongName, 'a', sizeof(sLongName) - 1);
+    sLongName[sizeof(sLongName) - 1] = '\0';
+    XSock_InitCert(&cert);
+    cert.pHostName = sLongName;
+    CHECK(XSock_SetSSLCert(&sock, &cert) == XSOCK_INVALID, "An overlong server name is refused");
+    CHECK(XSock_Status(&sock) == XSOCK_ERR_SSLCNT && sock.nFD == XSOCK_INVALID, "As a TLS setup failure");
+    xclosesock(pair[1]);
+
+    /* A socket without a TLS context takes no certificate */
+    CHECK(XSock_CreatePair(pair) == XSTDOK, "A socket pair is created");
+    CHECK(XSock_Init(&sock, XSOCK_TCP_PEER, pair[0]) != XSOCK_ERROR, "The socket wraps");
+    XSock_InitCert(&cert);
+    cert.pCertPath = "/no/such/cert.pem";
+    CHECK(XSock_SetSSLCert(&sock, &cert) == XSOCK_INVALID, "A plain socket takes no certificate");
+    CHECK(XSock_Status(&sock) == XSOCK_ERR_SSLINV && sock.nFD == XSOCK_INVALID, "As a socket without TLS");
+    xclosesock(pair[1]);
+
     /* A plain socket has no TLS session to hand out. */
     CHECK(XSock_CreatePair(pair) == XSTDOK, "A socket pair is created");
     CHECK(XSock_Init(&sock, XSOCK_TCP_PEER, pair[0]) != XSOCK_ERROR, "The socket wraps");
@@ -567,6 +614,81 @@ static int XTest_cert_guards(void)
     /* Initializing twice is a no-op rather than a reinitialization. */
     XSock_InitSSL();
     XSock_InitSSL();
+    return 0;
+}
+
+static int XTest_plain_calls(void)
+{
+    /* The plain send and receive calls of a TLS socket go through TLS, whichever of them is used */
+    tls_fixture_t fixture;
+    if (tls_fixture_begin(&fixture) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("The TLS fixture could not be built, skipping\n");
+        return 77;
+    }
+
+    XSock_InitSSL();
+    for (int nRound = 0; nRound < 3; nRound++)
+    {
+        tls_server_t server;
+        xthread_t thread;
+        if (tls_start(&server, &fixture, &thread, XFALSE) != XSTDOK)
+        {
+            tls_fixture_end(&fixture);
+            printf("No free loopback port, skipping\n");
+            return 77;
+        }
+
+        xsock_cert_t cert;
+        XSock_InitCert(&cert);
+        cert.pCaPath = fixture.sCert;
+        cert.pHostName = "localhost";
+        cert.nVerifyFlags = SSL_VERIFY_PEER;
+
+        xsock_t client;
+        CHECK(tls_connect_armed(&client, server.nPort, &cert, &server) == XSTDOK, "The TLS handshake completes");
+
+        const char *pMessage = "sent by a plain call";
+        size_t nMessage = strlen(pMessage), nReply = strlen(server.pReply);
+        char sReply[256] = {0};
+        int nSent = 0, nRead = 0;
+
+        if (nRound == 0)
+        {
+            nSent = XSock_Send(&client, pMessage, nMessage);
+            for (int i = 0; i < 100 && (size_t)nRead < nReply; i++)
+            {
+                int nBytes = XSock_Recv(&client, sReply + nRead, nReply - (size_t)nRead);
+                if (nBytes <= 0) break;
+                nRead += nBytes;
+            }
+        }
+        else if (nRound == 1)
+        {
+            nSent = XSock_SendChunk(&client, (void*)pMessage, nMessage);
+            nRead = XSock_RecvChunk(&client, sReply, nReply);
+        }
+        else
+        {
+            nSent = XSock_Write(&client, pMessage, nMessage);
+            for (int i = 0; i < 100 && (size_t)nRead < nReply; i++)
+            {
+                int nBytes = XSock_Read(&client, sReply + nRead, nReply - (size_t)nRead);
+                if (nBytes <= 0) break;
+                nRead += nBytes;
+            }
+        }
+
+        CHECK(nSent == (int)nMessage, "The whole message is sent");
+        CHECK(nRead == (int)nReply && !strcmp(sReply, server.pReply), "The whole answer is received, decrypted");
+
+        XSock_Close(&client);
+        XThread_Join(&thread);
+        CHECK(!strcmp(server.sReceived, pMessage), "The server received the message through TLS");
+    }
+
+    tls_fixture_end(&fixture);
     return 0;
 }
 
@@ -918,5 +1040,6 @@ XTEST_MAIN(
     XTEST_CASE(closed_session_io),
     XTEST_CASE(status_strings),
     XTEST_CASE(write_after_reset),
+    XTEST_CASE(plain_calls),
     XTEST_CASE(ssl_teardown)
 )

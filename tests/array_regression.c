@@ -537,6 +537,133 @@ static int XTest_sort_unsigned_keys(void)
     return 0;
 }
 
+static int XTest_insert_holes(void)
+{
+    /* An insertion in front of an empty slot is an insertion like any other:
+       the item is stored and the call succeeds, so XArray_InsertData never
+       frees an item the array still holds. */
+    xarray_t *pArr = XArray_New(NULL, 4, XFALSE);
+    CHECK(pArr != NULL, "Create an array");
+
+    int values[] = { 10, 20, 30 };
+    for (size_t i = 0; i < 3; i++)
+        CHECK(XArray_AddData(pArr, &values[i], sizeof(values[i])) == (int)i, "Fill the array");
+
+    xarray_data_t *pHole = XArray_Set(pArr, 1, NULL);
+    CHECK(pHole != NULL && XArray_GetData(pArr, 1) == NULL, "Punch a hole in the middle");
+    XArray_FreeData(pHole);
+
+    int inserted = 15;
+    xarray_data_t *pResult = XArray_InsertData(pArr, 1, &inserted, sizeof(inserted));
+    CHECK(pResult != NULL, "An insertion in front of an empty slot succeeds");
+    CHECK(pArr->nUsed == 4, "It adds one item");
+    CHECK(*(int*)XArray_GetData(pArr, 0) == 10 && *(int*)XArray_GetData(pArr, 1) == 15, "It lands where it was asked to");
+    CHECK(XArray_GetData(pArr, 2) == NULL && *(int*)XArray_GetData(pArr, 3) == 30, "The hole and the rest move up");
+
+    /* An insertion that finds an item in place reports the item it moved */
+    int second = 5;
+    xarray_data_t *pMoved = XArray_InsertData(pArr, 0, &second, sizeof(second));
+    CHECK(pMoved != NULL && *(int*)pMoved->pData == 10, "An insertion over an item reports the item it moved");
+    CHECK(pArr->nUsed == 5 && *(int*)XArray_GetData(pArr, 0) == 5, "And the new item is in front");
+
+    /* At the end, and at an index past the end */
+    int last = 99;
+    CHECK(XArray_InsertData(pArr, pArr->nUsed, &last, sizeof(last)) != NULL, "An insertion at the end appends");
+    CHECK(*(int*)XArray_GetData(pArr, pArr->nUsed - 1) == 99, "The appended item is last");
+    CHECK(XArray_InsertData(pArr, pArr->nUsed + 1, &last, sizeof(last)) == NULL, "An insertion past the end is refused");
+
+    /* A hole that is the last used slot */
+    pHole = XArray_Set(pArr, pArr->nUsed - 1, NULL);
+    CHECK(pHole != NULL && XArray_Get(pArr, pArr->nUsed - 1) == NULL, "Punch a hole at the end");
+    XArray_FreeData(pHole);
+
+    size_t nUsed = pArr->nUsed;
+    for (int i = 0; i < 40; i++)
+        CHECK(XArray_InsertData(pArr, nUsed - 1, &inserted, sizeof(inserted)) != NULL, "Insert repeatedly before a hole");
+    CHECK(pArr->nUsed == nUsed + 40 && XArray_GetData(pArr, pArr->nUsed - 1) == NULL, "The hole stays last as the array grows");
+
+    XArray_Destroy(pArr);
+    return 0;
+}
+
+static int XTest_null_and_bounds(void)
+{
+    /* Every accessor copes with a missing array, and a slot that does not
+       exist is never written or allocated for. */
+    int value = 7;
+    CHECK(XArray_GetDataOr(NULL, 0, &value) == &value, "A missing array gives the fallback");
+    CHECK(XArray_GetKey(NULL, 0) == 0, "A missing array has no keys");
+    CHECK(XArray_Set(NULL, 0, NULL) == NULL, "A missing array has nothing to replace");
+    CHECK(XArray_SetData(NULL, 0, &value, sizeof(value)) == NULL, "A missing array cannot be set");
+    CHECK(XArray_PushData(NULL, &value, sizeof(value)) == XARRAY_FAILURE, "A missing array cannot be pushed to");
+    CHECK(XArray_AddDataKey(NULL, &value, sizeof(value), 1) == XARRAY_FAILURE, "A missing array cannot be added to");
+    XArray_Swap(NULL, 0, 1);
+
+    xarray_t *pArr = XArray_New(NULL, 2, XFALSE);
+    CHECK(pArr != NULL, "Create an array");
+    CHECK(XArray_AddData(pArr, &value, sizeof(value)) == 0, "Add one item");
+
+    CHECK(XArray_SetData(pArr, pArr->nSize, &value, sizeof(value)) == NULL, "A slot past the capacity is not set");
+    CHECK(XArray_SetData(pArr, 1000, &value, sizeof(value)) == NULL, "Nor one far past it");
+    CHECK(pArr->nUsed == 1 && XArray_GetData(pArr, 1) == NULL, "Nothing was stored");
+
+    int other = 8;
+    xarray_data_t *pOld = XArray_SetData(pArr, 1, &other, sizeof(other));
+    CHECK(pOld == NULL && *(int*)XArray_GetData(pArr, 1) == 8, "An unused slot within the capacity is set");
+    CHECK(pArr->nUsed == 1, "Setting does not change what is counted as used");
+
+    CHECK(XArray_GetDataOr(pArr, 100, &value) == &value, "An index past the capacity gives the fallback");
+    CHECK(XArray_GetKey(pArr, 100) == 0, "An index past the capacity has no key");
+
+    XArray_Swap(pArr, 0, 5);
+    CHECK(*(int*)XArray_GetData(pArr, 0) == 7, "A swap with a slot past the used ones changes nothing");
+
+    xarray_data_t *pSet = XArray_Set(pArr, 1, NULL);
+    XArray_FreeData(pSet);
+    XArray_Destroy(pArr);
+    return 0;
+}
+
+static int XTest_search_holes(void)
+{
+    /* The searches skip empty slots instead of reading through them */
+    xarray_t *pArr = XArray_New(NULL, 8, XFALSE);
+    CHECK(pArr != NULL, "Create an array");
+
+    for (uint32_t i = 0; i < 6; i++)
+        CHECK(XArray_AddDataKey(pArr, &i, sizeof(i), i * 10) == (int)i, "Add keyed items");
+
+    xarray_data_t *pHole = XArray_Set(pArr, 2, NULL);
+    XArray_FreeData(pHole);
+
+    CHECK(XArray_LinearSearch(pArr, 30) == 3, "A linear search passes an empty slot");
+    CHECK(XArray_LinearSearch(pArr, 20) == XARRAY_FAILURE, "The key of the removed item is gone");
+    CHECK(XArray_DoubleSearch(pArr, 30) == 3, "A double ended search passes an empty slot");
+    CHECK(XArray_DoubleSearch(pArr, 20) == XARRAY_FAILURE, "And does not find the removed key");
+    CHECK(XArray_SentinelSearch(pArr, 50) == 5, "A sentinel search still finds the last item");
+    CHECK(XArray_SentinelSearch(pArr, 40) == 4, "And one before it, past the empty slot");
+    CHECK(XArray_SentinelSearch(pArr, 20) == XARRAY_FAILURE, "And does not find the removed key");
+    CHECK(XArray_BinarySearch(pArr, 0) == 0, "A binary search finds the first item");
+
+    int nFound = XArray_BinarySearch(pArr, 20);
+    CHECK(nFound == XARRAY_FAILURE, "A binary search stopped by an empty slot reports failure");
+
+    /* An empty last slot and an empty first slot */
+    pHole = XArray_Set(pArr, 5, NULL);
+    XArray_FreeData(pHole);
+    CHECK(XArray_SentinelSearch(pArr, 50) == XARRAY_FAILURE, "A sentinel search copes with an empty last slot");
+    CHECK(XArray_SentinelSearch(pArr, 40) == 4, "And still finds what is before it");
+    CHECK(XArray_GetData(pArr, 5) == NULL, "The empty last slot is left in place");
+
+    pHole = XArray_Set(pArr, 0, NULL);
+    XArray_FreeData(pHole);
+    CHECK(XArray_BinarySearch(pArr, 0) == XARRAY_FAILURE, "A binary search copes with an empty first slot");
+    CHECK(XArray_LinearSearch(pArr, 10) == 1, "A linear search copes with it too");
+
+    XArray_Destroy(pArr);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(pool_clear_reuse),
     XTEST_CASE(sort_scaling),
@@ -549,5 +676,8 @@ XTEST_MAIN(
     XTEST_CASE(fixed_capacity),
     XTEST_CASE(search_agreement),
     XTEST_CASE(heap_array),
-    XTEST_CASE(release_guards)
+    XTEST_CASE(release_guards),
+    XTEST_CASE(insert_holes),
+    XTEST_CASE(null_and_bounds),
+    XTEST_CASE(search_holes)
 )

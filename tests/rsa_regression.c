@@ -1,6 +1,8 @@
 /* libxutils: RSA key import, encryption, signature integrity and malformed keys. */
 #include "test.h"
 #include "rsa.h"
+#include "xfs.h"
+#include <limits.h>
 #include <unistd.h>
 
 static int XTest_signatures(void)
@@ -51,6 +53,9 @@ static int XTest_invalid_keys(void)
 {
     size_t nLength = 0;
     CHECK(XCrypt_RSA((const uint8_t*)"x", 1, "invalid key", 11, &nLength) == NULL, "Reject malformed public key");
+    nLength = 123;
+    CHECK(XDecrypt_RSA((const uint8_t*)"x", 1, "invalid key", 11, &nLength) == NULL && !nLength,
+        "Malformed decryption keys return no plaintext and reset the output length");
     CHECK(XCrypt_RS256((const uint8_t*)"x", 1, "invalid key", 11, &nLength) == NULL, "Reject malformed signing key");
     CHECK(XCrypt_VerifyRS256((const uint8_t*)"x", 1, (const uint8_t*)"x", 1, "invalid key", 11) != XSTDOK,
         "A parse failure cannot authenticate a signature");
@@ -354,6 +359,156 @@ static int XTest_build_support(void)
     return 0;
 }
 
+static int XTest_short_ciphertext(void)
+{
+    /* A ciphertext shorter than the modulus still decrypts to a block as
+       wide as the modulus: without padding the value one decrypts to 255
+       zero bytes and a one. The output has room for that whatever the input
+       length is. */
+    xrsa_ctx_t key;
+    CHECK(XRSA_GenerateKeys(&key, 2048, 65537) == XSTDOK, "Generate a key");
+    key.nPadding = RSA_NO_PADDING;
+
+    const uint8_t one[] = { 0x01 };
+    size_t nPlain = 0;
+    uint8_t *pPlain = XRSA_Decrypt(&key, one, sizeof(one), &nPlain);
+    CHECK(pPlain != NULL && nPlain == 256, "A one byte ciphertext decrypts to a full block");
+
+    int bZeros = 1;
+    for (size_t i = 0; i < 255; i++) if (pPlain[i] != 0) bZeros = 0;
+    CHECK(bZeros && pPlain[255] == 0x01 && pPlain[256] == '\0', "The block is the value one, terminated");
+    free(pPlain);
+
+    /* A padded decrypt of a short input is refused or, where OpenSSL rejects
+       implicitly, answered with a synthetic message; either fits the output */
+    key.nPadding = RSA_PKCS1_PADDING;
+    const uint8_t shortInput[] = { 0x00, 0x02, 0x11, 0x22 };
+    nPlain = 7;
+    pPlain = XRSA_Decrypt(&key, shortInput, sizeof(shortInput), &nPlain);
+    CHECK(pPlain == NULL ? nPlain == 0 : (nPlain <= 256 - 11 && pPlain[nPlain] == '\0'),
+        "A short padded ciphertext never yields more than the modulus holds");
+    free(pPlain);
+    XRSA_Destroy(&key);
+
+    /* A context without a key has nothing to work with */
+    xrsa_ctx_t empty;
+    XRSA_Init(&empty);
+    size_t nOut = 7;
+    CHECK(XRSA_Crypt(&empty, one, sizeof(one), &nOut) == NULL && nOut == 0, "Encryption without a key is refused");
+    CHECK(XRSA_PrivCrypt(&empty, one, sizeof(one), &nOut) == NULL, "Signing without a key is refused");
+    CHECK(XRSA_PubDecrypt(&empty, one, sizeof(one), &nOut) == NULL, "Verifying without a key is refused");
+    CHECK(XRSA_Decrypt(&empty, one, sizeof(one), &nOut) == NULL, "Decryption without a key is refused");
+    XRSA_Destroy(&empty);
+    return 0;
+}
+
+static int XTest_length_overflow(void)
+{
+#if SIZE_MAX <= UINT_MAX
+    return 77;
+#else
+    xrsa_ctx_t key;
+    CHECK(XRSA_GenerateKeys(&key, 1024, 65537) == XSTDOK, "Generate the integer-boundary key");
+    key.nPadding = RSA_NO_PADDING;
+    const uint8_t one = 1;
+    const size_t lengths[] = {(size_t)UINT_MAX + 2, (size_t)INT_MAX + 1, (size_t)UINT_MAX + 129, SIZE_MAX};
+    uint8_t *(*operations[])(xrsa_ctx_t*, const uint8_t*, size_t, size_t*) = {
+        XRSA_Crypt, XRSA_PrivCrypt, XRSA_PubDecrypt, XRSA_Decrypt
+    };
+    for (size_t i = 0; i < sizeof(operations) / sizeof(*operations); i++)
+        for (size_t j = 0; j < sizeof(lengths) / sizeof(*lengths); j++)
+        {
+            size_t nOutput = 17;
+            uint8_t *pResult = operations[i](&key, &one, lengths[j], &nOutput);
+            xbool_t bRejected = !pResult && !nOutput;
+            free(pResult);
+            if (!bRejected) XRSA_Destroy(&key);
+            CHECK(bRejected, "RSA input lengths cannot wrap to a smaller message at the OpenSSL boundary");
+        }
+    XRSA_Destroy(&key);
+    return 0;
+#endif
+}
+
+static int XTest_key_length_overflow(void)
+{
+    xrsa_ctx_t key;
+    XRSA_Init(&key);
+    CHECK(XRSA_SetPubKey(&key, "x", SIZE_MAX) != XSTDOK && !key.pPublicKey && !key.nPubKeyLen,
+        "An overflowing public PEM length is rejected before allocation or copying");
+    CHECK(XRSA_SetPrivKey(&key, "x", SIZE_MAX) != XSTDOK && !key.pPrivateKey && !key.nPrivKeyLen,
+        "An overflowing private PEM length is rejected before allocation or copying");
+    CHECK(XRSA_GenerateKeys(&key, 1024, 65537) == XSTDOK, "Create a key for direct import length checks");
+    size_t nPublic = key.nPubKeyLen, nPrivate = key.nPrivKeyLen;
+    key.nPubKeyLen = (size_t)INT_MAX + 1;
+    key.nPrivKeyLen = (size_t)INT_MAX + 1;
+    int nPublicStatus = XRSA_LoadPubKey(&key), nPrivateStatus = XRSA_LoadPrivKey(&key);
+    key.nPubKeyLen = nPublic;
+    key.nPrivKeyLen = nPrivate;
+    XRSA_Destroy(&key);
+    CHECK(nPublicStatus != XSTDOK && nPrivateStatus != XSTDOK, "PEM import lengths must fit the BIO integer parameter");
+#if SIZE_MAX > UINT_MAX
+    int nStatus = XRSA_GenerateKeys(&key, (size_t)UINT_MAX + 1025, 65537);
+    XRSA_Destroy(&key);
+    CHECK(nStatus != XSTDOK, "A requested key size must not wrap into a smaller RSA key");
+#endif
+    return 0;
+}
+
+static int XTest_partial_key_files(void)
+{
+    char root[] = "/tmp/xutils-rsa-files-XXXXXX";
+    CHECK(mkdtemp(root) != NULL, "Create the key reload directory");
+    char priv[128], pub[128], bad[128], missing[128];
+    snprintf(priv, sizeof(priv), "%s/private.pem", root);
+    snprintf(pub, sizeof(pub), "%s/public.pem", root);
+    snprintf(bad, sizeof(bad), "%s/invalid.pem", root);
+    snprintf(missing, sizeof(missing), "%s/missing.pem", root);
+    xrsa_ctx_t source, key;
+    CHECK(XRSA_GenerateKeys(&source, 1024, 65537) == XSTDOK, "Generate a matching file pair");
+    CHECK(XPath_Write(priv, (const uint8_t*)source.pPrivateKey, source.nPrivKeyLen, "cwt") == (int)source.nPrivKeyLen &&
+        XPath_Write(pub, (const uint8_t*)source.pPublicKey, source.nPubKeyLen, "cwt") == (int)source.nPubKeyLen &&
+        XPath_Write(bad, (const uint8_t*)"invalid key", 11, "cwt") == 11, "Write complete and malformed key files");
+    struct { const char *pPrivate; const char *pPublic; xbool_t bValid; } cases[] = {
+        {missing, pub, XFALSE}, {bad, pub, XFALSE}, {priv, missing, XFALSE}, {priv, bad, XFALSE},
+        {missing, missing, XFALSE}, {bad, bad, XFALSE}, {priv, pub, XTRUE}, {priv, NULL, XTRUE}, {NULL, pub, XTRUE}
+    };
+    xbool_t bValid = XTRUE;
+    for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); i++)
+    {
+        XRSA_Init(&key);
+        int nStatus = XRSA_LoadKeyFiles(&key, cases[i].pPrivate, cases[i].pPublic);
+        if (cases[i].bValid)
+        {
+            if (nStatus != XSTDOK || !key.pKeyPair) bValid = XFALSE;
+            if (cases[i].pPrivate && (!key.pPrivateKey || strcmp(key.pPrivateKey, source.pPrivateKey))) bValid = XFALSE;
+            if (cases[i].pPublic && (!key.pPublicKey || strcmp(key.pPublicKey, source.pPublicKey))) bValid = XFALSE;
+        }
+        else if (nStatus == XSTDOK || key.pKeyPair || key.pPrivateKey || key.pPublicKey || key.nPrivKeyLen || key.nPubKeyLen)
+            bValid = XFALSE;
+        XRSA_Destroy(&key);
+    }
+    XRSA_Init(&key);
+    CHECK(XRSA_LoadKeyFiles(&key, priv, pub) == XSTDOK, "Load the initial key pair");
+    CHECK(XRSA_LoadKeyFiles(&key, priv, pub) == XSTDOK, "Reload both PEM buffers on the same context");
+    const uint8_t data[] = {'f', 0, 'i', 0xff};
+    size_t nCipher = 0, nPlain = 0;
+    uint8_t *pCipher = XRSA_Crypt(&key, data, sizeof(data), &nCipher);
+    uint8_t *pPlain = pCipher ? XRSA_Decrypt(&source, pCipher, nCipher, &nPlain) : NULL;
+    xbool_t bRoundtrip = pPlain && nPlain == sizeof(data) && !memcmp(pPlain, data, sizeof(data));
+    free(pPlain);
+    free(pCipher);
+    XRSA_Destroy(&key);
+    XRSA_Destroy(&source);
+    unlink(priv);
+    unlink(pub);
+    unlink(bad);
+    rmdir(root);
+    CHECK(bValid, "Loading a requested key pair fails if either member is missing or malformed and clears partial state");
+    CHECK(bRoundtrip, "Repeated file import retains the exact key identity and binary payload");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(signatures),
     XTEST_CASE(encryption),
@@ -364,5 +519,9 @@ XTEST_MAIN(
     XTEST_CASE(key_files),
     XTEST_CASE(context),
     XTEST_CASE(size_limits),
-    XTEST_CASE(build_support)
+    XTEST_CASE(build_support),
+    XTEST_CASE(short_ciphertext),
+    XTEST_CASE(length_overflow),
+    XTEST_CASE(key_length_overflow),
+    XTEST_CASE(partial_key_files)
 )

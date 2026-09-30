@@ -83,22 +83,26 @@ int XThread_Run(xthread_t *pThread)
 
     if (pThread->nDetached)
     {
-        if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED))
+        nAttrStatus = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+        if (nAttrStatus != 0)
         {
             fprintf(stderr, "<%s:%d> %s Can not set detache state to the pthread attribute: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
+                __FILE__, __LINE__, __FUNCTION__, nAttrStatus);
 
             pthread_attr_destroy(&attr);
+            errno = nAttrStatus;
             return XSTDERR;
         }
     }
 
-    if (pthread_create(&pThread->threadId, &attr, pThread->functionCb, pThread->pArgument))
+    int nStatus = pthread_create(&pThread->threadId, &attr, pThread->functionCb, pThread->pArgument);
+    if (nStatus != 0)
     {
         fprintf(stderr, "<%s:%d> %s Can not create pthread: %d\n",
-            __FILE__, __LINE__, __FUNCTION__, errno);
+            __FILE__, __LINE__, __FUNCTION__, nStatus);
 
         pthread_attr_destroy(&attr);
+        errno = nStatus;
         return XSTDERR;
     }
 

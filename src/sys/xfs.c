@@ -395,7 +395,7 @@ uint8_t* XFile_LoadSize(xfile_t *pFile, size_t nMaxSize, size_t *pSize)
 
     } while (nBytes > 0);
 
-    if (!nOffset)
+    if (nBytes < 0 || !nOffset)
     {
         free(pBuffer);
         return NULL;
@@ -817,7 +817,7 @@ int XPath_SetPerm(const char *pPath, const char *pPerm)
 int XPath_GetPerm(char *pOutput, size_t nSize, const char *pPath)
 {
     xstat_t statbuf;
-    xstat(pPath, &statbuf);
+    if (xstat(pPath, &statbuf) < 0) return XSTDERR;
     return XPath_ModeToPerm(pOutput, nSize, statbuf.st_mode);
 }
 
@@ -827,11 +827,11 @@ long XPath_GetSize(const char *pPath)
 
     if (XFile_Open(&srcFile, pPath, NULL, NULL) >= 0)
     {
-        XFile_GetStats(&srcFile);
+        int nStatus = XFile_GetStats(&srcFile);
         size_t nSize = srcFile.nSize;
 
         XFile_Close(&srcFile);
-        return (long)nSize;
+        return nStatus < 0 ? XSTDERR : (long)nSize;
     }
 
     return XSTDERR;
@@ -848,9 +848,10 @@ int XPath_CopyFile(const char *pSrc, const char *pDst)
     xfile_t srcFile;
     if (XFile_Open(&srcFile, pSrc, "rn", NULL) < 0) return XSTDERR;
 
-    if (XFile_GetStats(&srcFile) < 0 || !S_ISREG(srcFile.nMode))
+    int nStatus = XFile_GetStats(&srcFile);
+    if (nStatus < 0 || !S_ISREG(srcFile.nMode))
     {
-        int nSavedErrno = S_ISREG(srcFile.nMode) ? errno : EINVAL;
+        int nSavedErrno = nStatus < 0 ? errno : EINVAL;
         XFile_Close(&srcFile);
         errno = nSavedErrno;
         return XSTDERR;

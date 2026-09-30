@@ -100,7 +100,8 @@ XSTATUS XCLI_ReadStdin(char *pBuffer, size_t nSize, xbool_t bAsync)
             fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
     }
 
-    nLength = read(STDIN_FILENO, pBuffer, nSize);
+    /* A buffer of more than one byte is terminated, so the read leaves room for it */
+    nLength = read(STDIN_FILENO, pBuffer, nSize > 1 ? nSize - 1 : nSize);
     if (nLength < 0)
     {
         if (errno == EWOULDBLOCK ||
@@ -210,6 +211,7 @@ XSTATUS XCLI_GetPass(const char *pText, char *pPass, size_t nSize)
 XSTATUS XCLI_GetInput(const char *pText, char *pInput, size_t nSize, xbool_t bCutNewLine)
 {
     XCHECK(pInput, XSTDINV);
+    XCHECK_NL((nSize > 0), XSTDINV);
     pInput[0] = XSTR_NUL;
 
     if (pText != NULL)
@@ -333,10 +335,18 @@ XSTATUS XCLIWin_AddLineFmt(xcli_win_t *pWin, const char *pFmt, ...)
     XSTRCPYFMT(pDest, pFmt, &nLength);
     if (pDest == NULL) return XSTDERR;
 
-    if (XArray_PushData(pLines, pDest, nLength) < 0)
+    xarray_data_t *pData = XArray_NewData(pLines, pDest, 0, 0);
+    if (pData == NULL)
     {
         XArray_Clear(pLines);
         free(pDest);
+        return XSTDERR;
+    }
+
+    pData->nSize = nLength;
+    if (XArray_Add(pLines, pData) < 0)
+    {
+        XArray_Clear(pLines);
         return XSTDERR;
     }
 

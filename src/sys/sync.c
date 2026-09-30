@@ -27,17 +27,32 @@ void xusleep(uint32_t nUsecs)
 #endif
 }
 
+#ifndef _WIN32
+/* The pthread functions return their error instead of setting errno */
+static int XSync_InitMutex(pthread_mutex_t *pMutex, xbool_t bRecursive)
+{
+    if (!bRecursive) return pthread_mutex_init(pMutex, NULL);
+
+    pthread_mutexattr_t mutexAttr;
+    int nStatus = pthread_mutexattr_init(&mutexAttr);
+    if (nStatus) return nStatus;
+
+    nStatus = pthread_mutexattr_settype(&mutexAttr, PTHREAD_MUTEX_RECURSIVE);
+    if (!nStatus) nStatus = pthread_mutex_init(pMutex, &mutexAttr);
+
+    pthread_mutexattr_destroy(&mutexAttr);
+    return nStatus;
+}
+#endif
+
 void XSync_InitRecursive(xsync_mutex_t *pSync)
 {
 #ifndef _WIN32
-    pthread_mutexattr_t mutexAttr;
-    if (pthread_mutexattr_init(&mutexAttr) ||
-        pthread_mutexattr_settype(&mutexAttr, PTHREAD_MUTEX_RECURSIVE) ||
-        pthread_mutex_init(&pSync->mutex, &mutexAttr) ||
-        pthread_mutexattr_destroy(&mutexAttr))
+    int nStatus = XSync_InitMutex(&pSync->mutex, XTRUE);
+    if (nStatus)
     {
         fprintf(stderr, "<%s:%d> %s: Can not initialize recursive mutex: %d\n",
-            __FILE__, __LINE__, __FUNCTION__, errno);
+            __FILE__, __LINE__, __FUNCTION__, nStatus);
 
         exit(EXIT_FAILURE);
     }
@@ -51,10 +66,11 @@ void XSync_InitRecursive(xsync_mutex_t *pSync)
 void XSync_Init(xsync_mutex_t *pSync)
 {
 #ifndef _WIN32
-    if (pthread_mutex_init(&pSync->mutex, NULL))
+    int nStatus = XSync_InitMutex(&pSync->mutex, XFALSE);
+    if (nStatus)
     {
         fprintf(stderr, "<%s:%d> %s: Can not initialize mutex: %d\n",
-            __FILE__, __LINE__, __FUNCTION__, errno);
+            __FILE__, __LINE__, __FUNCTION__, nStatus);
 
         exit(EXIT_FAILURE);
     }
@@ -68,29 +84,13 @@ void XSync_Init(xsync_mutex_t *pSync)
 XSTATUS XSync_InitAdv(xsync_mutex_t *pSync, xbool_t bRecursive)
 {
 #ifndef _WIN32
-    if (bRecursive)
+    int nStatus = XSync_InitMutex(&pSync->mutex, bRecursive);
+    if (nStatus)
     {
-        pthread_mutexattr_t mutexAttr;
-        if (pthread_mutexattr_init(&mutexAttr) ||
-            pthread_mutexattr_settype(&mutexAttr, PTHREAD_MUTEX_RECURSIVE) ||
-            pthread_mutex_init(&pSync->mutex, &mutexAttr) ||
-            pthread_mutexattr_destroy(&mutexAttr))
-        {
-            fprintf(stderr, "<%s:%d> %s: Can not initialize recursive mutex: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
+        fprintf(stderr, "<%s:%d> %s: Can not initialize %smutex: %d\n",
+            __FILE__, __LINE__, __FUNCTION__, bRecursive ? "recursive " : "", nStatus);
 
-            return XSTDERR;
-        }
-    }
-    else
-    {
-        if (pthread_mutex_init(&pSync->mutex, NULL))
-        {
-            fprintf(stderr, "<%s:%d> %s: Can not initialize mutex: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
-
-            return XSTDERR;
-        }
+        return XSTDERR;
     }
 #else
     InitializeCriticalSection(&pSync->mutex);
@@ -105,10 +105,11 @@ void XSync_Destroy(xsync_mutex_t *pSync)
     if (pSync->bEnabled)
     {
 #ifndef _WIN32
-        if(pthread_mutex_destroy(&pSync->mutex))
+        int nStatus = pthread_mutex_destroy(&pSync->mutex);
+        if (nStatus)
         {
             fprintf(stderr, "<%s:%d> %s: Can not deinitialize mutex: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
+                __FILE__, __LINE__, __FUNCTION__, nStatus);
 
             exit(EXIT_FAILURE);
         }
@@ -125,10 +126,11 @@ void XSync_Lock(xsync_mutex_t *pSync)
     if (pSync->bEnabled)
     {
 #ifndef _WIN32
-        if (pthread_mutex_lock(&pSync->mutex))
+        int nStatus = pthread_mutex_lock(&pSync->mutex);
+        if (nStatus)
         {
             fprintf(stderr, "<%s:%d> %s: Can not lock mutex: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
+                __FILE__, __LINE__, __FUNCTION__, nStatus);
 
             exit(EXIT_FAILURE);
         }
@@ -143,10 +145,11 @@ void XSync_Unlock(xsync_mutex_t *pSync)
     if (pSync->bEnabled)
     {
 #ifndef _WIN32
-        if (pthread_mutex_unlock(&pSync->mutex))
+        int nStatus = pthread_mutex_unlock(&pSync->mutex);
+        if (nStatus)
         {
             fprintf(stderr, "<%s:%d> %s: Can not unlock mutex: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
+                __FILE__, __LINE__, __FUNCTION__, nStatus);
 
             exit(EXIT_FAILURE);
         }
@@ -159,10 +162,11 @@ void XSync_Unlock(xsync_mutex_t *pSync)
 void XRWSync_Init(xsync_rw_t *pSync)
 {
 #ifndef _WIN32
-    if (pthread_rwlock_init(&pSync->rwLock, NULL))
+    int nStatus = pthread_rwlock_init(&pSync->rwLock, NULL);
+    if (nStatus)
     {
         fprintf(stderr, "<%s:%d> %s: Can not init rwlock: %d\n",
-            __FILE__, __LINE__, __FUNCTION__, errno);
+            __FILE__, __LINE__, __FUNCTION__, nStatus);
 
         exit(EXIT_FAILURE);
     }
@@ -179,10 +183,11 @@ void XRWSync_ReadLock(xsync_rw_t *pSync)
     if (pSync->bEnabled)
     {
 #ifndef _WIN32
-        if (pthread_rwlock_rdlock(&pSync->rwLock))
+        int nStatus = pthread_rwlock_rdlock(&pSync->rwLock);
+        if (nStatus)
         {
             fprintf(stderr, "<%s:%d> %s: Can not read lock rwlock: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
+                __FILE__, __LINE__, __FUNCTION__, nStatus);
 
             exit(EXIT_FAILURE);
         }
@@ -197,10 +202,11 @@ void XRWSync_WriteLock(xsync_rw_t *pSync)
     if (pSync->bEnabled)
     {
 #ifndef _WIN32
-        if (pthread_rwlock_wrlock(&pSync->rwLock))
+        int nStatus = pthread_rwlock_wrlock(&pSync->rwLock);
+        if (nStatus)
         {
             fprintf(stderr, "<%s:%d> %s: Can not write lock rwlock: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
+                __FILE__, __LINE__, __FUNCTION__, nStatus);
 
             exit(EXIT_FAILURE);
         }
@@ -216,10 +222,11 @@ void XRWSync_Unlock(xsync_rw_t *pSync)
     if (pSync->bEnabled)
     {
 #ifndef _WIN32
-        if (pthread_rwlock_unlock(&pSync->rwLock))
+        int nStatus = pthread_rwlock_unlock(&pSync->rwLock);
+        if (nStatus)
         {
             fprintf(stderr, "<%s:%d> %s: Can not unlock rwlock: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
+                __FILE__, __LINE__, __FUNCTION__, nStatus);
 
             exit(EXIT_FAILURE);
         }
@@ -239,10 +246,11 @@ void XRWSync_Destroy(xsync_rw_t *pSync)
     if (pSync->bEnabled)
     {
 #ifndef _WIN32
-        if (pthread_rwlock_destroy(&pSync->rwLock))
+        int nStatus = pthread_rwlock_destroy(&pSync->rwLock);
+        if (nStatus)
         {
             fprintf(stderr, "<%s:%d> %s: Can not destroy rwlock: %d\n",
-                __FILE__, __LINE__, __FUNCTION__, errno);
+                __FILE__, __LINE__, __FUNCTION__, nStatus);
 
             exit(EXIT_FAILURE);
         }

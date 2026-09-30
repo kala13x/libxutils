@@ -135,6 +135,36 @@ static int XTest_empty_body(void)
     return 0;
 }
 
+static int XTest_assemble_empty_body(void)
+{
+    for (int nResponse = 0; nResponse < 2; nResponse++)
+    {
+        xhttp_t http;
+        if (nResponse) XHTTP_InitResponse(&http, 200, "1.1");
+        else XHTTP_InitRequest(&http, XHTTP_POST, "/empty", "1.1");
+        CHECK(XHTTP_AddHeader(&http, "Content-Type", "application/octet-stream") > 0, "Set the body type");
+        CHECK(XHTTP_AddHeader(&http, "Content-Length", "9") > 0, "An explicit body replaces a stale length");
+        CHECK(XHTTP_AddHeader(&http, "Connection", "keep-alive") > 0, "Use a persistent connection");
+        xbyte_buffer_t *pWire = XHTTP_Assemble(&http, (const uint8_t*)"", 0);
+        CHECK(pWire != NULL, "Assemble an explicitly empty body");
+        const char *pLength = XHTTP_GetHeader(&http, "Content-Length");
+        CHECK(pLength != NULL && !strcmp(pLength, "0"), "An explicit empty body is length delimited");
+        xhttp_t parsed;
+        CHECK(XHTTP_ParseData(&parsed, pWire->pData, pWire->nUsed) == XHTTP_COMPLETE, "The empty message completes");
+        CHECK(parsed.nContentLength == 0 && XHTTP_GetBodySize(&parsed) == 0, "No body bytes are invented");
+        XHTTP_Clear(&parsed);
+        XHTTP_Clear(&http);
+    }
+
+    xhttp_t stream;
+    XHTTP_InitResponse(&stream, 200, "1.1");
+    CHECK(XHTTP_AddHeader(&stream, "Content-Type", "application/octet-stream") > 0, "Prepare a streaming response");
+    CHECK(XHTTP_Assemble(&stream, NULL, 0) != NULL, "Assemble headers without providing a body");
+    CHECK(XHTTP_GetHeader(&stream, "Content-Length") == NULL, "An unspecified streaming body retains its framing");
+    XHTTP_Clear(&stream);
+    return 0;
+}
+
 
 static int XTest_code_strings(void)
 {
@@ -703,6 +733,180 @@ static int XTest_many_header_lines(void)
     return 0;
 }
 
+static int XTest_header_delimiters(void)
+{
+    const char wire[] =
+        "GET / HTTP/1.1\r\n"
+        "X-Inner: a\rb\nc\r\rd\n\ne\r\n"
+        "X-Tail: value\r\r\n"
+        "X-Last: yes\r\n"
+        "Content-Length: 15\r\n\r\n"
+        "X-Body: no\r\n\r\nx";
+
+    xhttp_t http;
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)wire, sizeof(wire) - 1) == XHTTP_COMPLETE, "Headers end only at a CRLF pair");
+    CHECK(http.nHeaderCount == 4, "Only header lines before the body are counted");
+    const char *pValue = XHTTP_GetHeader(&http, "X-Inner");
+    CHECK(pValue != NULL && !strcmp(pValue, "a\rb\nc\r\rd\n\ne"), "Unpaired line delimiters stay in the value");
+    pValue = XHTTP_GetHeader(&http, "X-Tail");
+    CHECK(pValue != NULL && !strcmp(pValue, "value\r"), "A carriage return before the delimiter stays in the value");
+    pValue = XHTTP_GetHeader(&http, "X-Last");
+    CHECK(pValue != NULL && !strcmp(pValue, "yes"), "The final named header is parsed");
+    CHECK(XHTTP_GetHeader(&http, "X-Body") == NULL, "Body lines are not parsed as headers");
+    CHECK(!memcmp(http.rawData.pData, wire, sizeof(wire)), "Parsing preserves every byte of the message");
+    XHTTP_Clear(&http);
+    return 0;
+}
+
+static int XTest_start_line_colon(void)
+{
+    /* The start line is not a header whatever it holds: a colon in a request
+       target (an absolute URI, a port, a query) or in a reason phrase must not
+       make it one. */
+    const char request[] =
+        "GET http://example.com:8080/a:b?c=d:e HTTP/1.1\r\n"
+        "Host: example.com\r\n\r\n";
+
+    xhttp_t http;
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)request, sizeof(request) - 1) == XHTTP_COMPLETE,
+        "A request whose target holds colons parses");
+    CHECK(http.nHeaderCount == 1, "Only the real header is counted");
+    CHECK(XHTTP_GetHeader(&http, "get http") == NULL, "The request line is not stored as a header");
+    CHECK(strcmp(http.sUri, "http://example.com:8080/a:b?c=d:e") == 0, "The target keeps its colons");
+    CHECK(strcmp(XHTTP_GetHeader(&http, "Host"), "example.com") == 0, "The real header is kept");
+    XHTTP_Clear(&http);
+
+    const char response[] = "HTTP/1.1 200 OK: fine\r\nX-A: 1\r\n\r\n";
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)response, sizeof(response) - 1) == XHTTP_COMPLETE,
+        "A response whose reason phrase holds a colon parses");
+    CHECK(http.nStatusCode == 200 && http.nHeaderCount == 1, "The status line is not counted as a header");
+    CHECK(XHTTP_GetHeader(&http, "http/1.1 200 ok") == NULL, "The status line is not stored as a header");
+    XHTTP_Clear(&http);
+
+    /* A start line with nothing but a colon after the method still parses */
+    const char bare[] = "GET /:: HTTP/1.1\r\n\r\n";
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)bare, sizeof(bare) - 1) == XHTTP_COMPLETE, "A target of colons parses");
+    CHECK(http.nHeaderCount == 0 && strcmp(http.sUri, "/::") == 0, "And carries no headers at all");
+    XHTTP_Clear(&http);
+    return 0;
+}
+
+static int XTest_long_header_line(void)
+{
+    /* A header line is kept whole however long it is. A bearer token or a
+       cookie can run to kilobytes, and a clipped value is a different value. */
+    const size_t nLengths[] = { 8180, 8189, 8190, 8191, 8192, 8193, 8200, 16384, 30000 };
+
+    for (size_t i = 0; i < sizeof(nLengths) / sizeof(*nLengths); i++)
+    {
+        size_t nValue = nLengths[i];
+        char *pValue = (char*)malloc(nValue + 1);
+        CHECK(pValue != NULL, "Allocate the long header value");
+
+        for (size_t j = 0; j < nValue; j++) pValue[j] = (char)('a' + j % 26);
+        pValue[nValue] = '\0';
+
+        xbyte_buffer_t wire;
+        XByteBuffer_Init(&wire, 0, XTRUE);
+        CHECK(XByteBuffer_AddFmt(&wire, "GET / HTTP/1.1\r\nX-Before: 1\r\nCookie: %s\r\nX-After: 2\r\n\r\n", pValue) > 0,
+            "Build a request with one very long header line");
+
+        xhttp_t http;
+        CHECK(XHTTP_ParseData(&http, wire.pData, wire.nUsed) == XHTTP_COMPLETE, "The request parses");
+
+        const char *pCookie = XHTTP_GetHeader(&http, "Cookie");
+        CHECK(pCookie != NULL && strlen(pCookie) == nValue && strcmp(pCookie, pValue) == 0,
+            "The long header value is kept whole, byte for byte");
+        CHECK(strcmp(XHTTP_GetHeader(&http, "X-Before"), "1") == 0 && strcmp(XHTTP_GetHeader(&http, "X-After"), "2") == 0,
+            "The headers around the long line are unaffected");
+        CHECK(http.nHeaderCount == 3, "Every header is counted once");
+
+        XHTTP_Clear(&http);
+        XByteBuffer_Clear(&wire);
+        free(pValue);
+    }
+
+    return 0;
+}
+
+static int XTest_header_whitespace(void)
+{
+    /* Optional whitespace around a field value is not part of it (RFC 7230,
+       3.2.4). What is inside the value stays as it was sent. */
+    const char wire[] =
+        "GET / HTTP/1.1\r\n"
+        "X-Tab:\tvalue\r\n"
+        "X-Trail: value \t \r\n"
+        "X-Both: \t  both\t\r\n"
+        "X-Only: \t \r\n"
+        "X-Inner: a b\tc\r\n"
+        "X-Colons::: v\r\n"
+        "x-first: one\r\n"
+        "X-FIRST: two\r\n"
+        "X-Late:\r\n"
+        "X-Late: kept\r\n"
+        "no-colon-at-all\r\n"
+        ": nameless\r\n\r\n";
+
+    xhttp_t http;
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)wire, sizeof(wire) - 1) == XHTTP_COMPLETE, "The request parses");
+    CHECK(strcmp(XHTTP_GetHeader(&http, "X-Tab"), "value") == 0, "A leading tab is not part of the value");
+    CHECK(strcmp(XHTTP_GetHeader(&http, "X-Trail"), "value") == 0, "Trailing spaces and tabs are not part of it");
+    CHECK(strcmp(XHTTP_GetHeader(&http, "X-Both"), "both") == 0, "Whitespace on both sides is dropped");
+    CHECK(XHTTP_GetHeader(&http, "X-Only") == NULL, "A value of only whitespace is no value");
+    CHECK(strcmp(XHTTP_GetHeader(&http, "X-Inner"), "a b\tc") == 0, "Whitespace inside the value is kept");
+    CHECK(strcmp(XHTTP_GetHeader(&http, "X-Colons"), "v") == 0, "Extra colons after the name are skipped");
+    CHECK(strcmp(XHTTP_GetHeader(&http, "X-First"), "one") == 0, "The first of repeated names wins");
+    CHECK(strcmp(XHTTP_GetHeader(&http, "X-Late"), "kept") == 0, "An empty first occurrence does not claim the name");
+    CHECK(XHTTP_GetHeader(&http, "no-colon-at-all") == NULL, "A line without a colon is no header");
+    CHECK(http.nHeaderCount == 7, "Exactly the headers with a name and a value are stored");
+
+    /* Stored names are lower case, whatever the spelling on the wire */
+    CHECK(XMap_Get(&http.headerMap, "x-tab") != NULL && XMap_Get(&http.headerMap, "X-Tab") == NULL,
+        "Header names are stored in lower case");
+    XHTTP_Clear(&http);
+    return 0;
+}
+
+static int XTest_parse_restores_buffer(void)
+{
+    /* The parser works on the caller's bytes. Whatever the outcome they are
+       left as they were, so the same buffer can be parsed again or passed on. */
+    const char *pWires[] = {
+        "GARBAGE WITHOUT A VERSION\r\n\r\n",
+        "HTTP/1.1 999 Out Of Range\r\n\r\n",
+        "HTTP/1.1 42 Too Low\r\n\r\n",
+        "PATCH / HTTP/1.1\r\nHost: x\r\n\r\n",
+        "GET / HTTP/1.1\r\nHost: x\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nbody",
+        "GET / HTTP/1.1\r\nContent-Length: 10\r\n\r\npart"
+    };
+
+    for (size_t i = 0; i < sizeof(pWires) / sizeof(*pWires); i++)
+    {
+        size_t nLength = strlen(pWires[i]);
+        uint8_t *pCopy = (uint8_t*)malloc(nLength + 1);
+        CHECK(pCopy != NULL, "Allocate the caller owned wire");
+        memcpy(pCopy, pWires[i], nLength + 1);
+
+        for (int nPass = 0; nPass < 2; nPass++)
+        {
+            xhttp_t http;
+            XHTTP_Init(&http, XHTTP_DUMMY, XSTDNON);
+            XByteBuffer_SetData(&http.rawData, pCopy, nLength);
+            xhttp_status_t eStatus = XHTTP_Parse(&http);
+
+            CHECK(memcmp(pCopy, pWires[i], nLength + 1) == 0, "The caller's bytes are unchanged after any outcome");
+            CHECK(i < 4 ? eStatus == XHTTP_INVALID : eStatus != XHTTP_INVALID, "Only the malformed messages are invalid");
+            XHTTP_Clear(&http);
+        }
+
+        free(pCopy);
+    }
+
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(partial),
     XTEST_CASE(pipeline),
@@ -711,6 +915,7 @@ XTEST_MAIN(
     XTEST_CASE(long_basic_auth),
     XTEST_CASE(reuse),
     XTEST_CASE(empty_body),
+    XTEST_CASE(assemble_empty_body),
     XTEST_CASE(code_strings),
     XTEST_CASE(content_length),
     XTEST_CASE(start_line),
@@ -720,5 +925,10 @@ XTEST_MAIN(
     XTEST_CASE(callbacks),
     XTEST_CASE(lifecycle),
     XTEST_CASE(unix_and_auth),
-    XTEST_CASE(many_header_lines)
+    XTEST_CASE(many_header_lines),
+    XTEST_CASE(header_delimiters),
+    XTEST_CASE(start_line_colon),
+    XTEST_CASE(long_header_line),
+    XTEST_CASE(header_whitespace),
+    XTEST_CASE(parse_restores_buffer)
 )

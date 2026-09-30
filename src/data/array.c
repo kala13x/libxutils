@@ -319,6 +319,7 @@ int XArray_AddData(xarray_t *pArr, void *pData, size_t nSize)
 
 int XArray_PushData(xarray_t *pArr, void *pData, size_t nSize)
 {
+    if (pArr == NULL) return XARRAY_FAILURE;
     xarray_data_t *pNewData = XArray_NewData(pArr, pData, 0, 0);
     if (pNewData == NULL)
     {
@@ -332,6 +333,7 @@ int XArray_PushData(xarray_t *pArr, void *pData, size_t nSize)
 
 int XArray_AddDataKey(xarray_t *pArr, void *pData, size_t nSize, uint32_t nKey)
 {
+    if (pArr == NULL) return XARRAY_FAILURE;
     xarray_data_t *pNewData = XArray_NewData(pArr, pData, nSize, nKey);
 
     if (pNewData == NULL)
@@ -358,7 +360,7 @@ void* XArray_GetData(xarray_t *pArr, size_t nIndex)
 
 void* XArray_GetDataOr(xarray_t *pArr, size_t nIndex, void *pRet)
 {
-    if (nIndex >= pArr->nSize) return pRet;
+    if (pArr == NULL || nIndex >= pArr->nSize) return pRet;
     xarray_data_t *pArrData = pArr->pData[nIndex];
     return pArrData ? pArrData->pData : pRet;
 }
@@ -372,7 +374,7 @@ size_t XArray_GetSize(xarray_t *pArr, size_t nIndex)
 
 uint32_t XArray_GetKey(xarray_t *pArr, size_t nIndex)
 {
-    if (nIndex >= pArr->nSize) return 0;
+    if (pArr == NULL || nIndex >= pArr->nSize) return 0;
     xarray_data_t *pArrData = pArr->pData[nIndex];
     return pArrData ? pArrData->nKey : 0;
 }
@@ -415,7 +417,7 @@ void XArray_Delete(xarray_t *pArr, size_t nIndex)
 xarray_data_t* XArray_Set(xarray_t *pArr, size_t nIndex, xarray_data_t *pNewData)
 {
     xarray_data_t *pOldData = NULL;
-    if (nIndex < pArr->nSize)
+    if (pArr != NULL && nIndex < pArr->nSize)
     {
         pOldData = pArr->pData[nIndex];
         pArr->pData[nIndex] = pNewData;
@@ -426,6 +428,9 @@ xarray_data_t* XArray_Set(xarray_t *pArr, size_t nIndex, xarray_data_t *pNewData
 
 xarray_data_t* XArray_SetData(xarray_t *pArr, size_t nIndex, void *pData, size_t nSize)
 {
+    /* Nothing is created for a slot that does not exist, it would have no owner */
+    if (pArr == NULL || nIndex >= pArr->nSize) return NULL;
+
     xarray_data_t *pNewData = XArray_NewData(pArr, pData, nSize, 0);
     if (pNewData == NULL)
     {
@@ -448,16 +453,16 @@ xarray_data_t* XArray_Insert(xarray_t *pArr, size_t nIndex, xarray_data_t *pData
         return pData;
     }
 
-    xarray_data_t *pOldData = XArray_Set(pArr, nIndex, pData);
-    if (pOldData == NULL) return NULL;
+    /* The space is checked above, so the shift can not fail. It moves empty
+       slots too: an insertion in front of one is as good as any other. */
+    size_t nNextIndex = nIndex + 1;
+    size_t nTail = pArr->nUsed - nIndex;
 
-    size_t i, nNextIndex = nIndex + 1;
+    memmove(&pArr->pData[nNextIndex], &pArr->pData[nIndex], nTail * sizeof(xarray_data_t*));
+    pArr->pData[nIndex] = pData;
+    pArr->nUsed++;
 
-    for (i = nNextIndex; i < pArr->nUsed; i++)
-        pOldData = XArray_Set(pArr, i, pOldData);
-
-    XArray_Add(pArr, pOldData);
-    return pArr->pData[nNextIndex];
+    return pArr->pData[nNextIndex] != NULL ? pArr->pData[nNextIndex] : pData;
 }
 
 xarray_data_t* XArray_InsertData(xarray_t *pArr, size_t nIndex, void *pData, size_t nSize)
@@ -479,7 +484,8 @@ xarray_data_t* XArray_InsertData(xarray_t *pArr, size_t nIndex, void *pData, siz
 
 void XArray_Swap(xarray_t *pArr, size_t nIndex1, size_t nIndex2)
 {
-    if (nIndex1 >= pArr->nUsed ||
+    if (pArr == NULL ||
+        nIndex1 >= pArr->nUsed ||
         nIndex2 >= pArr->nUsed) return;
 
     xarray_data_t *pData1 = pArr->pData[nIndex1];
@@ -589,7 +595,7 @@ int XArray_LinearSearch(xarray_t *pArr, uint32_t nKey)
     for (i = 0; i < pArr->nUsed; i++)
     {
         xarray_data_t *pData = pArr->pData[i];
-        if (nKey == pData->nKey) return (int)i;
+        if (pData != NULL && nKey == pData->nKey) return (int)i;
     }
 
     return XARRAY_FAILURE;
@@ -601,7 +607,7 @@ int XArray_SentinelSearch(xarray_t *pArr, uint32_t nKey)
     int i, nRet = 0, nLast = (int)pArr->nUsed - 1;
 
     xarray_data_t *pLast = pArr->pData[nLast];
-    if (pLast->nKey == nKey) return nLast;
+    if (pLast != NULL && pLast->nKey == nKey) return nLast;
 
     xarray_data_t term = {.nKey = nKey, .nSize = 0, .pData = NULL};
     pArr->pData[nLast] = &term;
@@ -609,7 +615,7 @@ int XArray_SentinelSearch(xarray_t *pArr, uint32_t nKey)
     for (i = 0;; i++)
     {
         xarray_data_t *pData = pArr->pData[i];
-        if (nKey == pData->nKey)
+        if (pData != NULL && nKey == pData->nKey)
         {
             pArr->pData[nLast] = pLast;
             nRet = (i < nLast) ? i : -1;
@@ -628,10 +634,10 @@ int XArray_DoubleSearch(xarray_t *pArr, uint32_t nKey)
     while (nFront <= nBack)
     {
         xarray_data_t *pData = pArr->pData[nFront];
-        if (nKey == pData->nKey) return nFront;
+        if (pData != NULL && nKey == pData->nKey) return nFront;
 
         pData = pArr->pData[nBack];
-        if (nKey == pData->nKey) return nBack;
+        if (pData != NULL && nKey == pData->nKey) return nBack;
 
         nFront++;
         nBack--;
@@ -646,14 +652,16 @@ int XArray_BinarySearch(xarray_t *pArr, uint32_t nKey)
     int nLeft = 0, nRight = (int)pArr->nUsed - 1;
 
     xarray_data_t *pData = pArr->pData[nLeft];
-    if (pData->nKey == nKey) return nLeft;
+    if (pData != NULL && pData->nKey == nKey) return nLeft;
 
     while (nLeft <= nRight)
     {
         int nMiddle = nLeft + (nRight - nLeft) / 2;
         pData = pArr->pData[nMiddle];
 
-        if (pData->nKey < nKey) nLeft = nMiddle + 1;
+        /* An empty slot has no key to steer by */
+        if (pData == NULL) return XARRAY_FAILURE;
+        else if (pData->nKey < nKey) nLeft = nMiddle + 1;
         else if (pData->nKey == nKey) return nMiddle;
         else nRight = nMiddle - 1;
     }

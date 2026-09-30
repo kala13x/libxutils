@@ -134,9 +134,18 @@ static int XSearch_Callback(xsearch_t *pSearch, xsearch_entry_t *pEntry)
 
     if (nReturnValue > 0)
     {
-        if (XArray_AddData(&pSearch->fileArray, pEntry, 0) < 0)
+        xarray_data_t *pItem = XArray_NewData(&pSearch->fileArray, pEntry, 0, 0);
+        if (pItem == NULL)
         {
             XSearch_ErrorCallback(pSearch, "Failed to append entry: %s%s", pEntry->sPath, pEntry->sName);
+            XSearch_FreeEntry(pEntry);
+            return XSTDERR;
+        }
+
+        /* A failed add releases the item, and the entry with it */
+        if (XArray_Add(&pSearch->fileArray, pItem) < 0)
+        {
+            XSearch_ErrorCallback(pSearch, "Failed to append entry");
             return XSTDERR;
         }
 
@@ -336,9 +345,19 @@ static XSTATUS XSearch_Text(xsearch_t *pSearch, const char *pPath, const char *p
     xbyte_buffer_t buffer;
 
     nStatus = XSearch_LoadData(pSearch, &buffer, pPath, pName);
-    if (nStatus <= XSTDNON) return XSTDNON;
+    if (nStatus <= XSTDNON)
+    {
+        XByteBuffer_Clear(&buffer);
+        return XSTDNON;
+    }
 
-    if (pSearch->bInsensitive) xstrcase((char*)buffer.pData, XSTR_LOWER);
+    /* The whole buffer: a binary file can hold NUL bytes before the text searched for */
+    if (pSearch->bInsensitive)
+    {
+        size_t i;
+        for (i = 0; i < buffer.nUsed; i++)
+            buffer.pData[i] = (uint8_t)tolower(buffer.pData[i]);
+    }
     int nPosit = xstrsrcb((char*)buffer.pData, buffer.nUsed, pSearch->sText);
 
     if (nPosit < 0 || nPosit >= (int)buffer.nUsed)
