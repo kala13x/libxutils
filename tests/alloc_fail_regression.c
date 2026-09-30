@@ -839,14 +839,30 @@ static int scn_hmac(void)
 {
     const uint8_t sKey[] = "hmac-key";
     const uint8_t sData[] = "the message being authenticated";
+    const char *pSHA = "58ef59fbbcb5633430c5f69c5bd561d42f66fa8667fd7de1919e3ea56787195a";
+    const char *pMD5 = "ec7054bab643624274e822432fca3163";
+    const char *pBase64 = "WO9Z-7y1YzQwxfacW9Vh1C9m-oZn_X3hkZ4-pWeHGVo";
 
     uint8_t sDigest[XSHA256_DIGEST_SIZE];
-    XHMAC_SHA256(sDigest, sizeof(sDigest), sKey, sizeof(sKey) - 1, sData, sizeof(sData) - 1);
+    CHECK(XHMAC_SHA256(sDigest, sizeof(sDigest), sData, sizeof(sData) - 1, sKey, sizeof(sKey) - 1) == XSTDOK,
+        "The buffer HMAC requires no heap allocation");
 
     char sHex[XSHA256_LENGTH + 1];
-    XHMAC_SHA256_HEX(sHex, sizeof(sHex), sKey, sizeof(sKey) - 1, sData, sizeof(sData) - 1);
+    CHECK(XHMAC_SHA256_HEX(sHex, sizeof(sHex), sData, sizeof(sData) - 1, sKey, sizeof(sKey) - 1) == XSTDOK &&
+        !strcmp(sHex, pSHA), "The HMAC key and message produce the independently calculated SHA-256 tag");
 
-    return 0;
+    char *pTag = XHMAC_SHA256_NEW(sData, sizeof(sData) - 1, sKey, sizeof(sKey) - 1);
+    int nBroken = pTag ? strcmp(pTag, pSHA) != 0 : g_nFailAt < 1;
+    free(pTag);
+    pTag = XHMAC_MD5_NEW(sData, sizeof(sData) - 1, sKey, sizeof(sKey) - 1);
+    nBroken |= pTag ? strcmp(pTag, pMD5) != 0 : g_nFailAt < 1;
+    free(pTag);
+    size_t nLength = 123;
+    pTag = XHMAC_SHA256_B64(sData, sizeof(sData) - 1, sKey, sizeof(sKey) - 1, &nLength);
+    nBroken |= pTag ? strcmp(pTag, pBase64) != 0 || nLength != strlen(pBase64) : g_nFailAt < 1;
+    free(pTag);
+
+    return nBroken;
 }
 
 static int scn_addr_info(void)

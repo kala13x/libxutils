@@ -1,13 +1,17 @@
 /* System call failures must preserve ownership and allow a clean retry. */
 #include "test.h"
 #include "api.h"
+#include "ntp.h"
 #include <fcntl.h>
 #include <stdarg.h>
 #include <sys/timerfd.h>
+#include <sys/wait.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
 enum { FAULT_NONE, FAULT_SOCKET, FAULT_LISTEN, FAULT_CONNECT, FAULT_OPTION,
-    FAULT_GETFL, FAULT_SETFL, FAULT_SETFD, FAULT_ACCEPT, FAULT_EPOLL, FAULT_CONTROL, FAULT_TIMER, FAULT_ARM, FAULT_READ };
+    FAULT_GETFL, FAULT_SETFL, FAULT_SETFD, FAULT_ACCEPT, FAULT_EPOLL, FAULT_CONTROL, FAULT_TIMER, FAULT_ARM, FAULT_READ,
+    FAULT_SEND, FAULT_CHMOD, FAULT_ALLOC };
 
 static int g_nFault;
 static int g_nHits;
@@ -18,6 +22,12 @@ static int g_nOption;
 static int g_nOperation;
 static xbool_t g_bFallback;
 static int g_nReadFD = -1;
+static int g_nSkip;
+static void *g_pRetiringArray;
+static size_t g_nArrayCount;
+static xbool_t g_bArrayOverlap;
+
+xevent_status_t XAPI_RebuildWorkerEvents(xapi_t*);
 
 static void fault_arm(int nFault)
 {
@@ -29,6 +39,7 @@ static void fault_arm(int nFault)
 static xbool_t fault_hit(int nFault)
 {
     if (g_nFault != nFault || g_nHits) return XFALSE;
+    if (g_nSkip) { g_nSkip--; return XFALSE; }
     g_nHits++;
     errno = EIO;
     return XTRUE;
@@ -46,6 +57,38 @@ int __real_epoll_ctl(int, int, int, struct epoll_event*);
 int __real_timerfd_create(int, int);
 int __real_timerfd_settime(int, int, const struct itimerspec*, struct itimerspec*);
 ssize_t __real_read(int, void*, size_t);
+ssize_t __real_send(int, const void*, size_t, int);
+ssize_t __real_sendto(int, const void*, size_t, int, const struct sockaddr*, socklen_t);
+int __real_chmod(const char*, mode_t);
+void *__real_calloc(size_t, size_t);
+void __real_free(void*);
+
+void __wrap_free(void *pData)
+{
+    if (pData == g_pRetiringArray) g_pRetiringArray = NULL;
+    __real_free(pData);
+}
+
+void *__wrap_calloc(size_t nCount, size_t nSize)
+{
+    if (g_pRetiringArray && nCount == g_nArrayCount && nSize == sizeof(struct epoll_event)) g_bArrayOverlap = XTRUE;
+    return fault_hit(FAULT_ALLOC) ? NULL : __real_calloc(nCount, nSize);
+}
+
+ssize_t __wrap_send(int nFD, const void *pData, size_t nSize, int nFlags)
+{
+    return fault_hit(FAULT_SEND) ? -1 : __real_send(nFD, pData, nSize, nFlags);
+}
+
+ssize_t __wrap_sendto(int nFD, const void *pData, size_t nSize, int nFlags, const struct sockaddr *pAddr, socklen_t nAddrSize)
+{
+    return fault_hit(FAULT_SEND) ? -1 : __real_sendto(nFD, pData, nSize, nFlags, pAddr, nAddrSize);
+}
+
+int __wrap_chmod(const char *pPath, mode_t nMode)
+{
+    return fault_hit(FAULT_CHMOD) ? -1 : __real_chmod(pPath, nMode);
+}
 
 ssize_t __wrap_read(int nFD, void *pData, size_t nSize)
 {
@@ -219,15 +262,23 @@ static int XTest_accept(void)
     return 0;
 }
 
-typedef struct { int nErrors; int nClosed; int nDestroyed; xapi_session_t *pSession; } fault_api_t;
+typedef struct { int nErrors; int nClosed; int nDestroyed; int nTimers; xapi_session_t *pSession; } fault_api_t;
 
 static int fault_api_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 {
     fault_api_t *pTest = pCtx->pApi->pUserCtx;
     if (pCtx->eCbType == XAPI_CB_ERROR) pTest->nErrors++;
-    if (pCtx->eCbType == XAPI_CB_LISTENING || pCtx->eCbType == XAPI_CB_REGISTERED) pTest->pSession = pSession;
+    if (pCtx->eCbType == XAPI_CB_LISTENING || pCtx->eCbType == XAPI_CB_REGISTERED ||
+        pCtx->eCbType == XAPI_CB_CONNECTED) pTest->pSession = pSession;
     if (pCtx->eCbType == XAPI_CB_CLOSED) { pTest->pSession = NULL; pTest->nClosed++; }
     if (pCtx->eCbType == XAPI_CB_STATUS && pCtx->nStatus == XAPI_DESTROY) pTest->nDestroyed++;
+    if (pCtx->eCbType == XAPI_CB_STATUS && pCtx->nStatus == XAPI_TIMER_DESTROY) pTest->nTimers++;
+    if (pCtx->eCbType == XAPI_CB_ACCEPTED)
+    {
+        pTest->pSession = pSession;
+        pSession->bKeepRxBuffer = XTRUE;
+        return XAPI_SetEvents(pSession, XPOLLIN) > 0 ? XAPI_CONTINUE : XAPI_DISCONNECT;
+    }
     return XAPI_CONTINUE;
 }
 
@@ -237,7 +288,7 @@ static int XTest_api_setup(void)
     CHECK(mkdtemp(root) != NULL, "Create the private listener directory");
     char path[108];
     snprintf(path, sizeof(path), "%s/peer.sock", root);
-    const int faults[] = {FAULT_LISTEN, FAULT_EPOLL, FAULT_CONTROL};
+    const int faults[] = {FAULT_SOCKET, FAULT_GETFL, FAULT_SETFL, FAULT_LISTEN, FAULT_CHMOD, FAULT_EPOLL, FAULT_CONTROL};
     for (size_t i = 0; i < sizeof(faults) / sizeof(*faults); i++)
     {
         xapi_t api;
@@ -250,6 +301,7 @@ static int XTest_api_setup(void)
         endpoint.bUnix = XTRUE;
         endpoint.pAddr = path;
         endpoint.bForce = XTRUE;
+        endpoint.nMode = 0600;
         g_nOperation = EPOLL_CTL_ADD;
         fault_arm(faults[i]);
         int nStatus = XAPI_Listen(&api, &endpoint);
@@ -264,6 +316,329 @@ static int XTest_api_setup(void)
     }
     unlink(path);
     rmdir(root);
+    return 0;
+}
+
+static int XTest_api_connect(void)
+{
+    char root[] = "/tmp/xutils-connect-fault-XXXXXX";
+    CHECK(mkdtemp(root) != NULL, "Create an isolated connection endpoint");
+    char path[108];
+    snprintf(path, sizeof(path), "%s/peer.sock", root);
+    const int faults[] = {FAULT_SOCKET, FAULT_GETFL, FAULT_SETFL, FAULT_CONNECT, FAULT_EPOLL, FAULT_CONTROL};
+    const uint8_t request[] = {0, 0x81, 'r', 'e', 'q', 0xff};
+    const uint8_t response[] = {0x7f, 'o', 'k', 0, 0x80};
+    for (size_t i = 0; i < sizeof(faults) / sizeof(*faults); i++)
+    {
+        xsock_t listener;
+        CHECK(XSock_Create(&listener, XSOCK_UNIX_SERVER | XSOCK_NB | XSOCK_FORCE, path, 0) >= 0,
+            "Create the actual server before faulting the API client");
+        xapi_t api;
+        fault_api_t test = {0};
+        CHECK(XAPI_Init(&api, fault_api_cb, &test) == XSTDOK, "Initialize a reconnectable API client");
+        xapi_endpoint_t endpoint;
+        XAPI_InitEndpoint(&endpoint);
+        endpoint.eType = XAPI_SOCK;
+        endpoint.bUnix = XTRUE;
+        endpoint.pAddr = path;
+        g_nOperation = EPOLL_CTL_ADD;
+        fault_arm(faults[i]);
+        int nStatus = XAPI_Connect(&api, &endpoint);
+        xbool_t bClosed = fault_closed(g_nCreated);
+        CHECK(nStatus < 0 && g_nHits == 1 && test.nErrors == 1 && !XAPI_GetEventCount(&api) && bClosed,
+            "Every failed client setup reports one error and relinquishes its descriptor and registration");
+        fault_arm(FAULT_NONE);
+        xsock_t discarded;
+        while (XSock_Accept(&listener, &discarded) >= 0) XSock_Close(&discarded);
+        CHECK(XAPI_Connect(&api, &endpoint) == XSTDOK && test.pSession && XAPI_GetEventCount(&api) == 1,
+            "The same client retries with exactly one live session");
+        api.events.nEventMax = 4;
+        xsock_t peer;
+        CHECK(XSock_Accept(&listener, &peer) >= 0, "Accept the successfully retried client");
+        CHECK(XByteBuffer_Add(XAPI_GetTxBuff(test.pSession), request, sizeof(request)) == sizeof(request) &&
+            XAPI_EnableEvent(test.pSession, XPOLLOUT) > 0, "Queue the exact binary request through XAPI");
+        for (int j = 0; j < 20 && test.pSession->txBuffer.nUsed; j++) XAPI_Service(&api, 10);
+        uint8_t bytes[32];
+        int nBytes = XSock_Read(&peer, bytes, sizeof(bytes));
+        CHECK(nBytes == sizeof(request) && !memcmp(bytes, request, sizeof(request)),
+            "The server receives every byte of the intended request after recovery");
+        CHECK(XSock_Write(&peer, response, sizeof(response)) == sizeof(response), "Send the exact binary server response");
+        test.pSession->bKeepRxBuffer = XTRUE;
+        for (int j = 0; j < 20 && test.pSession->rxBuffer.nUsed < sizeof(response); j++) XAPI_Service(&api, 10);
+        CHECK(test.pSession->rxBuffer.nUsed == sizeof(response) &&
+            !memcmp(test.pSession->rxBuffer.pData, response, sizeof(response)),
+            "XAPI delivers the exact server response to the recovered client");
+        XSock_Close(&peer);
+        XSock_Close(&listener);
+        XAPI_Destroy(&api);
+        CHECK(test.nClosed == 1 && test.nDestroyed == 1, "The recovered session and event backend close exactly once");
+    }
+    unlink(path);
+    rmdir(root);
+    return 0;
+}
+
+static int XTest_ntp_failure(void)
+{
+    int nServer = socket(AF_INET, SOCK_DGRAM, 0);
+    struct sockaddr_in addr = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+    socklen_t nSize = sizeof(addr);
+    CHECK(nServer >= 0 && !bind(nServer, (struct sockaddr*)&addr, nSize) &&
+        !getsockname(nServer, (struct sockaddr*)&addr, &nSize), "Keep NTP failure traffic on a private local socket");
+    const int faults[] = {FAULT_SEND, FAULT_OPTION};
+    for (size_t i = 0; i < sizeof(faults) / sizeof(*faults); i++)
+    {
+        xtime_t time;
+        g_nOption = SO_RCVTIMEO;
+        fault_arm(faults[i]);
+        int nStatus = XNTP_GetDate("127.0.0.1", ntohs(addr.sin_port), &time);
+        int nHits = g_nHits;
+        xbool_t bClosed = fault_closed(g_nCreated);
+        fault_arm(FAULT_NONE);
+        CHECK(nHits == 1 && nStatus == XSTDERR && bClosed,
+            "A failed NTP send or timeout setup returns no date and closes the socket");
+    }
+    close(nServer);
+    return 0;
+}
+
+static int fault_worker_peer(xapi_t *pApi, fault_api_t *pTest, int *pPair, int *pTimerFD)
+{
+    CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pPair) == 0, "Create a worker-owned transport");
+    xapi_endpoint_t endpoint;
+    XAPI_InitEndpoint(&endpoint);
+    endpoint.eType = XAPI_SOCK;
+    endpoint.eRole = XAPI_PEER;
+    endpoint.nFD = pPair[0];
+    endpoint.nEvents = XPOLLIN;
+    CHECK(XAPI_AddEvent(pApi, &endpoint) == XSTDOK && pTest->pSession, "Register a worker-owned session");
+    CHECK(XAPI_AddTimer(pTest->pSession, 10000) == XSTDOK, "Attach a timer to its owning session");
+    *pTimerFD = pTest->pSession->pTimer->nFD;
+    pTest->pSession->bKeepRxBuffer = XTRUE;
+    pApi->events.nEventMax = 16;
+    return 0;
+}
+
+static int fault_worker_exchange(xapi_t *pApi, xapi_session_t *pSession, int nPeer)
+{
+    const uint8_t request[] = {0, 'w', 'o', 'r', 'k', 0xff};
+    const uint8_t response[] = {0x80, 'o', 'k', 0};
+    CHECK(write(nPeer, request, sizeof(request)) == sizeof(request), "Send the exact request after a worker backend change");
+    for (int i = 0; i < 20 && pSession->rxBuffer.nUsed < sizeof(request); i++) XAPI_Service(pApi, 10);
+    CHECK(pSession->rxBuffer.nUsed == sizeof(request) && !memcmp(pSession->rxBuffer.pData, request, sizeof(request)),
+        "The surviving backend routes every request byte to its original session");
+    CHECK(XByteBuffer_Add(&pSession->txBuffer, response, sizeof(response)) == sizeof(response) &&
+        XAPI_EnableEvent(pSession, XPOLLOUT) > 0, "Queue the exact worker response");
+    for (int i = 0; i < 20 && pSession->txBuffer.nUsed; i++) XAPI_Service(pApi, 10);
+    uint8_t bytes[16];
+    CHECK(recv(nPeer, bytes, sizeof(bytes), MSG_DONTWAIT) == sizeof(response) && !memcmp(bytes, response, sizeof(response)),
+        "The peer receives precisely the worker's intended response");
+    return 0;
+}
+
+static int XTest_worker_rebuild(void)
+{
+    const struct { int nFault; int nSkip; } cases[] = {
+        {FAULT_NONE, 0}, {FAULT_ALLOC, 0}, {FAULT_ALLOC, 1}, {FAULT_EPOLL, 0}, {FAULT_CONTROL, 0}, {FAULT_CONTROL, 3}
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); i++)
+    {
+        xapi_t api;
+        fault_api_t test = {0};
+        int pairs[3][2], timers[3];
+        xapi_session_t *sessions[3];
+        CHECK(XAPI_Init(&api, fault_api_cb, &test) == XSTDOK, "Initialize a backend with multiple sessions and timers");
+        for (int j = 0; j < 3; j++)
+        {
+            CHECK(fault_worker_peer(&api, &test, pairs[j], &timers[j]) == 0, "Create distinct worker-owned sessions");
+            sessions[j] = test.pSession;
+        }
+        fault_arm(cases[i].nFault);
+        g_nSkip = cases[i].nSkip;
+        g_nOperation = EPOLL_CTL_ADD;
+        int nStatus = XAPI_RebuildWorkerEvents(&api);
+        int nHits = g_nHits;
+        fault_arm(FAULT_NONE);
+        g_nSkip = 0;
+        if (cases[i].nFault == FAULT_NONE)
+        {
+            CHECK(nStatus == XEVENTS_SUCCESS && XAPI_GetEventCount(&api) == 6, "A rebuild retains all sessions and their timers");
+            for (int j = 0; j < 3; j++)
+                CHECK(fault_worker_exchange(&api, sessions[j], pairs[j][1]) == 0, "Each rebuilt session remains bidirectional");
+        }
+        else
+        {
+            int nExpected = cases[i].nFault == FAULT_ALLOC ? XEVENTS_EALLOC :
+                cases[i].nFault == FAULT_EPOLL ? XEVENTS_ECREATE : XEVENTS_ECTL;
+            CHECK(nStatus == nExpected && nHits == 1, "The requested rebuild failure reports its exact status");
+        }
+        XAPI_Destroy(&api);
+        xbool_t bClosed = XTRUE;
+        for (int j = 0; j < 3; j++)
+        {
+            if (!fault_closed(pairs[j][0]) || !fault_closed(timers[j])) bClosed = XFALSE;
+            close(pairs[j][1]);
+        }
+        CHECK(bClosed && test.nClosed == 3 && test.nTimers == 3 && test.nDestroyed == 1,
+            "Successful and failed rebuilds relinquish each session, timer and backend exactly once");
+    }
+    return 0;
+}
+
+static int XTest_worker_parent(void)
+{
+    char root[] = "/tmp/xutils-worker-fault-XXXXXX";
+    CHECK(mkdtemp(root) != NULL, "Create a private inherited listener");
+    char path[108];
+    snprintf(path, sizeof(path), "%s/peer.sock", root);
+    const int faults[] = {FAULT_EPOLL, FAULT_CONTROL};
+    for (size_t i = 0; i < sizeof(faults) / sizeof(*faults); i++)
+    {
+        xapi_t api;
+        fault_api_t test = {0};
+        CHECK(XAPI_Init(&api, fault_api_cb, &test) == XSTDOK, "Initialize the parent API");
+        xapi_endpoint_t endpoint;
+        XAPI_InitEndpoint(&endpoint);
+        endpoint.eType = XAPI_SOCK;
+        endpoint.bUnix = XTRUE;
+        endpoint.bForce = XTRUE;
+        endpoint.pAddr = path;
+        CHECK(XAPI_Listen(&api, &endpoint) == XSTDOK && test.pSession && XAPI_AddTimer(test.pSession, 10000) == XSTDOK,
+            "Create a real listener and timer that parent and child will inherit");
+        int nListener = test.pSession->sock.nFD, nTimer = test.pSession->pTimer->nFD;
+        api.events.nEventMax = 16;
+        pid_t nChild = fork();
+        CHECK(nChild >= 0, "Fork the worker isolation fixture");
+        if (!nChild)
+        {
+            fault_arm(faults[i]);
+            g_nOperation = EPOLL_CTL_ADD;
+            int nStatus = XAPI_RebuildWorkerEvents(&api);
+            fault_arm(FAULT_NONE);
+            XAPI_Destroy(&api);
+            xbool_t bClosed = fault_closed(nListener) && fault_closed(nTimer);
+            int nExpected = faults[i] == FAULT_EPOLL ? XEVENTS_ECREATE : XEVENTS_ECTL;
+            exit(nStatus == nExpected && test.nClosed == 1 && test.nTimers == 1 && bClosed ? 0 : 1);
+        }
+        int nStatus = 0;
+        CHECK(waitpid(nChild, &nStatus, 0) == nChild, "Reap the failed worker");
+        xbool_t bChildClean = WIFEXITED(nStatus) && WEXITSTATUS(nStatus) == 0;
+        xsock_t client;
+        CHECK(XSock_Create(&client, XSOCK_UNIX_CLIENT, path, 0) >= 0, "Connect to the parent's surviving listener");
+        for (int j = 0; j < 20 && test.pSession->eRole == XAPI_SERVER; j++) XAPI_Service(&api, 10);
+        CHECK(test.pSession->eRole == XAPI_PEER && fault_worker_exchange(&api, test.pSession, client.nFD) == 0,
+            "Cleaning a failed worker preserves the parent's inherited registration and transport");
+        XAPI_Destroy(&api);
+        XSock_Close(&client);
+        CHECK(bChildClean && test.nClosed == 2 && test.nTimers == 1, "Both processes clean up their own ownership exactly once");
+    }
+    unlink(path);
+    rmdir(root);
+    return 0;
+}
+
+static int XTest_worker_limits(void)
+{
+    xapi_t api;
+    fault_api_t test = {0};
+    int pair[2], nTimer;
+    CHECK(XAPI_Init(&api, fault_api_cb, &test) == XSTDOK && fault_worker_peer(&api, &test, pair, &nTimer) == 0,
+        "Create a live session and timer before exhausting descriptor capacity");
+    struct rlimit original, limited;
+    CHECK(!getrlimit(RLIMIT_NOFILE, &original), "Save the descriptor limit");
+    limited = original;
+    if (limited.rlim_cur > 64) limited.rlim_cur = 64;
+    CHECK(!setrlimit(RLIMIT_NOFILE, &limited), "Bound the descriptor exhaustion fixture");
+    int fillers[64], nCount = 0;
+    while (nCount < 64)
+    {
+        int nFD = open("/dev/null", O_RDONLY);
+        if (nFD < 0) break;
+        fillers[nCount++] = nFD;
+    }
+    xbool_t bFull = errno == EMFILE && nCount < 64;
+    int nStatus = XAPI_RebuildWorkerEvents(&api);
+    int nRestore = setrlimit(RLIMIT_NOFILE, &original);
+    for (int i = 0; i < nCount; i++) close(fillers[i]);
+    int nExchange = nStatus == XEVENTS_SUCCESS ? fault_worker_exchange(&api, test.pSession, pair[1]) : 1;
+    XAPI_Destroy(&api);
+    close(pair[1]);
+    CHECK(bFull && !nRestore, "The test actually exhausts descriptors and restores the process limit");
+    CHECK(nStatus == XEVENTS_SUCCESS && !nExchange && test.nClosed == 1 && test.nTimers == 1,
+        "Replacing a worker backend reuses its descriptor slot even at the descriptor limit");
+    return 0;
+}
+
+static int XTest_worker_peak(void)
+{
+    xapi_t api;
+    fault_api_t test = {0};
+    int pair[2], nTimer;
+    CHECK(XAPI_Init(&api, fault_api_cb, &test) == XSTDOK && fault_worker_peer(&api, &test, pair, &nTimer) == 0,
+        "Prepare a backend whose event array will be replaced");
+    g_pRetiringArray = api.events.pEventArray;
+    g_nArrayCount = api.events.nEventMax;
+    g_bArrayOverlap = XFALSE;
+    int nStatus = XAPI_RebuildWorkerEvents(&api);
+    xbool_t bOverlap = g_bArrayOverlap, bReleased = g_pRetiringArray == NULL;
+    g_pRetiringArray = NULL;
+    XAPI_Destroy(&api);
+    close(pair[1]);
+    CHECK(nStatus == XEVENTS_SUCCESS && bReleased && !bOverlap,
+        "Rebuilding releases the old event array before allocating its replacement");
+    return 0;
+}
+
+static uint32_t fault_epoll_flags(int nBackend, int nPeer)
+{
+    char path[64], line[256];
+    snprintf(path, sizeof(path), "/proc/self/fdinfo/%d", nBackend);
+    FILE *pFile = fopen(path, "r");
+    if (!pFile) return 0;
+    uint32_t nFound = 0;
+    while (fgets(line, sizeof(line), pFile))
+    {
+        int nFD;
+        unsigned int nFlags;
+        if (sscanf(line, "tfd: %d events: %x", &nFD, &nFlags) == 2 && nFD == nPeer) nFound = nFlags;
+    }
+    fclose(pFile);
+    return nFound;
+}
+
+static int XTest_worker_flags(void)
+{
+    char root[] = "/tmp/xutils-worker-flags-XXXXXX", path[108];
+    CHECK(mkdtemp(root), "Create a private listener for kernel registration checks");
+    snprintf(path, sizeof(path), "%s/http.sock", root);
+    xbool_t bValid = XTRUE;
+    for (int nExclusive = 0; nExclusive < 2; nExclusive++)
+    {
+        xapi_t api;
+        fault_api_t test = {0};
+        XAPI_Init(&api, fault_api_cb, &test);
+        xapi_endpoint_t endpoint;
+        XAPI_InitEndpoint(&endpoint);
+        endpoint.eType = XAPI_HTTP;
+        endpoint.bUnix = endpoint.bForce = XTRUE;
+        endpoint.pAddr = path;
+        endpoint.bExclusive = nExclusive;
+        CHECK(XAPI_Listen(&api, &endpoint) == XSTDOK && test.pSession, "Register a listener with the requested wakeup mode");
+        api.events.nEventMax = 16;
+        int nFD = test.pSession->sock.nFD;
+        uint32_t nBefore = fault_epoll_flags(api.events.nEventFd, nFD);
+        for (int i = 0; i < 3; i++)
+        {
+            int nStatus = XAPI_RebuildWorkerEvents(&api);
+            uint32_t nAfter = fault_epoll_flags(api.events.nEventFd, nFD);
+            if (nStatus != XEVENTS_SUCCESS || !(nBefore & XPOLLIN) ||
+                !!(nBefore & EPOLLEXCLUSIVE) != nExclusive || nBefore != nAfter) bValid = XFALSE;
+        }
+        XAPI_Destroy(&api);
+    }
+    unlink(path);
+    rmdir(root);
+    CHECK(bValid, "A worker rebuild preserves the listener's actual kernel flags, including optional EPOLLEXCLUSIVE");
     return 0;
 }
 
@@ -437,7 +812,8 @@ static int XTest_timer_read(void)
                 fault_dispatch_t test = {0};
                 test.nAction = actions[i];
                 test.bDefer = nDefer;
-                CHECK(XEvents_Create(&events, 4, &test, fault_dispatch_cb, nHash) == XEVENTS_SUCCESS, "Create the failing timer loop");
+                CHECK(XEvents_Create(&events, 4, &test, fault_dispatch_cb, nHash) == XEVENTS_SUCCESS,
+                    "Create the failing timer loop");
                 xevent_data_t *pTimer = XEvents_AddTimer(&events, NULL, 1);
                 CHECK(pTimer != NULL, "Arm a real timerfd");
                 g_nReadFD = pTimer->nFD;
@@ -448,7 +824,8 @@ static int XTest_timer_read(void)
                 fault_arm(FAULT_NONE);
                 g_nReadFD = -1;
                 XEvents_Destroy(&events);
-                CHECK(nHits == 1 && test.nErrors == 1 && !test.nRead, "A timer read failure reaches the error callback exactly once");
+                CHECK(nHits == 1 && test.nErrors == 1 && !test.nRead,
+                    "A timer read failure reaches the error callback exactly once");
                 CHECK(bRemoved && test.nCleared == 1, "The failed timer is released once for every callback response");
                 CHECK(test.nUser == (nDefer ? 2 : 0), "Deferred error handling completes the requested user callback sequence");
                 CHECK(nStatus == (actions[i] == XEVENTS_BREAK ? XEVENTS_EBREAK : XEVENTS_SUCCESS),
@@ -468,7 +845,7 @@ static int XTest_user_actions(void)
             xevents_t events;
             fault_dispatch_t test = {0};
             test.nAction = actions[i];
-            CHECK(XEvents_Create(&events, 4, &test, fault_dispatch_cb, nHash) == XEVENTS_SUCCESS, "Create the user callback loop");
+            CHECK(XEvents_Create(&events, 4, &test, fault_dispatch_cb, nHash) == XEVENTS_SUCCESS, "Create the callback loop");
             xevent_data_t *pEvent = XEvents_RegisterEvent(&events, NULL, pair[0], XPOLLIN, XEVENT_TYPE_CUSTOM);
             CHECK(pEvent && write(pair[1], "x", 1) == 1, "Publish the exact event byte");
             int nStatus = XEvents_Service(&events, 1000);
@@ -477,7 +854,8 @@ static int XTest_user_actions(void)
             XEvents_Destroy(&events);
             close(pair[0]);
             close(pair[1]);
-            CHECK(test.nRead == 1 && test.nUser == 2 && !test.nErrors && !test.bFailed, "The event and both requested user calls run once");
+            CHECK(test.nRead == 1 && test.nUser == 2 && !test.nErrors && !test.bFailed,
+                "The event and both requested user calls run once");
             CHECK(bRemoved == (actions[i] == XEVENTS_DISCONNECT), "A deferred disconnect removes its event during service");
             CHECK(test.nCleared == 1 && nStatus == (actions[i] == XEVENTS_BREAK ? XEVENTS_EBREAK : XEVENTS_SUCCESS),
                 "Deferred actions retain their meaning and clear ownership exactly once");
@@ -490,6 +868,13 @@ XTEST_MAIN(
     XTEST_CASE(nonblock),
     XTEST_CASE(accept),
     XTEST_CASE(api_setup),
+    XTEST_CASE(api_connect),
+    XTEST_CASE(ntp_failure),
+    XTEST_CASE(worker_rebuild),
+    XTEST_CASE(worker_parent),
+    XTEST_CASE(worker_limits),
+    XTEST_CASE(worker_peak),
+    XTEST_CASE(worker_flags),
     XTEST_CASE(api_timer),
     XTEST_CASE(event_destroy),
     XTEST_CASE(api_destroy),

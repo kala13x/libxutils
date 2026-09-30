@@ -32,6 +32,11 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    xutils_regression(worker_feature feature direct one two four eight shared unix restart_one restart_four churn repeated capacity)
+    target_link_options(worker_feature PRIVATE -Wl,--wrap=waitpid)
+    set_tests_properties(worker_feature.direct worker_feature.one worker_feature.two worker_feature.four
+        worker_feature.eight worker_feature.shared worker_feature.unix worker_feature.restart_one
+        worker_feature.restart_four worker_feature.churn PROPERTIES TIMEOUT 120)
     xutils_regression(thread_fault_regression sys start mutex fatal task)
     target_link_options(thread_fault_regression PRIVATE -Wl,--wrap=pthread_attr_init -Wl,--wrap=pthread_attr_destroy
         -Wl,--wrap=pthread_attr_setstacksize -Wl,--wrap=pthread_attr_setdetachstate -Wl,--wrap=pthread_create
@@ -44,10 +49,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(xfs_fault_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=open -Wl,--wrap=fstat
         -Wl,--wrap=read -Wl,--wrap=write)
     xutils_regression(sys_fault_regression net create nonblock accept api_setup api_timer event_destroy api_destroy
-        timer_read user_actions)
+        timer_read user_actions api_connect ntp_failure worker_rebuild worker_parent worker_limits worker_peak worker_flags)
     target_link_options(sys_fault_regression PRIVATE -Wl,--wrap=socket -Wl,--wrap=listen -Wl,--wrap=connect
         -Wl,--wrap=setsockopt -Wl,--wrap=fcntl -Wl,--wrap=accept -Wl,--wrap=accept4
-        -Wl,--wrap=epoll_create1 -Wl,--wrap=epoll_ctl -Wl,--wrap=timerfd_create -Wl,--wrap=timerfd_settime -Wl,--wrap=read)
+        -Wl,--wrap=epoll_create1 -Wl,--wrap=epoll_ctl -Wl,--wrap=timerfd_create -Wl,--wrap=timerfd_settime
+        -Wl,--wrap=read -Wl,--wrap=send -Wl,--wrap=sendto -Wl,--wrap=chmod -Wl,--wrap=calloc -Wl,--wrap=free)
     if(OPENSSL_FOUND)
         xutils_regression(rsa_fault_regression crypt generate import replace errors)
         target_link_options(rsa_fault_regression PRIVATE -Wl,--wrap=BN_new -Wl,--wrap=BN_set_word -Wl,--wrap=RSA_new
@@ -245,8 +251,10 @@ if(UNIX)
         target_link_options(cpu_fallback_regression PRIVATE -Wl,--wrap=sysconf -Wl,--wrap=XPath_LoadBuffer)
         xutils_regression(mon_regression sys lifecycle sampling restart target_pid)
         xutils_regression(mon_fixture_regression sys temperature_labels temperature_names temperature_bounds
-            sensor_index cpu_counters cpu_wide process_names network_rates network_members memory)
-        target_link_options(mon_fixture_regression PRIVATE -Wl,--wrap=open -Wl,--wrap=opendir)
+            sensor_index cpu_counters cpu_wide process_names cpu_hotplug cpu_sparse cpu_large load_invalid
+            cpu_faults cpu_read_error cpu_concurrent network_rates network_members network_large snapshot_io memory)
+        target_link_options(mon_fixture_regression PRIVATE -Wl,--wrap=open -Wl,--wrap=opendir
+            -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=read)
     endif()
     xutils_regression(worker_sock_regression net listener_inheritance)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

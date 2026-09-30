@@ -53,6 +53,9 @@ static int XTest_invalid_keys(void)
 {
     size_t nLength = 0;
     CHECK(XCrypt_RSA((const uint8_t*)"x", 1, "invalid key", 11, &nLength) == NULL, "Reject malformed public key");
+    nLength = 123;
+    CHECK(XDecrypt_RSA((const uint8_t*)"x", 1, "invalid key", 11, &nLength) == NULL && !nLength,
+        "Malformed decryption keys return no plaintext and reset the output length");
     CHECK(XCrypt_RS256((const uint8_t*)"x", 1, "invalid key", 11, &nLength) == NULL, "Reject malformed signing key");
     CHECK(XCrypt_VerifyRS256((const uint8_t*)"x", 1, (const uint8_t*)"x", 1, "invalid key", 11) != XSTDOK,
         "A parse failure cannot authenticate a signature");

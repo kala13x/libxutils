@@ -86,11 +86,21 @@ int XMon_GetCPUStats(xmon_stats_t *pStats, xcpu_stats_t *pCpuStats)
 {
     pCpuStats->nLoadAvg[0] = pCpuStats->nLoadAvg[1] = 0;
     pCpuStats->nLoadAvg[2] = pCpuStats->cores.nUsed = 0;
+    pCpuStats->nCoreCount = 0;
 
-    int i, nCPUCores = XSYNC_ATOMIC_GET(&pStats->cpuStats.nCoreCount);
-    if (nCPUCores <= 0) return 0;
+    XSync_Lock(&pStats->netLock);
+    int i, nCPUCores = pStats->cpuStats.cores.nUsed;
+    if (nCPUCores <= 0)
+    {
+        XSync_Unlock(&pStats->netLock);
+        return 0;
+    }
 
-    if (XArray_InitPool(&pCpuStats->cores, 0, 1, 0) == NULL) return -1;
+    if (XArray_InitPool(&pCpuStats->cores, 0, 1, 0) == NULL)
+    {
+        XSync_Unlock(&pStats->netLock);
+        return -1;
+    }
     pCpuStats->cores.clearCb = XMon_ClearCb;
 
     XMon_CopyCPUUsage(&pCpuStats->usage, &pStats->cpuStats.usage);
@@ -112,6 +122,7 @@ int XMon_GetCPUStats(xmon_stats_t *pStats, xcpu_stats_t *pCpuStats)
     pCpuStats->nLoadAvg[0] = XSYNC_ATOMIC_GET(&pStats->cpuStats.nLoadAvg[0]);
     pCpuStats->nLoadAvg[1] = XSYNC_ATOMIC_GET(&pStats->cpuStats.nLoadAvg[1]);
     pCpuStats->nLoadAvg[2] = XSYNC_ATOMIC_GET(&pStats->cpuStats.nLoadAvg[2]);
+    XSync_Unlock(&pStats->netLock);
 
     pCpuStats->nCoreCount = pCpuStats->cores.nUsed;
     if (pCpuStats->nCoreCount) return pCpuStats->nCoreCount;
@@ -179,13 +190,16 @@ static void XMon_UpdateNetworkStats(xmon_stats_t *pStats)
 
     XSync_Lock(&pStats->netLock);
     xarray_t *pIfaces = &pStats->netIfaces;
-
-    unsigned int i;
-    for (i = 0; i < pIfaces->nUsed; i++)
+    size_t nPrevCount = pIfaces->nUsed;
+    unsigned char sActive[256] = {0};
+    unsigned char *pActive = nPrevCount > sizeof(sActive) ? (unsigned char*)calloc(nPrevCount, 1) : sActive;
+    if (pActive == NULL)
     {
-        xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, i);
-        pIface->bActive = XFALSE;
+        XSync_Unlock(&pStats->netLock);
+        closedir(pDir);
+        return;
     }
+    XSync_Unlock(&pStats->netLock);
 
     struct dirent *pEntry = readdir(pDir);
     while(pEntry != NULL)
@@ -268,6 +282,10 @@ static void XMon_UpdateNetworkStats(xmon_stats_t *pStats)
             closedir(pIfaceDir);
         }
 
+        if (XAddr_GetIFCIP(netIface.sName, netIface.sIPAddr, sizeof(netIface.sIPAddr)) <= 0)
+            xstrncpy(netIface.sIPAddr, sizeof(netIface.sIPAddr), XNET_IPADDR_DEFAULT);
+
+        XSync_Lock(&pStats->netLock);
         if (pIfaces->nUsed > 0)
         {
             unsigned int i;
@@ -281,13 +299,11 @@ static void XMon_UpdateNetworkStats(xmon_stats_t *pStats)
                     netIface.nBytesSentPerSec = XMon_NetworkRate(netIface.nBytesSent, pIface->nBytesSent, pStats->nIntervalU);
                     netIface.nPacketsSentPerSec = XMon_NetworkRate(netIface.nPacketsSent, pIface->nPacketsSent, pStats->nIntervalU);
 
-                    if (XAddr_GetIFCIP(netIface.sName, netIface.sIPAddr, sizeof(netIface.sIPAddr)) <= 0)
-                        xstrncpy(netIface.sIPAddr, sizeof(netIface.sIPAddr), XNET_IPADDR_DEFAULT);
-
                     memcpy(pIface, &netIface, sizeof(xnet_iface_t));
 
                     pIface->bActive = XTRUE;
                     nHaveIface = XTRUE;
+                    if (i < nPrevCount) pActive[i] = 1;
                 }
             }
         }
@@ -300,26 +316,25 @@ static void XMon_UpdateNetworkStats(xmon_stats_t *pStats)
                 memcpy(pNewIface, &netIface, sizeof(xnet_iface_t));
                 pNewIface->bActive = XTRUE;
 
-                if (XAddr_GetIFCIP(pNewIface->sName, pNewIface->sIPAddr, sizeof(pNewIface->sIPAddr)) <= 0)
-                    xstrncpy(pNewIface->sIPAddr, sizeof(pNewIface->sIPAddr), XNET_IPADDR_DEFAULT);
-
                 if (XArray_AddData(pIfaces, pNewIface, 0) < 0) free(pNewIface);
             }
         }
+        XSync_Unlock(&pStats->netLock);
 
         pEntry = readdir(pDir);
     }
 
-    // Remove unused interfaces
-    for (i = 0; i < pIfaces->nUsed; i++)
+    /* Remove unused interfaces */
+    XSync_Lock(&pStats->netLock);
+    while (nPrevCount)
     {
-        xnet_iface_t *pIface = (xnet_iface_t*)XArray_GetData(pIfaces, i);
-        if (pIface == NULL || pIface->bActive) continue;
-        XArray_Delete(pIfaces, i--);
+        nPrevCount--;
+        if (!pActive[nPrevCount]) XArray_Delete(pIfaces, nPrevCount);
     }
 
-    closedir(pDir);
     XSync_Unlock(&pStats->netLock);
+    closedir(pDir);
+    if (pActive != sActive) free(pActive);
 }
 
 static uint8_t XMon_UpdateMemoryInfo(xmem_info_t *pDstInfo, xpid_t nPID)
@@ -620,54 +635,109 @@ static uint32_t XMon_CPUPercent(uint64_t nCurrent, uint64_t nPrevious, uint64_t 
     return XFloatToU32(((nCurrent - nPrevious) / (float)nTotal) * 100);
 }
 
-static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
+static int XMon_ReadCPUStats(xbyte_buffer_t *pBuffer)
 {
-    char sBuffer[XPROC_BUFFER_SIZE];
-    if (XPath_Read(XPROC_FILE_STAT, (uint8_t*)sBuffer, sizeof(sBuffer)) <= 0) return 0;
+    xfile_t file;
+    if (XFile_Open(&file, XPROC_FILE_STAT, "r", NULL) < 0) return XSTDERR;
 
+    int nRead;
+    char sBuffer[XPROC_BUFFER_SIZE];
+    while ((nRead = XFile_Read(&file, sBuffer, sizeof(sBuffer))) > 0)
+    {
+        if (XByteBuffer_Add(pBuffer, (uint8_t*)sBuffer, nRead) < 0)
+        {
+            nRead = XSTDERR;
+            break;
+        }
+    }
+
+    XFile_Close(&file);
+    return nRead < 0 ? XSTDERR : (int)pBuffer->nUsed;
+}
+
+static uint8_t XMon_UpdateCPUStats(xmon_stats_t *pStats)
+{
+    xbyte_buffer_t buffer;
+    XByteBuffer_Init(&buffer, 0, XTRUE);
+    if (XMon_ReadCPUStats(&buffer) <= 0)
+    {
+        XByteBuffer_Clear(&buffer);
+        return 0;
+    }
+
+    xcpu_stats_t *pCpuStats = &pStats->cpuStats;
     xproc_info_t lastCpuUsage;
     XMon_CopyCPUUsage(&lastCpuUsage, &pCpuStats->usage);
 
-    int nCoreCount = XSYNC_ATOMIC_GET(&pCpuStats->nCoreCount);
     char *pSavePtr = NULL;
-    int nCPUID = -1;
+    size_t nCoreCount = 0;
 
-    char *ptr = strtok_r(sBuffer, "\n", &pSavePtr);
+    char *ptr = strtok_r((char*)buffer.pData, "\n", &pSavePtr);
     while (ptr != NULL && !strncmp(ptr, "cpu", 3))
     {
         xcpu_info_t cpuInfo;
         memset(&cpuInfo, 0, sizeof(xcpu_info_t));
 
-        sscanf(ptr, "%*s %u %u %u %u %u %u %u %u %u %u", &cpuInfo.nUserSpaceRaw,
+        char *pFields = ptr + 3;
+        cpuInfo.nID = -1;
+        if (isdigit((unsigned char)*pFields))
+        {
+            errno = 0;
+            long nCPUID = strtol(pFields, &pFields, 10);
+            if (errno == ERANGE || nCPUID > INT_MAX) break;
+            cpuInfo.nID = (int)nCPUID;
+        }
+        if (!isspace((unsigned char)*pFields)) break;
+
+        int nFields = sscanf(pFields, "%u %u %u %u %u %u %u %u %u %u", &cpuInfo.nUserSpaceRaw,
             &cpuInfo.nUserSpaceNicedRaw, &cpuInfo.nKernelSpaceRaw, &cpuInfo.nIdleTimeRaw,
             &cpuInfo.nIOWaitRaw, &cpuInfo.nHardInterruptsRaw, &cpuInfo.nSoftInterruptsRaw,
             &cpuInfo.nStealRaw, &cpuInfo.nGuestRaw, &cpuInfo.nGuestNicedRaw);
+        if (nFields < 4) break;
 
         cpuInfo.nTotalRaw = (uint64_t)cpuInfo.nHardInterruptsRaw + cpuInfo.nSoftInterruptsRaw;
         cpuInfo.nTotalRaw += (uint64_t)cpuInfo.nUserSpaceRaw + cpuInfo.nKernelSpaceRaw;
         cpuInfo.nTotalRaw += (uint64_t)cpuInfo.nUserSpaceNicedRaw + cpuInfo.nStealRaw;
         cpuInfo.nTotalRaw += (uint64_t)cpuInfo.nIdleTimeRaw + cpuInfo.nIOWaitRaw;
 
-        cpuInfo.nID = nCPUID++;
         cpuInfo.nActive = 1;
         cpuInfo.nTemperature = XMon_ReadCPUTemperature(cpuInfo.nID);
 
-        if (!nCoreCount && cpuInfo.nID >= 0)
+        XSync_Lock(&pStats->netLock);
+        xcpu_info_t *pGenCpuInfo = &pCpuStats->sum;
+        if (cpuInfo.nID >= 0)
         {
-            xcpu_info_t *pInfo = (xcpu_info_t*)malloc(sizeof(xcpu_info_t));
-            if (pInfo != NULL)
+            size_t nIndex = nCoreCount;
+            for (; nIndex < pCpuStats->cores.nUsed; nIndex++)
             {
-                memcpy(pInfo, &cpuInfo, sizeof(xcpu_info_t));
-                int nStatus = XArray_AddData(&pCpuStats->cores, pInfo, 0);
-                if (nStatus < 0) free(pInfo);
+                pGenCpuInfo = (xcpu_info_t*)XArray_GetData(&pCpuStats->cores, nIndex);
+                if (pGenCpuInfo->nID == cpuInfo.nID) break;
+            }
+
+            if (nIndex == pCpuStats->cores.nUsed)
+            {
+                pGenCpuInfo = nIndex < UINT16_MAX ? (xcpu_info_t*)malloc(sizeof(xcpu_info_t)) : NULL;
+                if (pGenCpuInfo != NULL)
+                {
+                    memcpy(pGenCpuInfo, &cpuInfo, sizeof(xcpu_info_t));
+                    if (XArray_AddData(&pCpuStats->cores, pGenCpuInfo, 0) < 0)
+                    {
+                        free(pGenCpuInfo);
+                        pGenCpuInfo = NULL;
+                    }
+                }
+            }
+
+            if (pGenCpuInfo != NULL)
+            {
+                if (nIndex != nCoreCount) XArray_Swap(&pCpuStats->cores, nIndex, nCoreCount);
+                nCoreCount++;
             }
         }
-        else
-        {
-            xcpu_info_t lastCpuInfo, *pGenCpuInfo;
-            if (cpuInfo.nID < 0) pGenCpuInfo = &pCpuStats->sum;
-            else pGenCpuInfo = (xcpu_info_t*)XArray_GetData(&pCpuStats->cores, cpuInfo.nID);
 
+        if (pGenCpuInfo != NULL)
+        {
+            xcpu_info_t lastCpuInfo;
             XMon_CopyCPUInfo(&lastCpuInfo, pGenCpuInfo);
             uint64_t nTotalDiff = cpuInfo.nTotalRaw >= lastCpuInfo.nTotalRaw ? cpuInfo.nTotalRaw - lastCpuInfo.nTotalRaw : 0;
 
@@ -698,15 +768,23 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
             XSYNC_ATOMIC_SET(&pGenCpuInfo->nID, cpuInfo.nID);
             XSYNC_ATOMIC_SET(&pGenCpuInfo->nTemperature, cpuInfo.nTemperature);
         }
+        XSync_Unlock(&pStats->netLock);
 
         ptr = strtok_r(NULL, "\n", &pSavePtr);
     }
 
+    XSync_Lock(&pStats->netLock);
+    if (ptr == NULL || strncmp(ptr, "cpu", 3))
+        while (pCpuStats->cores.nUsed > nCoreCount) XArray_Delete(&pCpuStats->cores, pCpuStats->cores.nUsed - 1);
     XSYNC_ATOMIC_SET(&pCpuStats->nCoreCount, pCpuStats->cores.nUsed);
+    XSync_Unlock(&pStats->netLock);
+    XByteBuffer_Clear(&buffer);
+
+    char sBuffer[XPROC_BUFFER_SIZE];
     char sPath[XPATH_MAX];
 
-    if (nPID <= 0) xstrncpy(sPath, sizeof(sPath), XPROC_FILE_PIDSTAT);
-    else xstrncpyf(sPath, sizeof(sPath), "/proc/%d/stat", nPID);
+    if (pStats->nPID <= 0) xstrncpy(sPath, sizeof(sPath), XPROC_FILE_PIDSTAT);
+    else xstrncpyf(sPath, sizeof(sPath), "/proc/%d/stat", pStats->nPID);
     if (XPath_Read(sPath, (uint8_t*)sBuffer, sizeof(sBuffer)) <= 0) return 0;
 
     char *pFields = strrchr(sBuffer, ')');
@@ -739,7 +817,7 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
     if (XPath_Read(XPROC_FILE_LOADAVG, (uint8_t*)sBuffer, sizeof(sBuffer)) <= 0) return 0;
     float fOneMinInterval, fFiveMinInterval, fTenMinInterval;
 
-    sscanf(sBuffer, "%f %f %f", &fOneMinInterval, &fFiveMinInterval, &fTenMinInterval);
+    if (sscanf(sBuffer, "%f %f %f", &fOneMinInterval, &fFiveMinInterval, &fTenMinInterval) != 3) return 0;
     XSYNC_ATOMIC_SET(&pCpuStats->nLoadAvg[0], XFloatToU32(fOneMinInterval));
     XSYNC_ATOMIC_SET(&pCpuStats->nLoadAvg[1], XFloatToU32(fFiveMinInterval));
     XSYNC_ATOMIC_SET(&pCpuStats->nLoadAvg[2], XFloatToU32(fTenMinInterval));
@@ -750,7 +828,7 @@ static uint8_t XMon_UpdateCPUStats(xcpu_stats_t *pCpuStats, xpid_t nPID)
 int XMon_UpdateStats(void* pData)
 {
     xmon_stats_t *pStats = (xmon_stats_t*)pData;
-    XMon_UpdateCPUStats(&pStats->cpuStats, pStats->nPID);
+    XMon_UpdateCPUStats(pStats);
     XMon_UpdateMemoryInfo(&pStats->memInfo, pStats->nPID);
     XMon_UpdateNetworkStats(pStats);
     XSYNC_ATOMIC_SET(&pStats->nLoadDone, XTRUE);

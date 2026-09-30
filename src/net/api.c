@@ -440,18 +440,6 @@ static int XAPI_WorkerEventCb(xhash_pair_t *pPair, void *pCtx)
     return XSTDNON;
 }
 
-static void XAPI_DetachWorkerEventMap(xevents_t *pEvents)
-{
-    XCHECK_VOID_NL((pEvents != NULL));
-    XCHECK_VOID_NL(pEvents->bUseHash);
-
-    pEvents->eventsMap.clearCb = NULL;
-    pEvents->eventsMap.pUserContext = NULL;
-
-    XHash_Destroy(&pEvents->eventsMap);
-    pEvents->bUseHash = XFALSE;
-}
-
 static void XAPI_CloseEventBackend(xevents_t *pEvents)
 {
     XCHECK_VOID_NL((pEvents != NULL));
@@ -469,16 +457,6 @@ static void XAPI_CloseEventBackend(xevents_t *pEvents)
         pEvents->nEventFd = XSOCK_INVALID;
     }
 #endif
-}
-
-static void XAPI_ResetWorkerEvents(xevents_t *pEvents)
-{
-    XCHECK_VOID_NL((pEvents != NULL));
-
-    XAPI_CloseEventBackend(pEvents);
-    XAPI_DetachWorkerEventMap(pEvents);
-    pEvents->nEventCount = XSTDNON;
-    pEvents->bResync = XFALSE;
 }
 
 xevent_status_t XAPI_RebuildWorkerEvents(xapi_t *pApi)
@@ -508,38 +486,56 @@ xevent_status_t XAPI_RebuildWorkerEvents(xapi_t *pApi)
     }
 
     const uint32_t nEventMax = pEvents->nEventMax;
-    const xbool_t bUseHash = pEvents->bUseHash;
     void *pUserSpace = pEvents->pUserSpace;
     xevent_cb_t callback = pEvents->eventCallback;
 
-    // Reset the event map to avoid duplicate events
-    XAPI_ResetWorkerEvents(pEvents);
+    XAPI_CloseEventBackend(pEvents);
+    xevents_t workerBackend;
 
-    xevent_status_t eStatus = XEvents_Create(pEvents, nEventMax, pUserSpace, callback, bUseHash);
+    xevent_status_t eStatus = XEvents_Create(&workerBackend, nEventMax, pUserSpace, callback, XTRUE);
     if (eStatus != XEVENTS_SUCCESS)
     {
+        XEvents_Destroy(pEvents);
         pApi->bHaveEvents = XFALSE;
         free(ppEvents);
         return eStatus;
     }
 
+    /* The original map retains ownership while the new backend registers its descriptors. */
+    workerBackend.bUseHash = XFALSE;
     size_t i = 0;
+
     for (i = 0; i < workerEvents.nCount; i++)
     {
         xevent_data_t *pEvData = ppEvents[i];
         if (pEvData == NULL || pEvData->nFD == XSOCK_INVALID) continue;
 
         pEvData->nIndex = -1;
-        eStatus = XEvents_Add(pEvents, pEvData, pEvData->nEvents);
-        if (eStatus != XEVENTS_SUCCESS)
-        {
-            XAPI_ResetWorkerEvents(pEvents);
-            pApi->bHaveEvents = XFALSE;
+        uint32_t nEvents = pEvData->nEvents;
 
-            free(ppEvents);
-            return eStatus;
-        }
+        eStatus = XEvents_Add(&workerBackend, pEvData, nEvents);
+        if (eStatus != XEVENTS_SUCCESS) break;
+
+        pEvData->nEvents = nEvents;
     }
+
+    if (eStatus != XEVENTS_SUCCESS)
+    {
+        XAPI_CloseEventBackend(&workerBackend);
+        XEvents_Destroy(pEvents);
+        pApi->bHaveEvents = XFALSE;
+        free(ppEvents);
+        return eStatus;
+    }
+
+    pEvents->pEventArray = workerBackend.pEventArray;
+    pEvents->nEventMax = workerBackend.nEventMax;
+    pEvents->nEventCount = workerBackend.nEventCount;
+    pEvents->bResync = workerBackend.bResync;
+#if defined(_XEVENTS_USE_EPOLL)
+    pEvents->nEventFd = workerBackend.nEventFd;
+    pEvents->nWaitCount = 0;
+#endif
 
     free(ppEvents);
     return XEVENTS_SUCCESS;
@@ -2202,9 +2198,7 @@ xevents_t* XAPI_GetOrCreateEvents(xapi_t *pApi)
     if (pApi->bHaveEvents) return pEvents;
 
     xevent_status_t status;
-    status = XEvents_Create(pEvents, XSTDNON, pApi,
-             XAPI_EventCallback, pApi->bUseHashMap);
-
+    status = XEvents_Create(pEvents, XSTDNON, pApi, XAPI_EventCallback, pApi->bUseHashMap);
     if (status != XEVENTS_SUCCESS)
     {
         XAPI_ErrorCb(pApi, NULL, XAPI_EVENT, status);
