@@ -11,7 +11,7 @@
 
 enum { FAULT_NONE, FAULT_SOCKET, FAULT_LISTEN, FAULT_CONNECT, FAULT_OPTION,
     FAULT_GETFL, FAULT_SETFL, FAULT_SETFD, FAULT_ACCEPT, FAULT_EPOLL, FAULT_CONTROL, FAULT_TIMER, FAULT_ARM, FAULT_READ,
-    FAULT_SEND, FAULT_CHMOD, FAULT_ALLOC };
+    FAULT_SEND, FAULT_CHMOD, FAULT_ALLOC, FAULT_WAIT };
 
 static int g_nFault;
 static int g_nHits;
@@ -53,6 +53,7 @@ int __real_fcntl(int, int, ...);
 int __real_accept(int, struct sockaddr*, socklen_t*);
 int __real_accept4(int, struct sockaddr*, socklen_t*, int);
 int __real_epoll_create1(int);
+int __real_epoll_wait(int, struct epoll_event*, int, int);
 int __real_epoll_ctl(int, int, int, struct epoll_event*);
 int __real_timerfd_create(int, int);
 int __real_timerfd_settime(int, int, const struct itimerspec*, struct itimerspec*);
@@ -159,6 +160,11 @@ int __wrap_accept4(int nFD, struct sockaddr *pAddr, socklen_t *pSize, int nFlags
 int __wrap_epoll_create1(int nFlags)
 {
     return fault_hit(FAULT_EPOLL) ? -1 : __real_epoll_create1(nFlags);
+}
+
+int __wrap_epoll_wait(int nFD, struct epoll_event *pEvents, int nMax, int nTimeout)
+{
+    return fault_hit(FAULT_WAIT) ? -1 : __real_epoll_wait(nFD, pEvents, nMax, nTimeout);
 }
 
 int __wrap_epoll_ctl(int nFD, int nOperation, int nPeer, struct epoll_event *pEvent)
@@ -922,7 +928,31 @@ static int XTest_user_actions(void)
     return 0;
 }
 
+static int XTest_wait_failure(void)
+{
+    xapi_t api;
+    fault_api_t test = {0};
+    int pair[2], nTimer;
+    CHECK(XAPI_Init(&api, fault_api_cb, &test) == XSTDOK && fault_worker_peer(&api, &test, pair, &nTimer) == 0,
+        "Create a real API transport and timer before the polling failure");
+    xapi_session_t *pSession = test.pSession;
+    fault_arm(FAULT_WAIT);
+    int nStatus = XAPI_Service(&api, 0);
+    int nHits = g_nHits;
+    fault_arm(FAULT_NONE);
+    CHECK(nStatus == XEVENTS_EWAIT && nHits == 1 && test.pSession == pSession && !test.nClosed && !test.nErrors &&
+        !test.nTimers && XAPI_GetEventCount(&api) == 2, "Polling errors neither destroy nor dispatch live sessions");
+    CHECK(fault_worker_exchange(&api, pSession, pair[1]) == 0,
+        "The same loop delivers the exact request and response after polling recovers");
+    XAPI_Destroy(&api);
+    close(pair[1]);
+    CHECK(test.nClosed == 1 && test.nTimers == 1 && test.nDestroyed == 1 && fault_closed(pair[0]) && fault_closed(nTimer),
+        "The recovered event backend, timer and session are each released once");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(wait_failure),
     XTEST_CASE(create),
     XTEST_CASE(nonblock),
     XTEST_CASE(accept),

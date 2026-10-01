@@ -10,6 +10,7 @@
 #include "srch.h"
 #include <unistd.h>
 #include <fcntl.h>
+#include <poll.h>
 
 void *__real_malloc(size_t nSize);
 void *__real_calloc(size_t nCount, size_t nSize);
@@ -850,7 +851,119 @@ static int XTest_ws_answer_failure(void)
     return 0;
 }
 
+typedef struct {
+    xapi_session_t *pListener;
+    xapi_session_t *pPeer;
+    int nErrors;
+    int nLastError;
+    int nAccepted;
+    int nClosed;
+    uint8_t received[16];
+    size_t nReceived;
+} alloc_accept_t;
+
+static int alloc_accept_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
+{
+    alloc_accept_t *pTest = pCtx->pApi->pUserCtx;
+    if (pCtx->eCbType == XAPI_CB_REGISTERED) pTest->pListener = pSession;
+    if (pCtx->eCbType == XAPI_CB_ERROR) { pTest->nErrors++; pTest->nLastError = pCtx->nStatus; }
+    if (pCtx->eCbType == XAPI_CB_CLOSED)
+    {
+        pTest->nClosed++;
+        if (pSession == pTest->pListener) pTest->pListener = NULL;
+        if (pSession == pTest->pPeer) pTest->pPeer = NULL;
+    }
+    if (pCtx->eCbType == XAPI_CB_ACCEPTED)
+    {
+        pTest->pPeer = pSession;
+        pTest->nAccepted++;
+        return XAPI_SetEvents(pSession, XPOLLIN) > 0 ? XAPI_CONTINUE : XAPI_DISCONNECT;
+    }
+    if (pCtx->eCbType == XAPI_CB_READ)
+    {
+        xbyte_buffer_t *pData = pSession->pPacket;
+        if (!pData || pData->nUsed > sizeof(pTest->received) - pTest->nReceived) return XAPI_DISCONNECT;
+        memcpy(pTest->received + pTest->nReceived, pData->pData, pData->nUsed);
+        pTest->nReceived += pData->nUsed;
+    }
+    return XAPI_CONTINUE;
+}
+
+static int XTest_api_accept_failure(void)
+{
+    size_t nAllocations = 0, nFailures = 0;
+    for (size_t i = 0; i <= nAllocations; i++)
+    {
+        int nListener = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in addr = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+        socklen_t nSize = sizeof(addr);
+        CHECK(nListener >= 0 && !bind(nListener, (struct sockaddr*)&addr, nSize) && !listen(nListener, 8) &&
+            !getsockname(nListener, (struct sockaddr*)&addr, &nSize), "Reserve a private TCP listener on an ephemeral port");
+        alloc_accept_t test = {0};
+        xapi_t api;
+        CHECK(XAPI_Init(&api, alloc_accept_cb, &test) == XSTDOK, "Initialize the accepting API");
+        xapi_endpoint_t endpoint;
+        XAPI_InitEndpoint(&endpoint);
+        endpoint.eType = XAPI_SOCK;
+        endpoint.eRole = XAPI_SERVER;
+        endpoint.nEvents = XPOLLIN;
+        endpoint.nFD = nListener;
+        CHECK(XAPI_AddEvent(&api, &endpoint) == XSTDOK && test.pListener &&
+            XSock_NonBlock(&test.pListener->sock, XTRUE) >= 0, "Register the nonblocking listener before allocation failures");
+        api.events.nEventMax = 8;
+        int nClient = socket(AF_INET, SOCK_STREAM, 0);
+        CHECK(nClient >= 0 && !connect(nClient, (struct sockaddr*)&addr, nSize), "Queue a real TCP client for acceptance");
+        g_nCalls = 0;
+        g_nFailAt = i ? i : SIZE_MAX;
+        int nStatus = XAPI_Service(&api, 100);
+        g_nFailAt = 0;
+        if (!i) nAllocations = g_nCalls;
+        CHECK(nStatus == XEVENTS_SUCCESS && test.pListener && test.pListener->sock.nFD == nListener,
+            "An accept allocation failure never removes the listening session");
+        if (test.nErrors)
+        {
+            nFailures++;
+            CHECK(i && test.nErrors == 1 && !test.nAccepted && !test.pPeer && XAPI_GetEventCount(&api) == 1,
+                "An incomplete accepted session is never published or left registered");
+            if (test.nLastError == XAPI_ERR_REGISTER)
+            {
+                uint8_t byte;
+                struct pollfd ready = {.fd = nClient, .events = POLLIN};
+                CHECK(poll(&ready, 1, 5000) == 1 && recv(nClient, &byte, 1, MSG_DONTWAIT) == 0,
+                    "Registration failure closes the newly accepted transport");
+                close(nClient);
+                nClient = socket(AF_INET, SOCK_STREAM, 0);
+                CHECK(nClient >= 0 && !connect(nClient, (struct sockaddr*)&addr, nSize), "Connect another client after cleanup");
+            }
+            else CHECK(test.nLastError == XAPI_ERR_ALLOC, "A session allocation failure keeps the original client pending");
+            CHECK(XAPI_Service(&api, 100) == XEVENTS_SUCCESS, "Retry acceptance after allocations recover");
+        }
+        CHECK(test.pPeer && test.nAccepted == 1 && XAPI_GetEventCount(&api) == 2, "Exactly one complete peer is published");
+        int nStatusFlags = fcntl(test.pPeer->sock.nFD, F_GETFL), nFDFlags = fcntl(test.pPeer->sock.nFD, F_GETFD);
+        CHECK(nStatusFlags >= 0 && nFDFlags >= 0 && (nStatusFlags & O_NONBLOCK) && (nFDFlags & FD_CLOEXEC),
+            "The accepted descriptor is live, nonblocking and close-on-exec");
+        const uint8_t request[] = {0, 'r', 0xff}, response[] = {'o', 0, 'k', 0x81};
+        CHECK(write(nClient, request, sizeof(request)) == sizeof(request) && XAPI_Service(&api, 100) == XEVENTS_SUCCESS &&
+            test.nReceived == sizeof(request) && !memcmp(test.received, request, sizeof(request)),
+            "The recovered server receives the exact binary request");
+        CHECK(XByteBuffer_Add(&test.pPeer->txBuffer, response, sizeof(response)) == sizeof(response) &&
+            XAPI_EnableEvent(test.pPeer, XPOLLOUT) > 0 && XAPI_Service(&api, 100) == XEVENTS_SUCCESS,
+            "Send the intended response through the recovered API session");
+        uint8_t received[16];
+        struct pollfd ready = {.fd = nClient, .events = POLLIN};
+        CHECK(poll(&ready, 1, 5000) == 1 && recv(nClient, received, sizeof(received), MSG_DONTWAIT) == sizeof(response) &&
+            !memcmp(received, response, sizeof(response)), "The actual TCP client receives the exact response");
+        XAPI_Destroy(&api);
+        close(nClient);
+        CHECK(test.nClosed == 2 && !test.pPeer && !test.pListener && fcntl(nListener, F_GETFD) < 0 && errno == EBADF,
+            "The listener and successfully accepted peer close exactly once");
+    }
+    CHECK(nFailures >= 3, "Fail the accepted session, event data and map registration allocations independently");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_accept_failure),
     XTEST_CASE(ws_answer_failure),
     XTEST_CASE(ws_request_failure),
     XTEST_CASE(http_copy_failure),

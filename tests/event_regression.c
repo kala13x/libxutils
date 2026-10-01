@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <poll.h>
 
 typedef struct xtest_events_ {
     xevent_data_t *pVictim;
@@ -673,7 +674,118 @@ static int XTest_write_byte(void)
 #endif
 }
 
+static int XTest_detached_delete(void)
+{
+#if defined(_XEVENTS_USE_EPOLL)
+    for (int nHash = 0; nHash < 2; nHash++)
+        for (int nClosed = 0; nClosed < 2; nClosed++)
+        {
+            xtest_events_t test = {0};
+            xevents_t loop;
+            XSOCKET pair[2];
+            CHECK(XEvents_Create(&loop, 8, &test, XTest_EventCallback, nHash) == XEVENTS_SUCCESS &&
+                XSock_CreatePair(pair) == XSTDOK, "Create a loop with a caller-owned transport");
+            xevent_data_t *pEvent = XEvents_RegisterEvent(&loop, NULL, pair[0], XPOLLIN, XEVENT_TYPE_CUSTOM);
+            CHECK(pEvent && loop.nEventCount == 1, "Register the transport before its owner detaches it");
+            if (nClosed) CHECK(!close(pair[0]), "The descriptor owner closes its transport before deleting the registration");
+            else CHECK(!epoll_ctl(loop.nEventFd, EPOLL_CTL_DEL, pair[0], NULL), "Detach the transport from the kernel first");
+            CHECK(XEvents_Delete(&loop, pEvent) == XEVENTS_SUCCESS && !loop.nEventCount && test.nClears == 1 &&
+                !XEvents_GetData(&loop, pair[0]), "An absent kernel registration still removes the library event exactly once");
+            CHECK(XEvents_Service(&loop, 0) == XEVENTS_SUCCESS && !test.nReads, "The detached event cannot be dispatched again");
+            XEvents_Destroy(&loop);
+            CHECK(test.nClears == 1, "Destroy never clears an already detached event twice");
+            if (!nClosed)
+            {
+                char byte = 0;
+                CHECK(write(pair[1], "x", 1) == 1 && read(pair[0], &byte, 1) == 1 && byte == 'x',
+                    "Deleting a registration leaves its caller-owned descriptor usable");
+                close(pair[0]);
+            }
+            close(pair[1]);
+        }
+    return 0;
+#else
+    return 77;
+#endif
+}
+
+typedef struct {
+    int nExceptions;
+    int nClears;
+    xbool_t bDisconnect;
+    xbool_t bFailed;
+    uint8_t bytes[32];
+    size_t nUsed;
+} urgent_event_t;
+
+static int urgent_event_cb(void *pLoop, void *pData, XSOCKET nFD, xevent_cb_type_t eReason)
+{
+    xevents_t *pEvents = pLoop;
+    urgent_event_t *pTest = pEvents->pUserSpace;
+    (void)pData;
+    if (eReason == XEVENT_CB_CLEAR) pTest->nClears++;
+    if (eReason == XEVENT_CB_EXCEPTION)
+    {
+        uint8_t byte = 0;
+        if (recv(nFD, &byte, 1, MSG_OOB | MSG_DONTWAIT) != 1 || byte != 0x91) pTest->bFailed = XTRUE;
+        pTest->nExceptions++;
+        if (pTest->bDisconnect) return XEVENTS_DISCONNECT;
+    }
+    if (eReason == XEVENT_CB_READ)
+    {
+        ssize_t nRead = recv(nFD, pTest->bytes + pTest->nUsed, sizeof(pTest->bytes) - pTest->nUsed, MSG_DONTWAIT);
+        if (nRead <= 0) pTest->bFailed = XTRUE;
+        else pTest->nUsed += nRead;
+    }
+    return XEVENTS_CONTINUE;
+}
+
+static int XTest_urgent_data(void)
+{
+    for (int nDisconnect = 0; nDisconnect < 2; nDisconnect++)
+    {
+        int nListener = socket(AF_INET, SOCK_STREAM, 0), nClient = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in addr = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+        socklen_t nSize = sizeof(addr);
+        CHECK(nListener >= 0 && nClient >= 0 && !bind(nListener, (struct sockaddr*)&addr, nSize) && !listen(nListener, 4) &&
+            !getsockname(nListener, (struct sockaddr*)&addr, &nSize) && !connect(nClient, (struct sockaddr*)&addr, nSize),
+            "Establish a real TCP connection capable of carrying urgent data");
+        int nPeer = accept(nListener, NULL, NULL);
+        CHECK(nPeer >= 0, "Accept the urgent-data client");
+        urgent_event_t test = {.bDisconnect = nDisconnect};
+        xevents_t loop;
+        CHECK(XEvents_Create(&loop, 8, &test, urgent_event_cb, XTRUE) == XEVENTS_SUCCESS &&
+            XEvents_RegisterEvent(&loop, NULL, nPeer, XPOLLIN | XPOLLPRI, XEVENT_TYPE_CUSTOM),
+            "Register ordinary and exceptional readability on the same connection");
+        const uint8_t byte = 0x91;
+        CHECK(send(nClient, "before", 6, 0) == 6 && send(nClient, &byte, 1, MSG_OOB) == 1 &&
+            send(nClient, "after", 5, 0) == 5, "Send distinct normal bytes on both sides of the urgent byte");
+        struct pollfd ready = {.fd = nPeer, .events = POLLPRI};
+        CHECK(poll(&ready, 1, 5000) == 1 && (ready.revents & POLLPRI), "The kernel has received the urgent byte before dispatch");
+        uint64_t nDeadline = XTime_GetMonoMs() + 5000;
+        while (!test.bFailed && XTime_GetMonoMs() < nDeadline &&
+            (nDisconnect ? !test.nClears : !test.nExceptions || test.nUsed < 11))
+            CHECK(XEvents_Service(&loop, 20) == XEVENTS_SUCCESS, "Service real urgent and ordinary socket notifications");
+        CHECK(!test.bFailed && test.nExceptions == 1, "Exceptional readiness delivers the exact urgent byte once");
+        if (nDisconnect)
+            CHECK(test.nClears == 1 && !test.nUsed && !loop.nEventCount,
+                "A disconnect from the exception callback removes the event before ordinary data dispatch");
+        else
+            CHECK(!test.nClears && test.nUsed == 11 && !memcmp(test.bytes, "beforeafter", 11) &&
+                XEvents_Service(&loop, 0) == XEVENTS_SUCCESS && test.nExceptions == 1,
+                "Normal data retains its exact order, excludes the urgent byte, and leaves no spurious exception");
+        XEvents_Destroy(&loop);
+        close(nPeer);
+        close(nClient);
+        close(nListener);
+        CHECK(test.nClears == 1, "Every urgent-data event is cleared once");
+    }
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(urgent_data),
+    XTEST_CASE(detached_delete),
     XTEST_CASE(lifecycle),
     XTEST_CASE(modify),
     XTEST_CASE(callback_delete),

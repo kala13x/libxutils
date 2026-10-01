@@ -223,7 +223,8 @@ static void worker_serve(xapi_t *pApi, worker_test_t *pTest, int nStartStatus)
     if (!bValid)
     {
         ready.nStatus = XSTDERR;
-        (void)write(pTest->nReadyFD, &ready, sizeof(ready));
+        ssize_t nWritten = write(pTest->nReadyFD, &ready, sizeof(ready));
+        (void)nWritten;
     }
     close(pTest->nReadyFD);
     exit(bValid ? 0 : 1);

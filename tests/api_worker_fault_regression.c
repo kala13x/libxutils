@@ -80,12 +80,13 @@ static int worker_fault_cb(xapi_ctx_t *pCtx, xapi_session_t *pSession)
     return XAPI_CONTINUE;
 }
 
-static int worker_fault_open(xapi_t *pApi, worker_fault_t *pTest, int *pPeer)
+static int worker_fault_open_map(xapi_t *pApi, worker_fault_t *pTest, int *pPeer, xbool_t bUseHash)
 {
     int pair[2];
     memset(&g_script, 0, sizeof(g_script));
     CHECK(!socketpair(AF_UNIX, SOCK_STREAM, 0, pair), "Create a real transport around scripted process calls");
     CHECK(XAPI_Init(pApi, worker_fault_cb, pTest) == XSTDOK, "Initialize the worker owner");
+    pApi->bUseHashMap = bUseHash;
     xapi_endpoint_t endpoint;
     XAPI_InitEndpoint(&endpoint);
     endpoint.eType = XAPI_SOCK;
@@ -98,6 +99,11 @@ static int worker_fault_open(xapi_t *pApi, worker_fault_t *pTest, int *pPeer)
     pApi->events.nEventMax = 8;
     *pPeer = pair[1];
     return 0;
+}
+
+static int worker_fault_open(xapi_t *pApi, worker_fault_t *pTest, int *pPeer)
+{
+    return worker_fault_open_map(pApi, pTest, pPeer, XTRUE);
 }
 
 static int XTest_start_failure(void)
@@ -326,6 +332,72 @@ static int XTest_watch_reaped(void)
     return 0;
 }
 
+static int XTest_start_guards(void)
+{
+    for (int nCase = 0; nCase < 4; nCase++)
+    {
+        xapi_t api;
+        worker_fault_t test = {0};
+        int nPeer;
+        CHECK(!worker_fault_open_map(&api, &test, &nPeer, nCase != 3), "Create the actual worker-start precondition");
+        if (nCase == 1) CHECK(XAPI_Disconnect(test.pSession) == XSTDOK, "Remove the last session from an existing backend");
+        if (nCase == 2) CHECK(XAPI_InitWorkers(&api, 3, XFALSE) == XSTDOK, "Start the original worker group");
+        const xpid_t *pPIDs = XAPI_GetWorkerPIDs(&api);
+        CHECK(XAPI_InitWorkers(&api, nCase == 0 ? 0 : 2, XTRUE) == (nCase == 2 ? XSTDEXC : XSTDINV),
+            "Zero workers, an empty backend, duplicate initialization and a mapless backend are refused");
+        CHECK(g_script.nForks == (nCase == 2 ? 3 : 0) && !g_script.nKills && !g_script.nWaits &&
+            XAPI_GetWorkerPIDs(&api) == pPIDs && XAPI_GetWorkerCount(&api) == (nCase == 2 ? 3 : 0) && !api.bSetAffinity,
+            "Rejected initialization cannot spawn children, replace the worker table or change affinity policy");
+        if (nCase == 2)
+            CHECK(pPIDs[0] == 41001 && pPIDs[1] == 41002 && pPIDs[2] == 41003 && XAPI_WaitWorkers(&api) == XSTDOK,
+                "The original group retains every PID and can still be reaped normally");
+        if (nCase == 3) CHECK(XAPI_Disconnect(test.pSession) == XSTDOK, "The mapless caller explicitly releases its session");
+        XAPI_Destroy(&api);
+        close(nPeer);
+        CHECK(test.nClosed == 1 && !test.nErrors && !g_script.bInvalid, "Every refused setup retains the correct cleanup owner");
+    }
+    return 0;
+}
+
+static int XTest_start_retry(void)
+{
+    for (int nWorkers = 1; nWorkers <= 3; nWorkers += 2)
+        for (int nFail = 1; nFail <= nWorkers; nFail++)
+        {
+            xapi_t api;
+            worker_fault_t test = {0};
+            int nPeer;
+            CHECK(!worker_fault_open(&api, &test, &nPeer), "Create the parent before a worker start fails");
+            g_script.nForkFail = nFail;
+            CHECK(XAPI_InitWorkers(&api, nWorkers, XFALSE) == XSTDERR && !api.pWorkerPIDs && !api.nWorkerCount,
+                "A failed one-worker or multi-worker start leaves no partially initialized group");
+            CHECK(g_script.nKills == nFail - 1 && g_script.nWaits == nFail - 1,
+                "Only children created before the failure are stopped and reaped");
+            for (int i = 0; i < nFail - 1; i++)
+                CHECK(g_script.killPIDs[i] == 41001 + i && g_script.waitPIDs[i] == 41001 + i,
+                    "Cleanup targets each successfully started child exactly once");
+            CHECK(XAPI_InitWorkers(&api, nWorkers, XFALSE) == XSTDOK && api.nWorkerCount == (size_t)nWorkers &&
+                g_script.nForks == nFail + nWorkers, "The same API can initialize a complete worker group after recovery");
+            for (int i = 0; i < nWorkers; i++)
+                CHECK(api.pWorkerPIDs[i] == 41001 + nFail + i, "The retry publishes only the new worker identities");
+            const uint8_t data[] = {0, 'r', 0xff};
+            CHECK(write(nPeer, data, sizeof(data)) == sizeof(data) && XAPI_Service(&api, 100) == XEVENTS_SUCCESS &&
+                test.pSession->rxBuffer.nUsed == sizeof(data) && !memcmp(test.pSession->rxBuffer.pData, data, sizeof(data)),
+                "Parent event ownership and exact transport data survive the failed start and successful retry");
+            CHECK(XAPI_StopWorkers(&api, SIGTERM) == XSTDOK && XAPI_WaitWorkers(&api) == XSTDOK &&
+                g_script.nKills == nFail - 1 + nWorkers && g_script.nWaits == nFail - 1 + nWorkers,
+                "The replacement group is stopped and reaped independently of the failed attempt");
+            for (int i = 0; i < nWorkers; i++)
+                CHECK(g_script.killPIDs[nFail - 1 + i] == 41001 + nFail + i &&
+                    g_script.waitPIDs[nFail - 1 + i] == 41001 + nFail + i, "Shutdown uses only the retry's exact PIDs");
+            XAPI_Destroy(&api);
+            close(nPeer);
+            CHECK(test.nClosed == 1 && test.nErrors == 1 && test.nLastError == XAPI_ERR_FORK && !g_script.bInvalid,
+                "One fork error and one session close account for the complete failure and recovery cycle");
+        }
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(start_failure),
     XTEST_CASE(wait_failures),
@@ -333,5 +405,7 @@ XTEST_MAIN(
     XTEST_CASE(watch_failures),
     XTEST_CASE(watch_shutdown),
     XTEST_CASE(wait_single),
-    XTEST_CASE(watch_reaped)
+    XTEST_CASE(watch_reaped),
+    XTEST_CASE(start_guards),
+    XTEST_CASE(start_retry)
 )
