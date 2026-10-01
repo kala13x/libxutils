@@ -950,13 +950,13 @@ XSTATUS XAPI_RespondHTTP(xapi_session_t *pSession, int nCode, xapi_status_t eSta
     xapi_t *pApi = pSession->pApi;
 
     xhttp_t handle;
-    XHTTP_InitResponse(&handle, nCode, NULL);
+    XSTATUS nStatus = XHTTP_InitResponse(&handle, nCode, NULL);
 
     char sContent[XSTR_MID];
     size_t nLength = xstrncpyf(sContent, sizeof(sContent), "{\"status\": \"%s\"}",
         eStatus != XAPI_UNKNOWN ? XAPI_GetStatusStr(eStatus) : XHTTP_GetCodeStr(nCode));
 
-    if ((eStatus == XAPI_MISSING_TOKEN &&
+    if (nStatus <= 0 || (eStatus == XAPI_MISSING_TOKEN &&
         XHTTP_AddHeader(&handle, "WWW-Authenticate", "Basic realm=\"XAPI\"") < 0) ||
         XHTTP_AddHeader(&handle, "Server", "%s", pSession->sUserAgent) < 0 ||
         XHTTP_AddHeader(&handle, "Content-Type", "application/json") < 0 ||
@@ -978,8 +978,8 @@ XSTATUS XAPI_RespondHTTP(xapi_session_t *pSession, int nCode, xapi_status_t eSta
     XHTTP_Clear(&handle);
 
     if (!pSession->txBuffer.nUsed) return XEVENTS_DISCONNECT;
-    XSTATUS nStatus = XAPI_EnableEvent(pSession, XPOLLOUT);
-    return XAPI_StatusToEvent(pApi, nStatus);
+    nStatus = XAPI_EnableEvent(pSession, XPOLLOUT);
+    return XAPI_StatusToEvent(pApi, (int)nStatus);
 }
 
 static xbool_t XAPI_MatchCredential(const char *pProvided, const char *pExpected, size_t nLength)
@@ -1194,7 +1194,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     XCHECK((pSession != NULL), XSTDINV);
 
     xhttp_t handle;
-    XHTTP_InitResponse(&handle, 101, XAPI_DEFAULT_HTTP_VER);
+    XSTATUS nStatus = XHTTP_InitResponse(&handle, 101, XAPI_DEFAULT_HTTP_VER);
 
     char *pSecKey = XAPI_GetWSKey(pApi, pSession);
     if (pSecKey == NULL)
@@ -1203,7 +1203,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_session_t *pSession)
         return XEVENTS_DISCONNECT;
     }
 
-    if (XHTTP_AddHeader(&handle, "Upgrade", "websocket") < 0 ||
+    if (nStatus <= 0 || XHTTP_AddHeader(&handle, "Upgrade", "websocket") < 0 ||
         XHTTP_AddHeader(&handle, "Connection", "Upgrade") < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Accept", "%s", pSecKey) < 0 ||
         XHTTP_AddHeader(&handle, "Server", "%s", pSession->sUserAgent) < 0 ||
@@ -1220,7 +1220,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     free(pSecKey);
     pSession->pPacket = &handle;
 
-    int nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_HANDSHAKE_ANSWER);
+    nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_HANDSHAKE_ANSWER);
     int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
     XAPI_PutTxBuff(pSession, &handle.rawData);
@@ -1233,7 +1233,7 @@ static int XAPI_AnswerUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     else if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
     nStatus = XAPI_EnableEvent(pSession, XPOLLOUT);
-    return XAPI_StatusToEvent(pApi, nStatus);
+    return XAPI_StatusToEvent(pApi, (int)nStatus);
 }
 
 static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
@@ -1242,7 +1242,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     XCHECK((pSession != NULL), XSTDINV);
 
     xhttp_t handle;
-    XHTTP_InitRequest(&handle, XHTTP_GET, pSession->sUri, XAPI_DEFAULT_HTTP_VER);
+    XSTATUS nStatus = XHTTP_InitRequest(&handle, XHTTP_GET, pSession->sUri, XAPI_DEFAULT_HTTP_VER);
 
     char sNonce[XWS_NONCE_LENGTH + 1];
     size_t nLength = XWS_NONCE_LENGTH;
@@ -1270,7 +1270,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     if (bDefaultPort) xstrncpy(sHost, sizeof(sHost), pSession->sAddr);
     else xstrncpyf(sHost, sizeof(sHost), "%s:%u", pSession->sAddr, (unsigned)pSession->nPort);
 
-    if (XHTTP_AddHeader(&handle, "Upgrade", "websocket") < 0 ||
+    if (nStatus <= 0 || XHTTP_AddHeader(&handle, "Upgrade", "websocket") < 0 ||
         XHTTP_AddHeader(&handle, "Connection", "Upgrade") < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Version", "%d", XWS_SEC_WS_VERSION) < 0 ||
         XHTTP_AddHeader(&handle, "Sec-WebSocket-Key", "%s", pSession->sKey) < 0 ||
@@ -1288,7 +1288,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     pSession->bHandshakeStart = XTRUE;
     pSession->pPacket = &handle;
 
-    int nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_HANDSHAKE_REQUEST);
+    nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_HANDSHAKE_REQUEST);
     int nRetVal = XAPI_StatusToEvent(pApi, nStatus);
 
     XAPI_PutTxBuff(pSession, &handle.rawData);
@@ -1301,7 +1301,7 @@ static int XAPI_RequestUpgrade(xapi_t *pApi, xapi_session_t *pSession)
     else if (!pBuffer->nUsed) return XEVENTS_DISCONNECT;
 
     nStatus = XAPI_EnableEvent(pSession, XPOLLOUT);
-    return XAPI_StatusToEvent(pApi, nStatus);
+    return XAPI_StatusToEvent(pApi, (int)nStatus);
 }
 
 /* Whether parsing the pending handshake request could give a different answer than last time. Parsing searches for

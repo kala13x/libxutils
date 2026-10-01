@@ -356,6 +356,7 @@ typedef struct {
     int nRead;
     int nErrors;
     int nLastError;
+    int nClosed;
 } alloc_ws_t;
 
 static int alloc_ws_callback(xapi_ctx_t *pContext, xapi_session_t *pSession)
@@ -363,6 +364,11 @@ static int alloc_ws_callback(xapi_ctx_t *pContext, xapi_session_t *pSession)
     alloc_ws_t *pTest = (alloc_ws_t*)pContext->pApi->pUserCtx;
     if (pContext->eCbType == XAPI_CB_REGISTERED)
         pTest->pSession = pSession;
+    else if (pContext->eCbType == XAPI_CB_CLOSED)
+    {
+        pTest->nClosed++;
+        pTest->pSession = NULL;
+    }
     else if (pContext->eCbType == XAPI_CB_ERROR)
     {
         pTest->nLastError = pContext->nStatus;
@@ -558,7 +564,298 @@ static int XTest_long_token_failure(void)
     return 0;
 }
 
+static int XTest_api_response_failure(void)
+{
+    const struct { int nCode; xapi_status_t eStatus; const char *pBody; } cases[] = {
+        {401, XAPI_MISSING_TOKEN, "{\"status\": \"Missing auth basic header\"}"},
+        {200, XAPI_STATUS_OK, "{\"status\": \"Unknown status\"}"}, {404, XAPI_UNKNOWN, "{\"status\": \"Not Found\"}"}
+    };
+    size_t nFailures = 0;
+    for (size_t c = 0; c < sizeof(cases) / sizeof(*cases); c++)
+    {
+        size_t nAllocations = 0;
+        for (size_t i = 0; i <= nAllocations; i++)
+        {
+            alloc_ws_t test = {0};
+            xapi_t api;
+            int pair[2];
+            CHECK(XAPI_Init(&api, alloc_ws_callback, &test) == XSTDOK && !socketpair(AF_UNIX, SOCK_STREAM, 0, pair),
+                "Create a response fixture before failing allocations");
+            xapi_endpoint_t endpoint;
+            XAPI_InitEndpoint(&endpoint);
+            endpoint.eType = XAPI_HTTP;
+            endpoint.eRole = XAPI_PEER;
+            endpoint.nEvents = XPOLLIN;
+            endpoint.nFD = pair[0];
+            CHECK(XAPI_AddEvent(&api, &endpoint) == XSTDOK && test.pSession, "Register the response owner");
+            api.events.nEventMax = 4;
+            g_nCalls = 0;
+            g_nFailAt = i ? i : SIZE_MAX;
+            int nStatus = XAPI_RespondHTTP(test.pSession, cases[c].nCode, cases[c].eStatus);
+            g_nFailAt = 0;
+            if (!i) nAllocations = g_nCalls;
+            if (nStatus == XEVENTS_CONTINUE)
+            {
+                xhttp_t response;
+                CHECK(XHTTP_ParseData(&response, test.pSession->txBuffer.pData, test.pSession->txBuffer.nUsed) == XHTTP_COMPLETE,
+                    "A successful response contains a complete HTTP message");
+                const char *pType = XHTTP_GetHeader(&response, "Content-Type");
+                const char *pAuth = XHTTP_GetHeader(&response, "WWW-Authenticate");
+                CHECK(response.nStatusCode == cases[c].nCode && pType && !strcmp(pType, "application/json"),
+                    "The intended status and content type survive every optional allocation failure");
+                CHECK(cases[c].eStatus == XAPI_MISSING_TOKEN ? pAuth && !strcmp(pAuth, "Basic realm=\"XAPI\"") : !pAuth,
+                    "Only the missing-token response carries the authentication challenge");
+                CHECK(!strcmp(response.sVersion, "1.0") && XHTTP_GetBodySize(&response) == strlen(cases[c].pBody) &&
+                    !memcmp(XHTTP_GetBody(&response), cases[c].pBody, strlen(cases[c].pBody)), "The version and body are exact");
+                XHTTP_Clear(&response);
+            }
+            else
+            {
+                nFailures++;
+                CHECK(i && test.nErrors && !test.pSession->txBuffer.nUsed,
+                    "A required allocation failure reports an error without queuing a partial response");
+            }
+            XAPI_Destroy(&api);
+            CHECK(fcntl(pair[0], F_GETFD) < 0 && errno == EBADF, "Every response owner relinquishes its descriptor");
+            close(pair[1]);
+        }
+    }
+    CHECK(nFailures > 20, "Fail distinct header, assembly and outbound-buffer allocations");
+    return 0;
+}
+
+static int XTest_mdtp_header_failure(void)
+{
+    uint8_t payload[] = {0, 0xff, 'p', 'a', 'y'};
+    size_t nAllocations = 0, nFailures = 0;
+    for (size_t i = 0; i <= nAllocations; i++)
+    {
+        xpacket_t packet, parsed;
+        CHECK(XPacket_Init(&packet, payload, sizeof(payload)) == XPACKET_ERR_NONE, "Initialize the MDTP header owner");
+        XPacket_Clear(&packet);
+        packet.header.eType = XPACKET_TYPE_DATA;
+        packet.header.nSessionID = 0xfedcba98;
+        packet.header.nTimeStamp = 1700000123;
+        packet.header.nPacketID = 12345;
+        packet.header.bEncrypted = XTRUE;
+        strcpy(packet.header.sVersion, "1.2");
+        strcpy(packet.header.sPayloadType, "application/octet-stream");
+        strcpy(packet.header.sTime, "2026-10-01T12:34:56");
+        strcpy(packet.header.sTZ, "UTC");
+        g_nCalls = 0;
+        g_nFailAt = i ? i : SIZE_MAX;
+        int nStatus = XPacket_UpdateHeader(&packet);
+        g_nFailAt = 0;
+        if (!i) nAllocations = g_nCalls;
+        if (nStatus != XPACKET_ERR_NONE)
+        {
+            nFailures++;
+            CHECK(i && nStatus == XPACKET_ERR_ALLOC, "Every failed header allocation returns the allocation status");
+            packet.header.eType = XPACKET_TYPE_DATA;
+            CHECK(XPacket_UpdateHeader(&packet) == XPACKET_ERR_NONE, "Retry completes a partially constructed header");
+        }
+        xbyte_buffer_t *pWire = XPacket_Assemble(&packet);
+        CHECK(pWire && XPacket_Parse(&parsed, pWire->pData, pWire->nUsed) == XPACKET_COMPLETE,
+            "The completed header and binary payload form a complete packet");
+        CHECK(parsed.header.eType == XPACKET_TYPE_DATA && parsed.header.nSessionID == 0xfedcba98 &&
+            parsed.header.nTimeStamp == 1700000123 && parsed.header.nPacketID == 12345 && parsed.header.bEncrypted &&
+            !strcmp(parsed.header.sVersion, "1.2") && !strcmp(parsed.header.sPayloadType, "application/octet-stream") &&
+            !strcmp(parsed.header.sTime, "2026-10-01T12:34:56") && !strcmp(parsed.header.sTZ, "UTC"),
+            "Every optional header field survives failure and retry with its exact value");
+        CHECK(parsed.header.nPayloadSize == sizeof(payload) && !memcmp(XPacket_GetPayload(&parsed), payload, sizeof(payload)),
+            "Header allocation failures never alter the caller's binary payload");
+        XPacket_Clear(&parsed);
+        XPacket_Clear(&packet);
+    }
+    CHECK(nFailures > 30, "Fail allocations throughout metadata, extra fields and encrypted payload metadata");
+    return 0;
+}
+
+static int XTest_http_copy_failure(void)
+{
+    const uint8_t body[] = {0, 'c', 'o', 'p', 'y', 0xff};
+    size_t nAllocations = 0, nFailures = 0;
+    for (size_t i = 0; i <= nAllocations; i++)
+    {
+        xhttp_t source, copy;
+        CHECK(XHTTP_InitRequest(&source, XHTTP_POST, "/copy?exact=1", "1.1") > 0 &&
+            XHTTP_AddHeader(&source, "X-One", "first") > 0 && XHTTP_AddHeader(&source, "X-Two", "second") > 0 &&
+            XHTTP_Assemble(&source, body, sizeof(body)), "Assemble the original HTTP message before copying");
+        source.nTimeout = 4321;
+        source.nContentMax = 98765;
+        source.nHeaderMax = 5432;
+        source.pUserCtx = &nFailures;
+        strcpy(source.sUnixAddr, "/tmp/copy.sock");
+        g_nCalls = 0;
+        g_nFailAt = i ? i : SIZE_MAX;
+        int nStatus = XHTTP_Copy(&copy, &source);
+        g_nFailAt = 0;
+        if (!i) nAllocations = g_nCalls;
+        if (nStatus < 0) nFailures++;
+        CHECK(!strcmp(XHTTP_GetHeader(&source, "X-One"), "first") &&
+            !strcmp(XHTTP_GetHeader(&source, "X-Two"), "second") && XHTTP_GetBodySize(&source) == sizeof(body) &&
+            !memcmp(XHTTP_GetBody(&source), body, sizeof(body)), "Copy failure preserves the original headers and binary body");
+        if (nStatus > 0)
+        {
+            CHECK(copy.rawData.nUsed == source.rawData.nUsed &&
+                !memcmp(copy.rawData.pData, source.rawData.pData, source.rawData.nUsed),
+                "A successful copy preserves every wire byte");
+            CHECK(copy.nTimeout == 4321 && copy.nContentMax == 98765 && copy.nHeaderMax == 5432 && copy.pUserCtx == &nFailures &&
+                !strcmp(copy.sUnixAddr, "/tmp/copy.sock") && !strcmp(copy.sUri, "/copy?exact=1"),
+                "A successful copy preserves limits, callback context and endpoint metadata");
+            XHTTP_Clear(&source);
+            CHECK(!strcmp(XHTTP_GetHeader(&copy, "X-One"), "first") && !strcmp(XHTTP_GetHeader(&copy, "X-Two"), "second") &&
+                !memcmp(XHTTP_GetBody(&copy), body, sizeof(body)), "The copy owns its data independently of the original");
+        }
+        else XHTTP_Clear(&source);
+        XHTTP_Clear(&copy);
+    }
+    CHECK(nFailures >= 6, "Fail payload, map, header-key and header-value allocations independently");
+    return 0;
+}
+
+static int XTest_ws_request_failure(void)
+{
+    size_t nFailures = 0;
+    for (int nDefaultPort = 0; nDefaultPort < 2; nDefaultPort++)
+    {
+        size_t nAllocations = 0;
+        for (size_t i = 0; i <= nAllocations; i++)
+        {
+            alloc_ws_t test = {0};
+            xapi_t api;
+            int pair[2];
+            CHECK(XAPI_Init(&api, alloc_ws_callback, &test) == XSTDOK && !socketpair(AF_UNIX, SOCK_STREAM, 0, pair),
+                "Create a websocket client before injecting failures");
+            xapi_endpoint_t endpoint;
+            XAPI_InitEndpoint(&endpoint);
+            endpoint.eType = XAPI_WS;
+            endpoint.eRole = XAPI_CLIENT;
+            endpoint.nEvents = XPOLLOUT;
+            endpoint.nPort = nDefaultPort ? 80 : 4321;
+            endpoint.pUri = "/socket?exact=1";
+            endpoint.nFD = pair[0];
+            CHECK(XAPI_AddEvent(&api, &endpoint) == XSTDOK && test.pSession, "Register the websocket client");
+            strcpy(test.pSession->sAddr, "example.test");
+            strcpy(test.pSession->sUserAgent, "allocation-test");
+            CHECK(XSock_NonBlock(&test.pSession->sock, XTRUE) >= 0, "Handshake writes cannot block");
+            api.events.nEventMax = 4;
+            g_nCalls = 0;
+            g_nFailAt = i ? i : SIZE_MAX;
+            int nStatus = XAPI_Service(&api, 100);
+            g_nFailAt = 0;
+            if (!i) nAllocations = g_nCalls;
+            CHECK(nStatus == XEVENTS_SUCCESS, "Handshake failures are contained to their session");
+            uint8_t wire[4096];
+            ssize_t nRead = recv(pair[1], wire, sizeof(wire), MSG_DONTWAIT);
+            if (test.nClosed)
+            {
+                nFailures++;
+                CHECK(i && test.nClosed == 1 && !test.pSession && nRead == 0 && test.nErrors,
+                    "Failed handshake allocations close the client without transmitting a partial HTTP request");
+            }
+            else
+            {
+                xhttp_t request;
+                CHECK(nRead > 0 && XHTTP_ParseData(&request, wire, nRead) == XHTTP_COMPLETE,
+                    "A successful client sends a complete HTTP upgrade request");
+                CHECK(request.eType == XHTTP_REQUEST && request.eMethod == XHTTP_GET &&
+                    !strcmp(request.sUri, "/socket?exact=1") && !strcmp(request.sVersion, "1.1") && !XHTTP_GetBodySize(&request),
+                    "Every successful request preserves its exact method, URI, version and empty body");
+                const char *pNames[] = {"Upgrade", "Connection", "Sec-WebSocket-Version", "User-Agent", "Host",
+                    "Sec-WebSocket-Key"};
+                const char *pValues[] = {"websocket", "Upgrade", "13", "allocation-test",
+                    nDefaultPort ? "example.test" : "example.test:4321", test.pSession->sKey};
+                for (size_t j = 0; j < sizeof(pNames) / sizeof(*pNames); j++)
+                {
+                    const char *pValue = XHTTP_GetHeader(&request, pNames[j]);
+                    CHECK(pValue && !strcmp(pValue, pValues[j]), "Every upgrade header has its intended exact value");
+                }
+                CHECK(strlen(test.pSession->sKey) == 24 && test.pSession->bHandshakeStart && !test.pSession->bHandshakeDone &&
+                    !test.nErrors && !test.pSession->txBuffer.nUsed, "The client awaits an answer after sending a valid nonce");
+                XHTTP_Clear(&request);
+            }
+            XAPI_Destroy(&api);
+            close(pair[1]);
+            CHECK(test.nClosed == 1 && fcntl(pair[0], F_GETFD) < 0 && errno == EBADF, "Every client descriptor is released once");
+        }
+    }
+    CHECK(nFailures > 20, "Fail request initialization, nonce encoding, headers, assembly and transmit-buffer allocations");
+    return 0;
+}
+
+static int XTest_ws_answer_failure(void)
+{
+    const char request[] = "GET /socket HTTP/1.1\r\nHost: example.test\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
+    size_t nAllocations = 0, nFailures = 0;
+    for (size_t i = 0; i <= nAllocations; i++)
+    {
+        alloc_ws_t test = {0};
+        xapi_t api;
+        int pair[2];
+        CHECK(XAPI_Init(&api, alloc_ws_callback, &test) == XSTDOK && !socketpair(AF_UNIX, SOCK_STREAM, 0, pair),
+            "Create a websocket server before injecting failures");
+        xapi_endpoint_t endpoint;
+        XAPI_InitEndpoint(&endpoint);
+        endpoint.eType = XAPI_WS;
+        endpoint.eRole = XAPI_PEER;
+        endpoint.nEvents = XPOLLIN;
+        endpoint.nFD = pair[0];
+        CHECK(XAPI_AddEvent(&api, &endpoint) == XSTDOK && test.pSession, "Register the accepted websocket transport");
+        strcpy(test.pSession->sUserAgent, "allocation-server");
+        CHECK(XSock_NonBlock(&test.pSession->sock, XTRUE) >= 0 &&
+            XByteBuffer_Add(&test.pSession->rxBuffer, (const uint8_t*)request, sizeof(request) - 1) == sizeof(request) - 1,
+            "Provide the complete known upgrade request before failing allocations");
+        api.events.nEventMax = 4;
+        g_nCalls = 0;
+        g_nFailAt = i ? i : SIZE_MAX;
+        int nStatus = XAPI_ProcessBuffered(test.pSession);
+        g_nFailAt = 0;
+        if (!i) nAllocations = g_nCalls;
+        if (nStatus == XAPI_CONTINUE)
+        {
+            CHECK(test.pSession->txBuffer.nUsed && !test.pSession->rxBuffer.nUsed && !test.nErrors &&
+                test.pSession->bHandshakeStart && !test.pSession->bHandshakeDone, "A successful upgrade queues its full answer");
+            CHECK(XAPI_Service(&api, 100) == XEVENTS_SUCCESS && test.pSession && test.pSession->bHandshakeDone &&
+                !test.pSession->txBuffer.nUsed, "The server completes its handshake only after sending the answer");
+            uint8_t wire[4096];
+            ssize_t nRead = recv(pair[1], wire, sizeof(wire), MSG_DONTWAIT);
+            xhttp_t response;
+            CHECK(nRead > 0 && XHTTP_ParseData(&response, wire, nRead) == XHTTP_COMPLETE,
+                "The peer receives a complete HTTP upgrade response");
+            CHECK(response.eType == XHTTP_RESPONSE && response.nStatusCode == 101 && !strcmp(response.sVersion, "1.1") &&
+                !XHTTP_GetBodySize(&response), "Every successful upgrade has status 101, HTTP/1.1 and no unexpected body");
+            const char *pNames[] = {"Upgrade", "Connection", "Sec-WebSocket-Accept", "Server"};
+            const char *pValues[] = {"websocket", "Upgrade", "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", "allocation-server"};
+            for (size_t j = 0; j < sizeof(pNames) / sizeof(*pNames); j++)
+            {
+                const char *pValue = XHTTP_GetHeader(&response, pNames[j]);
+                CHECK(pValue && !strcmp(pValue, pValues[j]), "The answer contains the exact headers and known accept digest");
+            }
+            XHTTP_Clear(&response);
+        }
+        else
+        {
+            nFailures++;
+            CHECK(i && nStatus == XAPI_DISCONNECT && test.nErrors && !test.pSession->txBuffer.nUsed && !test.nClosed,
+                "A failed buffered upgrade reports its failure, queues no partial answer and leaves cleanup to its caller");
+        }
+        CHECK(!test.pSession->pPacket, "No borrowed handshake pointer escapes the callback");
+        XAPI_Destroy(&api);
+        close(pair[1]);
+        CHECK(test.nClosed == 1 && fcntl(pair[0], F_GETFD) < 0 && errno == EBADF, "Every server transport is released once");
+    }
+    CHECK(nFailures > 20, "Fail incoming parsing, response initialization, accept digest, headers and output allocations");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(ws_answer_failure),
+    XTEST_CASE(ws_request_failure),
+    XTEST_CASE(http_copy_failure),
+    XTEST_CASE(mdtp_header_failure),
+    XTEST_CASE(api_response_failure),
     XTEST_CASE(tls_context_failure),
     XTEST_CASE(borrowed_string_failure),
     XTEST_CASE(split_failure),
