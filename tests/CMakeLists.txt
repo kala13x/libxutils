@@ -32,6 +32,9 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    xutils_regression(api_worker_fault_regression net start_failure wait_failures stop_failures watch_failures watch_shutdown
+        wait_single watch_reaped start_guards start_retry)
+    target_link_options(api_worker_fault_regression PRIVATE -Wl,--wrap=calloc -Wl,--wrap=fork -Wl,--wrap=kill -Wl,--wrap=waitpid)
     xutils_regression(worker_feature feature direct one two four eight shared unix restart_one restart_four churn
         repeated capacity tls_direct tls_one tls_four tls_shared tls_restart_one tls_restart_four tls_churn
         shutdown_direct shutdown_one shutdown_four tls_shutdown_one tls_shutdown_four)
@@ -55,10 +58,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         -Wl,--wrap=read -Wl,--wrap=write)
     xutils_regression(sys_fault_regression net create nonblock accept api_setup api_timer event_destroy api_destroy
         timer_read read_paths user_actions api_connect ntp_failure worker_rebuild worker_parent worker_limits worker_peak
-        worker_flags)
+        worker_flags wait_failure)
     target_link_options(sys_fault_regression PRIVATE -Wl,--wrap=socket -Wl,--wrap=listen -Wl,--wrap=connect
         -Wl,--wrap=setsockopt -Wl,--wrap=fcntl -Wl,--wrap=accept -Wl,--wrap=accept4
-        -Wl,--wrap=epoll_create1 -Wl,--wrap=epoll_ctl -Wl,--wrap=timerfd_create -Wl,--wrap=timerfd_settime
+        -Wl,--wrap=epoll_create1 -Wl,--wrap=epoll_wait -Wl,--wrap=epoll_ctl -Wl,--wrap=timerfd_create -Wl,--wrap=timerfd_settime
         -Wl,--wrap=read -Wl,--wrap=__read_chk -Wl,--wrap=send -Wl,--wrap=sendto -Wl,--wrap=chmod -Wl,--wrap=calloc
         -Wl,--wrap=free)
     if(OPENSSL_FOUND)
@@ -134,7 +137,7 @@ xutils_regression(addr_url_regression net components scheme_case default_ports p
     parse_guards overlong unix_socket interfaces local_ip url_shapes)
 
 xutils_regression(event_regression net lifecycle modify callback_delete timers timer_order wakeup status_strings
-    capacity lookup event_fd service_guards timer_lifecycle interrupted write_byte)
+    capacity lookup event_fd service_guards timer_lifecycle interrupted write_byte detached_delete urgent_data)
 xutils_regression(ws_regression net lengths partial coalesced invalid_wire creation_guards frame_types
     masking control_frames extra_data allocation mask_lengths append_frame mask_keys)
 xutils_regression(http_regression net partial pipeline headers basic_auth long_basic_auth reuse empty_body assemble_empty_body
@@ -199,6 +202,8 @@ xutils_regression(api_io_regression net partial_io callback_disconnect peer_eof 
     real_ip http_endless handshake_body_limit mdtp_limit crossed_events reloop)
 xutils_regression(api_http_regression net http_partial http_pipeline http_pipeline_burst auth_key auth_basic auth_short)
 if(UNIX)
+    xutils_regression(api_branch_regression net timer_actions buffered_actions tick_actions write_actions complete_actions
+        ws_key_policy ws_token_refusals http_client_ip cancel_ready)
     xutils_regression(api_ctl_regression net vocabulary init listen_connect endpoint_guards
         timers workers buffers)
     xutils_regression(api_proto_regression net websocket mdtp http_endpoint timers
@@ -298,7 +303,8 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     xutils_regression(allocation_regression allocation json_cleanup http_header buffer_preservation endpoint_ownership
         mdtp_assemble map_rehash_failure http_parse_failure format_failure search_append_failure ws_fragment_failure
-        borrowed_string_failure split_failure long_token_failure tls_context_failure)
+        borrowed_string_failure split_failure long_token_failure tls_context_failure api_response_failure mdtp_header_failure
+        http_copy_failure ws_request_failure ws_answer_failure api_accept_failure)
     target_link_options(allocation_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc)
 endif()
 

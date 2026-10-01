@@ -223,7 +223,8 @@ static void worker_serve(xapi_t *pApi, worker_test_t *pTest, int nStartStatus)
     if (!bValid)
     {
         ready.nStatus = XSTDERR;
-        write(pTest->nReadyFD, &ready, sizeof(ready));
+        ssize_t nWritten = write(pTest->nReadyFD, &ready, sizeof(ready));
+        (void)nWritten;
     }
     close(pTest->nReadyFD);
     exit(bValid ? 0 : 1);
@@ -757,12 +758,33 @@ int main(int argc, char **argv)
             test.nRounds > 0 && test.nBytes > 0 && test.nBytes <= 4096, "Benchmark dimensions are valid");
         return worker_run(&test);
     }
-    const xtest_case_t cases[] = {XTEST_CASE(direct), XTEST_CASE(one), XTEST_CASE(two), XTEST_CASE(four), XTEST_CASE(eight),
-        XTEST_CASE(shared), XTEST_CASE(unix), XTEST_CASE(restart_one), XTEST_CASE(restart_four), XTEST_CASE(churn),
-        XTEST_CASE(tls_direct), XTEST_CASE(tls_one), XTEST_CASE(tls_four), XTEST_CASE(tls_shared),
-        XTEST_CASE(tls_restart_one), XTEST_CASE(tls_restart_four), XTEST_CASE(tls_churn),
-        XTEST_CASE(shutdown_direct), XTEST_CASE(shutdown_one), XTEST_CASE(shutdown_four),
-        XTEST_CASE(tls_shutdown_one), XTEST_CASE(tls_shutdown_four),
-        XTEST_CASE(repeated), XTEST_CASE(capacity)};
+
+    const xtest_case_t cases[] = {
+        XTEST_CASE(direct),
+        XTEST_CASE(one),
+        XTEST_CASE(two),
+        XTEST_CASE(four),
+        XTEST_CASE(eight),
+        XTEST_CASE(shared),
+        XTEST_CASE(unix),
+        XTEST_CASE(restart_one),
+        XTEST_CASE(restart_four),
+        XTEST_CASE(churn),
+        XTEST_CASE(tls_direct),
+        XTEST_CASE(tls_one),
+        XTEST_CASE(tls_four),
+        XTEST_CASE(tls_shared),
+        XTEST_CASE(tls_restart_one),
+        XTEST_CASE(tls_restart_four),
+        XTEST_CASE(tls_churn),
+        XTEST_CASE(shutdown_direct),
+        XTEST_CASE(shutdown_one),
+        XTEST_CASE(shutdown_four),
+        XTEST_CASE(tls_shutdown_one),
+        XTEST_CASE(tls_shutdown_four),
+        XTEST_CASE(repeated),
+        XTEST_CASE(capacity)
+    };
+
     return XTest_Run(argc, argv, cases, sizeof(cases) / sizeof(*cases));
 }
