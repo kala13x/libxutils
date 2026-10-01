@@ -123,4 +123,8 @@ static int XTest_pool_dump(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(boundaries), XTEST_CASE(escape_nul), XTEST_CASE(pool_dump))
+XTEST_MAIN(
+    XTEST_CASE(boundaries),
+    XTEST_CASE(escape_nul),
+    XTEST_CASE(pool_dump)
+)

@@ -82,7 +82,10 @@ static int XTest_unix_backlog(void)
     CHECK(WIFEXITED(nStatus) && WEXITSTATUS(nStatus) == 0, "A full accept queue must fail without blocking the worker");
     return 0;
 }
-XTEST_MAIN(XTEST_CASE(listener_inheritance), XTEST_CASE(unix_backlog))
+XTEST_MAIN(
+    XTEST_CASE(listener_inheritance),
+    XTEST_CASE(unix_backlog)
+)
 #else
 XTEST_MAIN(XTEST_CASE(listener_inheritance))
 #endif

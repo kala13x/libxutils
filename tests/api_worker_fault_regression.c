@@ -326,5 +326,12 @@ static int XTest_watch_reaped(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(start_failure), XTEST_CASE(wait_failures), XTEST_CASE(stop_failures), XTEST_CASE(watch_failures),
-    XTEST_CASE(watch_shutdown), XTEST_CASE(wait_single), XTEST_CASE(watch_reaped))
+XTEST_MAIN(
+    XTEST_CASE(start_failure),
+    XTEST_CASE(wait_failures),
+    XTEST_CASE(stop_failures),
+    XTEST_CASE(watch_failures),
+    XTEST_CASE(watch_shutdown),
+    XTEST_CASE(wait_single),
+    XTEST_CASE(watch_reaped)
+)

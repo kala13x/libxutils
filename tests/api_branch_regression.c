@@ -398,6 +398,13 @@ static int XTest_cancel_ready(void)
     return 0;
 }
 
-XTEST_MAIN(XTEST_CASE(timer_actions), XTEST_CASE(buffered_actions), XTEST_CASE(tick_actions), XTEST_CASE(write_actions),
-    XTEST_CASE(complete_actions), XTEST_CASE(ws_key_policy), XTEST_CASE(ws_token_refusals), XTEST_CASE(http_client_ip),
-    XTEST_CASE(cancel_ready))
+XTEST_MAIN(XTEST_CASE(timer_actions),
+    XTEST_CASE(buffered_actions),
+    XTEST_CASE(tick_actions),
+    XTEST_CASE(write_actions),
+    XTEST_CASE(complete_actions),
+    XTEST_CASE(ws_key_policy),
+    XTEST_CASE(ws_token_refusals),
+    XTEST_CASE(http_client_ip),
+    XTEST_CASE(cancel_ready)
+)
