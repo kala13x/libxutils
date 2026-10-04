@@ -27,6 +27,7 @@ typedef enum {
     XFUZZ_TARGET_DIGEST,
     XFUZZ_TARGET_AES,
     XFUZZ_TARGET_FORMAT,
+    XFUZZ_TARGET_JSON_SCAN,
     XFUZZ_TARGET_COUNT
 } xfuzz_target_t;
 

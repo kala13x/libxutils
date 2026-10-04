@@ -78,7 +78,11 @@ static const xfuzz_seed_t g_fuzzSeeds[] = {
         "\x05" "0123456789abcdef0123456789abcdef" "fedcba9876543210fedcba9876543210" "nonce-0123456789" "plain text"),
 
     /* The first byte splits the rest into the two formatted arguments */
-    XFUZZ_SEED("format", XFUZZ_TARGET_FORMAT, "\x04" "leftright side")
+    XFUZZ_SEED("format", XFUZZ_TARGET_FORMAT, "\x04" "leftright side"),
+
+    /* A protocol header as a relay routes it */
+    XFUZZ_SEED("json-scan", XFUZZ_TARGET_JSON_SCAN,
+        "{\"version\":1,\"type\":\"encrypted\",\"sessionId\":7,\"encrypted\":true,\"payloadSize\":32}")
 };
 
 #endif

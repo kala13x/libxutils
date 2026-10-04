@@ -1405,6 +1405,102 @@ static int XTest_reloop(void)
     return 0;
 }
 
+/* Writes until the session has nothing queued, reading what arrives at the peer into pOut */
+static int XTest_Drain(xapi_t *pApi, xtest_api_t *pTest, xsock_t *pPeer, xbyte_buffer_t *pOut)
+{
+    uint8_t sChunk[8192];
+    for (int i = 0; i < 400 && (pTest->pSession->txBuffer.nUsed || pTest->pSession->nEvents & XPOLLOUT); i++)
+    {
+        CHECK(XAPI_Service(pApi, 10) == XEVENTS_SUCCESS, "Service the queued write");
+        int nBytes = XSock_Read(pPeer, sChunk, sizeof(sChunk));
+        if (nBytes > 0) CHECK(XByteBuffer_Add(pOut, sChunk, (size_t)nBytes) > 0, "Keep what arrived");
+    }
+
+    int nBytes = 0;
+    while ((nBytes = XSock_Read(pPeer, sChunk, sizeof(sChunk))) > 0)
+        CHECK(XByteBuffer_Add(pOut, sChunk, (size_t)nBytes) > 0, "Keep what arrived last");
+    return pTest->pSession->txBuffer.nUsed == 0 ? 0 : 1;
+}
+
+static int XTest_buffer_reuse(void)
+{
+    /* A session that moves one small message at a time keeps its emptied buffers' memory for the next one: they used to
+       be shrunk after every message and grown again for the next. A large buffer is still released once emptied. */
+    xtest_api_t test = {0};
+    xapi_t api;
+    xsock_t peer;
+    CHECK(XTest_OpenWS(&api, &test, &peer) == 0, "Create a buffer reuse fixture");
+    xapi_session_t *pSession = test.pSession;
+
+    xbyte_buffer_t sent, arrived;
+    XByteBuffer_Init(&sent, 0, XTRUE);
+    XByteBuffer_Init(&arrived, 0, XTRUE);
+
+    const uint8_t *pKept = NULL;
+    for (int i = 0; i < 4; i++)
+    {
+        char sMessage[64];
+        int nLength = snprintf(sMessage, sizeof(sMessage), "message %d", i);
+        CHECK(XWS_AppendFrame(&pSession->txBuffer, (const uint8_t*)sMessage, (size_t)nLength, XWS_BINARY, XFALSE, XTRUE) ==
+            XWS_ERR_NONE, "Queue a small frame");
+        CHECK(XWS_AppendFrame(&sent, (const uint8_t*)sMessage, (size_t)nLength, XWS_BINARY, XFALSE, XTRUE) == XWS_ERR_NONE,
+            "Remember it");
+        CHECK(i == 0 || pSession->txBuffer.pData == pKept, "The next frame goes where the last one was");
+        CHECK(XAPI_EnableEvent(pSession, XPOLLOUT) > 0, "Ask to write it");
+        CHECK(XTest_Drain(&api, &test, &peer, &arrived) == 0, "The frame is written");
+        CHECK(pSession->txBuffer.nUsed == 0 && pSession->txBuffer.pData != NULL && pSession->txBuffer.nSize > (size_t)nLength &&
+            pSession->txBuffer.nSize <= 4096, "An emptied small buffer keeps its memory");
+        pKept = pSession->txBuffer.pData;
+    }
+
+    CHECK(test.nComplete == 4 && !test.nErrors, "Each write completes once");
+    CHECK(arrived.nUsed == sent.nUsed && !memcmp(arrived.pData, sent.pData, sent.nUsed), "Every byte arrives in order");
+
+    /* A large send is released when it has gone out, as before */
+    size_t nLarge = 200000;
+    uint8_t *pLarge = (uint8_t*)malloc(nLarge);
+    CHECK(pLarge != NULL, "Allocate a large frame");
+    for (size_t i = 0; i < nLarge; i++) pLarge[i] = (uint8_t)(i * 7);
+    CHECK(XWS_AppendFrame(&pSession->txBuffer, pLarge, nLarge, XWS_BINARY, XFALSE, XTRUE) == XWS_ERR_NONE,
+        "Queue a large frame");
+    CHECK(XWS_AppendFrame(&sent, pLarge, nLarge, XWS_BINARY, XFALSE, XTRUE) == XWS_ERR_NONE, "Remember it too");
+    CHECK(XAPI_EnableEvent(pSession, XPOLLOUT) > 0, "Ask to write the large frame");
+    CHECK(XTest_Drain(&api, &test, &peer, &arrived) == 0, "The large frame is written");
+    CHECK(pSession->txBuffer.nUsed == 0 && pSession->txBuffer.nSize <= 1, "An emptied large buffer is released");
+    CHECK(arrived.nUsed == sent.nUsed && !memcmp(arrived.pData, sent.pData, sent.nUsed), "The large frame arrives whole");
+
+    /* The receive side: a small frame read and handled leaves the buffer allocated, a large one releases it */
+    xbyte_buffer_t wire;
+    XByteBuffer_Init(&wire, 0, XTRUE);
+    CHECK(XWS_AppendFrame(&wire, (const uint8_t*)"ping me", 7, XWS_BINARY, XTRUE, XTRUE) == XWS_ERR_NONE, "Mask a frame");
+    CHECK(XSock_Write(&peer, wire.pData, wire.nUsed) == (int)wire.nUsed, "Send it");
+    for (int i = 0; i < 50 && test.nRead < 1; i++) XAPI_Service(&api, 10);
+    CHECK(test.nRead == 1 && pSession->rxBuffer.nUsed == 0, "The small frame is read and handled");
+    CHECK(pSession->rxBuffer.pData != NULL && pSession->rxBuffer.nSize >= wire.nUsed && pSession->rxBuffer.nSize <= 4096,
+        "An emptied small receive buffer keeps its memory");
+
+    XByteBuffer_Reset(&wire);
+    CHECK(XWS_AppendFrame(&wire, pLarge, 60000, XWS_BINARY, XTRUE, XTRUE) == XWS_ERR_NONE, "Mask a large frame");
+    size_t nWritten = 0;
+    for (int i = 0; i < 400 && (nWritten < wire.nUsed || test.nRead < 2); i++)
+    {
+        int nBytes = nWritten < wire.nUsed ? XSock_Write(&peer, wire.pData + nWritten, wire.nUsed - nWritten) : 0;
+        if (nBytes > 0) nWritten += (size_t)nBytes;
+        XAPI_Service(&api, 10);
+    }
+
+    CHECK(test.nRead == 2 && pSession->rxBuffer.nUsed == 0 && pSession->rxBuffer.nSize <= 1,
+        "An emptied large receive buffer is released");
+    CHECK(test.received.nUsed == 60007 && !memcmp(test.received.pData + 7, pLarge, 60000), "Both frames arrive intact");
+
+    free(pLarge);
+    XByteBuffer_Clear(&wire);
+    XByteBuffer_Clear(&sent);
+    XByteBuffer_Clear(&arrived);
+    XTest_Close(&api, &test, &peer);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(partial_io),
     XTEST_CASE(callback_disconnect),
@@ -1432,5 +1528,6 @@ XTEST_MAIN(
     XTEST_CASE(handshake_body_limit),
     XTEST_CASE(mdtp_limit),
     XTEST_CASE(crossed_events),
-    XTEST_CASE(reloop)
+    XTEST_CASE(reloop),
+    XTEST_CASE(buffer_reuse)
 )

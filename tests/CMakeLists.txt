@@ -151,7 +151,7 @@ xutils_regression(array_regression data lifecycle reference_model search_boundar
     insert_holes null_and_bounds search_holes)
 xutils_regression(json_regression data
     parse_matrix parse_boundaries builders_and_writers generated_string_edges byte_boundaries error_states pool_and_stress root_array_and_api_boundaries
-    empty_objects pair_names)
+    empty_objects pair_names scan_flat)
 xutils_regression(json_limits_regression data boundaries escape_nul pool_dump)
 xutils_regression(str_buf_regression data boundaries)
 xutils_regression(base64_regression crypt boundaries)
@@ -199,7 +199,7 @@ xutils_regression(api_io_regression net partial_io callback_disconnect peer_eof 
     client_handshake_edges client_upgrade_validation server_upgrade_validation http_trickle websocket_control
     websocket_sequence_errors websocket_limits
     websocket_tls_hello
-    real_ip http_endless handshake_body_limit mdtp_limit crossed_events reloop)
+    real_ip http_endless handshake_body_limit mdtp_limit crossed_events reloop buffer_reuse)
 xutils_regression(api_http_regression net http_partial http_pipeline http_pipeline_burst auth_key auth_basic auth_short)
 if(UNIX)
     xutils_regression(api_branch_regression net timer_actions buffered_actions tick_actions write_actions complete_actions
@@ -211,7 +211,7 @@ if(UNIX)
     xutils_regression(api_events_regression net peer_closed peer_hunged user_callback
         interrupted_service tick extend_timer session_guards rx_size http_garbage
         http_oversized mdtp_garbage invalid_role inactive_role endpoint_guards ws_garbage_request
-        ws_oversized_request ws_bad_response ws_upgrade_tokens)
+        ws_oversized_request ws_bad_response ws_upgrade_tokens accept_exhausted)
 endif()
 xutils_regression(buf_regression data aliasing borrowed pointer_ownership ring_model growth edit
     accessors ownership_transfer heap_buffer data_buffer ring_boundaries
@@ -313,7 +313,14 @@ if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "1.1.0")
     xutils_regression(tls_regression net pending_record wrong_hostname untrusted)
     if(UNIX)
         xutils_regression(sock_tls_regression net handshake stale_error_queue pkcs12_identity pkcs12_ownership untrusted
-            cert_guards peer_endings closed_session_io status_strings write_after_reset plain_calls ssl_teardown)
+            cert_guards peer_endings closed_session_io status_strings write_after_reset plain_calls ssl_teardown
+            sigpipe_ignored)
+
+        # sigpipe_ignored counts the signal mask changes the TLS guard makes, through the linker's --wrap
+        if(NOT APPLE)
+            target_link_options(sock_tls_regression PRIVATE -Wl,--wrap=pthread_sigmask)
+            target_compile_definitions(sock_tls_regression PRIVATE XTEST_WRAP_SIGMASK)
+        endif()
         xutils_regression(api_tls_regression net handshake async_client async_stalled pkcs12_listener partial_writes
             plaintext_client missing_identity)
 
@@ -324,7 +331,7 @@ if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "1.1.0")
         endforeach()
 
         foreach(sock_tls_case handshake pkcs12_identity pkcs12_ownership untrusted cert_guards
-                peer_endings closed_session_io status_strings write_after_reset plain_calls ssl_teardown)
+                peer_endings closed_session_io status_strings write_after_reset plain_calls ssl_teardown sigpipe_ignored)
             set_tests_properties("sock_tls_regression.${sock_tls_case}" PROPERTIES TIMEOUT 300)
         endforeach()
     endif()

@@ -258,6 +258,7 @@ xbool_t XSock_WinsockInit(void);
 /* Create a pair of connected stream sockets (POSIX: socketpair(),
    Windows: loopback emulation). Usable with XEvents on all platforms. */
 XSTATUS XSock_CreatePair(XSOCKET aPair[2]);
+XSTATUS XSock_IgnoreSIGPIPE(void);
 
 XSTATUS XSock_MsgPeek(xsock_t* pSock);
 XSTATUS XSock_IsOpen(xsock_t* pSock);

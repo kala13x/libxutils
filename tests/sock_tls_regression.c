@@ -968,6 +968,96 @@ static int XTest_write_after_reset(void)
 }
 
 
+#ifdef XTEST_WRAP_SIGMASK
+/* Linked with --wrap=pthread_sigmask: every change of this thread's signal mask is counted, which is what the TLS
+   guard against SIGPIPE costs. The count is per thread, so the server thread's own calls stay out of it. */
+int __real_pthread_sigmask(int nHow, const sigset_t *pSet, sigset_t *pOld);
+static __thread int g_nSigmaskCalls = 0;
+
+int __wrap_pthread_sigmask(int nHow, const sigset_t *pSet, sigset_t *pOld)
+{
+    g_nSigmaskCalls++;
+    return __real_pthread_sigmask(nHow, pSet, pOld);
+}
+#endif
+
+static int XTest_sigpipe_ignored(void)
+{
+    /* An application that ignores SIGPIPE for good says so, and TLS calls stop masking the signal around every read
+     * and write: four system calls each, for a signal that can neither end the process nor reach a handler. A write
+     * into a session the peer has reset still fails cleanly. */
+#ifndef XTEST_WRAP_SIGMASK
+    printf("The signal mask calls cannot be counted with this linker, skipping\n");
+    return 77;
+#else
+    tls_fixture_t fixture;
+    if (tls_fixture_begin(&fixture) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("No TLS fixture could be built, skipping\n");
+        return 77;
+    }
+
+    tls_server_t server;
+    xthread_t thread;
+
+    if (tls_start_ex(&server, &fixture, &thread, XFALSE, TLS_END_RESET) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("The TLS server could not be started, skipping\n");
+        return 77;
+    }
+
+    xsock_cert_t cert;
+    XSock_InitCert(&cert);
+    cert.pCaPath = fixture.sCert;
+
+    xsock_t client;
+    if (tls_connect_armed(&client, server.nPort, &cert, &server) != XSTDOK)
+    {
+        XSock_Close(&client);
+        XThread_Join(&thread);
+        tls_fixture_end(&fixture);
+        printf("The TLS handshake did not complete, skipping\n");
+        return 77;
+    }
+
+    XSock_TimeOutR(&client, 10, 0);
+    XSock_TimeOutS(&client, 10, 0);
+
+    int nCalls = g_nSigmaskCalls;
+    CHECK(XSock_SSLWrite(&client, "hello", 5) == 5, "The first write goes out");
+    CHECK(g_nSigmaskCalls - nCalls == 2, "A guarded TLS write blocks SIGPIPE and puts the mask back");
+
+    CHECK(XSock_IgnoreSIGPIPE() == XSTDOK, "SIGPIPE can be ignored");
+    struct sigaction current;
+    CHECK(sigaction(SIGPIPE, NULL, &current) == 0 && current.sa_handler == SIG_IGN, "And is ignored for the process");
+
+    nCalls = g_nSigmaskCalls;
+    char sBuffer[256];
+    CHECK(XSock_SSLRead(&client, sBuffer, sizeof(sBuffer) - 1, XFALSE) > 0, "The server's answer is read");
+    XThread_Join(&thread);
+
+    char sChunk[8192];
+    memset(sChunk, 'w', sizeof(sChunk));
+
+    int nFailed = 0;
+    for (int i = 0; i < 64 && !nFailed; i++)
+    {
+        if (XSock_SSLWrite(&client, sChunk, sizeof(sChunk)) <= 0) nFailed = 1;
+        else xusleep(2000);
+    }
+
+    CHECK(nFailed == 1, "Writing into a reset session still fails, and the process is still here to see it");
+    CHECK(XSock_GetFD(&client) == XSOCK_INVALID, "The socket was closed rather than left open");
+    CHECK(g_nSigmaskCalls == nCalls, "Ignored, no TLS read or write touches the signal mask");
+
+    XSock_Close(&client);
+    tls_fixture_end(&fixture);
+    return 0;
+#endif
+}
+
 static int XTest_pkcs12_ownership(void)
 {
     /* The bundle loader hands the caller a certificate, a key and a CA
@@ -1041,5 +1131,6 @@ XTEST_MAIN(
     XTEST_CASE(status_strings),
     XTEST_CASE(write_after_reset),
     XTEST_CASE(plain_calls),
-    XTEST_CASE(ssl_teardown)
+    XTEST_CASE(ssl_teardown),
+    XTEST_CASE(sigpipe_ignored)
 )

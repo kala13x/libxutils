@@ -19,6 +19,7 @@
 #include "sha1.h"
 #include "hash.h"
 #include "base64.h"
+#include "xtime.h"
 
 #ifdef __linux__
 #include <sys/prctl.h>
@@ -33,6 +34,20 @@
 #define XAPI_READ_CHUNK         (128 * 1024)
 #define XAPI_SSL_DRAIN_MAX      64
 
+/* Largest allocation an emptied session buffer keeps for what comes next, see XAPI_ConsumeBuffer */
+#define XAPI_KEEP_BUFFER        4096
+
+/* How long a listener is left alone after accept() ran out of descriptors or memory, see XAPI_PauseAccept */
+#define XAPI_ACCEPT_RETRY_MS    100
+
+#ifdef _WIN32
+#define XAPI_ACCEPT_ERRNO()             WSAGetLastError()
+#define XAPI_ACCEPT_EXHAUSTED(nError)   ((nError) == WSAEMFILE || (nError) == WSAENOBUFS)
+#else
+#define XAPI_ACCEPT_ERRNO()             errno
+#define XAPI_ACCEPT_EXHAUSTED(nError)   ((nError) == EMFILE || (nError) == ENFILE || (nError) == ENOBUFS || (nError) == ENOMEM)
+#endif
+
 #define XAPI_DEFAULT_HTTP_VER   "1.1"
 
 typedef struct XAPIWorkerEvents {
@@ -42,6 +57,7 @@ typedef struct XAPIWorkerEvents {
 } xapi_worker_events_t;
 
 static void XAPI_CloseEventBackend(xevents_t *pEvents);
+static void XAPI_ForgetPausedAccept(xapi_t *pApi, xapi_session_t *pListener);
 XSTATUS XAPI_SpawnWorker(xapi_t *pApi, size_t nIndex);
 XSTATUS XAPI_WaitWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers);
 XSTATUS XAPI_StopWorkerPIDs(xpid_t *pWorkerPIDs, size_t nWorkers, int nSignal);
@@ -732,6 +748,9 @@ static int XAPI_ClearEvent(xapi_t *pApi, xevent_data_t *pEvData)
             xapi_session_t *pSession = (xapi_session_t*)pEvData->pContext;
             if (XAPI_ShouldDispatchSession(pSession))
                 nStatus = XAPI_ServiceCb(pApi, pSession, XAPI_CB_CLOSED);
+
+            if (pSession->eRole == XAPI_SERVER)
+                XAPI_ForgetPausedAccept(pApi, pSession);
 
             XAPI_FreeData(&pSession);
             pEvData->pContext = NULL;
@@ -1550,6 +1569,27 @@ static int XAPI_ClientHandshake(xapi_t *pApi, xapi_session_t *pSession)
     return nRetVal;
 }
 
+/* Takes nSize bytes off the front of a session's receive or send buffer. XByteBuffer_Advance() shrinks what is left
+   to fit, so a session that moved one small message at a time freed its buffer after every message and allocated it
+   again for the next. An emptied buffer keeps a small allocation now; a large one is still released, so an idle
+   session holds at most XAPI_KEEP_BUFFER. Returns what is left in the buffer. */
+static size_t XAPI_ConsumeBuffer(xbyte_buffer_t *pBuffer, size_t nSize)
+{
+    /* What XByteBuffer_Advance() leaves of an emptied buffer, the status included, without the shrinking */
+    if (nSize >= pBuffer->nUsed &&
+        pBuffer->pData != NULL &&
+        pBuffer->nSize > 0 &&
+        pBuffer->nSize <= XAPI_KEEP_BUFFER)
+    {
+        pBuffer->pData[0] = '\0';
+        pBuffer->nUsed = 0;
+        return XSTDNON;
+    }
+
+    int nLeft = XByteBuffer_Advance(pBuffer, nSize);
+    return nLeft > 0 ? (size_t)nLeft : XSTDNON;
+}
+
 static void XAPI_ResetWSFragments(xapi_session_t *pSession)
 {
     XCHECK_VOID_NL((pSession != NULL));
@@ -1722,7 +1762,7 @@ static int XAPI_HandleWS(xapi_t *pApi, xapi_session_t *pSession)
         if (eStatus != XWS_FRAME_COMPLETE) break;
     }
 
-    if (nOffset) XByteBuffer_Advance(pBuffer, nOffset);
+    if (nOffset) XAPI_ConsumeBuffer(pBuffer, nOffset);
     return nRetVal;
 }
 
@@ -1849,6 +1889,57 @@ static int XAPI_Read(xapi_t *pApi, xapi_session_t *pSession)
     return nStatus;
 }
 
+/* accept() that fails for want of a descriptor or of memory leaves the connection queued, so the listener stays
+   readable: the loop asked again at once, a failed accept() and an error callback per pass - a core spinning and the
+   log filling until something freed a descriptor. The listener is left out of polling for a moment instead, and the
+   connection waits in the queue rather than being dropped. A timer would itself need a descriptor, so XAPI_Service()
+   brings it back. A listener that cannot be tracked is polled as before. */
+static void XAPI_PauseAccept(xapi_t *pApi, xapi_session_t *pListener)
+{
+    size_t i;
+    for (i = 0; i < pApi->nAcceptPaused; i++) if (pApi->pAcceptPaused[i] == pListener) return;
+
+    XCHECK_VOID_NL((pApi->nAcceptPaused < XAPI_ACCEPT_PAUSED_MAX && pListener->pEvData != NULL));
+    XCHECK_VOID_NL((XEvents_Suspend(&pApi->events, pListener->pEvData) == XEVENTS_SUCCESS));
+
+    pApi->pAcceptPaused[pApi->nAcceptPaused++] = pListener;
+    pApi->nAcceptResumeMs = XTime_GetMonoMs() + XAPI_ACCEPT_RETRY_MS;
+}
+
+static void XAPI_ForgetPausedAccept(xapi_t *pApi, xapi_session_t *pListener)
+{
+    size_t i;
+    for (i = 0; i < pApi->nAcceptPaused; i++)
+    {
+        if (pApi->pAcceptPaused[i] != pListener) continue;
+        pApi->pAcceptPaused[i] = pApi->pAcceptPaused[--pApi->nAcceptPaused];
+        return;
+    }
+}
+
+/* Polls the paused listeners again once their moment has passed. Returns how long the
+   event wait may take, so a caller waiting longer, or for ever, is woken in time. */
+static int XAPI_ResumeAccept(xapi_t *pApi, int nTimeoutMs)
+{
+    XCHECK_NL((pApi->nAcceptPaused > 0), nTimeoutMs);
+    uint64_t nNowMs = XTime_GetMonoMs();
+
+    if (nNowMs < pApi->nAcceptResumeMs)
+    {
+        uint64_t nLeftMs = pApi->nAcceptResumeMs - nNowMs;
+        return (nTimeoutMs < 0 || (uint64_t)nTimeoutMs > nLeftMs) ? (int)nLeftMs : nTimeoutMs;
+    }
+
+    while (pApi->nAcceptPaused > 0)
+    {
+        xapi_session_t *pListener = pApi->pAcceptPaused[--pApi->nAcceptPaused];
+        if (XEvents_Resume(&pApi->events, pListener->pEvData, pListener->nEvents) != XEVENTS_SUCCESS)
+            XAPI_ErrorCb(pApi, pListener, XAPI_EVENT, XEVENTS_ECTL);
+    }
+
+    return nTimeoutMs;
+}
+
 static int XAPI_Accept(xapi_t *pApi, xapi_session_t *pSession)
 {
     XCHECK((pApi != NULL), XEVENTS_DISCONNECT);
@@ -1868,11 +1959,15 @@ static int XAPI_Accept(xapi_t *pApi, xapi_session_t *pSession)
 
     if (XSock_Accept(pListener, pNewSock) == XSOCK_INVALID)
     {
+        int nError = XAPI_ACCEPT_ERRNO();
         xsock_status_t status = pListener->eStatus != XSOCK_ERR_NONE ?
                                 pListener->eStatus : pNewSock->eStatus;
 
         if (status != XSOCK_WANT_READ && status != XSOCK_WANT_WRITE)
             XAPI_ErrorCb(pApi, pPeerData, XAPI_SOCK, status);
+
+        if (pListener->eStatus == XSOCK_ERR_ACCEPT && XAPI_ACCEPT_EXHAUSTED(nError))
+            XAPI_PauseAccept(pApi, pSession);
 
         XAPI_FreeData(&pPeerData);
         return XEVENTS_CONTINUE;
@@ -1946,7 +2041,7 @@ static int XAPI_Write(xapi_t *pApi, xapi_session_t *pSession)
         return XEVENTS_DISCONNECT;
     }
 
-    if (!XByteBuffer_Advance(pBuffer, nSent))
+    if (!XAPI_ConsumeBuffer(pBuffer, (size_t)nSent))
     {
         nStatus = XAPI_DisableEvent(pSession, XPOLLOUT);
         XCHECK((nStatus > XSTDNON), XEVENTS_DISCONNECT);
@@ -2227,6 +2322,8 @@ XSTATUS XAPI_Init(xapi_t *pApi, xapi_cb_t callback, void *pUserCtx)
     pApi->pUserCtx = pUserCtx;
     pApi->nRxSize = XAPI_RX_MAX;
     pApi->pReadBuffer = NULL;
+    pApi->nAcceptPaused = XSTDNON;
+    pApi->nAcceptResumeMs = XSTDNON;
     return XSTDOK;
 }
 
@@ -2334,6 +2431,8 @@ xevent_status_t XAPI_Service(xapi_t *pApi, int nTimeoutMs)
     XCHECK(pApi->bHaveEvents, XEVENTS_EINVALID);
 
     xevents_t *pEvents = &pApi->events;
+    nTimeoutMs = XAPI_ResumeAccept(pApi, nTimeoutMs);
+
     xevent_status_t eStatus = XEvents_Service(pEvents, nTimeoutMs);
     if (eStatus != XEVENTS_SUCCESS) return eStatus;
     return XAPI_TickEvent(pApi);

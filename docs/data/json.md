@@ -80,6 +80,16 @@ JSON parser, mutable object builder and formatter.
 
 - Frees root object and clears parser state.
 
+#### `xbool_t XJSON_ScanFlat(const char *pData, size_t nSize, xjson_field_t *pFields, size_t nCount)`
+
+- Reads the members named in `pFields` from a flat JSON object without building a tree or allocating.
+- Uses the parser's own lexer: `XTRUE` means `XJSON_Parse()` accepts the same input. Every value must be a
+  string, number, `true`, `false` or `null`, no name may repeat, and only whitespace may follow the object.
+- Each field gets `nType` (`XJSON_TYPE_INVALID` when absent), and `pValue`/`nLength` pointing into `pData`:
+  a string without its quotes, anything else as written. Names match exactly as written between the quotes.
+- Returns `XFALSE` for invalid input and for what it does not handle - arrays, nested values, objects with more
+  than `XJSON_SCAN_MEMBERS` members - so a caller that needs more falls back to `XJSON_Parse()`.
+
 #### `size_t XJSON_GetErrorStr(xjson_t *pJson, char *pOutput, size_t nSize)`
 
 - Formats the current parser error and byte offset into `pOutput`.

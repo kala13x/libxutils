@@ -16,6 +16,8 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
 
 typedef struct {
     xapi_t api;
@@ -43,6 +45,7 @@ typedef struct {
 
     int nTickSessions;
     int nInterruptSessions;
+    int nAcceptedCb;
 
     /* What a peer should ask to watch once it has been accepted. */
     int nPeerEvents;
@@ -140,6 +143,8 @@ static int api_ev_callback(xapi_ctx_t *pCtx, xapi_session_t *pSession)
 
     if (pCtx->eCbType == XAPI_CB_ACCEPTED)
     {
+        pTest->nAcceptedCb++;
+
         /* An accepted peer watches nothing until it says otherwise, so this
          * is where the test picks which poll bits it wants to be told about. */
         if (pTest->bExtendOnAccept)
@@ -1044,6 +1049,95 @@ static int XTest_ws_upgrade_tokens(void)
     return 0;
 }
 
+/* Valgrind keeps descriptors of its own above the limit it shows a program and enforces that limit itself: an
+   accept() past it is closed by valgrind once the kernel has taken the connection off the queue. */
+static xbool_t api_ev_under_valgrind(void)
+{
+    const char *pPreload = getenv("LD_PRELOAD");
+    return pPreload != NULL && strstr(pPreload, "vgpreload") != NULL;
+}
+
+/* Runs in a child of its own, which lowers its descriptor limit and uses up every descriptor it is left with */
+static int api_ev_accept_exhausted(void)
+{
+    struct rlimit limit;
+    CHECK(getrlimit(RLIMIT_NOFILE, &limit) == 0, "Read the descriptor limit");
+    limit.rlim_cur = limit.rlim_max < 256 ? limit.rlim_max : 256;
+    CHECK(setrlimit(RLIMIT_NOFILE, &limit) == 0, "Lower the descriptor limit");
+
+    api_ev_t test;
+    memset(&test, 0, sizeof(test));
+    test.nPeerEvents = XPOLLIN;
+    CHECK(XAPI_Init(&test.api, api_ev_callback, &test) == XSTDOK, "Initialize the API");
+
+    uint16_t nPort = api_ev_port();
+    CHECK(nPort != 0, "Find a free port");
+
+    xapi_endpoint_t listener;
+    XAPI_InitEndpoint(&listener);
+    listener.eType = XAPI_SOCK;
+    listener.eRole = XAPI_SERVER;
+    listener.pAddr = "127.0.0.1";
+    listener.nPort = nPort;
+    CHECK(XAPI_Listen(&test.api, &listener) == XSTDOK, "Listen");
+
+    int nClient = (int)socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(nPort);
+    CHECK(nClient >= 0 && connect(nClient, (struct sockaddr*)&addr, sizeof(addr)) == 0, "Queue a connection");
+
+    int nFills[256];
+    size_t nFilled = 0;
+    while (nFilled < sizeof(nFills) / sizeof(nFills[0]))
+    {
+        int nFD = dup(nClient);
+        if (nFD < 0) break;
+        nFills[nFilled++] = nFD;
+    }
+
+    CHECK(errno == EMFILE, "Every descriptor is in use");
+
+    /* The queued connection keeps the listener readable. Asked about on every pass, it was a failed accept() and an
+       error each time, as fast as the loop could turn; it is looked at a few times a second now. */
+    int nErrors = test.nErrors, nPasses = 0;
+    uint64_t nStartMs = XTime_GetMonoMs();
+    while (XTime_GetMonoMs() - nStartMs < 350)
+    {
+        CHECK(XAPI_Service(&test.api, 10) == XEVENTS_SUCCESS, "Service the loop");
+        nPasses++;
+    }
+
+    int nFailed = test.nErrors - nErrors;
+    CHECK(nFailed >= 1 && nFailed <= 6, "Out of descriptors, accepting is retried a few times a second, not on every pass");
+    CHECK(nPasses > nFailed, "And the loop keeps turning for everything else meanwhile");
+    CHECK(test.nAcceptedCb == 0, "Nothing could be accepted yet");
+
+    /* Under valgrind the connection did not get to wait: valgrind closed it */
+    xbool_t bQueued = !api_ev_under_valgrind();
+    for (size_t i = 0; i < nFilled; i++) close(nFills[i]);
+    for (int i = 0; i < 50 && !test.nAcceptedCb && bQueued; i++) XAPI_Service(&test.api, 20);
+    CHECK(test.nAcceptedCb == 1 || !bQueued, "The connection waited in the queue and is accepted once descriptors are free");
+
+    close(nClient);
+    XAPI_Destroy(&test.api);
+    return 0;
+}
+
+static int XTest_accept_exhausted(void)
+{
+    pid_t nPid = fork();
+    CHECK(nPid >= 0, "Fork a child for its own descriptor limit");
+    if (nPid == 0) _exit(api_ev_accept_exhausted());
+
+    int nStatus = 0;
+    CHECK(waitpid(nPid, &nStatus, 0) == nPid, "Wait for the child");
+    CHECK(WIFEXITED(nStatus) && WEXITSTATUS(nStatus) == 0, "The child's checks passed");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(peer_closed),
     XTEST_CASE(peer_hunged),
@@ -1062,5 +1156,6 @@ XTEST_MAIN(
     XTEST_CASE(ws_garbage_request),
     XTEST_CASE(ws_oversized_request),
     XTEST_CASE(ws_bad_response),
-    XTEST_CASE(ws_upgrade_tokens)
+    XTEST_CASE(ws_upgrade_tokens),
+    XTEST_CASE(accept_exhausted)
 )

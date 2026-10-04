@@ -1070,6 +1070,93 @@ int XJSON_Parse(xjson_t *pJson, xpool_t *pPool, const char *pData, size_t nSize)
     return nStatus;
 }
 
+/* Follows XJSON_Parse token for token over the subset it handles. A header of a
+   few members cost a map, a name and a value allocation per member to parse, and
+   as many frees after: most of what a relay spends on a small message. Anything
+   the walk below does not accept, XJSON_Parse would either refuse as well or
+   accept as something this is not meant to read, so XFALSE is always safe. */
+xbool_t XJSON_ScanFlat(const char *pData, size_t nSize, xjson_field_t *pFields, size_t nCount)
+{
+    XCHECK_NL((pData != NULL && (pFields != NULL || !nCount)), XFALSE);
+    size_t i;
+
+    for (i = 0; i < nCount; i++)
+    {
+        pFields[i].nType = XJSON_TYPE_INVALID;
+        pFields[i].pValue = NULL;
+        pFields[i].nLength = 0;
+    }
+
+    xjson_t json;
+    XJSON_Init(&json);
+    json.pData = pData;
+    json.nDataSize = nSize;
+    xjson_token_t *pToken = &json.lastToken;
+
+    /* XJSON_Parse refuses a name it has already seen in the object */
+    const char *pNames[XJSON_SCAN_MEMBERS];
+    size_t nNameLens[XJSON_SCAN_MEMBERS];
+    size_t nMembers = 0;
+
+    XCHECK_NL((XJSON_GetNextToken(&json) && pToken->nType == XJSON_TOKEN_LCURLY), XFALSE);
+    XCHECK_NL(XJSON_GetNextToken(&json), XFALSE);
+    xbool_t bEmpty = pToken->nType == XJSON_TOKEN_RCURLY;
+
+    while (!bEmpty)
+    {
+        XCHECK_NL((pToken->nType == XJSON_TOKEN_QUOTE && nMembers < XJSON_SCAN_MEMBERS), XFALSE);
+        const char *pName = pToken->pData;
+        size_t nNameLen = pToken->nLength;
+
+        for (i = 0; i < nMembers; i++)
+        {
+            if (nNameLens[i] == nNameLen &&
+                !memcmp(pNames[i], pName, nNameLen)) 
+                return XFALSE;
+        }
+
+        pNames[nMembers] = pName;
+        nNameLens[nMembers++] = nNameLen;
+
+        XCHECK_NL(XJSON_Expect(&json, XJSON_TOKEN_COLON), XFALSE);
+        XCHECK_NL((XJSON_GetNextToken(&json) && XJSON_TokenIsItem(pToken)), XFALSE);
+
+        /* A name never holds a NUL, the lexer refuses control characters. The first
+           character settles almost every comparison before strncmp() is needed. */
+        char cFirst = nNameLen ? pName[0] : '\0';
+        for (i = 0; i < nCount; i++)
+        {
+            const char *pWanted = pFields[i].pName;
+            if (pWanted == NULL || pWanted[0] != cFirst) continue;
+            if (strncmp(pWanted, pName, nNameLen) || pWanted[nNameLen] != '\0') continue;
+
+            pFields[i].nType = XJSON_GetItemType(pToken->nType);
+            pFields[i].pValue = pToken->pData;
+            pFields[i].nLength = pToken->nLength;
+            break;
+        }
+
+        XCHECK_NL(XJSON_GetNextToken(&json), XFALSE);
+        if (pToken->nType == XJSON_TOKEN_RCURLY) break;
+
+        XCHECK_NL((pToken->nType == XJSON_TOKEN_COMMA), XFALSE);
+        XCHECK_NL(XJSON_GetNextToken(&json), XFALSE);
+    }
+
+    while (json.nOffset < nSize)
+    {
+        char nCharacter = pData[json.nOffset++];
+
+        if (nCharacter != ' ' &&
+            nCharacter != '\n' &&
+            nCharacter != '\r' &&
+            nCharacter != '\t')
+            return XFALSE;
+    }
+
+    return XTRUE;
+}
+
 xjson_obj_t *XJSON_FromStr(xpool_t *pPool, const char *pFmt, ...)
 {
     size_t nSize = 0;

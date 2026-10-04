@@ -69,6 +69,8 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
   - `pSession`: active API session.
 - Does:
   - returns the session-owned TX or RX buffer.
+  - once XAPI has written out or handled everything in it, a buffer whose allocation is at most 4 KiB keeps that
+    allocation for the next message; a larger one is shrunk as `XByteBuffer_Advance()` shrinks it.
 - Returns:
   - internal buffer pointer.
   - `NULL` when `pSession == NULL`.
@@ -401,6 +403,10 @@ High-level event/runtime wrapper over `event.c`, `sock.c`, `http.c`, `mdtp.c` an
   - `pApi`: initialized runtime with an active events backend.
   - `nTimeoutMs`: poll timeout passed to `XEvents_Service()`.
 - Does:
+  - polls again any listener that was paused after `accept()` ran out of descriptors or memory (`EMFILE`,
+    `ENFILE`, `ENOBUFS`, `ENOMEM`). Such a listener is left out of polling for 100 ms rather than retried on
+    every pass, which spun the loop and repeated the error callback; the connection waits in the listen queue.
+    The wait is shortened so the listener is not left paused longer than that.
   - services the underlying event loop.
   - if that cycle succeeds, emits `XAPI_CB_TICK`.
 - Returns:

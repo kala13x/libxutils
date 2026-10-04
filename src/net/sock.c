@@ -826,6 +826,26 @@ XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
     return XSock_SetFlags(pSock, nFlags);
 }
 
+/* Set once by XSock_IgnoreSIGPIPE(), read by the TLS guard below.
+   Forked workers inherit it with the disposition. */
+static volatile sig_atomic_t g_bSigPipeIgnored = 0;
+
+XSTATUS XSock_IgnoreSIGPIPE(void)
+{
+#ifdef _WIN32
+    return XSTDOK;
+#else
+    struct sigaction sact;
+    memset(&sact, 0, sizeof(sact));
+    sigemptyset(&sact.sa_mask);
+    sact.sa_handler = SIG_IGN;
+
+    if (sigaction(SIGPIPE, &sact, NULL) != 0) return XSTDERR;
+    g_bSigPipeIgnored = 1;
+    return XSTDOK;
+#endif
+}
+
 #ifdef XSOCK_USE_SSL
 /* SIGPIPE suppression for the TLS path.
  *
@@ -870,6 +890,9 @@ static void XSock_BlockSIGPIPE(xsock_nosigpipe_t *pGuard)
 {
     pGuard->bBlocked = XFALSE;
     pGuard->bWasPending = XFALSE;
+
+    /* Ignored, the signal ends nothing and reaches no handler: there is nothing to guard against */
+    if (g_bSigPipeIgnored) return;
 
     sigset_t pipeSet, pending;
     sigemptyset(&pipeSet);

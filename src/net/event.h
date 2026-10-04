@@ -191,6 +191,9 @@ xevent_data_t* XEvents_RegisterEvent(xevents_t *pEvents, void *pCtx, XSOCKET nFd
 xevent_status_t XEvents_Add(xevents_t *pEvents, xevent_data_t *pData, int nEvents);
 xevent_status_t XEvents_Modify(xevents_t *pEvents, xevent_data_t *pData, int nEvents);
 xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData);
+
+xevent_status_t XEvents_Suspend(xevents_t *pEvents, xevent_data_t *pData);
+xevent_status_t XEvents_Resume(xevents_t *pEvents, xevent_data_t *pData, int nEvents);
 xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs);
 
 #ifdef __cplusplus
