@@ -2,6 +2,8 @@
  * relay-supplied bytes, so it must roundtrip cleanly and reject garbage
  * without crashing or leaking. */
 
+#include <ctype.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <math.h>
 #include <stdio.h>
@@ -11,6 +13,7 @@
 #include "json.h"
 #include "map.h"
 #include "log.h"
+#include "str.h"
 
 #include "test.h"
 
@@ -890,6 +893,301 @@ static int XTest_scan_flat(void)
     return 0;
 }
 
+/* Numbers are written without a format pass; the text has to be the one printf gives, digit for digit */
+static int number_matches(xpool_t *pPool, uint64_t nValue)
+{
+    char sWant[32];
+    xjson_obj_t *pObj = XJSON_NewU64(pPool, "n", nValue);
+    snprintf(sWant, sizeof(sWant), "%" PRIu64, nValue);
+    int bSame = pObj != NULL && pObj->nType == XJSON_TYPE_NUMBER && !strcmp((const char*)pObj->pData, sWant);
+    XJSON_FreeObject(pObj);
+
+    pObj = XJSON_NewU32(pPool, "n", (uint32_t)nValue);
+    snprintf(sWant, sizeof(sWant), "%u", (uint32_t)nValue);
+    bSame = bSame && pObj != NULL && pObj->nType == XJSON_TYPE_NUMBER && !strcmp((const char*)pObj->pData, sWant);
+    XJSON_FreeObject(pObj);
+
+    pObj = XJSON_NewU16(pPool, NULL, (uint16_t)nValue);
+    snprintf(sWant, sizeof(sWant), "%u", (unsigned)(uint16_t)nValue);
+    bSame = bSame && pObj != NULL && pObj->nType == XJSON_TYPE_NUMBER && !strcmp((const char*)pObj->pData, sWant);
+    XJSON_FreeObject(pObj);
+
+    int nInt = (int)(int32_t)(uint32_t)nValue;
+    pObj = XJSON_NewInt(pPool, "i", nInt);
+    snprintf(sWant, sizeof(sWant), "%d", nInt);
+    bSame = bSame && pObj != NULL && pObj->nType == XJSON_TYPE_NUMBER && !strcmp((const char*)pObj->pData, sWant);
+    XJSON_FreeObject(pObj);
+
+    int nNegated = nInt == INT32_MIN ? INT32_MAX : -nInt;
+    pObj = XJSON_NewInt(pPool, "i", nNegated);
+    snprintf(sWant, sizeof(sWant), "%d", nNegated);
+    bSame = bSame && pObj != NULL && !strcmp((const char*)pObj->pData, sWant);
+    XJSON_FreeObject(pObj);
+
+    if (!bSame) fprintf(stderr, "json_regression: number text differs for %" PRIu64 "\n", nValue);
+    return bSame;
+}
+
+static int XTest_number_text(void)
+{
+    xpool_t *pPool = XPool_Create(4096);
+    CHECK(pPool != NULL, "Create a pool");
+
+    for (uint64_t v = 0; v <= 20000; v++) CHECK(number_matches((v & 1) ? pPool : NULL, v), "Every small value");
+
+    /* Each digit count from both sides, and the ends of every width */
+    for (uint64_t p = 1, i = 0; i < 20; i++, p *= 10)
+    {
+        for (uint64_t d = 0; d < 4; d++)
+        {
+            CHECK(number_matches(NULL, p + d) && number_matches(NULL, p - 1 - d) && number_matches(NULL, UINT64_MAX - p + d),
+                "The values around a power of ten");
+        }
+    }
+
+    for (int b = 0; b < 64; b++) CHECK(number_matches(NULL, (1ULL << b) - 1) && number_matches(NULL, 1ULL << b), "Powers of two");
+    CHECK(number_matches(NULL, UINT64_MAX) && number_matches(NULL, UINT32_MAX) && number_matches(NULL, (uint64_t)INT32_MAX + 1),
+        "The type limits");
+
+    uint64_t nState = 0x9E3779B97F4A7C15ULL;
+    for (int i = 0; i < 50000; i++)
+    {
+        nState ^= nState << 13;
+        nState ^= nState >> 7;
+        nState ^= nState << 17;
+        CHECK(number_matches(NULL, nState >> (nState % 64)), "Random values of every magnitude");
+    }
+
+    xjson_obj_t *pInt = XJSON_NewInt(NULL, NULL, INT32_MIN);
+    CHECK(pInt != NULL && !strcmp((const char*)pInt->pData, "-2147483648") && XJSON_GetInt(pInt) == INT32_MIN, "INT_MIN");
+    XJSON_FreeObject(pInt);
+
+    for (int i = 0; i < 2; i++)
+    {
+        xjson_obj_t *pTrue = XJSON_NewBool(i ? pPool : NULL, "t", 2);
+        xjson_obj_t *pFalse = XJSON_NewBool(i ? pPool : NULL, "f", 0);
+        xjson_obj_t *pNull = XJSON_NewNull(i ? pPool : NULL, "z");
+        CHECK(pTrue != NULL && pTrue->nType == XJSON_TYPE_BOOLEAN && !strcmp((const char*)pTrue->pData, "true"), "true");
+        CHECK(pFalse != NULL && pFalse->nType == XJSON_TYPE_BOOLEAN && !strcmp((const char*)pFalse->pData, "false"), "false");
+        CHECK(pNull != NULL && pNull->nType == XJSON_TYPE_NULL && !strcmp((const char*)pNull->pData, "null"), "null");
+        XJSON_FreeObject(pTrue);
+        XJSON_FreeObject(pFalse);
+        XJSON_FreeObject(pNull);
+    }
+
+    XPool_Destroy(pPool);
+    return 0;
+}
+
+/* The escaping the writer does, spelled out on its own: valid escapes are kept, the rest is escaped */
+static size_t reference_escape(char *pOut, const char *pIn)
+{
+    size_t nOut = 0, nLength = strlen(pIn);
+    for (size_t i = 0; i < nLength;)
+    {
+        unsigned char c = (unsigned char)pIn[i];
+        size_t nKeep = 0;
+        if (c == '\\' && i + 1 < nLength && strchr("\"\\/bfnrt", pIn[i + 1]) != NULL) nKeep = 2;
+        else if (c == '\\' && i + 5 < nLength && pIn[i + 1] == 'u')
+        {
+            nKeep = 6;
+            for (size_t j = i + 2; j < i + 6; j++)
+                if (!isxdigit((unsigned char)pIn[j])) nKeep = 0;
+        }
+
+        if (nKeep)
+        {
+            memcpy(pOut + nOut, pIn + i, nKeep);
+            nOut += nKeep;
+            i += nKeep;
+            continue;
+        }
+
+        i++;
+        if (c == '"' || c == '\\') nOut += (size_t)sprintf(pOut + nOut, "\\%c", c);
+        else if (c == '\b') nOut += (size_t)sprintf(pOut + nOut, "\\b");
+        else if (c == '\f') nOut += (size_t)sprintf(pOut + nOut, "\\f");
+        else if (c == '\n') nOut += (size_t)sprintf(pOut + nOut, "\\n");
+        else if (c == '\r') nOut += (size_t)sprintf(pOut + nOut, "\\r");
+        else if (c == '\t') nOut += (size_t)sprintf(pOut + nOut, "\\t");
+        else if (c < 0x20) nOut += (size_t)sprintf(pOut + nOut, "\\u%04x", c);
+        else pOut[nOut++] = (char)c;
+    }
+
+    pOut[nOut] = '\0';
+    return nOut;
+}
+
+/* A name and a value written compact, indented and pretty without colours, against the reference escaping */
+static int escape_matches(const char *pText)
+{
+    char sName[1024], sValue[1024], sWant[2200];
+    reference_escape(sName, pText);
+    reference_escape(sValue, pText);
+
+    xjson_obj_t *pRoot = XJSON_NewObject(NULL, NULL, XFALSE);
+    if (pRoot == NULL || XJSON_AddString(pRoot, pText, pText) != XJSON_ERR_NONE)
+    {
+        XJSON_FreeObject(pRoot);
+        return 0;
+    }
+
+    xjson_format_t plain;
+    memset(&plain, 0, sizeof(plain));
+    plain.pNameFmt = plain.pNameClr = plain.pStrFmt = plain.pStrClr = "";
+    plain.pNumFmt = plain.pNumClr = plain.pFloatFmt = plain.pFloatClr = "";
+    plain.pBoolFmt = plain.pBoolClr = plain.pNullFmt = plain.pNullClr = "";
+
+    size_t nLength = 0;
+    char *pCompact = XJSON_DumpObj(pRoot, 0, &nLength);
+    snprintf(sWant, sizeof(sWant), "{\"%s\":\"%s\"}", sName, sValue);
+    int bSame = pCompact != NULL && nLength == strlen(sWant) && !strcmp(pCompact, sWant);
+
+    char *pTabbed = XJSON_DumpObj(pRoot, 2, &nLength);
+    snprintf(sWant, sizeof(sWant), "{\n  \"%s\": \"%s\"\n}", sName, sValue);
+    bSame = bSame && pTabbed != NULL && nLength == strlen(sWant) && !strcmp(pTabbed, sWant);
+
+    char *pPretty = XJSON_FormatObj(pRoot, 0, &plain, &nLength);
+    snprintf(sWant, sizeof(sWant), "{\"%s" XSTR_FMT_RESET "\":\"%s" XSTR_FMT_RESET "\"}", sName, sValue);
+    bSame = bSame && pPretty != NULL && nLength == strlen(sWant) && !strcmp(pPretty, sWant);
+
+    if (!bSame) fprintf(stderr, "json_regression: escaping differs for \"%s\": %s\n", pText, pCompact ? pCompact : "(null)");
+    free(pCompact);
+    free(pTabbed);
+    free(pPretty);
+    XJSON_FreeObject(pRoot);
+    return bSame;
+}
+
+static int XTest_escape_reference(void)
+{
+    /* Every byte at every position of a run that would otherwise be copied as it is */
+    for (int nByte = 1; nByte <= UINT8_MAX; nByte++)
+    {
+        for (size_t nAt = 0; nAt < 12; nAt++)
+        {
+            char sText[16];
+            memcpy(sText, "abcdefghijkl", 12);
+            sText[nAt] = (char)nByte;
+            sText[12] = '\0';
+            CHECK(escape_matches(sText), "One byte anywhere in a plain run");
+            sText[nAt + 1] = '\0';
+            CHECK(escape_matches(sText), "One byte at the end");
+        }
+    }
+
+    static const char *pEdges[] = { "", "a", "\\", "\\\\", "\"", "\\u", "\\u00e", "\\u00e9", "\\u00G9", "x\\u00e9y\\", "\\/",
+        "\\x", "plain then \\n escape", "plain then \" quote", "\x01\x02", "tail\x1f", "\x7f\x80\xff", "ქართული", "a\\\"b" };
+    for (size_t i = 0; i < sizeof(pEdges) / sizeof(pEdges[0]); i++) CHECK(escape_matches(pEdges[i]), "Escaping edge");
+
+    uint32_t nState = 0x2545F491;
+    const char sAlphabet[] = "\\\"u0aF/bfnrt \x01\x1f\x7f\xc3\xa9xyz";
+    for (int nRound = 0; nRound < 20000; nRound++)
+    {
+        char sText[64];
+        nState = nState * 1664525u + 1013904223u;
+        size_t nLength = (nState >> 8) % 40;
+        for (size_t i = 0; i < nLength; i++)
+        {
+            nState = nState * 1664525u + 1013904223u;
+            sText[i] = sAlphabet[(nState >> 16) % (sizeof(sAlphabet) - 1)];
+        }
+        sText[nLength] = '\0';
+        CHECK(escape_matches(sText), "Random text over the characters escaping turns on");
+    }
+
+    return 0;
+}
+
+/* Brackets and newlines go straight into the output. Each fixed buffer short of the document fails, leaves a
+   terminated prefix of it and never writes past its end; any longer one holds exactly the document. */
+static int writes_at_every_size(xjson_obj_t *pRoot, size_t nTabSize, int nPretty, const char *pWant)
+{
+    size_t nWant = strlen(pWant);
+    char *pBuffer = (char*)malloc(nWant + 16);
+    if (pBuffer == NULL) return 0;
+
+    for (size_t nSize = 1; nSize <= nWant + 4; nSize++)
+    {
+        memset(pBuffer, 0x5a, nWant + 16);
+        xjson_writer_t writer;
+        if (!XJSON_InitWriter(&writer, NULL, pBuffer, nSize)) break;
+        writer.nTabSize = nTabSize;
+        writer.nPretty = (uint8_t)nPretty;
+        XJSON_FormatInit(&writer.format);
+
+        int nStatus = XJSON_WriteObject(pRoot, &writer);
+        size_t nUsed = strnlen(pBuffer, nSize);
+        int bOk = nUsed < nSize && nUsed == writer.nLength && writer.nAvail == nSize - nUsed &&
+                  !memcmp(pBuffer, pWant, nUsed) && (unsigned char)pBuffer[nSize] == 0x5a;
+
+        if (nSize > nWant) bOk = bOk && nStatus == XJSON_SUCCESS && nUsed == nWant;
+        else bOk = bOk && nStatus == XJSON_FAILURE;
+
+        if (!bOk)
+        {
+            fprintf(stderr, "json_regression: a %zu byte buffer gave status %d and %zu bytes for: %s\n",
+                nSize, nStatus, nUsed, pWant);
+            free(pBuffer);
+            return 0;
+        }
+    }
+
+    free(pBuffer);
+    return 1;
+}
+
+static int XTest_writer_tokens(void)
+{
+    xjson_obj_t *pRoot = XJSON_NewObject(NULL, NULL, XFALSE);
+    CHECK(pRoot != NULL, "Create the root");
+
+    xjson_obj_t *pEmptyObj = XJSON_NewObject(NULL, "eo", XFALSE);
+    xjson_obj_t *pEmptyArr = XJSON_NewArray(NULL, "ea", XFALSE);
+    xjson_obj_t *pArray = XJSON_NewArray(NULL, "a", XFALSE);
+    xjson_obj_t *pInner = XJSON_NewObject(NULL, NULL, XFALSE);
+    CHECK(pEmptyObj != NULL && pEmptyArr != NULL && pArray != NULL && pInner != NULL, "Create the members");
+
+    CHECK(XJSON_AddU32(pInner, "k", 1) == XJSON_ERR_NONE && XJSON_AddObject(pArray, pInner) == XJSON_ERR_NONE &&
+          XJSON_AddObject(pArray, XJSON_NewArray(NULL, NULL, XFALSE)) == XJSON_ERR_NONE &&
+          XJSON_AddObject(pArray, XJSON_NewBool(NULL, NULL, 1)) == XJSON_ERR_NONE &&
+          XJSON_AddObject(pRoot, pEmptyObj) == XJSON_ERR_NONE && XJSON_AddObject(pRoot, pEmptyArr) == XJSON_ERR_NONE &&
+          XJSON_AddObject(pRoot, pArray) == XJSON_ERR_NONE, "Assemble the document");
+
+    /* Member order is the map's, so the expected text is taken from a dump and checked by shape */
+    size_t nLength = 0;
+    char *pCompact = XJSON_DumpObj(pRoot, 0, &nLength);
+    CHECK(pCompact != NULL && nLength == strlen(pCompact) && parse_bytes_ok(pCompact, nLength), "Dump compact");
+    CHECK(strstr(pCompact, "\"eo\":{}") && strstr(pCompact, "\"ea\":[]") && strstr(pCompact, "\"a\":[{\"k\":1},[],true]"),
+        "Every bracket is where it belongs");
+    CHECK(writes_at_every_size(pRoot, 0, 0, pCompact), "Compact output at every buffer size");
+
+    char *pTabbed = XJSON_DumpObj(pRoot, 4, &nLength);
+    const char *pIndented = "    \"a\": [\n        {\n            \"k\": 1\n        },\n        [],\n        true\n    ]";
+    CHECK(pTabbed != NULL && strstr(pTabbed, pIndented), "Indented output puts each bracket on its own line");
+    CHECK(writes_at_every_size(pRoot, 4, 0, pTabbed), "Indented output at every buffer size");
+
+    xjson_format_t format;
+    XJSON_FormatInit(&format);
+    char *pPretty = XJSON_FormatObj(pRoot, 2, &format, &nLength);
+    CHECK(pPretty != NULL && nLength == strlen(pPretty), "Pretty output");
+    CHECK(writes_at_every_size(pRoot, 2, 1, pPretty), "Pretty output at every buffer size");
+
+    /* A parsed document has the linter flags set, which is what indents a bracket of its own */
+    xjson_t json;
+    CHECK(XJSON_Parse(&json, NULL, pCompact, strlen(pCompact)) == XJSON_SUCCESS, "Parse the dump back");
+    char *pParsed = XJSON_Dump(&json, 3, &nLength);
+    CHECK(pParsed != NULL && writes_at_every_size(json.pRootObj, 3, 0, pParsed), "A parsed tree at every buffer size");
+
+    free(pParsed);
+    XJSON_Destroy(&json);
+    free(pCompact);
+    free(pTabbed);
+    free(pPretty);
+    XJSON_FreeObject(pRoot);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(parse_matrix),
     XTEST_CASE(parse_boundaries),
@@ -901,5 +1199,8 @@ XTEST_MAIN(
     XTEST_CASE(root_array_and_api_boundaries),
     XTEST_CASE(empty_objects),
     XTEST_CASE(pair_names),
-    XTEST_CASE(scan_flat)
+    XTEST_CASE(scan_flat),
+    XTEST_CASE(number_text),
+    XTEST_CASE(escape_reference),
+    XTEST_CASE(writer_tokens)
 )

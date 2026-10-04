@@ -151,7 +151,7 @@ xutils_regression(array_regression data lifecycle reference_model search_boundar
     insert_holes null_and_bounds search_holes)
 xutils_regression(json_regression data
     parse_matrix parse_boundaries builders_and_writers generated_string_edges byte_boundaries error_states pool_and_stress root_array_and_api_boundaries
-    empty_objects pair_names scan_flat)
+    empty_objects pair_names scan_flat number_text escape_reference writer_tokens)
 xutils_regression(json_limits_regression data boundaries escape_nul pool_dump)
 xutils_regression(str_buf_regression data boundaries)
 xutils_regression(base64_regression crypt boundaries)

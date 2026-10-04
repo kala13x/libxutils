@@ -505,12 +505,43 @@ xjson_obj_t* XJSON_NewArray(xpool_t *pPool, const char *pName, uint8_t nAllowUpd
     return XJSON_NewArrayN(pPool, pName, nNameLen, nAllowUpdate);
 }
 
+/* The text "%"PRIu64 gives, terminated, without a format pass: numbers go into every protocol header */
+static void XJSON_PutU64(char *pOutput, uint64_t nValue)
+{
+    char sDigits[20];
+    size_t nCount = 0;
+
+    do
+    {
+        sDigits[nCount++] = (char)('0' + nValue % 10);
+        nValue /= 10;
+    }
+    while (nValue);
+
+    while (nCount) *pOutput++ = sDigits[--nCount];
+    *pOutput = '\0';
+}
+
+/* The text "%d" gives, INT_MIN included */
+static void XJSON_PutInt(char *pOutput, int nValue)
+{
+    unsigned int nMagnitude = (unsigned int)nValue;
+
+    if (nValue < 0)
+    {
+        *pOutput++ = '-';
+        nMagnitude = 0U - nMagnitude;
+    }
+
+    XJSON_PutU64(pOutput, nMagnitude);
+}
+
 xjson_obj_t* XJSON_NewU64(xpool_t *pPool, const char *pName, uint64_t nValue)
 {
     char *pValue = (char*)xalloc(pPool, XJSON_NUMBER_MAX);
     if (pValue == NULL) return NULL;
 
-    xstrncpyf(pValue, XJSON_NUMBER_MAX, "%"PRIu64, nValue);
+    XJSON_PutU64(pValue, nValue);
     xjson_obj_t *pObj = XJSON_CreateObject(pPool, pName, pValue, XJSON_TYPE_NUMBER);
 
     if (pObj == NULL)
@@ -540,7 +571,7 @@ xjson_obj_t* XJSON_NewU32(xpool_t *pPool, const char *pName, uint32_t nValue)
     char *pValue = (char*)xalloc(pPool, XJSON_NUMBER_MAX);
     if (pValue == NULL) return NULL;
 
-    xstrncpyf(pValue, XJSON_NUMBER_MAX, "%u", nValue);
+    XJSON_PutU64(pValue, nValue);
     xjson_obj_t *pObj = XJSON_CreateObject(pPool, pName, pValue, XJSON_TYPE_NUMBER);
 
     if (pObj == NULL)
@@ -557,7 +588,7 @@ xjson_obj_t* XJSON_NewU16(xpool_t *pPool, const char *pName, uint16_t nValue)
     char *pValue = (char*)xalloc(pPool, XJSON_NUMBER_MAX);
     if (pValue == NULL) return NULL;
 
-    xstrncpyf(pValue, XJSON_NUMBER_MAX, "%u", nValue);
+    XJSON_PutU64(pValue, nValue);
     xjson_obj_t *pObj = XJSON_CreateObject(pPool, pName, pValue, XJSON_TYPE_NUMBER);
 
     if (pObj == NULL)
@@ -600,7 +631,7 @@ xjson_obj_t* XJSON_NewInt(xpool_t *pPool, const char *pName, int nValue)
     char *pValue = (char*)xalloc(pPool, XJSON_NUMBER_MAX);
     if (pValue == NULL) return NULL;
 
-    xstrncpyf(pValue, XJSON_NUMBER_MAX, "%d", nValue);
+    XJSON_PutInt(pValue, nValue);
     xjson_obj_t *pObj = XJSON_CreateObject(pPool, pName, pValue, XJSON_TYPE_NUMBER);
 
     if (pObj == NULL)
@@ -706,9 +737,10 @@ xjson_obj_t* XJSON_NewBool(xpool_t *pPool, const char *pName, int nValue)
     char *pValue = (char*)xalloc(pPool, XJSON_BOOL_MAX);
     if (pValue == NULL) return NULL;
 
-    xstrncpyf(pValue, XJSON_BOOL_MAX, "%s", nValue ? "true" : "false");
-    xjson_obj_t *pObj = XJSON_CreateObject(pPool, pName, pValue, XJSON_TYPE_BOOLEAN);
+    if (nValue) memcpy(pValue, "true", sizeof("true"));
+    else memcpy(pValue, "false", sizeof("false"));
 
+    xjson_obj_t *pObj = XJSON_CreateObject(pPool, pName, pValue, XJSON_TYPE_BOOLEAN);
     if (pObj == NULL)
     {
         xfree(pPool, pValue);
@@ -736,7 +768,7 @@ xjson_obj_t* XJSON_NewNull(xpool_t *pPool, const char *pName)
     char *pValue = (char*)xalloc(pPool, XJSON_NULL_MAX);
     if (pValue == NULL) return NULL;
 
-    xstrncpyf(pValue, XJSON_NULL_MAX, "%s", "null");
+    memcpy(pValue, "null", sizeof("null"));
     xjson_obj_t *pObj = XJSON_CreateObject(pPool, pName, pValue, XJSON_TYPE_NULL);
 
     if (pObj == NULL)
@@ -1430,6 +1462,13 @@ static int XJSON_WriteRaw(xjson_writer_t *pWriter, const char *pData, size_t nLe
     return XJSON_SUCCESS;
 }
 
+/* A bracket or a newline: what XJSON_WriteString wrote for it, without a format pass */
+static int XJSON_WriteChar(xjson_writer_t *pWriter, int nIndent, char cChar)
+{
+    if (nIndent) XCHECK(XJSON_AppedSpaces(pWriter), XJSON_FAILURE);
+    return XJSON_WriteRaw(pWriter, &cChar, 1);
+}
+
 static int XJSON_WriteString(xjson_writer_t *pWriter, int nIndent, const char *pFmt, ...)
 {
     if (nIndent) XCHECK(XJSON_AppedSpaces(pWriter), XJSON_FAILURE);
@@ -1475,11 +1514,27 @@ static size_t XJSON_ValidEscapeLength(const char *pValue, size_t nLeft)
     return 6;
 }
 
+/* Length of the leading run that is written out unchanged: no quote, backslash or control byte in it.
+   Names and most values are nothing but that run, and the loops below give each of its bytes one byte. */
+static size_t XJSON_PlainLength(const char *pValue, size_t nLength)
+{
+    size_t i = 0;
+
+    while (i < nLength)
+    {
+        unsigned char c = (unsigned char)pValue[i];
+        if (c < 0x20 || c == '"' || c == '\\') break;
+        i++;
+    }
+
+    return i;
+}
+
 static size_t XJSON_EscapedLength(const char *pValue, size_t nLength)
 {
-    size_t nEscapedLength = 0;
+    size_t nEscapedLength = XJSON_PlainLength(pValue, nLength);
 
-    for (size_t i = 0; i < nLength;)
+    for (size_t i = nEscapedLength; i < nLength;)
     {
         size_t nEscape = XJSON_ValidEscapeLength(&pValue[i], nLength - i);
         if (nEscape)
@@ -1506,8 +1561,10 @@ static size_t XJSON_EscapedLength(const char *pValue, size_t nLength)
 static size_t XJSON_EscapeTo(char *pEscaped, const char *pValue, size_t nLength)
 {
     static const char sHex[] = "0123456789abcdef";
-    size_t nOffset = 0;
-    for (size_t i = 0; i < nLength;)
+    size_t nOffset = XJSON_PlainLength(pValue, nLength);
+    memcpy(pEscaped, pValue, nOffset);
+
+    for (size_t i = nOffset; i < nLength;)
     {
         size_t nEscape = XJSON_ValidEscapeLength(&pValue[i], nLength - i);
         if (nEscape)
@@ -1569,7 +1626,8 @@ static int XJSON_WriteQuoted(xjson_writer_t *pWriter, int nIndent, const char *p
 
     size_t nLength = strlen(pValue);
     size_t nSuffixLen = strlen(pSuffix);
-    size_t nEscapedLength = XJSON_EscapedLength(pValue, nLength);
+    xbool_t bPlain = XJSON_PlainLength(pValue, nLength) == nLength;
+    size_t nEscapedLength = bPlain ? nLength : XJSON_EscapedLength(pValue, nLength);
 
     if (nEscapedLength > SIZE_MAX - nSuffixLen - 3) return XJSON_FAILURE;
     size_t nTotal = nEscapedLength + nSuffixLen + 2;
@@ -1577,7 +1635,9 @@ static int XJSON_WriteQuoted(xjson_writer_t *pWriter, int nIndent, const char *p
 
     char *pOffset = &pWriter->pData[pWriter->nLength];
     *pOffset++ = '"';
-    pOffset += XJSON_EscapeTo(pOffset, pValue, nLength);
+    if (bPlain) memcpy(pOffset, pValue, nLength);
+    else XJSON_EscapeTo(pOffset, pValue, nLength);
+    pOffset += nEscapedLength;
     *pOffset++ = '"';
     memcpy(pOffset, pSuffix, nSuffixLen);
 
@@ -1700,12 +1760,12 @@ static int XJSON_WriteHashmap(xjson_obj_t *pObj, xjson_writer_t *pWriter)
     int nIndent = (pObj->pName == NULL && pObj->nAllowLinter) ? 1 : 0;
     xmap_t *pMap = (xmap_t*)pObj->pData;
 
-    XCHECK(XJSON_WriteString(pWriter, nIndent, "{"), XJSON_FAILURE);
+    XCHECK(XJSON_WriteChar(pWriter, nIndent, '{'), XJSON_FAILURE);
     nIndent = (pWriter->nTabSize && pMap->nCount && pObj->nAllowLinter) ? 1 : 0;
 
     if (nIndent)
     {
-        XCHECK(XJSON_WriteString(pWriter, 0, "\n"), XJSON_FAILURE);
+        XCHECK(XJSON_WriteChar(pWriter, 0, '\n'), XJSON_FAILURE);
         XCHECK(XJSON_Ident(pWriter, XJSON_IDENT_INC), XJSON_FAILURE);
     }
 
@@ -1720,7 +1780,7 @@ static int XJSON_WriteHashmap(xjson_obj_t *pObj, xjson_writer_t *pWriter)
     }
 
     if (nIndent) XCHECK(XJSON_Ident(pWriter, XJSON_IDENT_DEC), XJSON_FAILURE);
-    return XJSON_WriteString(pWriter, nIndent, "}");
+    return XJSON_WriteChar(pWriter, nIndent, '}');
 }
 
 static int XJSON_WriteArray(xjson_obj_t *pObj, xjson_writer_t *pWriter)
@@ -1730,14 +1790,14 @@ static int XJSON_WriteArray(xjson_obj_t *pObj, xjson_writer_t *pWriter)
     int nIndent = (pObj->pName == NULL && pObj->nAllowLinter) ? 1 : 0;
 
     xarray_t* pArray = (xarray_t*)pObj->pData;
-    XCHECK(XJSON_WriteString(pWriter, nIndent, "["), XJSON_FAILURE);
+    XCHECK(XJSON_WriteChar(pWriter, nIndent, '['), XJSON_FAILURE);
 
     size_t i, nUsed = XArray_Used(pArray);
     nIndent = (pWriter->nTabSize && nUsed && pObj->nAllowLinter) ? 1 : 0;
 
     if (nIndent)
     {
-        XCHECK(XJSON_WriteString(pWriter, 0, "\n"), XJSON_FAILURE);
+        XCHECK(XJSON_WriteChar(pWriter, 0, '\n'), XJSON_FAILURE);
         XCHECK(XJSON_Ident(pWriter, XJSON_IDENT_INC), XJSON_FAILURE);
     }
 
@@ -1755,7 +1815,7 @@ static int XJSON_WriteArray(xjson_obj_t *pObj, xjson_writer_t *pWriter)
     }
 
     if (nIndent) XCHECK(XJSON_Ident(pWriter, XJSON_IDENT_DEC), XJSON_FAILURE);
-    return XJSON_WriteString(pWriter, nIndent, "]");
+    return XJSON_WriteChar(pWriter, nIndent, ']');
 }
 
 int XJSON_WriteObject(xjson_obj_t *pObj, xjson_writer_t *pWriter)
