@@ -12,6 +12,7 @@
 #include "rtp.h"
 #include "str.h"
 #include "array.h"
+#include "map.h"
 #include "buf.h"
 #include "crypt.h"
 #include "xfs.h"
@@ -813,6 +814,45 @@ int LLVMFuzzerTestOneInput(const uint8_t *pData, size_t nSize)
 
         free(pFirst);
         free(pSecond);
+    }
+    else if (nTarget == XFUZZ_TARGET_JSON_SCAN)
+    {
+        /* The allocation-free scan against the parser. Whatever it takes has
+           to parse, each member it reports has to be the parsed one, and a
+           flat object the parser takes has to be taken by the scan too. */
+        xjson_field_t fields[] = { { "type", NULL, 0, 0 }, { "sessionId", NULL, 0, 0 }, { "", NULL, 0, 0 } };
+        xbool_t bScanned = XJSON_ScanFlat((const char*)pData, nSize, fields, 3);
+
+        xjson_t json;
+        xjson_obj_t *pRoot = XJSON_Parse(&json, NULL, (const char*)pData, nSize) ? json.pRootObj : NULL;
+        xarray_t *pMembers = (pRoot != NULL && pRoot->nType == XJSON_TYPE_OBJECT) ? XJSON_GetObjects(pRoot) : NULL;
+        xbool_t bFlat = pMembers != NULL && XArray_Used(pMembers) <= XJSON_SCAN_MEMBERS;
+
+        for (size_t i = 0; bFlat && i < XArray_Used(pMembers); i++)
+        {
+            xmap_pair_t *pPair = (xmap_pair_t*)XArray_GetData(pMembers, i);
+            xjson_type_t nType = ((xjson_obj_t*)pPair->pData)->nType;
+            if (nType == XJSON_TYPE_OBJECT || nType == XJSON_TYPE_ARRAY) bFlat = XFALSE;
+        }
+
+        if (bScanned != bFlat) abort();
+
+        for (size_t i = 0; bScanned && i < sizeof(fields) / sizeof(fields[0]); i++)
+        {
+            xjson_obj_t *pMember = XJSON_GetObject(pRoot, fields[i].pName);
+            if (fields[i].nType == XJSON_TYPE_INVALID)
+            {
+                if (pMember != NULL) abort();
+                continue;
+            }
+
+            const char *pText = pMember != NULL ? (const char*)pMember->pData : NULL;
+            if (pText == NULL || pMember->nType != fields[i].nType || strlen(pText) != fields[i].nLength ||
+                memcmp(pText, fields[i].pValue, fields[i].nLength)) abort();
+        }
+
+        XArray_Destroy(pMembers);
+        XJSON_Destroy(&json);
     }
     else
     {

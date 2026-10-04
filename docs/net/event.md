@@ -83,6 +83,15 @@ Cross-platform event loop over `epoll`, `poll` or `WSAPoll`, with timer support.
   event data `XEvents_Delete` frees. XAPI keeps its sockets open until they
   have been deleted (see `XSOCK_KEEPOPEN` in [sock.md](sock.md)).
 
+#### `xevent_status_t XEvents_Suspend(xevents_t *pEvents, xevent_data_t *pData)`
+
+#### `xevent_status_t XEvents_Resume(xevents_t *pEvents, xevent_data_t *pData, int nEvents)`
+
+- Take a registered descriptor out of polling and put it back, its event data untouched.
+- `XEvents_Modify()` cannot do this for a descriptor added with `EPOLLEXCLUSIVE`: epoll lets such a
+  registration be removed and added again, not changed. Pass `XEvents_Resume()` the events the descriptor
+  was registered with, `EPOLLEXCLUSIVE` included.
+
 ### Service loop
 
 #### `xevent_status_t XEvents_Service(xevents_t *pEvents, int nTimeoutMs)`

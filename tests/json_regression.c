@@ -724,6 +724,172 @@ static int XTest_pair_names(void)
     return 0;
 }
 
+/* XJSON_ScanFlat against XJSON_Parse on the same bytes. Whatever the scan accepts has to parse, and every field it
+   reports has to be the parsed member, by type and by text; a flat object that parses has to scan. Returns 1 when
+   the two agree, and fills *pScanned so a caller can count how often the scan took the input. */
+static int scan_agrees(const char *pData, size_t nSize, int *pScanned)
+{
+    xjson_field_t fields[] = {
+        { "type", NULL, 0, 0 }, { "sessionId", NULL, 0, 0 }, { "payloadSize", NULL, 0, 0 }, { "encrypted", NULL, 0, 0 },
+        { "", NULL, 0, 0 }, { "a", NULL, 0, 0 }, { "a\\\"b", NULL, 0, 0 }, { "missing", NULL, 0, 0 }
+    };
+
+    size_t nFields = sizeof(fields) / sizeof(fields[0]);
+    xbool_t bScanned = XJSON_ScanFlat(pData, nSize, fields, nFields);
+    *pScanned = bScanned ? 1 : 0;
+
+    xjson_t json;
+    int nParsed = XJSON_Parse(&json, NULL, pData, nSize);
+    xjson_obj_t *pRoot = nParsed ? json.pRootObj : NULL;
+    int nAgrees = 1;
+
+    xbool_t bFlat = pRoot != NULL && pRoot->nType == XJSON_TYPE_OBJECT;
+    xarray_t *pMembers = bFlat ? XJSON_GetObjects(pRoot) : NULL;
+    if (bFlat && (pMembers == NULL || XArray_Used(pMembers) > XJSON_SCAN_MEMBERS)) bFlat = XFALSE;
+
+    for (size_t i = 0; bFlat && i < XArray_Used(pMembers); i++)
+    {
+        xmap_pair_t *pPair = (xmap_pair_t*)XArray_GetData(pMembers, i);
+        xjson_obj_t *pMember = pPair != NULL ? (xjson_obj_t*)pPair->pData : NULL;
+        if (pMember == NULL || pMember->nType == XJSON_TYPE_OBJECT || pMember->nType == XJSON_TYPE_ARRAY) bFlat = XFALSE;
+    }
+
+    if (bScanned != bFlat) nAgrees = 0;
+
+    for (size_t i = 0; bScanned && nAgrees && i < nFields; i++)
+    {
+        xjson_obj_t *pMember = XJSON_GetObject(pRoot, fields[i].pName);
+        if (fields[i].nType == XJSON_TYPE_INVALID)
+        {
+            if (pMember != NULL || fields[i].pValue != NULL || fields[i].nLength) nAgrees = 0;
+            continue;
+        }
+
+        const char *pText = pMember != NULL ? (const char*)pMember->pData : NULL;
+        if (pText == NULL || pMember->nType != fields[i].nType || strlen(pText) != fields[i].nLength ||
+            memcmp(pText, fields[i].pValue, fields[i].nLength)) nAgrees = 0;
+    }
+
+    XArray_Destroy(pMembers);
+    XJSON_Destroy(&json);
+    return nAgrees;
+}
+
+static int XTest_scan_flat(void)
+{
+    const char sHeader[] = "{\"version\":1,\"type\":\"encrypted\",\"sessionId\":42,\"encrypted\":true,\"payloadSize\":300}";
+    xjson_field_t fields[] = {
+        { "type", NULL, 0, 0 }, { "sessionId", NULL, 0, 0 }, { "encrypted", NULL, 0, 0 }, { "missing", NULL, 0, 0 }
+    };
+
+    CHECK(XJSON_ScanFlat(sHeader, sizeof(sHeader) - 1, fields, 4), "A protocol header scans");
+    CHECK(fields[0].nType == XJSON_TYPE_STRING && fields[0].nLength == 9 && !memcmp(fields[0].pValue, "encrypted", 9),
+        "A string is reported without its quotes");
+    CHECK(fields[1].nType == XJSON_TYPE_NUMBER && fields[1].nLength == 2 && !memcmp(fields[1].pValue, "42", 2),
+        "A number is reported as written");
+    CHECK(fields[2].nType == XJSON_TYPE_BOOLEAN && fields[2].nLength == 4, "A literal is reported as written");
+    CHECK(fields[3].nType == XJSON_TYPE_INVALID && fields[3].pValue == NULL, "A member that is not there is absent");
+    CHECK(XJSON_ScanFlat(sHeader, sizeof(sHeader) - 1, NULL, 0), "Nothing has to be asked for");
+    CHECK(!XJSON_ScanFlat(NULL, 0, NULL, 0) && !XJSON_ScanFlat(sHeader, sizeof(sHeader) - 1, NULL, 1),
+        "Missing input or fields are refused");
+
+    /* Only a flat object is taken. Each of these parses, and is left to the parser. */
+    const char *pDeclined[] = { "[]", "[1,2]", "{\"a\":{}}", "{\"a\":[]}", "{\"a\":1,\"b\":{\"c\":2}}" };
+    for (size_t i = 0; i < sizeof(pDeclined) / sizeof(*pDeclined); i++)
+    {
+        int nScanned = 0;
+        CHECK(parse_ok(pDeclined[i]) && !XJSON_ScanFlat(pDeclined[i], strlen(pDeclined[i]), NULL, 0),
+            "A document with nesting is declined");
+        CHECK(scan_agrees(pDeclined[i], strlen(pDeclined[i]), &nScanned) && !nScanned, "And the parser agrees");
+    }
+
+    /* A name twice is refused here because the parser refuses it, even when that name is one being asked for */
+    const char sTwice[] = "{\"type\":\"encrypted\",\"sessionId\":1,\"type\":\"webrtc\"}";
+    CHECK(!XJSON_ScanFlat(sTwice, sizeof(sTwice) - 1, fields, 4), "A duplicate name is refused");
+
+    /* The member limit: one more than XJSON_SCAN_MEMBERS goes to the parser */
+    char sMany[2048];
+    for (size_t nMembers = XJSON_SCAN_MEMBERS - 1; nMembers <= XJSON_SCAN_MEMBERS + 1; nMembers++)
+    {
+        size_t nUsed = (size_t)snprintf(sMany, sizeof(sMany), "{");
+        for (size_t i = 0; i < nMembers; i++)
+            nUsed += (size_t)snprintf(sMany + nUsed, sizeof(sMany) - nUsed, "%s\"m%zu\":%zu", i ? "," : "", i, i);
+        nUsed += (size_t)snprintf(sMany + nUsed, sizeof(sMany) - nUsed, "}");
+
+        int nScanned = 0;
+        CHECK(scan_agrees(sMany, nUsed, &nScanned), "A long object scans as it parses");
+        CHECK(nScanned == (nMembers <= XJSON_SCAN_MEMBERS), "Up to the limit an object is taken, past it it is not");
+    }
+
+    /* Every case the parser is held to, valid and invalid, plus every cut of a header */
+    const char *pCases[] = { "{}", " \t\r\n{}\n\r\t ", "{\"\":1}", "{\"a\":\"\"}", "{\"a\":-0}", "{\"a\":1.5e-3}",
+        "{\"a\":null,\"b\":true,\"c\":false}", "{\"a\\\"b\":\"x\",\"\\u00e9\":1}", "{\"a\":\"\\u0000\\\\\\\"\"}",
+        "{\"a\":1,\"a\":2}", "{\"a\":1,}", "{,\"a\":1}", "{\"a\" 1}", "{\"a\":01}", "{\"a\":nul}", "{\"a\":nullx}",
+        "{\"a\":\"raw\nline\"}", "{\"a\":1} x", "{\"a\":1}{}", "{\"a\":1", "{\"a\":", "{\"a\"", "{", "", " ", "null",
+        "\"a\"", "{\"a\":1}\v", "{\"a\":TRUE}", "{\"sessionId\":99999999999999999999999}", "{\"type\":5}" };
+
+    for (size_t i = 0; i < sizeof(pCases) / sizeof(*pCases); i++)
+    {
+        int nScanned = 0;
+        CHECK(scan_agrees(pCases[i], strlen(pCases[i]), &nScanned), "The scan agrees with the parser on a fixed case");
+    }
+
+    for (size_t i = 0; i <= sizeof(sHeader) - 1; i++)
+    {
+        int nScanned = 0;
+        CHECK(scan_agrees(sHeader, i, &nScanned), "The scan agrees with the parser on every cut of a header");
+        CHECK(nScanned == (i == sizeof(sHeader) - 1), "Only the whole header is taken");
+    }
+
+    /* Mutations of real headers: flips, deletions and insertions of the characters the grammar turns on */
+    const char *pSeeds[] = { sHeader, "{\"type\":\"webrtc\",\"sessionId\":7,\"a\":null,\"\":-12.5e+3}",
+        "{ \"type\" : \"status\" , \"a\\\"b\" : \"\\u00ff\\n\" }" };
+    const char sAlphabet[] = "{}[]:,\"\\ \t\n0129-+.eEtrufalsn\x01\x7f";
+    uint32_t nState = 0x2545F491;
+    int nTaken = 0;
+
+    for (size_t nRound = 0; nRound < 30000; nRound++)
+    {
+        char sDoc[256];
+        const char *pSeed = pSeeds[nRound % (sizeof(pSeeds) / sizeof(*pSeeds))];
+        size_t nLength = strlen(pSeed);
+        memcpy(sDoc, pSeed, nLength);
+
+        for (int nEdit = 0; nEdit < 1 + (int)(nRound % 3); nEdit++)
+        {
+            nState = nState * 1664525u + 1013904223u;
+            size_t nAt = (nState >> 8) % (nLength + 1);
+            char cWith = sAlphabet[(nState >> 20) % (sizeof(sAlphabet) - 1)];
+            int nKind = (int)((nState >> 4) % 3);
+
+            if (nKind == 0 && nAt < nLength) sDoc[nAt] = cWith;
+            else if (nKind == 1 && nAt < nLength)
+            {
+                memmove(sDoc + nAt, sDoc + nAt + 1, nLength - nAt - 1);
+                nLength--;
+            }
+            else if (nLength + 1 < sizeof(sDoc))
+            {
+                memmove(sDoc + nAt + 1, sDoc + nAt, nLength - nAt);
+                sDoc[nAt] = cWith;
+                nLength++;
+            }
+        }
+
+        int nScanned = 0;
+        if (!scan_agrees(sDoc, nLength, &nScanned))
+        {
+            fprintf(stderr, "json_regression: scan and parse disagree on: %.*s\n", (int)nLength, sDoc);
+            return 1;
+        }
+
+        nTaken += nScanned;
+    }
+
+    CHECK(nTaken > 1000, "Enough of the mutations stayed valid for the comparison to mean something");
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(parse_matrix),
     XTEST_CASE(parse_boundaries),
@@ -734,5 +900,6 @@ XTEST_MAIN(
     XTEST_CASE(pool_and_stress),
     XTEST_CASE(root_array_and_api_boundaries),
     XTEST_CASE(empty_objects),
-    XTEST_CASE(pair_names)
+    XTEST_CASE(pair_names),
+    XTEST_CASE(scan_flat)
 )

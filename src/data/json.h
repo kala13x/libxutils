@@ -121,6 +121,23 @@ int XJSON_Parse(xjson_t *pJson, xpool_t *pPool, const char *pData, size_t nSize)
 void XJSON_Destroy(xjson_t *pJson);
 void XJSON_Init(xjson_t *pJson);
 
+/* Most members XJSON_ScanFlat looks at in one object */
+#define XJSON_SCAN_MEMBERS 32
+
+typedef struct xjson_field_ {
+    const char *pName;      /* Member to report, matched against its name exactly as written between the quotes */
+    const char *pValue;     /* Its value as written in the input: a string without its quotes, a number or a literal */
+    size_t nLength;         /* Length of pValue */
+    xjson_type_t nType;     /* XJSON_TYPE_INVALID when the object has no such member */
+} xjson_field_t;
+
+/* Reads the members named in pFields from a flat JSON object without building a tree or allocating anything.
+   The input goes through the parser's own lexer, and XTRUE means XJSON_Parse accepts it as well: one object,
+   every value a string, number, true, false or null, no name twice, nothing but whitespace after it. Values
+   point into pData. XFALSE refuses everything else - invalid input, but also arrays, nested values and objects
+   with more than XJSON_SCAN_MEMBERS members, so a caller that has to know more parses the input with XJSON_Parse. */
+xbool_t XJSON_ScanFlat(const char *pData, size_t nSize, xjson_field_t *pFields, size_t nCount);
+
 size_t XJSON_GetArrayLength(xjson_obj_t *pObj);
 int XJSON_RemoveArrayItem(xjson_obj_t *pObj, size_t nIndex);
 xarray_t* XJSON_GetObjects(xjson_obj_t *pObj);

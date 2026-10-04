@@ -26,6 +26,8 @@ extern "C" {
 
 typedef struct xapi_ xapi_t;
 
+#define XAPI_ACCEPT_PAUSED_MAX  8
+
 #define XAPI_CONTINUE   XSTDOK
 #define XAPI_DISCONNECT XSTDERR
 #define XAPI_NO_ACTION  XSTDNON
@@ -200,6 +202,12 @@ struct xapi_ {
     xbool_t bIsWorker;
 
     uint8_t *pReadBuffer;
+
+    /* Listeners left unpolled for a moment after accept() ran out of descriptors or memory. XAPI_Service()
+       polls them again once nAcceptResumeMs has passed: a timer would need a descriptor of its own. */
+    xapi_session_t *pAcceptPaused[XAPI_ACCEPT_PAUSED_MAX];
+    size_t nAcceptPaused;
+    uint64_t nAcceptResumeMs;
 };
 
 const char* XAPI_GetStatus(xapi_ctx_t *pCtx);

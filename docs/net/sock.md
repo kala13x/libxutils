@@ -140,6 +140,15 @@ Cross-platform socket wrapper covering TCP, UDP, Unix sockets, socket options an
 
 ### SSL helpers
 
+#### `XSTATUS XSock_IgnoreSIGPIPE(void)`
+
+- Sets `SIGPIPE` to `SIG_IGN` for the whole process and tells the TLS paths so.
+- Every OpenSSL call that can write is otherwise wrapped in blocking `SIGPIPE` and draining what it raised:
+  four system calls per TLS read and per TLS write. An ignored `SIGPIPE` reaches no handler and ends no
+  process, so the wrapping is skipped.
+- Returns `XSTDOK` once ignored. The application must leave `SIGPIPE` ignored afterwards, and programs it
+  starts with `exec()` inherit the disposition.
+
 #### `void XSock_InitSSL(void)`
 
 #### `void XSock_DeinitSSL(void)`

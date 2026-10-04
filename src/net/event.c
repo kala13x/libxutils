@@ -662,6 +662,45 @@ xevent_status_t XEvents_Modify(xevents_t *pEvents, xevent_data_t *pData, int nEv
     return XEVENTS_SUCCESS;
 }
 
+xevent_status_t XEvents_Suspend(xevents_t *pEvents, xevent_data_t *pData)
+{
+    XCHECK((pEvents != NULL && pData != NULL), XEVENTS_EINVALID);
+    XCHECK((pData->nFD != XSOCK_INVALID), XEVENTS_EINVALID);
+
+#if defined(_XEVENTS_USE_EPOLL)
+    if (epoll_ctl(pEvents->nEventFd, EPOLL_CTL_DEL, pData->nFD, NULL) < 0) return XEVENTS_ECTL;
+#else
+    XCHECK((pData->nIndex >= 0 && (uint32_t)pData->nIndex < pEvents->nEventCount), XEVENTS_ECTL);
+    pEvents->pEventArray[pData->nIndex].events = 0;
+    pEvents->pEventArray[pData->nIndex].revents = 0;
+#endif
+
+    return XEVENTS_SUCCESS;
+}
+
+xevent_status_t XEvents_Resume(xevents_t *pEvents, xevent_data_t *pData, int nEvents)
+{
+    XCHECK((pEvents != NULL && pData != NULL), XEVENTS_EINVALID);
+    XCHECK((pData->nFD != XSOCK_INVALID), XEVENTS_EINVALID);
+
+#if defined(_XEVENTS_USE_EPOLL)
+    struct epoll_event event;
+    event.data.ptr = pData;
+    event.events = nEvents;
+    if (epoll_ctl(pEvents->nEventFd, EPOLL_CTL_ADD, pData->nFD, &event) < 0) return XEVENTS_ECTL;
+
+#ifdef EPOLLEXCLUSIVE
+    nEvents &= ~EPOLLEXCLUSIVE;
+#endif
+#else
+    XCHECK((pData->nIndex >= 0 && (uint32_t)pData->nIndex < pEvents->nEventCount), XEVENTS_ECTL);
+    pEvents->pEventArray[pData->nIndex].events = (short)nEvents;
+#endif
+
+    pData->nEvents = nEvents;
+    return XEVENTS_SUCCESS;
+}
+
 xevent_status_t XEvents_Delete(xevents_t *pEvents, xevent_data_t *pData)
 {
     XCHECK((pEvents != NULL), XEVENTS_EINVALID);
