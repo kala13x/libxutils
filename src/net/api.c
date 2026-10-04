@@ -2257,6 +2257,7 @@ static int XAPI_EventCallback(void *events, void* data, XSOCKET fd, xevent_cb_ty
     xevent_data_t *pData = (xevent_data_t*)data;
     xevents_t *pEvents = (xevents_t*)events;
     xapi_t *pApi = (xapi_t*)pEvents->pUserSpace;
+    (void)fd;
 
     switch(reason)
     {

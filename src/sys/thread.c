@@ -200,7 +200,7 @@ uint32_t XTask_Wait(xtask_t *pTask, int nEvent, int nIntervalU)
 {
     uint32_t nCheckCount = 0;
 
-    while (XSYNC_ATOMIC_GET(&pTask->nStatus) != nEvent)
+    while ((int)XSYNC_ATOMIC_GET(&pTask->nStatus) != nEvent)
     {
         if (nIntervalU < 0) break;
         else if (!nIntervalU) continue;
