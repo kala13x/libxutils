@@ -374,6 +374,34 @@ static void XJSON_ArrayClearCb(xarray_data_t *pItem)
     XJSON_FreeObject((xjson_obj_t*)pItem->pData);
 }
 
+void XJSON_SetStrict(xjson_obj_t *pObj, xbool_t bStrict)
+{
+    if (pObj != NULL)
+    {
+        pObj->nStrict = bStrict ?
+                XJSON_STRICT_ON :
+                XJSON_STRICT_OFF;
+    }
+}
+
+/* A member that could not be stored for want of memory: a strict object remembers it (see XJSON_SetStrict) */
+static xjson_error_t XJSON_Lost(xjson_obj_t *pObj)
+{
+    if (pObj != NULL && pObj->nStrict)
+        pObj->nStrict = XJSON_STRICT_LOST;
+
+    return XJSON_ERR_ALLOC;
+}
+
+/* A container that becomes part of a strict document is tracked from then on */
+static void XJSON_InheritStrict(const xjson_obj_t *pParent, xjson_obj_t *pChild)
+{
+    if (pParent->nStrict && !pChild->nStrict &&
+        (pChild->nType == XJSON_TYPE_OBJECT ||
+         pChild->nType == XJSON_TYPE_ARRAY))
+            pChild->nStrict = XJSON_STRICT_ON;
+}
+
 xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc)
 {
     if (pDst == NULL || pSrc == NULL) return XJSON_ERR_INVALID;
@@ -395,11 +423,15 @@ xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc)
 
             pMap->pPairs[nHash].pKey = pSrc->pName;
             XJSON_FreeObject(pFound);
+            XJSON_InheritStrict(pDst, pSrc);
             return XJSON_ERR_NONE;
         }
 
         int nStatus = XMap_Put(pMap, pSrc->pName, (void*)pSrc);
-        return nStatus < 0 ? XJSON_ERR_ALLOC : XJSON_ERR_NONE;
+        if (nStatus < 0) return XJSON_Lost(pDst);
+
+        XJSON_InheritStrict(pDst, pSrc);
+        return XJSON_ERR_NONE;
     }
     else if (pDst->nType == XJSON_TYPE_ARRAY)
     {
@@ -410,11 +442,12 @@ xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc)
         /* XArray_Add clears its item on failure. Transfer the JSON child only
            after insertion succeeds, so failed additions remain caller-owned. */
         xarray_data_t *pItem = XArray_NewData(pArray, NULL, 0, 0);
-        if (pItem == NULL) return XJSON_ERR_ALLOC;
+        if (pItem == NULL) return XJSON_Lost(pDst);
 
-        if (XArray_Add(pArray, pItem) < 0) return XJSON_ERR_ALLOC;
+        if (XArray_Add(pArray, pItem) < 0) return XJSON_Lost(pDst);
         pItem->pData = pSrc;
 
+        XJSON_InheritStrict(pDst, pSrc);
         return XJSON_ERR_NONE;
     }
 
@@ -429,6 +462,7 @@ static xjson_obj_t* XJSON_CreateObjectN(xpool_t *pPool, const char *pName, size_
     xjson_obj_t *pObj = (xjson_obj_t*)xalloc(pPool, sizeof(xjson_obj_t));
     if (pObj == NULL) return NULL;
 
+    pObj->nStrict = XJSON_STRICT_OFF;
     pObj->nAllowUpdate = 0;
     pObj->nAllowLinter = 1;
     pObj->nAllocated = 1;
@@ -559,7 +593,7 @@ xjson_error_t XJSON_AddU64(xjson_obj_t *pObject, const char *pName, uint64_t nVa
 
     xpool_t *pPool = pObject->pPool;
     xjson_obj_t *pNewObj = XJSON_NewU64(pPool, pName, nValue);
-    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+    if (pNewObj == NULL) return XJSON_Lost(pObject);
 
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
     if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
@@ -606,7 +640,7 @@ xjson_error_t XJSON_AddU16(xjson_obj_t *pObject, const char *pName, uint16_t nVa
 
     xpool_t *pPool = pObject->pPool;
     xjson_obj_t *pNewObj = XJSON_NewU16(pPool, pName, nValue);
-    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+    if (pNewObj == NULL) return XJSON_Lost(pObject);
 
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
     if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
@@ -619,7 +653,7 @@ xjson_error_t XJSON_AddU32(xjson_obj_t *pObject, const char *pName, uint32_t nVa
 
     xpool_t *pPool = pObject->pPool;
     xjson_obj_t *pNewObj = XJSON_NewU32(pPool, pName, nValue);
-    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+    if (pNewObj == NULL) return XJSON_Lost(pObject);
 
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
     if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
@@ -649,7 +683,7 @@ xjson_error_t XJSON_AddInt(xjson_obj_t *pObject, const char *pName, int nValue)
 
     xpool_t *pPool = pObject->pPool;
     xjson_obj_t *pNewObj = XJSON_NewInt(pPool, pName, nValue);
-    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+    if (pNewObj == NULL) return XJSON_Lost(pObject);
 
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
     if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
@@ -681,7 +715,7 @@ xjson_error_t XJSON_AddFloat(xjson_obj_t *pObject, const char *pName, double fVa
 
     xpool_t *pPool = pObject->pPool;
     xjson_obj_t *pNewObj = XJSON_NewFloat(pPool, pName, fValue);
-    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+    if (pNewObj == NULL) return XJSON_Lost(pObject);
 
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
     if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
@@ -711,7 +745,7 @@ xjson_error_t XJSON_AddString(xjson_obj_t *pObject, const char *pName, const cha
     if (pValue == NULL) return XJSON_AddNull(pObject, pName);
 
     xjson_obj_t *pNewObj = XJSON_NewString(pPool, pName, pValue);
-    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+    if (pNewObj == NULL) return XJSON_Lost(pObject);
 
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
     if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
@@ -725,7 +759,7 @@ xjson_error_t XJSON_AddStrIfUsed(xjson_obj_t *pObject, const char *pName, const 
     xpool_t *pPool = pObject->pPool;
 
     xjson_obj_t *pNewObj = XJSON_NewString(pPool, pName, pValue);
-    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+    if (pNewObj == NULL) return XJSON_Lost(pObject);
 
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
     if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
@@ -756,7 +790,7 @@ xjson_error_t XJSON_AddBool(xjson_obj_t *pObject, const char *pName, int nValue)
 
     xpool_t *pPool = pObject->pPool;
     xjson_obj_t *pNewObj = XJSON_NewBool(pPool, pName, nValue);
-    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+    if (pNewObj == NULL) return XJSON_Lost(pObject);
 
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
     if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
@@ -786,7 +820,7 @@ xjson_error_t XJSON_AddNull(xjson_obj_t *pObject, const char *pName)
 
     xpool_t *pPool = pObject->pPool;
     xjson_obj_t *pNewObj = XJSON_NewNull(pPool, pName);
-    if (pNewObj == NULL) return XJSON_ERR_ALLOC;
+    if (pNewObj == NULL) return XJSON_Lost(pObject);
 
     xjson_error_t status = XJSON_AddObject(pObject, pNewObj);
     if (status != XJSON_ERR_NONE) XJSON_FreeObject(pNewObj);
@@ -1284,7 +1318,11 @@ xjson_obj_t *XJSON_GetOrCreateObject(xjson_obj_t *pObj, const char *pName, uint8
     }
 
     pChild = XJSON_NewObject(pObj->pPool, pName, nAllowUpdate);
-    if (pChild == NULL) return NULL;
+    if (pChild == NULL)
+    {
+        XJSON_Lost(pObj);
+        return NULL;
+    }
 
     if (XJSON_AddObject(pObj, pChild) != XJSON_ERR_NONE)
     {
@@ -1311,7 +1349,11 @@ xjson_obj_t *XJSON_GetOrCreateArray(xjson_obj_t *pObj, const char *pName, uint8_
     }
 
     pChild = XJSON_NewArray(pObj->pPool, pName, nAllowUpdate);
-    if (pChild == NULL) return NULL;
+    if (pChild == NULL)
+    {
+        XJSON_Lost(pObj);
+        return NULL;
+    }
 
     if (XJSON_AddObject(pObj, pChild) != XJSON_ERR_NONE)
     {
@@ -1756,7 +1798,9 @@ static int XJSON_Ident(xjson_writer_t *pWriter, int nIncrease)
 static int XJSON_WriteHashmap(xjson_obj_t *pObj, xjson_writer_t *pWriter)
 {
     XCHECK(XJSON_CheckObject(pObj, XJSON_TYPE_OBJECT), XJSON_FAILURE);
+    XCHECK_NL((pObj->nStrict != XJSON_STRICT_LOST), XJSON_FAILURE);
     XCHECK(XJSON_WriteName(pObj, pWriter), XJSON_FAILURE);
+
     int nIndent = (pObj->pName == NULL && pObj->nAllowLinter) ? 1 : 0;
     xmap_t *pMap = (xmap_t*)pObj->pData;
 
@@ -1786,6 +1830,7 @@ static int XJSON_WriteHashmap(xjson_obj_t *pObj, xjson_writer_t *pWriter)
 static int XJSON_WriteArray(xjson_obj_t *pObj, xjson_writer_t *pWriter)
 {
     XCHECK(XJSON_CheckObject(pObj, XJSON_TYPE_ARRAY), XJSON_FAILURE);
+    XCHECK_NL((pObj->nStrict != XJSON_STRICT_LOST), XJSON_FAILURE);
     XCHECK(XJSON_WriteName(pObj, pWriter), XJSON_FAILURE);
     int nIndent = (pObj->pName == NULL && pObj->nAllowLinter) ? 1 : 0;
 

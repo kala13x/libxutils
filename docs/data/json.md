@@ -64,6 +64,18 @@ JSON parser, mutable object builder and formatter.
 - No-op success when `pValue` is null/empty.
 - Otherwise behaves like `AddString`.
 
+#### `void XJSON_SetStrict(xjson_obj_t *pObj, xbool_t bStrict)`
+
+- Off by default. A strict object remembers when an add fails for want of memory (`XJSON_ERR_ALLOC`), and
+  `XJSON_WriteObject()` - so every dump, format and `XJSON_Write()` - refuses it from then on: a document built
+  without checking each add is never sent or saved with a member missing.
+- Adds refused for other reasons (a name already taken, an unnamed member of an object, a non-finite float)
+  do not count: they leave the document as it was.
+- Containers created inside a strict object by `XJSON_GetOrCreateObject()` / `XJSON_GetOrCreateArray()`, or
+  added to it, become strict too; a loss anywhere inside fails the whole document.
+- `nStrict` reads `XJSON_STRICT_OFF`, `XJSON_STRICT_ON` or `XJSON_STRICT_LOST`. Calling the function again
+  starts over, so a caller that put back what was lost can declare the object complete.
+
 ### Parser lifecycle
 
 #### `void XJSON_Init(xjson_t *pJson)`

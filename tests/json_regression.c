@@ -1188,6 +1188,188 @@ static int XTest_writer_tokens(void)
     return 0;
 }
 
+/* Only a member lost for want of memory keeps a strict document from being written (see the json-incomplete
+   scenario of alloc_fail_regression). Adds refused for what they are - a name already taken, a float that is
+   not a number, a nameless member of an object - leave the document as complete as it was. */
+static int XTest_refused_adds(void)
+{
+    xjson_obj_t *pRoot = XJSON_NewObject(NULL, NULL, XFALSE);
+    CHECK(pRoot != NULL, "Create the root");
+    XJSON_SetStrict(pRoot, XTRUE);
+
+    CHECK(XJSON_AddString(pRoot, "name", "first") == XJSON_ERR_NONE, "Add a member");
+    CHECK(XJSON_AddString(pRoot, "name", "second") == XJSON_ERR_EXITS, "A taken name is refused");
+    CHECK(XJSON_AddFloat(pRoot, "nan", NAN) == XJSON_ERR_INVALID, "A float that is not a number is refused");
+
+    xjson_obj_t *pNameless = XJSON_NewInt(NULL, NULL, 1);
+    CHECK(pNameless != NULL && XJSON_AddObject(pRoot, pNameless) == XJSON_ERR_INVALID, "A nameless member is refused");
+    XJSON_FreeObject(pNameless);
+
+    xjson_obj_t *pArray = XJSON_GetOrCreateArray(pRoot, "list", XFALSE);
+    xjson_obj_t *pNamed = XJSON_NewInt(NULL, "named", 1);
+    CHECK(pArray != NULL && pNamed != NULL && XJSON_AddObject(pArray, pNamed) == XJSON_ERR_INVALID,
+        "A named item is refused by an array");
+    XJSON_FreeObject(pNamed);
+    CHECK(XJSON_GetOrCreateObject(pRoot, "name", XFALSE) == NULL, "A member of another type is not replaced");
+
+    size_t nLength = 0;
+    char *pDump = XJSON_DumpObj(pRoot, 0, &nLength);
+    CHECK(pDump != NULL && strstr(pDump, "\"name\":\"first\"") && strstr(pDump, "\"list\":[]"),
+        "Refused adds leave a document that is still written in full");
+
+    free(pDump);
+    XJSON_FreeObject(pRoot);
+    return 0;
+}
+
+/* Strictness: what a strict document passes on, what a lost member does to it and to the documents around it,
+   and how a caller that put the member back declares it complete again. A plain document keeps its old ways. */
+static int XTest_strict_documents(void)
+{
+    xjson_obj_t *pRoot = XJSON_NewObject(NULL, NULL, XFALSE);
+    CHECK(pRoot != NULL && pRoot->nStrict == XJSON_STRICT_OFF, "A document is not strict unless asked");
+    XJSON_SetStrict(pRoot, XTRUE);
+    CHECK(pRoot->nStrict == XJSON_STRICT_ON, "Asked, it is");
+
+    xjson_obj_t *pCreated = XJSON_GetOrCreateObject(pRoot, "created", XFALSE);
+    xjson_obj_t *pList = XJSON_GetOrCreateArray(pRoot, "list", XFALSE);
+    CHECK(pCreated != NULL && pCreated->nStrict == XJSON_STRICT_ON && pList != NULL && pList->nStrict == XJSON_STRICT_ON,
+        "Containers created inside a strict document are strict");
+
+    xjson_obj_t *pAdded = XJSON_NewObject(NULL, "added", XFALSE);
+    xjson_obj_t *pItem = XJSON_NewObject(NULL, NULL, XFALSE);
+    xjson_obj_t *pScalar = XJSON_NewInt(NULL, "scalar", 1);
+    CHECK(pAdded != NULL && XJSON_AddObject(pRoot, pAdded) == XJSON_ERR_NONE && pAdded->nStrict == XJSON_STRICT_ON,
+        "A container added to a strict document is tracked from then on");
+    CHECK(pItem != NULL && XJSON_AddObject(pList, pItem) == XJSON_ERR_NONE && pItem->nStrict == XJSON_STRICT_ON,
+        "So is one added to a strict array");
+    CHECK(pScalar != NULL && XJSON_AddObject(pRoot, pScalar) == XJSON_ERR_NONE && pScalar->nStrict == XJSON_STRICT_OFF,
+        "A value has nothing to track");
+
+    char *pDump = XJSON_DumpObj(pRoot, 0, NULL);
+    CHECK(pDump != NULL, "A complete strict document is written");
+    free(pDump);
+
+    /* A member lost deep inside fails the whole document, whichever writer asks */
+    pItem->nStrict = XJSON_STRICT_LOST;
+    xjson_format_t format;
+    XJSON_FormatInit(&format);
+    CHECK(XJSON_DumpObj(pRoot, 0, NULL) == NULL && XJSON_DumpObj(pRoot, 2, NULL) == NULL &&
+        XJSON_FormatObj(pRoot, 2, &format, NULL) == NULL, "A loss in a nested container keeps the document from being written");
+
+    char sFixed[256];
+    xjson_t json = { .pRootObj = pRoot };
+    CHECK(XJSON_Write(&json, sFixed, sizeof(sFixed)) == XJSON_FAILURE, "Into a buffer of the caller's as well");
+
+    /* The caller put it back: complete again */
+    XJSON_SetStrict(pItem, XTRUE);
+    pDump = XJSON_DumpObj(pRoot, 0, NULL);
+    CHECK(pDump != NULL && strstr(pDump, "\"list\":[{}]") != NULL, "A document declared complete again is written");
+    CHECK(XJSON_Write(&json, sFixed, sizeof(sFixed)) == XJSON_SUCCESS && !strcmp(sFixed, pDump),
+        "And written into the caller's buffer the same way");
+    free(pDump);
+
+    /* A plain document still writes what it has, as it always did */
+    xjson_obj_t *pPlain = XJSON_NewObject(NULL, NULL, XFALSE);
+    CHECK(pPlain != NULL && XJSON_AddString(pPlain, "kept", "yes") == XJSON_ERR_NONE, "Build a plain document");
+    pDump = XJSON_DumpObj(pPlain, 0, NULL);
+    CHECK(pDump != NULL && !strcmp(pDump, "{\"kept\":\"yes\"}"), "A plain document is written as before");
+    free(pDump);
+
+    XJSON_FreeObject(pPlain);
+    XJSON_FreeObject(pRoot);
+    return 0;
+}
+
+/* The error paths of the parser and the writer: each refusal is a refusal, and says what it was */
+static int XTest_error_paths(void)
+{
+    char sError[128];
+    xjson_t json;
+
+    /* Too deep in objects, as it is in arrays */
+    size_t nDepth = XJSON_MAX_DEPTH + 2, nAt = 0;
+    char *pDeep = (char*)malloc(nDepth * 6 + 16);
+    CHECK(pDeep != NULL, "Allocate a deep document");
+    for (size_t i = 0; i < nDepth; i++) nAt += (size_t)sprintf(pDeep + nAt, "{\"a\":");
+    nAt += (size_t)sprintf(pDeep + nAt, "1");
+    for (size_t i = 0; i < nDepth; i++) pDeep[nAt++] = '}';
+    CHECK(XJSON_Parse(&json, NULL, pDeep, nAt) == XJSON_FAILURE && json.nError == XJSON_ERR_DEPTH,
+        "Objects nested past the limit are refused");
+    CHECK(XJSON_GetErrorStr(&json, sError, sizeof(sError)) > 0 && strstr(sError, "nesting exceeds") != NULL,
+        "And the error says so");
+    XJSON_Destroy(&json);
+    free(pDeep);
+
+    /* An escape cut short, and a document that ends where a value should be */
+    const char sCut[] = "{\"a\":\"\\u12";
+    CHECK(XJSON_Parse(&json, NULL, sCut, sizeof(sCut) - 1) == XJSON_FAILURE, "A \\u escape cut short is refused");
+    XJSON_Destroy(&json);
+
+    const char sEnd[] = "{\"a\":";
+    CHECK(XJSON_Parse(&json, NULL, sEnd, sizeof(sEnd) - 1) == XJSON_FAILURE, "A document that ends early is refused");
+    CHECK(XJSON_GetErrorStr(&json, sError, sizeof(sError)) > 0 && strstr(sError, "posit") != NULL, "Its error has a position");
+    XJSON_Destroy(&json);
+
+    const char sInner[] = "{\"a\":[1,}]}";
+    CHECK(XJSON_Parse(&json, NULL, sInner, sizeof(sInner) - 1) == XJSON_FAILURE, "A broken nested array fails the parse");
+    XJSON_Destroy(&json);
+
+    /* Every error code has its own text, and an unknown one says so */
+    static const struct { xjson_error_t eError; const char *pText; } errors[] = {
+        { XJSON_ERR_ALLOC, "allocate memory" }, { XJSON_ERR_DEPTH, "nesting exceeds" }, { XJSON_ERR_NONE, "Undeclared" },
+        { XJSON_ERR_EXITS, "Duplicate Key" }, { XJSON_ERR_BOUNDS, "Unexpected EOF" }, { XJSON_ERR_INVALID, "Invalid item" },
+        { (xjson_error_t)99, "Undeclared" } };
+    for (size_t i = 0; i < sizeof(errors) / sizeof(errors[0]); i++)
+    {
+        xjson_t state;
+        XJSON_Init(&state);
+        state.nError = errors[i].eError;
+        CHECK(XJSON_GetErrorStr(&state, sError, sizeof(sError)) > 0 && strstr(sError, errors[i].pText) != NULL,
+            "Each error code has its own text");
+    }
+
+    xjson_t eof;
+    XJSON_Init(&eof);
+    eof.nError = XJSON_ERR_UNEXPECTED;
+    eof.pData = "{";
+    eof.nDataSize = 1;
+    eof.nOffset = 1;
+    CHECK(XJSON_GetErrorStr(&eof, sError, sizeof(sError)) > 0 && strstr(sError, "Unexpected EOF") != NULL,
+        "An unexpected end of input reads as one");
+    CHECK(XJSON_GetErrorStr(NULL, sError, sizeof(sError)) == 0 && XJSON_GetErrorStr(&eof, NULL, 8) == 0 &&
+        XJSON_GetErrorStr(&eof, sError, 0) == 0, "No error text without somewhere to put it");
+
+    /* Adding to something that is not a container, and getting what is already there */
+    xjson_obj_t *pNumber = XJSON_NewInt(NULL, "n", 1);
+    xjson_obj_t *pChild = XJSON_NewInt(NULL, "c", 2);
+    CHECK(pNumber != NULL && pChild != NULL && XJSON_AddObject(pNumber, pChild) == XJSON_ERR_INVALID,
+        "A number takes no members");
+    CHECK(XJSON_GetOrCreateArray(pNumber, "list", XFALSE) == NULL, "Nor arrays");
+    XJSON_FreeObject(pChild);
+    XJSON_FreeObject(pNumber);
+
+    xjson_obj_t *pRoot = XJSON_NewObject(NULL, NULL, XFALSE);
+    xjson_obj_t *pList = XJSON_GetOrCreateArray(pRoot, "list", XFALSE);
+    CHECK(pList != NULL && XJSON_GetOrCreateArray(pRoot, "list", XTRUE) == pList && pList->nAllowUpdate == XTRUE,
+        "An existing array is handed back, with the update flag asked for");
+
+    /* Objects the writer cannot write: an item of no known type, a value with no data */
+    xjson_obj_t *pInvalid = XJSON_CreateObject(NULL, "bad", NULL, XJSON_TYPE_INVALID);
+    xjson_obj_t *pEmpty = XJSON_CreateObject(NULL, "empty", NULL, XJSON_TYPE_STRING);
+    xjson_format_t format;
+    XJSON_FormatInit(&format);
+    CHECK(pInvalid != NULL && XJSON_DumpObj(pInvalid, 0, NULL) == NULL && XJSON_FormatObj(pInvalid, 2, &format, NULL) == NULL,
+        "An item of no known type is not written");
+    CHECK(pEmpty != NULL && XJSON_DumpObj(pEmpty, 0, NULL) == NULL, "A string with no data is not written");
+    CHECK(XJSON_AddObject(pRoot, pEmpty) == XJSON_ERR_NONE && XJSON_DumpObj(pRoot, 0, NULL) == NULL,
+        "Nor is a document that holds one");
+
+    XJSON_FreeObject(pInvalid);
+    XJSON_FreeObject(pRoot);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(parse_matrix),
     XTEST_CASE(parse_boundaries),
@@ -1202,5 +1384,8 @@ XTEST_MAIN(
     XTEST_CASE(scan_flat),
     XTEST_CASE(number_text),
     XTEST_CASE(escape_reference),
-    XTEST_CASE(writer_tokens)
+    XTEST_CASE(writer_tokens),
+    XTEST_CASE(refused_adds),
+    XTEST_CASE(strict_documents),
+    XTEST_CASE(error_paths)
 )

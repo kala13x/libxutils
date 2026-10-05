@@ -62,6 +62,7 @@ typedef struct xjson_obj_ {
     uint8_t nAllowUpdate;
     uint8_t nAllowLinter;
     uint8_t nAllocated;
+    uint8_t nStrict;
     xpool_t *pPool;
     void *pData;
     char *pName;
@@ -92,6 +93,16 @@ xjson_obj_t* XJSON_NewString(xpool_t *pPool, const char *pName, const char *pVal
 xjson_obj_t* XJSON_NewBool(xpool_t *pPool, const char *pName, int nValue);
 xjson_obj_t* XJSON_NewNull(xpool_t *pPool, const char *pName);
 void XJSON_FreeObject(xjson_obj_t *pObj);
+
+#define XJSON_STRICT_OFF        0   /* Default: a member that fails to be added is simply not there */
+#define XJSON_STRICT_ON         1   /* Every member added so far is there */
+#define XJSON_STRICT_LOST       2   /* A member was lost to a failed allocation: the writer refuses the object */
+
+/* A strict object remembers when an add fails for want of memory, and XJSON_WriteObject (so every dump and
+   format) refuses it from then on: a document whose adds are not all checked is never written out with a
+   member missing. Containers created in a strict object by XJSON_GetOrCreate*, or added to it, become strict
+   too. Calling it again starts over, so a caller that has put back what was lost can declare it complete. */
+void XJSON_SetStrict(xjson_obj_t *pObj, xbool_t bStrict);
 
 xjson_error_t XJSON_AddObject(xjson_obj_t *pDst, xjson_obj_t *pSrc);
 xjson_error_t XJSON_AddU64(xjson_obj_t *pObject, const char *pName, uint64_t nValue);

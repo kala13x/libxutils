@@ -1101,6 +1101,66 @@ static int scn_cli_frame(void)
     return nBroken;
 }
 
+/* A strict document that lost a member to a failed allocation is never written out: every add below reports
+ * what it could not store, so whatever the writer does turn into text has to hold all of it, and a lost member
+ * has to make the write fail. A caller that ignored the add would otherwise send or save it without the member. */
+static int scn_json_incomplete(void)
+{
+    xjson_obj_t *pRoot = XJSON_NewObject(NULL, NULL, 0);
+    if (pRoot == NULL) return 0;
+    XJSON_SetStrict(pRoot, XTRUE);
+
+    int bLost = 0;
+    bLost |= XJSON_AddString(pRoot, "type", "auth") == XJSON_ERR_ALLOC;
+    bLost |= XJSON_AddU32(pRoot, "version", 1) == XJSON_ERR_ALLOC;
+    bLost |= XJSON_AddStrIfUsed(pRoot, "status", "ok") == XJSON_ERR_ALLOC;
+    bLost |= XJSON_AddBool(pRoot, "flag", 1) == XJSON_ERR_ALLOC;
+    bLost |= XJSON_AddNull(pRoot, "none") == XJSON_ERR_ALLOC;
+    bLost |= XJSON_AddInt(pRoot, "delta", -7) == XJSON_ERR_ALLOC;
+    bLost |= XJSON_AddU64(pRoot, "big", 18446744073709551615ULL) == XJSON_ERR_ALLOC;
+    bLost |= XJSON_AddU16(pRoot, "port", 443) == XJSON_ERR_ALLOC;
+    bLost |= XJSON_AddFloat(pRoot, "ratio", 0.5) == XJSON_ERR_ALLOC;
+
+    /* A nested object and an array, each of which can lose its own members or not exist at all */
+    xjson_obj_t *pNested = XJSON_GetOrCreateObject(pRoot, "nested", 0);
+    xjson_obj_t *pList = XJSON_GetOrCreateArray(pRoot, "list", 0);
+    bLost |= pNested == NULL || pList == NULL;
+    if (pNested != NULL) bLost |= XJSON_AddString(pNested, "inner", "value") == XJSON_ERR_ALLOC;
+
+    /* Three items, so the array grows. An item that could not even be created never reached the array, so the
+       array cannot know about it: that loss is the caller's to see, and the expected text leaves the list out */
+    int bAllItems = 1;
+    for (int i = 5; i <= 7; i++)
+    {
+        xjson_obj_t *pItem = XJSON_NewInt(NULL, NULL, i);
+        if (pItem == NULL) bAllItems = 0;
+        else if (pList == NULL || XJSON_AddObject(pList, pItem) != XJSON_ERR_NONE)
+        {
+            bLost = 1;
+            XJSON_FreeObject(pItem);
+        }
+    }
+
+    size_t nLength = 0;
+    char *pDump = XJSON_DumpObj(pRoot, 0, &nLength);
+    int nBroken = 0;
+
+    if (pDump != NULL && bLost) nBroken = 1;
+    else if (pDump != NULL)
+    {
+        const char *pMembers[] = { "\"type\":\"auth\"", "\"version\":1", "\"status\":\"ok\"", "\"flag\":true",
+            "\"none\":null", "\"delta\":-7", "\"big\":18446744073709551615", "\"port\":443", "\"ratio\":",
+            "\"inner\":\"value\"", bAllItems ? "\"list\":[5,6,7]" : "\"list\":[" };
+        for (size_t i = 0; i < sizeof(pMembers) / sizeof(pMembers[0]); i++)
+            if (strstr(pDump, pMembers[i]) == NULL) nBroken = 1;
+    }
+
+    if (nBroken) fprintf(stderr, "json-incomplete: written%s: %s\n", bLost ? " after losing a member" : "", pDump);
+    free(pDump);
+    XJSON_FreeObject(pRoot);
+    return nBroken;
+}
+
 typedef struct {
     const char *pName;
     alloc_scenario_t run;
@@ -1109,6 +1169,7 @@ typedef struct {
 static const alloc_case_t g_scenarios[] = {
     {"json-parse",     scn_json_parse},
     {"json-write",     scn_json_write},
+    {"json-incomplete", scn_json_incomplete},
     {"http-parse",     scn_http_parse},
     {"http-assemble",  scn_http_assemble},
     {"ws-frame",       scn_ws_frame},
