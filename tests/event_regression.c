@@ -1007,8 +1007,7 @@ static int XTest_error_events(void)
     for (int i = 0; i < 2; i++) CHECK((pair.pEvents[i] = XEvents_AddTimer(&loop, NULL, 1)) != NULL, "Add a short timer");
 
     struct pollfd fds[2] = { { pair.pEvents[0]->nFD, POLLIN, 0 }, { pair.pEvents[1]->nFD, POLLIN, 0 } };
-    for (int i = 0; i < 100 && poll(fds, 2, 50) < 2; i++);
-    CHECK((fds[0].revents & POLLIN) && (fds[1].revents & POLLIN), "Both timers expire");
+    for (int i = 0; i < 2; i++) CHECK(poll(&fds[i], 1, 5000) == 1 && (fds[i].revents & POLLIN), "Both timers expire");
     CHECK(XEvents_Service(&loop, 1000) == XEVENTS_SUCCESS, "Service both timers");
     CHECK(pair.nTimeouts == 1 && pair.nErrors == 1 && loop.nEventCount == 1, "The drained timer fails and is deleted");
     XEvents_Destroy(&loop);
