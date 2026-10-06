@@ -1,3 +1,7 @@
+if(XUTILS_TEST_COVERAGE AND "${CMAKE_C_FLAGS}" MATCHES "--coverage")
+    add_compile_definitions(XTEST_GCOV_DUMP)
+endif()
+
 function(xutils_regression target category)
     add_executable(${target} "${target}.c")
     target_link_libraries(${target} PRIVATE xutils)
@@ -78,8 +82,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     endif()
 endif()
 
-xutils_regression(jwt_regression data roundtrip wrong_secret tampering boundaries malformed
-    algorithms segments rs256)
+xutils_regression(jwt_regression data optional_lengths api_guards roundtrip refused_key wrong_secret tampering boundaries
+    malformed algorithms segments rs256)
 
 # rs256 generates RSA keys, so how long it takes is probabilistic in the same
 # way the rsa_regression cases are. The limit is there for the tail, not the
@@ -136,22 +140,27 @@ set_tests_properties(addr_regression PROPERTIES TIMEOUT 120)
 xutils_regression(addr_url_regression net components scheme_case default_ports percent_decoding
     parse_guards overlong unix_socket interfaces local_ip url_shapes)
 
-xutils_regression(event_regression net lifecycle modify callback_delete timers timer_order wakeup status_strings
-    capacity lookup event_fd service_guards timer_lifecycle interrupted write_byte detached_delete urgent_data)
-xutils_regression(ws_regression net lengths partial coalesced invalid_wire creation_guards frame_types
+xutils_regression(event_regression net api_guards error_events lifecycle modify callback_delete timers timer_order wakeup
+    status_strings capacity lookup event_fd service_guards timer_lifecycle interrupted write_byte detached_delete urgent_data
+    descriptor_limit)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(event_regression PRIVATE -Wl,--wrap=sysconf)
+    target_compile_definitions(event_regression PRIVATE XTEST_WRAP_SYSCONF)
+endif()
+xutils_regression(ws_regression net api_guards lengths partial coalesced invalid_wire creation_guards frame_types
     masking control_frames extra_data allocation mask_lengths append_frame mask_keys)
-xutils_regression(http_regression net partial pipeline headers basic_auth long_basic_auth reuse empty_body assemble_empty_body
-    code_strings content_length start_line assemble header_lookup limits callbacks lifecycle unix_and_auth
+xutils_regression(http_regression net api_guards partial pipeline headers basic_auth long_basic_auth reuse empty_body
+    assemble_empty_body code_strings content_length start_line assemble header_lookup limits callbacks lifecycle unix_and_auth
     many_header_lines header_delimiters start_line_colon long_header_line header_whitespace parse_restores_buffer)
 
-xutils_regression(map_regression data lifecycle reference_model operations iteration growth hashing
+xutils_regression(map_regression data api_guards lifecycle reference_model operations iteration growth hashing
     pair_transfer)
-xutils_regression(array_regression data lifecycle reference_model search_boundaries sorting mutation
+xutils_regression(array_regression data api_guards lifecycle reference_model search_boundaries sorting mutation
     fixed_capacity search_agreement heap_array release_guards pool_clear_reuse sort_scaling sort_unsigned_keys
     insert_holes null_and_bounds search_holes)
-xutils_regression(json_regression data
-    parse_matrix parse_boundaries builders_and_writers generated_string_edges byte_boundaries error_states pool_and_stress root_array_and_api_boundaries
-    empty_objects pair_names scan_flat number_text escape_reference writer_tokens refused_adds strict_documents error_paths)
+xutils_regression(json_regression data api_guards parse_matrix parse_boundaries builders_and_writers generated_string_edges
+    byte_boundaries error_states pool_and_stress root_array_and_api_boundaries empty_objects pair_names scan_flat number_text
+    escape_reference writer_tokens refused_adds strict_documents error_paths)
 xutils_regression(json_limits_regression data boundaries escape_nul pool_dump)
 xutils_regression(str_buf_regression data boundaries)
 xutils_regression(base64_regression crypt boundaries)
@@ -179,20 +188,20 @@ if(UNIX)
         endif()
     endforeach()
     set_tests_properties(network_feature.concurrent network_feature.concurrent_tls PROPERTIES TIMEOUT 300)
-    xutils_regression(http_client_regression net connect link_exchange easy_exchange perform
+    xutils_regression(http_client_regression net client_paths connect link_exchange easy_exchange perform
         easy_perform auth_and_status client_failures truncated_answer stream_callback buffered_stream stopped_stream
     terminated_stream content_limit callback_guards length_stream length_buffered
     length_stopped length_terminated length_limit length_truncated)
-    xutils_regression(sock_ext_regression net unix_stream chunked_transfer nonblocking_accept
+    xutils_regression(sock_ext_regression net unix_stream force_long_path chunked_transfer nonblocking_accept
         options buffers_and_alloc datagram_options address_accessors flag_guards)
     xutils_regression(sock_timeout_regression net boundaries)
-    xutils_regression(sock_api_regression net address_conversion address_info status_strings
+    xutils_regression(sock_api_regression net stream_errors call_guards address_conversion address_info status_strings
         accessors buffers listener create_guards udp failed_create_state address_port_range option_failures
         connect_refused forced_bind_failure)
 endif()
 
-xutils_regression(hash_regression data collisions ownership operations distribution pairs)
-xutils_regression(list_regression data links rings stack_head push removal single_node insert_nodes ring_walk)
+xutils_regression(hash_regression data api_guards collisions ownership operations distribution pairs)
+xutils_regression(list_regression data api_guards links rings stack_head push removal single_node insert_nodes ring_walk)
 xutils_regression(api_io_regression net partial_io callback_disconnect peer_eof peer_eof_forked websocket_fragments
     unexpected_continuation
     buffered_upgrade websocket_burst websocket_burst_invalid eof_with_data read_chunk handshake_trickle client_handshake
@@ -208,22 +217,23 @@ if(UNIX)
         timers workers buffers)
     xutils_regression(api_proto_regression net websocket mdtp http_endpoint timers
         status_strings workers worker_affinity)
-    xutils_regression(api_events_regression net peer_closed peer_hunged user_callback
+    xutils_regression(api_events_regression net api_guards event_dispatch peer_reset accept_refused unix_listener
+        unknown_type peer_closed peer_hunged user_callback
         interrupted_service tick extend_timer session_guards rx_size http_garbage
         http_oversized mdtp_garbage invalid_role inactive_role endpoint_guards ws_garbage_request
         ws_oversized_request ws_bad_response ws_upgrade_tokens accept_exhausted)
 endif()
-xutils_regression(buf_regression data aliasing borrowed pointer_ownership ring_model growth edit
+xutils_regression(buf_regression data api_guards aliasing borrowed pointer_ownership ring_model growth edit
     accessors ownership_transfer heap_buffer data_buffer ring_boundaries
     string_and_stdin read_stdin borrowed_reset)
 xutils_regression(str_regression data capacities dynamic split_replace)
-xutils_regression(xstring_regression data build edit transform substrings tokens construction colors borrowed_copy
+xutils_regression(xstring_regression data guards build edit transform substrings tokens construction colors borrowed_copy
     borrowed_resize)
-xutils_regression(str_ops_regression data split split_scaling match_pathological bounded_copies match compare search replace
-    cut tokens casing fill_and_trim duplicate concat colors random glob field_formatting append_remaining ansi_widths
-    format_boundaries)
-xutils_regression(aes_regression crypt ecb_vector modes siv_tampering generated_iv malformed_ciphertext unpredictable_random
-    fips_vectors siv_vectors block_roundtrip xbc_prefix length_overflow)
+xutils_regression(str_ops_regression data argument_guards split split_scaling match_pathological bounded_copies match compare
+    search replace cut tokens casing fill_and_trim duplicate concat colors random glob field_formatting append_remaining
+    ansi_widths format_boundaries)
+xutils_regression(aes_regression crypt api_guards cbc_padding xbc_carried_iv ecb_vector modes siv_tampering generated_iv
+    malformed_ciphertext unpredictable_random fips_vectors siv_vectors block_roundtrip xbc_prefix length_overflow)
 if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "3.0")
     xutils_regression(aes_siv_regression crypt openssl_vectors)
 endif()
@@ -232,17 +242,17 @@ xutils_regression(thread_regression sys contention recursive invalid_start)
 xutils_regression(sync_regression sys mutex recursive rwlock barrier task task_start_state sleep atomics misuse)
 xutils_regression(time_regression sys calendar serialization http_year formats parse_guards
     conversions differences normalize clock fraction_bounds)
-xutils_regression(crypt_regression crypt hex transforms dispatch cipher_names keyless_roundtrip
-    keyed_roundtrip digests casear multy hex_columns hex_decode_agreement hex_scaling)
+xutils_regression(crypt_regression crypt api_guards keyed_dispatch aes_key_lengths hex transforms dispatch cipher_names
+    keyless_roundtrip keyed_roundtrip digests casear multy hex_columns hex_decode_agreement hex_scaling)
 if(OPENSSL_FOUND)
-    xutils_regression(rsa_regression crypt signatures encryption invalid_keys key_sizes cross_key
+    xutils_regression(rsa_regression crypt call_guards signatures encryption invalid_keys key_sizes cross_key
         key_import key_files context size_limits build_support short_ciphertext
         length_overflow key_length_overflow partial_key_files)
 
     # RSA key generation searches for primes, so how long it takes is
     # probabilistic and on a shared runner the tail is long. These cases are
     # fast in the common case; the limit is there for the tail, not the mean.
-    foreach(rsa_case signatures encryption invalid_keys key_sizes cross_key
+    foreach(rsa_case call_guards signatures encryption invalid_keys key_sizes cross_key
             key_import key_files context size_limits build_support short_ciphertext
             length_overflow key_length_overflow partial_key_files)
         set_tests_properties("rsa_regression.${rsa_case}" PROPERTIES TIMEOUT 300)
@@ -250,11 +260,11 @@ if(OPENSSL_FOUND)
 endif()
 if(UNIX)
     xutils_regression(xfs_regression sys copy permissions directories nonregular_source copy_failures)
-    xutils_regression(xfs_ops_regression sys file_io handles lines load paths directories ownership path_bounds
-        short_write read_bounds remove_large_dir)
-    xutils_regression(srch_regression sys deep_tree name_matching recursion criteria text_search callback entries guards
-        text_shapes line_bounds link_entries nocase_binary stdin_search empty_stdin binary_lines)
-    xutils_regression(cli_regression sys window_size window_lines window_align window_display
+    xutils_regression(xfs_ops_regression sys api_guards file_io handles lines load paths directories ownership path_bounds
+        short_write read_bounds remove_large_dir long_directories)
+    xutils_regression(srch_regression sys interruptions deep_tree name_matching recursion criteria text_search callback entries
+        guards text_shapes line_bounds link_entries nocase_binary stdin_search empty_stdin binary_lines long_paths)
+    xutils_regression(cli_regression sys async_input window_size window_lines window_align window_display
         progress_bounds progress_output progress_animation input terminal_modes terminal_input read_bounds)
     xutils_regression(sig_regression sys register exit_handler errexit backtrace daemonize)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -284,7 +294,7 @@ xutils_regression(mdtp_regression net type_mapping assemble_parse parse_guards p
     header_combinations header_refusals)
 xutils_regression(sock_regression net retry_read retry_write empty_and_eof keep_open interrupted_io accept_cloexec
     accept_flags empty_datagram closed_write pipe_write)
-xutils_regression(log_regression sys filtering large_message severities flag_mask config
+xutils_regression(log_regression sys api_paths filtering large_message severities flag_mask config
     formatting file_output rotation throw callback_veto enabled)
 xutils_regression(type_regression sys float_bits concurrent printable byte_units kb_units version)
 
@@ -304,7 +314,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang
     xutils_regression(allocation_regression allocation json_cleanup http_header buffer_preservation endpoint_ownership
         mdtp_assemble map_rehash_failure http_parse_failure format_failure search_append_failure ws_fragment_failure
         borrowed_string_failure split_failure long_token_failure tls_context_failure api_response_failure mdtp_header_failure
-        http_copy_failure ws_request_failure ws_answer_failure api_accept_failure)
+        http_copy_failure ws_request_failure ws_answer_failure api_accept_failure array_slots_failure)
     target_link_options(allocation_regression PRIVATE -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc)
 endif()
 
@@ -312,9 +322,9 @@ set_tests_properties(api_io_regression.partial_io PROPERTIES TIMEOUT 120)
 if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "1.1.0")
     xutils_regression(tls_regression net pending_record wrong_hostname untrusted)
     if(UNIX)
-        xutils_regression(sock_tls_regression net handshake stale_error_queue pkcs12_identity pkcs12_ownership untrusted
-            cert_guards peer_endings closed_session_io status_strings write_after_reset plain_calls ssl_teardown
-            sigpipe_ignored)
+        xutils_regression(sock_tls_regression net handshake nonblocking_pair pkcs12_chain stale_error_queue pkcs12_identity
+            pkcs12_ownership untrusted cert_guards peer_endings closed_session_io status_strings write_after_reset plain_calls
+            ssl_teardown sigpipe_ignored)
 
         # sigpipe_ignored counts the signal mask changes the TLS guard makes, through the linker's --wrap
         if(NOT APPLE)
@@ -330,7 +340,7 @@ if(OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "1.1.0")
             set_tests_properties("api_tls_regression.${tls_case}" PROPERTIES TIMEOUT 300)
         endforeach()
 
-        foreach(sock_tls_case handshake pkcs12_identity pkcs12_ownership untrusted cert_guards
+        foreach(sock_tls_case handshake nonblocking_pair pkcs12_chain pkcs12_identity pkcs12_ownership untrusted cert_guards
                 peer_endings closed_session_io status_strings write_after_reset plain_calls ssl_teardown sigpipe_ignored)
             set_tests_properties("sock_tls_regression.${sock_tls_case}" PROPERTIES TIMEOUT 300)
         endforeach()

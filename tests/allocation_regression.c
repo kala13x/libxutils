@@ -124,6 +124,88 @@ static int XTest_endpoint_ownership(void)
     CHECK(fcntl(pair[0], F_GETFD) < 0 && errno == EBADF, "Ownership must not leak on the first allocation failure");
     close(pair[1]);
     XAPI_Destroy(&api);
+
+#ifdef XSOCK_USE_SSL
+    /* A TLS socket allocates state of its own before it is registered. Failed, it handed the registration an
+       invalid descriptor, and the one it was given stayed open with no owner. Every allocation is failed in
+       turn: the descriptor is either registered or closed. A descriptor number can be taken again at once, by
+       the loop's own epoll descriptor, so whether it was closed is asked of its peer. */
+    xbool_t bRegistered = XFALSE;
+    char cByte;
+
+    for (size_t i = 1; i <= 16 && !bRegistered; i++)
+    {
+        CHECK(XAPI_Init(&api, NULL, NULL) == XSTDOK, "Initialize API without callbacks");
+        CHECK(XSock_CreatePair(pair) == XSTDOK, "Create owned endpoint descriptor");
+
+        XAPI_InitEndpoint(&endpoint);
+        endpoint.eRole = XAPI_PEER;
+        endpoint.eType = XAPI_SOCK;
+        endpoint.bTLS = XTRUE;
+        endpoint.nFD = pair[0];
+
+        g_nCalls = 0;
+        g_nFailAt = i;
+        nStatus = XAPI_AddEvent(&api, &endpoint);
+        g_nFailAt = 0;
+
+        if (nStatus < 0)
+        {
+            CHECK(XAPI_GetEventCount(&api) == 0, "A failed registration registers nothing");
+            CHECK(recv(pair[1], &cByte, 1, MSG_DONTWAIT) == 0, "No allocation failure leaks the descriptor");
+        }
+        else
+        {
+            CHECK(XAPI_GetEventCount(&api) == 1, "A registration that succeeds is registered");
+            CHECK(recv(pair[1], &cByte, 1, MSG_DONTWAIT) < 0 && errno == EAGAIN, "The registered descriptor is open");
+            bRegistered = XTRUE;
+        }
+
+        XAPI_Destroy(&api);
+        CHECK(recv(pair[1], &cByte, 1, MSG_DONTWAIT) == 0, "The descriptor never outlives the API");
+        close(pair[1]);
+    }
+
+    CHECK(bRegistered, "Past its last allocation the registration succeeds");
+#endif
+    return 0;
+}
+
+static int XTest_array_slots_failure(void)
+{
+    /* An array that could not get its slot table claims no slots. It claimed the ones it asked for, so reading
+       one by index read through the missing table. */
+    for (size_t i = 1; i <= 4; i++)
+    {
+        xarray_t *pArray = XArray_New(NULL, 0, XFALSE);
+        CHECK(pArray != NULL && XArray_Size(pArray) == 0, "A lazy array starts without slots");
+
+        g_nCalls = 0;
+        g_nFailAt = i;
+        int nStatus = XArray_AddData(pArray, "value", 6);
+        g_nFailAt = 0;
+
+        if (nStatus < 0)
+        {
+            CHECK(XArray_Used(pArray) == 0 && XArray_Size(pArray) == 0, "A failed add leaves no slots claimed");
+            for (size_t j = 0; j < XARRAY_INITIAL_SIZE; j++)
+            {
+                CHECK(XArray_Get(pArray, j) == NULL && XArray_GetData(pArray, j) == NULL, "No slot is read");
+                CHECK(!XArray_Contains(pArray, j) && XArray_GetSize(pArray, j) == 0, "No slot is there");
+            }
+
+            CHECK(XArray_Remove(pArray, 0) == NULL, "Nothing is removed");
+            CHECK(XArray_AddData(pArray, "value", 6) == 0, "The next add succeeds");
+        }
+        else
+        {
+            CHECK(nStatus == 0 && XArray_Size(pArray) == XARRAY_INITIAL_SIZE, "A successful add gets its slots");
+        }
+
+        CHECK(strcmp((const char*)XArray_GetData(pArray, 0), "value") == 0, "The value is stored");
+        XArray_Destroy(pArray);
+    }
+
     return 0;
 }
 
@@ -963,6 +1045,7 @@ static int XTest_api_accept_failure(void)
 }
 
 XTEST_MAIN(
+    XTEST_CASE(array_slots_failure),
     XTEST_CASE(api_accept_failure),
     XTEST_CASE(ws_answer_failure),
     XTEST_CASE(ws_request_failure),

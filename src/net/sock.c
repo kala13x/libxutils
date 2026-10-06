@@ -828,7 +828,15 @@ XSTATUS XSock_Init(xsock_t *pSock, uint32_t nFlags, XSOCKET nFD)
 
 /* Set once by XSock_IgnoreSIGPIPE(), read by the TLS guard below.
    Forked workers inherit it with the disposition. */
-static volatile sig_atomic_t g_bSigPipeIgnored = 0;
+static xatomic_t g_bSigPipeIgnored = 0;
+
+#if defined(__GNUC__) || defined(__clang__)
+#define XSOCK_SIGPIPE_IGNORED() __atomic_load_n(&g_bSigPipeIgnored, __ATOMIC_RELAXED)
+#define XSOCK_SIGPIPE_IGNORE() __atomic_store_n(&g_bSigPipeIgnored, 1, __ATOMIC_RELAXED)
+#else
+#define XSOCK_SIGPIPE_IGNORED() XSYNC_ATOMIC_GET(&g_bSigPipeIgnored)
+#define XSOCK_SIGPIPE_IGNORE() XSYNC_ATOMIC_SET(&g_bSigPipeIgnored, 1)
+#endif
 
 XSTATUS XSock_IgnoreSIGPIPE(void)
 {
@@ -841,7 +849,7 @@ XSTATUS XSock_IgnoreSIGPIPE(void)
     sact.sa_handler = SIG_IGN;
 
     if (sigaction(SIGPIPE, &sact, NULL) != 0) return XSTDERR;
-    g_bSigPipeIgnored = 1;
+    XSOCK_SIGPIPE_IGNORE();
     return XSTDOK;
 #endif
 }
@@ -892,7 +900,7 @@ static void XSock_BlockSIGPIPE(xsock_nosigpipe_t *pGuard)
     pGuard->bWasPending = XFALSE;
 
     /* Ignored, the signal ends nothing and reaches no handler: there is nothing to guard against */
-    if (g_bSigPipeIgnored) return;
+    if (XSOCK_SIGPIPE_IGNORED()) return;
 
     sigset_t pipeSet, pending;
     sigemptyset(&pipeSet);
@@ -1892,17 +1900,24 @@ XSOCKET XSock_Bind(xsock_t *pSock)
         xstrncpy(sUnixFinalPath, sizeof(sUnixFinalPath), pPath);
 
 #ifndef _WIN32
+        size_t nTmpLen = strlen(pPath) + (size_t)snprintf(NULL, 0, ".%d.tmp", (int)getpid());
         xstrncpyf(sUnixTmpPath, sizeof(sUnixTmpPath), "%s.%d.tmp", pPath, (int)getpid());
 #else
+        size_t nTmpLen = strlen(pPath) + strlen(".tmp");
         xstrncpyf(sUnixTmpPath, sizeof(sUnixTmpPath), "%s.tmp", pPath);
 #endif
 
-        xstrncpy(pSock->sockAddr.unAddr.sun_path,
-            sizeof(pSock->sockAddr.unAddr.sun_path),
-            sUnixTmpPath);
+        /* A temporary name cut to fit the address names some other file: bind in place instead */
+        if (nTmpLen < sizeof(sUnixTmpPath))
+        {
+            xstrncpy(pSock->sockAddr.unAddr.sun_path,
+                sizeof(pSock->sockAddr.unAddr.sun_path),
+                sUnixTmpPath);
 
-        XPath_Remove(sUnixTmpPath);
-        bUnixAtomic = XTRUE;
+            XPath_Remove(sUnixTmpPath);
+            bUnixAtomic = XTRUE;
+        }
+        else xunlink(sUnixFinalPath);
     }
 
     xsockaddr_t *pSockAddr = XSock_GetSockAddr(pSock);

@@ -195,7 +195,39 @@ static int XTest_pairs(void)
     return 0;
 }
 
+static int XTest_api_guards(void)
+{
+    XHash_Init(NULL, NULL, NULL);
+    XHash_Destroy(NULL);
+    XHash_Iterate(NULL, XTest_Count, NULL);
+    CHECK(XHash_GetNode(NULL, 1) == NULL && XHash_GetPair(NULL, 1) == NULL && XHash_GetData(NULL, 1) == NULL,
+        "No table finds nothing");
+    CHECK(XHash_GetSize(NULL, 1) == XSTDERR && XHash_Delete(NULL, 1) == XSTDERR, "No table has nothing to measure or delete");
+    CHECK(XHash_Insert(NULL, NULL, 0, 1) == XSTDERR && XHash_InsertPair(NULL, NULL) == XSTDERR, "No table takes nothing");
+
+    int nClears = 0, value = 5;
+    xhash_t hash;
+    XHash_Init(&hash, XTest_Clear, &nClears);
+    XHash_Iterate(&hash, NULL, NULL);
+    CHECK(XHash_InsertPair(&hash, NULL) == XSTDERR, "A table takes no missing pair");
+
+    /* A key is taken once, and the pair offered twice is released */
+    CHECK(XHash_Insert(&hash, &value, sizeof(value), 7) == XSTDOK, "Insert a key");
+    CHECK(XHash_Insert(&hash, &value, sizeof(value), 7) == XSTDEXC && hash.nPairCount == 1, "A key is inserted once");
+    CHECK(XHash_GetSize(&hash, 7) == (int)sizeof(value) && XHash_GetSize(&hash, 8) == XSTDERR, "Only a stored key has a size");
+
+    /* The clear callback releases data, so a pair of none does not reach it */
+    CHECK(XHash_Insert(&hash, NULL, 0, 9) == XSTDOK && XHash_Delete(&hash, 9) == XSTDOK && !nClears, "Nothing is cleared");
+    CHECK(XHash_Delete(&hash, 9) == XSTDERR, "A deleted key is gone");
+
+    hash.clearCb = NULL;
+    XHash_Destroy(&hash);
+    CHECK(!nClears && !hash.nPairCount, "Without a callback only the pairs are released");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
     XTEST_CASE(collisions),
     XTEST_CASE(ownership),
     XTEST_CASE(operations),

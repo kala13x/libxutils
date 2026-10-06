@@ -404,7 +404,7 @@ static int XTest_workers(void)
     if (XAPI_IsWorker(&api))
     {
         XAPI_Destroy(&api);
-        _exit(0);
+        XTEST_EXIT(0);
     }
 
     CHECK(XAPI_GetWorkerCount(&api) == 2, "The parent knows how many workers it started");

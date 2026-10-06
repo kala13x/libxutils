@@ -17,6 +17,15 @@
             return 1; \
         } \
     } while (0)
+/* A child forked by a case leaves through _exit(), which skips the handler that writes its coverage data:
+   what the child ran counted for nothing. A coverage build writes the data out first. */
+#ifdef XTEST_GCOV_DUMP
+void __gcov_dump(void);
+#define XTEST_EXIT(status) do { int nXTestExit = (status); __gcov_dump(); _exit(nXTestExit); } while (0)
+#else
+#define XTEST_EXIT(status) _exit(status)
+#endif
+
 #define XTEST_CASE(name) {#name, XTest_##name}
 #define XTEST_MAIN(...) \
     int main(int argc, char **argv) \

@@ -134,6 +134,52 @@ static int XTest_unix_stream(void)
     return 0;
 }
 
+static int XTest_force_long_path(void)
+{
+    sock_unix_fixture_t fixture;
+    CHECK(sock_unix_begin(&fixture) == XSTDOK, "A private socket directory is created");
+
+    /* A socket path that fits the address, with no room left for the temporary name a forced bind takes */
+    xsock_t server;
+    const size_t nAddrMax = sizeof(server.sockAddr.unAddr.sun_path);
+    size_t nRoot = strlen(fixture.sRoot);
+
+    memset(fixture.sPath, 0, sizeof(fixture.sPath));
+    memcpy(fixture.sPath, fixture.sRoot, nRoot);
+    fixture.sPath[nRoot] = '/';
+    memset(&fixture.sPath[nRoot + 1], 's', nAddrMax - 7 - nRoot - 1);
+    CHECK(strlen(fixture.sPath) == nAddrMax - 7, "The socket path fits the address");
+
+    /* What the temporary name was cut to: a file of someone else's, removed in the socket's stead */
+    char sCut[256];
+    snprintf(sCut, sizeof(sCut), "%s.%d.tmp", fixture.sPath, (int)getpid());
+    sCut[nAddrMax - 1] = '\0';
+    CHECK(XPath_Write(sCut, (const uint8_t*)"keep", 4, "cwt") == 4, "Another file has the name a cut one gives");
+    CHECK(XPath_Write(fixture.sPath, (const uint8_t*)"stale", 5, "cwt") == 5, "Something is in the socket's place");
+
+    CHECK(XSock_Create(&server, XSOCK_UNIX_SERVER | XSOCK_FORCE, fixture.sPath, 0) != XSOCK_INVALID,
+        "A forced bind with a long path succeeds");
+
+    uint8_t *pKept = XPath_Load(sCut, NULL);
+    CHECK(pKept != NULL && strcmp((const char*)pKept, "keep") == 0, "The other file is left as it was");
+    free(pKept);
+
+    xstat_t st;
+    CHECK(xstat(fixture.sPath, &st) == XSTDOK && S_ISSOCK(st.st_mode), "The socket replaced what was in its place");
+
+    xsock_t client, accepted;
+    CHECK(XSock_Create(&client, XSOCK_UNIX_CLIENT, fixture.sPath, 0) != XSOCK_INVALID, "A client reaches the listener");
+    CHECK(XSock_Accept(&server, &accepted) != XSOCK_INVALID, "The listener accepts");
+
+    XSock_Close(&accepted);
+    XSock_Close(&client);
+    XSock_Close(&server);
+    unlink(sCut);
+
+    sock_unix_end(&fixture);
+    return 0;
+}
+
 /* The chunked send runs in its own thread: a payload larger than the socket
  * buffer cannot be written in full until somebody is reading the other end.
  * Kept at file scope because a nested function is a GCC extension that the
@@ -562,6 +608,7 @@ static int XTest_flag_guards(void)
 
 XTEST_MAIN(
     XTEST_CASE(unix_stream),
+    XTEST_CASE(force_long_path),
     XTEST_CASE(chunked_transfer),
     XTEST_CASE(nonblocking_accept),
     XTEST_CASE(options),

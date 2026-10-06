@@ -960,7 +960,186 @@ static int XTest_length_truncated(void)
     return 0;
 }
 
+typedef struct {
+    char sPath[96];
+    xatomic_t nReady;
+    const char *pAnswer;
+} http_unix_server_t;
+
+/* Answers one request on a unix socket with a fixed response */
+static void *http_unix_serve(void *pContext)
+{
+    http_unix_server_t *pServer = (http_unix_server_t*)pContext;
+    int nListen = (int)socket(AF_UNIX, SOCK_STREAM, 0);
+
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    xstrncpy(addr.sun_path, sizeof(addr.sun_path), pServer->sPath);
+
+    if (nListen < 0 || bind(nListen, (struct sockaddr*)&addr, sizeof(addr)) < 0 || listen(nListen, 1) < 0)
+    {
+        if (nListen >= 0) close(nListen);
+        XSYNC_ATOMIC_SET(&pServer->nReady, 2);
+        return NULL;
+    }
+
+    XSYNC_ATOMIC_SET(&pServer->nReady, 1);
+    int nPeer = (int)accept(nListen, NULL, NULL);
+
+    if (nPeer >= 0)
+    {
+        char sRequest[2048];
+        size_t nUsed = 0;
+        while (nUsed < sizeof(sRequest) - 1)
+        {
+            ssize_t nRead = recv(nPeer, &sRequest[nUsed], sizeof(sRequest) - 1 - nUsed, 0);
+            if (nRead <= 0) break;
+            nUsed += (size_t)nRead;
+            sRequest[nUsed] = '\0';
+            if (strstr(sRequest, "\r\n\r\n") != NULL) break;
+        }
+
+        send(nPeer, pServer->pAnswer, strlen(pServer->pAnswer), MSG_NOSIGNAL);
+        close(nPeer);
+    }
+
+    close(nListen);
+    return NULL;
+}
+
+static int http_answer_cb(xhttp_t *pHttp, xhttp_ctx_t *pCtx)
+{
+    http_cb_t *pTest = (http_cb_t*)pHttp->pUserCtx;
+    if (pCtx->eCbType == XHTTP_STATUS) pTest->nStatusCbs++;
+    if (pCtx->eCbType == XHTTP_WRITE) pTest->nWriteCbs++;
+    if (pCtx->eCbType == XHTTP_READ_HDR) pTest->nHeaderCbs++;
+    if (pCtx->eCbType == XHTTP_READ_CNT) pTest->nContentCbs++;
+    if (pCtx->eCbType == XHTTP_STATUS && pCtx->eStatus == XHTTP_RESOLVED)
+        xstrncpy(pTest->sLastStatus, sizeof(pTest->sLastStatus), (const char*)pCtx->pData);
+    return (int)pCtx->eCbType == pTest->nAnswer ? XSTDNON : XSTDUSR;
+}
+
+static int XTest_client_paths(void)
+{
+    http_cb_t cb;
+    xhttp_t http, response;
+    xlink_t link;
+
+    /* A unix socket target is reached through the same exchange, with a read timeout and a status callback */
+    http_unix_server_t unixServer;
+    memset(&unixServer, 0, sizeof(unixServer));
+    snprintf(unixServer.sPath, sizeof(unixServer.sPath), "/tmp/xutils-http-%d.sock", (int)getpid());
+    unixServer.pAnswer = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+    unlink(unixServer.sPath);
+
+    xthread_t thread;
+    CHECK(XThread_Create(&thread, http_unix_serve, &unixServer, XFALSE) == XSTDOK, "Start a unix server");
+    for (int i = 0; i < 2000 && !XSYNC_ATOMIC_GET(&unixServer.nReady); i++) xusleep(1000);
+    CHECK(XSYNC_ATOMIC_GET(&unixServer.nReady) == 1, "The unix server listens");
+
+    memset(&cb, 0, sizeof(cb));
+    CHECK(XHTTP_InitRequest(&http, XHTTP_GET, "/unix", "1.1") > 0, "The request initializes");
+    CHECK(XHTTP_SetUnixAddr(&http, unixServer.sPath) > 0, "It goes to the unix socket");
+    CHECK(XHTTP_SetCallback(&http, http_answer_cb, &cb, XHTTP_STATUS) == XSTDOK, "It reports its status");
+    http.nTimeout = 5;
+
+    CHECK(XHTTP_EasyPerform(&http, "http://localhost/unix", NULL, 0) == XHTTP_COMPLETE, "The exchange completes");
+    CHECK(http.nStatusCode == 200 && XHTTP_GetBodySize(&http) == 2, "The answer is the server's");
+    CHECK(!strncmp(cb.sLastStatus, "Connecting to unix server: ", 27), "The connection named the unix server");
+    XHTTP_Clear(&http);
+    XThread_Join(&thread);
+    unlink(unixServer.sPath);
+
+    /* A protocol that is not HTTP is refused, a TLS one is tried, a link that is no link is reported */
+    CHECK(XHTTP_InitRequest(&http, XHTTP_GET, "/", "1.1") > 0, "The request initializes");
+    CHECK(XHTTP_EasyPerform(&http, "ftp://127.0.0.1/file", NULL, 0) == XHTTP_EPROTO, "FTP is not HTTP");
+    CHECK(XHTTP_EasyPerform(&http, "https://127.0.0.1:1/", NULL, 0) == XHTTP_ECONNECT, "A closed TLS port is reported");
+    XHTTP_Clear(&http);
+
+    CHECK(XHTTP_InitRequest(&http, XHTTP_GET, "/", "1.1") > 0, "The request initializes");
+    CHECK(XHTTP_EasyExchange(&http, &response, "") == XHTTP_ELINK, "An empty link is no link");
+    XHTTP_Clear(&http);
+
+    /* A link without a port gets the default one of its protocol */
+    XLink_Init(&link);
+    xstrncpy(link.sProtocol, sizeof(link.sProtocol), "https");
+    xstrncpy(link.sHost, sizeof(link.sHost), "127.0.0.1");
+    xsock_t sock;
+    CHECK(XHTTP_InitRequest(&http, XHTTP_GET, "/", "1.1") > 0, "The request initializes");
+    XHTTP_Connect(&http, &sock, &link);
+    CHECK(link.nPort == XHTTP_SSL_PORT && !strcmp(link.sHost, "127.0.0.1:443"), "TLS defaults to its port");
+    XSock_Close(&sock);
+    XHTTP_Clear(&http);
+
+    /* Neither the exchange nor the request runs on a socket that does not block */
+    XSOCKET pair[2];
+    CHECK(XSock_CreatePair(pair) == XSTDOK, "Create a pair");
+    CHECK(XSock_Init(&sock, XSOCK_UNIX | XSOCK_PEER | XSOCK_NB, pair[0]) == XSOCK_SUCCESS, "Flag one end non-blocking");
+    CHECK(XHTTP_InitRequest(&http, XHTTP_GET, "/", "1.1") > 0, "The request initializes");
+    CHECK(XHTTP_Exchange(&http, &response, &sock) == XHTTP_EFDMODE, "The exchange refuses it");
+    CHECK(XHTTP_Perform(&http, &sock, NULL, 0) == XHTTP_EFDMODE, "And so does the request");
+
+    /* A request that was never assembled has nothing to send */
+    sock.nFlags &= ~XSOCK_NB;
+    CHECK(XHTTP_Exchange(&http, &response, &sock) == XHTTP_EWRITE, "Nothing assembled is nothing to write");
+    XHTTP_Clear(&response);
+    XHTTP_Clear(&http);
+    XSock_Close(&sock);
+    close(pair[1]);
+
+    /* A callback can end the exchange after the request is written, or at the header of the answer */
+    http_server_t server;
+    CHECK(http_start(&server, &thread, 2) == XSTDOK, "Start a server");
+    char sUrl[128];
+    snprintf(sUrl, sizeof(sUrl), "http://127.0.0.1:%u/early", server.nPort);
+
+    memset(&cb, 0, sizeof(cb));
+    cb.nAnswer = XHTTP_READ_HDR;
+    CHECK(XHTTP_InitRequest(&http, XHTTP_GET, "/early", "1.1") > 0, "The request initializes");
+    CHECK(XHTTP_SetCallback(&http, http_answer_cb, &cb, XHTTP_READ_HDR) == XSTDOK, "Watch the header");
+    CHECK(XHTTP_EasyPerform(&http, sUrl, NULL, 0) == XHTTP_COMPLETE && cb.nHeaderCbs == 1, "The header ends it");
+    CHECK(http.nComplete, "As complete");
+    XHTTP_Clear(&http);
+
+    server.bStream = XTRUE;
+    memset(&cb, 0, sizeof(cb));
+    cb.nAnswer = XHTTP_READ_CNT;
+    CHECK(XHTTP_InitRequest(&http, XHTTP_GET, "/early", "1.1") > 0, "The request initializes");
+    CHECK(XHTTP_SetCallback(&http, http_answer_cb, &cb, XHTTP_READ_CNT) == XSTDOK, "Watch the body");
+    xhttp_status_t eStatus = XHTTP_EasyPerform(&http, sUrl, NULL, 0);
+    CHECK(eStatus == XHTTP_COMPLETE && http.nComplete, "A body without a length is ended by the callback");
+    XHTTP_Clear(&http);
+    XThread_Join(&thread);
+
+    /* Read without blocking, an answer that ends with its connection completes at its end. The whole answer is
+       waited for first: read before its body arrives, it completes with no body (see XHTTP_ReadContent) */
+    CHECK(http_start(&server, &thread, 1) == XSTDOK, "Start a server");
+    server.bStream = XTRUE;
+    CHECK(XSock_Create(&sock, XSOCK_TCP_CLIENT, "127.0.0.1", server.nPort) != XSOCK_INVALID, "Connect");
+    const char *pRequest = "GET /nonblocking HTTP/1.1\r\nHost: x\r\n\r\n";
+    CHECK(XSock_Write(&sock, pRequest, strlen(pRequest)) == (int)strlen(pRequest), "Send a request");
+    XThread_Join(&thread);
+    CHECK(XSock_NonBlock(&sock, XTRUE) != XSOCK_INVALID, "Stop blocking");
+
+    XHTTP_Init(&http, XHTTP_DUMMY, XSTDNON);
+    eStatus = XHTTP_INCOMPLETE;
+    for (int i = 0; i < 2000 && eStatus != XHTTP_COMPLETE; i++)
+    {
+        eStatus = http.nHeaderLength ? XHTTP_ReadContent(&http, &sock) : XHTTP_Receive(&http, &sock);
+        if (eStatus != XHTTP_COMPLETE) xusleep(1000);
+    }
+
+    CHECK(eStatus == XHTTP_COMPLETE && http.nStatusCode == 200, "The answer completes when the server closes");
+    CHECK(XHTTP_GetBodySize(&http) == strlen(server.pBody), "With the whole body");
+    CHECK(XHTTP_ReadContent(&http, &sock) == XHTTP_COMPLETE, "A complete answer reads as complete");
+    XHTTP_Clear(&http);
+    XSock_Close(&sock);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(client_paths),
     XTEST_CASE(connect),
     XTEST_CASE(link_exchange),
     XTEST_CASE(easy_exchange),

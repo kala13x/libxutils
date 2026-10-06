@@ -14,12 +14,12 @@ Generic transform layer over codecs, hashes and symmetric/asymmetric crypto.
   - `pInput`: input bytes.
   - `pLength`: in/out length.
   - `pKey`: AES key.
-  - `nKeyLen`: key length in bytes.
+  - `nKeyLen`: key length in bytes (`16`, `24` or `32`) or in bits (`128`, `192` or `256`).
   - `pIV`: IV bytes, may be `NULL`.
 - Does:
   - initializes AES-CBC helper with embedded-IV behavior and encrypts/decrypts one payload.
 - Returns:
-  - allocated output buffer or `NULL`.
+  - allocated output buffer or `NULL`, also for a key length that is no AES key size.
 
 ### `uint8_t *XCrypt_HEX(const uint8_t *pInput, size_t *pLength, const char *pSpace, size_t nColumns, xbool_t bLowCase)`
 
@@ -97,8 +97,6 @@ Generic transform layer over codecs, hashes and symmetric/asymmetric crypto.
   - returns the library’s textual name for that enum.
 - Returns:
   - static string or `NULL`.
-- Caveat:
-  - `XC_HS256` maps to `"h256"` in current code, not the more expected `"hs256"`.
 
 ## Context / Chain APIs
 

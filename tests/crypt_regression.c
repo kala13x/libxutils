@@ -1,6 +1,8 @@
 /* libxutils: binary-safe utility encodings and dispatcher consistency. */
 #include "test.h"
 #include "crypt.h"
+#include "rsa.h"
+#include <limits.h>
 
 static int XTest_hex(void)
 {
@@ -517,7 +519,168 @@ static int XTest_hex_scaling(void)
     return 0;
 }
 
+static int XTest_api_guards(void)
+{
+    const uint8_t data[] = "guarded";
+    size_t nLength = sizeof(data) - 1;
+
+    CHECK(XCrypt_XOR(NULL, 1, data, 1) == NULL && XCrypt_XOR(data, 1, NULL, 1) == NULL, "XOR needs input and key");
+    CHECK(XCrypt_XOR(data, 0, data, 1) == NULL, "XOR needs a length");
+    CHECK(XCrypt_HEX(data, NULL, NULL, 0, XTRUE) == NULL, "Hex encoding needs a length pointer");
+    CHECK(XDecrypt_HEX(NULL, &nLength, XTRUE) == NULL && XDecrypt_HEX(data, NULL, XTRUE) == NULL, "Hex decoding needs input");
+    nLength = 0;
+    CHECK(XDecrypt_HEX(data, &nLength, XTRUE) == NULL, "Hex decoding needs a length");
+
+    /* Both limits are checked before the input is read */
+    nLength = (size_t)INT_MAX + 1;
+    CHECK(XCrypt_HEX(data, &nLength, NULL, 0, XTRUE) == NULL, "Hex encoding refuses an input over INT_MAX");
+    nLength = (size_t)INT_MAX / 2 + 1;
+    CHECK(XCrypt_HEX(data, &nLength, " ", 0, XTRUE) == NULL && !nLength, "Hex encoding refuses an output over INT_MAX");
+
+    CHECK(XCrypt_Reverse(NULL, 1) == NULL && XCrypt_Reverse("x", 0) == NULL, "Reverse needs input");
+    CHECK(XDecrypt_Casear("x", 0, 1) == NULL, "The shift decryption needs a length");
+
+    const uint8_t key[] = "0123456789abcdef";
+    nLength = sizeof(data) - 1;
+    CHECK(XCrypt_AES(NULL, &nLength, key, 16, NULL) == NULL && XCrypt_AES(data, &nLength, NULL, 16, NULL) == NULL,
+        "AES encryption needs input and key");
+    CHECK(XCrypt_AES(data, &nLength, key, 0, NULL) == NULL && XCrypt_AES(data, NULL, key, 16, NULL) == NULL,
+        "AES encryption needs key and input lengths");
+    CHECK(XDecrypt_AES(NULL, &nLength, key, 16, NULL) == NULL && XDecrypt_AES(data, &nLength, NULL, 16, NULL) == NULL,
+        "AES decryption needs input and key");
+    CHECK(XDecrypt_AES(data, &nLength, key, 0, NULL) == NULL && XDecrypt_AES(data, NULL, key, 16, NULL) == NULL,
+        "AES decryption needs key and input lengths");
+    nLength = 0;
+    CHECK(XCrypt_AES(data, &nLength, key, 16, NULL) == NULL && XDecrypt_AES(data, &nLength, key, 16, NULL) == NULL,
+        "AES needs an input length");
+
+    /* The pseudo cipher has no single step in either direction */
+    xcrypt_ctx_t ctx;
+    crypt_ctx_t test;
+    crypt_init(&test, &ctx, XFALSE, NULL);
+    nLength = sizeof(data) - 1;
+    CHECK(XCrypt_Single(&ctx, XC_MULTY, data, &nLength) == NULL, "The pseudo cipher does not encrypt");
+    CHECK(test.nErrors == 1 && strstr(test.sLastError, "multy") != NULL, "The failure names the cipher");
+    CHECK(XDecrypt_Single(&ctx, XC_MULTY, data, &nLength) == NULL && test.nErrors == 2, "The pseudo cipher does not decrypt");
+
+    /* Without a callback a keyed cipher gets no key, and fails without one */
+    XCrypt_Init(&ctx, XFALSE, NULL, NULL, NULL);
+    CHECK(XCrypt_Single(&ctx, XC_XOR, data, &nLength) == NULL, "A keyed cipher without a key fails");
+
+    /* An unknown cipher is reported by the name it was given */
+    char sBad[] = "hex:bogus";
+    crypt_init(&test, &ctx, XFALSE, sBad);
+    nLength = sizeof(data) - 1;
+    CHECK(XCrypt_Multy(&ctx, data, &nLength) == NULL, "An unknown cipher fails the chain");
+    CHECK(strstr(test.sLastError, "bogus") != NULL, "The error names the unknown cipher");
+    return 0;
+}
+
+static int XTest_keyed_dispatch(void)
+{
+    const char plain[] = "Shift Me";
+    xcrypt_ctx_t ctx;
+    crypt_ctx_t test;
+    crypt_init(&test, &ctx, XFALSE, NULL);
+    test.pKey = "3";
+
+    size_t nLength = strlen(plain);
+    uint8_t *pShifted = XCrypt_Single(&ctx, XC_CASEAR, (const uint8_t*)plain, &nLength);
+    CHECK(pShifted != NULL && strcmp((char*)pShifted, "Vkliw Ph") == 0, "The dispatcher shifts by the supplied key");
+    uint8_t *pPlain = XDecrypt_Single(&ctx, XC_CASEAR, pShifted, &nLength);
+    CHECK(pPlain != NULL && strcmp((char*)pPlain, plain) == 0, "The dispatcher shifts back by the same key");
+    free(pShifted);
+    free(pPlain);
+
+#ifdef XCRYPT_USE_SSL
+    xrsa_ctx_t key;
+    XRSA_Init(&key);
+    CHECK(XRSA_GenerateKeys(&key, 1024, 65537) == XSTDOK, "Generate an ephemeral test-only key");
+    CHECK(key.nPrivKeyLen < sizeof(((xcrypt_key_t*)0)->sKey), "The key fits the callback buffer");
+
+    /* Public key encryption opens with the private key, private key encryption with the public one */
+    const struct { xcrypt_chipher_t eCipher; const char *pEncKey; const char *pDecKey; } pairs[] = {
+        { XC_RSA, key.pPublicKey, key.pPrivateKey }, { XC_RSAPR, key.pPrivateKey, key.pPublicKey }
+    };
+
+    for (size_t i = 0; i < sizeof(pairs) / sizeof(*pairs); i++)
+    {
+        crypt_init(&test, &ctx, XFALSE, NULL);
+        test.pKey = pairs[i].pEncKey;
+        nLength = strlen(plain);
+
+        uint8_t *pCrypted = XCrypt_Single(&ctx, pairs[i].eCipher, (const uint8_t*)plain, &nLength);
+        CHECK(pCrypted != NULL && nLength == 128, "The dispatcher encrypts with RSA");
+
+        test.pKey = pairs[i].pDecKey;
+        pPlain = XDecrypt_Single(&ctx, pairs[i].eCipher, pCrypted, &nLength);
+        CHECK(pPlain != NULL && nLength == strlen(plain) && !memcmp(pPlain, plain, nLength), "The dispatcher decrypts with RSA");
+        free(pCrypted);
+        free(pPlain);
+    }
+
+    crypt_init(&test, &ctx, XFALSE, NULL);
+    test.pKey = key.pPrivateKey;
+    nLength = strlen(plain);
+    uint8_t *pSignature = XCrypt_Single(&ctx, XC_RS256, (const uint8_t*)plain, &nLength);
+    CHECK(pSignature != NULL && nLength == 128, "The dispatcher signs with RSA");
+    CHECK(XCrypt_VerifyRS256(pSignature, nLength, (const uint8_t*)plain, strlen(plain), key.pPublicKey, key.nPubKeyLen) == XSTDOK,
+        "The dispatched signature verifies");
+    free(pSignature);
+    XRSA_Destroy(&key);
+#endif
+    return 0;
+}
+
+static int XTest_aes_key_lengths(void)
+{
+    /* A key length in bytes, as documented, used to leave the key unset: any key decrypted the data */
+    const uint8_t data[] = "top secret payload";
+    const uint8_t key[] = "0123456789abcdef0123456789abcdef", other[] = "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
+    const size_t lengths[][2] = { {16, 128}, {24, 192}, {32, 256} };
+
+    for (size_t i = 0; i < sizeof(lengths) / sizeof(*lengths); i++)
+    {
+        size_t nLength = sizeof(data) - 1;
+        uint8_t *pCrypted = XCrypt_AES(data, &nLength, key, lengths[i][0], NULL);
+        CHECK(pCrypted != NULL && nLength == 16 + 32, "The ciphertext carries its IV and a padded payload");
+
+        size_t nPlain = nLength;
+        uint8_t *pPlain = XDecrypt_AES(pCrypted, &nPlain, key, lengths[i][1], NULL);
+        CHECK(pPlain != NULL && nPlain == sizeof(data) - 1 && !memcmp(pPlain, data, nPlain), "Bytes and bits name the same key");
+        free(pPlain);
+
+        nPlain = nLength;
+        pPlain = XDecrypt_AES(pCrypted, &nPlain, other, lengths[i][0], NULL);
+        CHECK(pPlain == NULL || nPlain != sizeof(data) - 1 || memcmp(pPlain, data, nPlain), "Another key does not decrypt");
+        free(pPlain);
+
+        size_t nOther = sizeof(data) - 1;
+        uint8_t *pOther = XCrypt_AES(data, &nOther, other, lengths[i][0], pCrypted);
+        nPlain = nOther;
+        pPlain = XDecrypt_AES(pOther, &nPlain, key, lengths[i][0], NULL);
+        CHECK(pPlain == NULL || nPlain != sizeof(data) - 1 || memcmp(pPlain, data, nPlain), "Another key does not encrypt");
+        free(pPlain);
+        free(pOther);
+        free(pCrypted);
+    }
+
+    const size_t invalid[] = { 1, 10, 15, 17, 64, 127, 129, 512 };
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(*invalid); i++)
+    {
+        size_t nLength = sizeof(data) - 1;
+        CHECK(XCrypt_AES(data, &nLength, key, invalid[i], NULL) == NULL, "A key of no AES size does not encrypt");
+        nLength = 32;
+        CHECK(XDecrypt_AES(key, &nLength, key, invalid[i], NULL) == NULL, "A key of no AES size does not decrypt");
+    }
+
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
+    XTEST_CASE(keyed_dispatch),
+    XTEST_CASE(aes_key_lengths),
     XTEST_CASE(hex),
     XTEST_CASE(transforms),
     XTEST_CASE(dispatch),

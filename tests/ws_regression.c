@@ -649,7 +649,7 @@ static int XTest_mask_keys(void)
         uint32_t childKeys[32];
         for (size_t i = 0; i < 32; i++) childKeys[i] = ws_next_key();
         ssize_t nWritten = write(pipeFds[1], childKeys, sizeof(childKeys));
-        _exit(nWritten == (ssize_t)sizeof(childKeys) ? 0 : 1);
+        XTEST_EXIT(nWritten == (ssize_t)sizeof(childKeys) ? 0 : 1);
     }
 
     uint32_t mixed[64];
@@ -675,7 +675,100 @@ static int XTest_mask_keys(void)
     return 0;
 }
 
+static int XTest_api_guards(void)
+{
+    xws_frame_t frame;
+    xbyte_buffer_t buffer;
+    size_t nFrameSize = 1;
+    uint8_t sPayload[] = "payload";
+
+    CHECK(!strcmp(XWS_FrameTypeStr(XWS_INVALID), "dummy") && !strcmp(XWS_FrameTypeStr((xws_frame_type_t)99), "invalid"),
+        "The dummy and unknown frame types have names");
+    CHECK(XWS_OpCode(XWS_INVALID) == 0 && XWS_FrameType(0x10) == XWS_INVALID, "And no opcode");
+
+    uint8_t *pRaw = XWS_CreateFrame(sPayload, 7, 0x1, XTRUE, NULL);
+    CHECK(pRaw != NULL && pRaw[1] == 7, "A frame can be built without asking its size");
+    free(pRaw);
+    CHECK(XWS_CreateFrame(sPayload, 7, 0x10, XTRUE, &nFrameSize) == NULL && !nFrameSize, "No opcode past four bits");
+
+    XWebFrame_Init(NULL);
+    XWebFrame_Clear(NULL);
+    XWebFrame_Free(NULL);
+    CHECK(XWebFrame_GetBuffer(NULL) == NULL && !XWebFrame_GetFrameLength(NULL) && !XWebFrame_GetPayloadLength(NULL),
+        "No frame has no buffer and no lengths");
+    CHECK(XWebFrame_Create(NULL, sPayload, 7, XWS_TEXT, XFALSE, XTRUE) == XWS_INVALID_ARGS &&
+        XWebFrame_Create(&frame, NULL, 7, XWS_TEXT, XFALSE, XTRUE) == XWS_INVALID_ARGS &&
+        XWebFrame_Create(&frame, sPayload, 7, XWS_INVALID, XFALSE, XTRUE) == XWS_INVALID_TYPE,
+        "A frame needs somewhere to go, its payload and a type");
+    CHECK(XWebFrame_New(sPayload, 7, XWS_INVALID, XFALSE, XTRUE) == NULL, "And so does an allocated one");
+    CHECK(XWebFrame_AppendData(NULL, sPayload, 7) == XWS_INVALID_ARGS, "Data is appended to something");
+    CHECK(XWebFrame_AppendData(&frame, NULL, 7) == XWS_INVALID_ARGS, "From something");
+    CHECK(XWebFrame_AppendData(&frame, sPayload, 0) == XWS_INVALID_ARGS, "Of some length");
+    CHECK(XWebFrame_Mask(NULL) == XWS_INVALID_ARGS && XWebFrame_Unmask(NULL) == XWS_INVALID_ARGS &&
+        XWebFrame_Parse(NULL) == XWS_INVALID_ARGS, "No frame is masked, unmasked or parsed");
+
+    XWebFrame_Init(&frame);
+    CHECK(XWebFrame_Mask(&frame) == XWS_INVALID_ARGS && XWebFrame_Parse(&frame) == XWS_FRAME_INCOMPLETE,
+        "An empty frame has nothing to mask or parse");
+    frame.bMask = XTRUE;
+    CHECK(XWebFrame_Unmask(&frame) == XWS_INVALID_ARGS, "Nor to unmask");
+
+    /* A frame cut short is masked and unmasked no further than it reaches */
+    CHECK(XWebFrame_Create(&frame, sPayload, 7, XWS_BINARY, XFALSE, XTRUE) == XWS_ERR_NONE, "Build a frame");
+    frame.nHeaderSize = 1;
+    CHECK(XWebFrame_Mask(&frame) == XWS_ERR_SIZE, "A header shorter than two bytes is not masked");
+    frame.nHeaderSize = 20;
+    CHECK(XWebFrame_Mask(&frame) == XWS_FRAME_INCOMPLETE, "Nor one longer than the frame");
+    frame.nHeaderSize = 2;
+    frame.nPayloadLength = 20;
+    CHECK(XWebFrame_Mask(&frame) == XWS_FRAME_INCOMPLETE, "Nor a payload that is not all there");
+    frame.nPayloadLength = 7;
+    CHECK(XWebFrame_Mask(&frame) == XWS_ERR_NONE && frame.bMask, "The whole frame is masked");
+    CHECK(XWebFrame_Mask(&frame) == XWS_ERR_NONE && frame.nHeaderSize == 6, "Masking it again does nothing");
+    frame.nHeaderSize = 20;
+    CHECK(XWebFrame_Unmask(&frame) == XWS_FRAME_INCOMPLETE, "A header longer than the frame is not unmasked");
+    frame.nHeaderSize = 6;
+    frame.nPayloadLength = 20;
+    CHECK(XWebFrame_Unmask(&frame) == XWS_FRAME_INCOMPLETE, "Nor a payload that is not all there");
+    frame.nPayloadLength = 7;
+    CHECK(XWebFrame_Unmask(&frame) == XWS_ERR_NONE && !memcmp(XWebFrame_GetPayload(&frame), "payload", 7),
+        "The whole frame is unmasked");
+    XWebFrame_Clear(&frame);
+
+    /* No data after a frame is none to cut or copy, and copying can add to what is there */
+    CHECK(XWebFrame_Create(&frame, sPayload, 7, XWS_TEXT, XFALSE, XTRUE) == XWS_ERR_NONE, "Build a frame");
+    CHECK(XWebFrame_CutExtraData(&frame) == XSTDNON && XWebFrame_GetExtraData(&frame, &buffer, XFALSE) == XSTDNON,
+        "A frame alone has no extra data");
+    CHECK(XWebFrame_AppendData(&frame, (uint8_t*)"next", 4) == XWS_ERR_NONE, "Data follows it");
+    XByteBuffer_Init(&buffer, 0, XFALSE);
+    CHECK(XByteBuffer_Add(&buffer, (uint8_t*)"have:", 5) == 5, "A buffer holds something");
+    CHECK(XWebFrame_GetExtraData(&frame, &buffer, XTRUE) == 9 && !strcmp((char*)buffer.pData, "have:next"),
+        "The extra data is appended to it");
+    XByteBuffer_Clear(&buffer);
+    XWebFrame_Clear(&frame);
+
+    /* A frame that has not all arrived has a payload no longer than what is there */
+    uint8_t sPartial[] = { 0x82, 0x05, 'a', 'b' };
+    CHECK(XWebFrame_ParseData(&frame, sPartial, sizeof(sPartial)) == XWS_FRAME_INCOMPLETE, "Parse a cut frame");
+    CHECK(XWebFrame_GetPayloadLength(&frame) == 2 && !frame.bComplete, "Its payload is what arrived");
+    XWebFrame_Clear(&frame);
+
+    uint8_t sLong[] = { 0x82, 0x7f, 0, 0, 0, 0 };
+    CHECK(XWebFrame_ParseData(&frame, sLong, sizeof(sLong)) == XWS_FRAME_INCOMPLETE, "A 64 bit length needs its bytes");
+    XWebFrame_Clear(&frame);
+
+    /* A frame is not appended to a buffer that can not grow */
+    uint8_t sBorrowed[4];
+    XByteBuffer_SetData(&buffer, sBorrowed, sizeof(sBorrowed));
+    CHECK(XWS_AppendFrame(&buffer, sPayload, 7, XWS_TEXT, XFALSE, XTRUE) == XWS_ERR_ALLOC, "A borrowed buffer does not grow");
+    CHECK(XWS_AppendFrame(NULL, sPayload, 7, XWS_TEXT, XFALSE, XTRUE) == XWS_INVALID_ARGS &&
+        XWS_AppendFrame(&buffer, sPayload, 7, XWS_INVALID, XFALSE, XTRUE) == XWS_INVALID_TYPE,
+        "A frame is appended somewhere, with a type");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
     XTEST_CASE(lengths),
     XTEST_CASE(partial),
     XTEST_CASE(coalesced),

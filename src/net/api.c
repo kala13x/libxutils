@@ -2696,6 +2696,9 @@ XSTATUS XAPI_AddEvent(xapi_t *pApi, xapi_endpoint_t *pEndpt)
     xsock_t *pSock = &pSession->sock;
     XSock_Init(pSock, nFlags, pEndpt->nFD);
 
+    /* The descriptor is the API's from here on, also when the socket refused it */
+    if (pSock->nFD == XSOCK_INVALID) xclosesock(pEndpt->nFD);
+
     /* Create event instance */
     xevents_t *pEvents = XAPI_GetOrCreateEvents(pApi);
     if (pEvents == NULL)

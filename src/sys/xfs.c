@@ -215,7 +215,7 @@ int XFile_Open(xfile_t *pFile, const char *pPath, const char *pFlags, const char
     pFile->nFD = -1;
 
     const char *pPerm = (pPerms != NULL) ? pPerms : XFILE_DEFAULT_PERM;
-    if (!XPath_PermToMode(pPerm, &pFile->nMode)) return XSTDERR;
+    if (XPath_PermToMode(pPerm, &pFile->nMode) != XSTDOK) return XSTDERR;
 
 #ifdef _WIN32
     _sopen_s(&pFile->nFD, pPath, pFile->nFlags, _SH_DENYNO, pFile->nMode);
@@ -542,17 +542,25 @@ int XPath_EnsureDirectory(const char *pPath)
 {
     XCHECK((xstrused(pPath)), XSTDERR);
 
+    const char *pSlash = strrchr(pPath, '/');
+    if (pSlash == NULL) return XSTDNON;
+
+    size_t nLength = (size_t)(pSlash - pPath);
     char sDir[XPATH_MAX];
-    xstrncpy(sDir, sizeof(sDir), pPath);
 
-    char *pSlash = strrchr(sDir, '/');
-    if (pSlash != NULL)
-    {
-        *pSlash = XSTR_NUL;
-        return XDir_Create(sDir, XPATH_DIR_MODE);
-    }
+    char *pDir = nLength < sizeof(sDir) ? sDir : (char*)malloc(nLength + 1);
+    if (pDir == NULL) return XSTDERR;
 
-    return XSTDNON;
+    memcpy(pDir, pPath, nLength);
+    pDir[nLength] = XSTR_NUL;
+
+    int nStatus = XDir_Create(pDir, XPATH_DIR_MODE);
+    if (pDir == sDir) return nStatus;
+
+    int nErrno = errno;
+    free(pDir);
+    errno = nErrno;
+    return nStatus;
 }
 
 char XPath_GetType(xmode_t nMode)
@@ -1137,27 +1145,22 @@ int XDir_Make(char *pPath, xmode_t mode)
     return 1;
 }
 
-int XDir_Create(const char *pDir, xmode_t nMode)
+/* Makes every missing directory of pDir, a path of nLen characters that is worked on in place */
+static int XDir_CreatePath(char *pDir, size_t nLen, xmode_t nMode)
 {
-    if (XPath_Exists(pDir)) return 1;
-    char sDir[XPATH_MAX];
-    int nStatus = 0;
-
-    size_t nLen = xstrncpyf(sDir, sizeof(sDir), "%s", pDir);
-    if (!nLen) return nStatus;
-
-    if (sDir[nLen-1] == '/') sDir[nLen-1] = 0;
+    if (pDir[nLen-1] == '/') pDir[nLen-1] = 0;
     char *pOffset = NULL;
-    char *pRoot = sDir;
+    char *pRoot = pDir;
+    int nStatus = 0;
 
 #ifdef _WIN32
     /* A drive prefix is a root, not a directory. Left in the walk, "C:" is
      * handed to mkdir as if it were a component to create, and the failure
      * stops the whole path from being created. */
-    if (nLen > 2 && sDir[1] == ':' &&
-        ((sDir[0] >= 'A' && sDir[0] <= 'Z') ||
-         (sDir[0] >= 'a' && sDir[0] <= 'z')))
-            pRoot = sDir + 2;
+    if (nLen > 2 && pDir[1] == ':' &&
+        ((pDir[0] >= 'A' && pDir[0] <= 'Z') ||
+         (pDir[0] >= 'a' && pDir[0] <= 'z')))
+            pRoot = pDir + 2;
 #endif
 
     for (pOffset = pRoot + 1; *pOffset; pOffset++)
@@ -1165,13 +1168,36 @@ int XDir_Create(const char *pDir, xmode_t nMode)
         if (*pOffset == '/')
         {
             *pOffset = 0;
-            nStatus = XDir_Make(sDir, nMode);
+            nStatus = XDir_Make(pDir, nMode);
             if (nStatus <= 0) return nStatus;
             *pOffset = '/';
         }
     }
 
-    return XDir_Make(sDir, nMode);
+    return XDir_Make(pDir, nMode);
+}
+
+int XDir_Create(const char *pDir, xmode_t nMode)
+{
+    if (!xstrused(pDir)) return 0;
+    if (XPath_Exists(pDir)) return 1;
+
+    /* A path that does not fit the buffer is copied whole: cut short, it named another
+       directory and that one was made, with success reported for the one asked for */
+    size_t nLen = strlen(pDir);
+    char sDir[XPATH_MAX];
+
+    char *pPath = nLen < sizeof(sDir) ? sDir : (char*)malloc(nLen + 1);
+    if (pPath == NULL) return 0;
+
+    memcpy(pPath, pDir, nLen + 1);
+    int nStatus = XDir_CreatePath(pPath, nLen, nMode);
+    if (pPath == sDir) return nStatus;
+
+    int nErrno = errno;
+    free(pPath);
+    errno = nErrno;
+    return nStatus;
 }
 
 xbool_t XPath_IsLink(const char *pPath)

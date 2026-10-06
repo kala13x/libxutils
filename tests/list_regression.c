@@ -282,7 +282,43 @@ static int XTest_ring_walk(void)
     return 0;
 }
 
+static int XTest_api_guards(void)
+{
+    XListData_MergeCtx(NULL, NULL);
+    XList_Free(NULL);
+    XList_Detach(NULL);
+    CHECK(XList_Unlink(NULL) == NULL && XList_GetHead(NULL) == NULL && XList_GetTail(NULL) == NULL, "No list has no ends");
+    CHECK(XList_MakeRing(NULL) == NULL && !XList_IsRing(NULL), "No list makes no ring");
+    CHECK(XList_InsertPrev(NULL, NULL) == NULL && XList_InsertNext(NULL, NULL) == NULL, "No list takes no node");
+    CHECK(XList_InsertHead(NULL, NULL) == NULL && XList_InsertTail(NULL, NULL) == NULL, "No list takes no node");
+    CHECK(XList_PushPrev(NULL, NULL, 0) == NULL && XList_PushNext(NULL, NULL, 0) == NULL, "No list takes no data");
+    CHECK(XList_PushFront(NULL, NULL, 0) == NULL && XList_PushBack(NULL, NULL, 0) == NULL, "No list takes no data");
+    CHECK(XList_Search(NULL, NULL, XTest_MatchPtr) == NULL, "No list finds nothing");
+
+    xlist_t head;
+    XList_Init(&head, NULL, 0, NULL, NULL);
+    CHECK(XList_InsertPrev(&head, NULL) == NULL && XList_InsertNext(&head, NULL) == NULL, "No node is inserted");
+    CHECK(XList_InsertHead(&head, NULL) == NULL && XList_InsertTail(&head, NULL) == NULL, "No node is inserted");
+    CHECK(XList_Search(&head, NULL, NULL) == NULL, "A search needs a comparator");
+
+    /* Data with a size and no clear callback belongs to its node */
+    char *pOwned = strdup("owned");
+    xlist_t *pLast = XList_PushBack(&head, pOwned, strlen("owned") + 1);
+    CHECK(pOwned != NULL && pLast != NULL && pLast->data.pData == pOwned, "Push owned data");
+
+    /* A node put in front of one that has a predecessor goes between the two */
+    xlist_t *pMiddle = XList_New(NULL, 0, NULL, NULL);
+    CHECK(pMiddle != NULL && XList_InsertPrev(pLast, pMiddle) == &head, "The insertion reports the predecessor");
+    CHECK(head.pNext == pMiddle && pMiddle->pPrev == &head, "The new node follows the predecessor");
+    CHECK(pMiddle->pNext == pLast && pLast->pPrev == pMiddle, "And leads the node it was put in front of");
+
+    XList_Clear(&head);
+    CHECK(head.pNext == NULL && head.data.pData == NULL, "Clearing resets the head");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
     XTEST_CASE(links),
     XTEST_CASE(rings),
     XTEST_CASE(stack_head),

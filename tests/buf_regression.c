@@ -573,7 +573,117 @@ static int XTest_borrowed_reset(void)
     return 0;
 }
 
+static int XTest_api_guards(void)
+{
+    xbyte_buffer_t buffer, other;
+    uint8_t sBorrowed[8] = "borrow";
+
+    XByteBuffer_Clear(NULL);
+    XByteBuffer_Reset(NULL);
+    CHECK(XByteBuffer_SetData(NULL, sBorrowed, 6) == XSTDINV && XByteBuffer_Set(NULL, &buffer) == XSTDINV,
+        "Nothing is set on no buffer");
+    CHECK(XByteBuffer_OwnData(NULL, NULL, 0) == XSTDINV && XByteBuffer_Own(NULL, &buffer) == XSTDINV &&
+        XByteBuffer_Own(&buffer, NULL) == XSTDINV, "Nothing is owned by no buffer");
+    CHECK(!XByteBuffer_HasData(NULL), "No buffer holds no data");
+
+    /* Resizing: to nothing, past what an int counts, and a borrowed buffer that already holds enough */
+    CHECK(XByteBuffer_Init(&buffer, 16, XFALSE) > 0 && XByteBuffer_Add(&buffer, (uint8_t*)"0123456789", 10) == 10,
+        "Fill a buffer");
+    CHECK(XByteBuffer_Resize(&buffer, (size_t)INT_MAX + 1) == XSTDERR, "No size past an int");
+    XByteBuffer_Clear(&buffer);
+    CHECK(XByteBuffer_Init(&buffer, 16, XFALSE) > 0 && XByteBuffer_Add(&buffer, (uint8_t*)"0123456789", 10) == 10,
+        "Fill it again");
+    CHECK(XByteBuffer_Resize(&buffer, 4) == 4 && buffer.nUsed == 3 && !strcmp((char*)buffer.pData, "012"),
+        "Shrinking keeps what fits with its terminator");
+    CHECK(XByteBuffer_Resize(&buffer, 0) == XSTDNON && buffer.pData == NULL && !buffer.nSize, "Nothing is released");
+
+    XByteBuffer_SetData(&buffer, sBorrowed, 6);
+    CHECK(XByteBuffer_Resize(&buffer, 4) == 6, "A borrowed buffer is big enough for less than it holds");
+    CHECK(XByteBuffer_NullTerm(&buffer) == XSTDERR, "But can not grow for a terminator");
+    CHECK(XByteBuffer_Terminate(&buffer, 3) == XSTDOK && buffer.nUsed == 3 && !strcmp((char*)sBorrowed, "bor"),
+        "It can be cut inside what it holds");
+
+    buffer.pData = NULL;
+    buffer.nUsed = 0;
+    CHECK(XByteBuffer_Terminate(&buffer, 0) == XSTDERR, "An empty buffer is not terminated");
+
+    /* What is added or inserted from the buffer itself must lie inside it */
+    CHECK(XByteBuffer_Init(&buffer, 0, XFALSE) == XSTDNON && XByteBuffer_Add(&buffer, (uint8_t*)"abcdef", 6) == 6,
+        "Fill a buffer");
+    CHECK(XByteBuffer_Add(&buffer, buffer.pData + 4, 4) == XSTDERR, "No more of its own bytes than it holds are added");
+    buffer.nStatus = XSTDOK;
+    CHECK(XByteBuffer_Insert(&buffer, 1, buffer.pData + 4, 4) == XSTDERR, "Nor inserted");
+    buffer.nStatus = XSTDOK;
+    CHECK(XByteBuffer_Insert(&buffer, 1, buffer.pData + 4, 2) == 8 && !strcmp((char*)buffer.pData, "aefbcdef"),
+        "Its own bytes that are there are inserted");
+    CHECK(XByteBuffer_Insert(&buffer, 1, NULL, 2) == XSTDNON && XByteBuffer_Insert(&buffer, 1, (uint8_t*)"x", 0) == XSTDNON,
+        "Nothing is inserted from nothing");
+    CHECK(XByteBuffer_Insert(&buffer, 1, (uint8_t*)"x", INT_MAX) == XSTDERR, "Nor past an int");
+
+    XByteBuffer_Init(&other, 0, XFALSE);
+    CHECK(XByteBuffer_AddBuff(&buffer, &other) == XSTDERR, "An empty buffer adds nothing");
+    xbyte_buffer_t *pOther = &other;
+    XByteBuffer_Free(&pOther);
+    CHECK(pOther == &other, "A buffer that was not allocated is cleared, not freed");
+    XByteBuffer_Clear(&buffer);
+    CHECK(!XByteBuffer_HasData(&buffer), "A cleared buffer holds nothing");
+
+    /* Pointer buffers: their sizes, fixed or growing, holes, and shrinking once mostly empty */
+    xdata_buffer_t data;
+    CHECK(XDataBuffer_Init(&data, 0, XTRUE) == XSTDERR, "A fixed buffer needs a size");
+    CHECK(XDataBuffer_Init(&data, (size_t)INT_MAX + 1, XFALSE) == XSTDERR, "Not one past an int");
+    CHECK(XDataBuffer_Init(&data, 1, XTRUE) == 1 && XDataBuffer_Add(&data, sBorrowed) == 0, "A fixed buffer takes one");
+    CHECK(XDataBuffer_Add(&data, sBorrowed) == XSTDERR, "And no more");
+    CHECK(XDataBuffer_Set(&data, 5, sBorrowed) == NULL && data.nUsed == 1, "Nothing is set past its end");
+    CHECK(XDataBuffer_Pop(&data, 3) == NULL && XDataBuffer_Pop(&data, 0) == sBorrowed && !data.nUsed,
+        "Popping takes what is there");
+    XDataBuffer_Destroy(&data);
+
+    int nValues[64];
+    CHECK(XDataBuffer_Init(&data, 0, XFALSE) == 1, "A growing buffer starts at one");
+    for (int i = 0; i < 64; i++) CHECK(XDataBuffer_Add(&data, &nValues[i]) == i, "It grows");
+    CHECK(data.nSize == 64, "To fit");
+    CHECK(XDataBuffer_Set(&data, 63, NULL) == &nValues[63] && XDataBuffer_Pop(&data, 63) == NULL, "A hole pops nothing");
+    for (int i = 0; i < 56; i++) CHECK(XDataBuffer_Pop(&data, 0) == &nValues[i], "Pop from the front");
+    CHECK(data.nUsed == 8 && data.nSize < 64, "A mostly empty buffer shrinks");
+    for (int i = 0; i < 7; i++) CHECK(XDataBuffer_Pop(&data, 0) == &nValues[56 + i], "And keeps its order");
+    CHECK(XDataBuffer_Set(&data, 2, &nValues[0]) == NULL && data.nUsed == 3, "Setting past the end extends it");
+    XDataBuffer_Destroy(&data);
+
+    /* Ring buffers: sizes, empty and full, and slots never used */
+    xring_buffer_t ring;
+    uint8_t *pData = NULL;
+    size_t nSize = 0;
+    uint8_t sOut[8];
+    CHECK(XRingBuffer_Init(&ring, 0) == 0 && XRingBuffer_Init(&ring, (size_t)INT_MAX + 1) == 0, "A ring needs a sane size");
+    XRingBuffer_Update(&ring, 1);
+    XRingBuffer_Advance(&ring);
+    CHECK(XRingBuffer_Init(&ring, 2) == 2, "Make a ring of two");
+    XRingBuffer_Update(&ring, 0);
+    XRingBuffer_Advance(&ring);
+    CHECK(ring.nUsed == 0, "Nothing is taken from an empty ring");
+    CHECK(!XRingBuffer_GetData(&ring, &pData, &nSize) && !XRingBuffer_Pop(&ring, sOut, sizeof(sOut)), "Nor read");
+
+    CHECK(XRingBuffer_AddData(&ring, (uint8_t*)"one", 3) == 3 && XRingBuffer_AddData(&ring, (uint8_t*)"two", 3) == 3,
+        "Fill the ring");
+    XRingBuffer_Update(&ring, 1);
+    CHECK(ring.nUsed == 2 && XRingBuffer_AddData(&ring, (uint8_t*)"x", 1) == 0, "A full ring takes nothing");
+    CHECK(!XRingBuffer_GetData(&ring, NULL, &nSize) && !XRingBuffer_GetData(&ring, &pData, NULL), "A read needs both outputs");
+    CHECK(!XRingBuffer_Pop(&ring, NULL, 8) && !XRingBuffer_Pop(&ring, sOut, 0), "A pop needs room");
+    CHECK(XRingBuffer_Pop(&ring, sOut, 2) == 2 && !memcmp(sOut, "on", 2), "A short pop takes what fits");
+
+    size_t nSlot = ring.nFront;
+    xbyte_buffer_t *pSlot = ring.pData[nSlot];
+    ring.pData[nSlot] = NULL;
+    CHECK(!XRingBuffer_GetData(&ring, &pData, &nSize), "A slot that is not there has no data");
+    CHECK(XRingBuffer_Pop(&ring, sOut, sizeof(sOut)) == 0 && ring.nUsed == 0, "And pops as empty");
+    ring.pData[nSlot] = pSlot;
+    XRingBuffer_Destroy(&ring);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
     XTEST_CASE(aliasing),
     XTEST_CASE(borrowed_reset),
     XTEST_CASE(borrowed),

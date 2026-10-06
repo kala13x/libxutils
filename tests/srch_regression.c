@@ -693,6 +693,121 @@ static int XTest_deep_tree(void)
     return 0;
 }
 
+static int g_nTooLong = 0;
+static int g_bStopOnLong = 0;
+
+static int srch_long_callback(xsearch_t *pSearch, xsearch_entry_t *pEntry, const char *pMsg)
+{
+    (void)pSearch;
+    (void)pEntry;
+
+    if (pMsg == NULL) return XSTDOK;
+    if (strstr(pMsg, "Path is too long") == NULL) return XSTDOK;
+
+    g_nTooLong++;
+    return g_bStopOnLong ? XSTDERR : XSTDOK;
+}
+
+static int srch_write_path(const char *pPath, const char *pData)
+{
+    FILE *pFile = fopen(pPath, "wb");
+    if (pFile == NULL) return XSTDERR;
+
+    size_t nWritten = fwrite(pData, 1, strlen(pData), pFile);
+    fclose(pFile);
+    return nWritten == strlen(pData) ? XSTDOK : XSTDERR;
+}
+
+static int XTest_long_paths(void)
+{
+    srch_fixture_t fixture;
+    snprintf(fixture.sRoot, sizeof(fixture.sRoot), "/tmp/xutils-srch-XXXXXX");
+    CHECK(mkdtemp(fixture.sRoot) != NULL, "Create a private search directory");
+    fixture.nCreated = 1;
+
+    /* A directory whose path leaves room for 20 characters of a name in a path buffer */
+    static char sDir[XPATH_MAX + 64], sPath[XPATH_MAX + 64];
+    size_t nLen = strlen(fixture.sRoot);
+    memcpy(sDir, fixture.sRoot, nLen + 1);
+
+    while (nLen + 101 <= XPATH_MAX - 40)
+    {
+        sDir[nLen++] = '/';
+        memset(&sDir[nLen], 'd', 99);
+        nLen += 99;
+        sDir[nLen] = '\0';
+        CHECK(mkdir(sDir, 0755) == 0, "Create a level of the long path");
+    }
+
+    size_t nLast = (XPATH_MAX - 22) - nLen - 1;
+    sDir[nLen++] = '/';
+    memset(&sDir[nLen], 'e', nLast);
+    nLen += nLast;
+    sDir[nLen] = '\0';
+    CHECK(mkdir(sDir, 0755) == 0, "Create the last level");
+    CHECK(nLen + 1 + 20 == XPATH_MAX - 1, "The directory leaves 20 characters of a path buffer");
+
+    /* Cut to the buffer, the path of the long name is the path of the short one */
+    const char *pLong = "needle-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+    char sShort[21];
+    memcpy(sShort, pLong, 20);
+    sShort[20] = '\0';
+
+    snprintf(sPath, sizeof(sPath), "%s/%s", sDir, sShort);
+    CHECK(srch_write_path(sPath, "SECRET\n") == XSTDOK, "The short name holds the text searched for");
+    snprintf(sPath, sizeof(sPath), "%s/%s", sDir, pLong);
+    CHECK(srch_write_path(sPath, "public\n") == XSTDOK, "The long name holds something else");
+
+    /* The file that holds the text is found, the one that does not is reported as too long, not opened in its
+       stead: searched through a path cut to the buffer, it matched with the content of the other file */
+    xsearch_t search;
+    g_nTooLong = 0;
+    g_bStopOnLong = 0;
+    XSearch_Init(&search, "needle-*");
+    search.bRecursive = XTRUE;
+    search.bMatchOnly = XTRUE;
+    search.callback = srch_long_callback;
+    xstrncpy(search.sText, sizeof(search.sText), "SECRET");
+
+    CHECK(XSearch(&search, fixture.sRoot) == XSTDOK, "A search through the long path completes");
+    CHECK(srch_has(&search, sShort), "The file holding the text is found");
+    CHECK(!srch_has(&search, pLong), "The file whose path does not fit is not reported with another file's content");
+    CHECK(XArray_Used(&search.fileArray) == 1, "Nothing else matches");
+    CHECK(g_nTooLong == 1, "The path that does not fit is reported");
+    XSearch_Destroy(&search);
+
+    /* Asked to stop there, the search stops */
+    g_nTooLong = 0;
+    g_bStopOnLong = 1;
+    XSearch_Init(&search, "needle-*");
+    search.bRecursive = XTRUE;
+    search.callback = srch_long_callback;
+
+    CHECK(XSearch(&search, fixture.sRoot) == XSTDERR, "A callback can stop the search at a path that does not fit");
+    CHECK(g_nTooLong == 1 && XSYNC_ATOMIC_GET(search.pInterrupted), "The search is interrupted");
+    XSearch_Destroy(&search);
+
+    /* A directory to search that does not fit is reported, and nothing in it is searched */
+    snprintf(sPath, sizeof(sPath), "%s/%s", sDir, pLong);
+    g_nTooLong = 0;
+    g_bStopOnLong = 0;
+    XSearch_Init(&search, "*");
+    search.callback = srch_long_callback;
+
+    CHECK(XSearch(&search, sPath) == XSTDOK && g_nTooLong == 1, "A directory path that does not fit is reported");
+    CHECK(XArray_Used(&search.fileArray) == 0, "Nothing is found in it");
+    XSearch_Destroy(&search);
+
+    g_bStopOnLong = 1;
+    XSearch_Init(&search, "*");
+    search.callback = srch_long_callback;
+    CHECK(XSearch(&search, sPath) == XSTDERR, "And can stop the search");
+    XSearch_Destroy(&search);
+
+    srch_destroy(&fixture);
+    return 0;
+}
+
 static int XTest_line_bounds(void)
 {
     srch_fixture_t fixture;
@@ -964,7 +1079,85 @@ static int XTest_binary_lines(void)
     return 0;
 }
 
+static int g_nStopMessages = 0;
+static xbool_t g_bStopOnMessage = XFALSE;
+
+/* Stops the search at its first entry, and at its first message when asked */
+static int srch_stop_callback(xsearch_t *pSearch, xsearch_entry_t *pEntry, const char *pMsg)
+{
+    (void)pSearch;
+    (void)pEntry;
+    if (pMsg == NULL) return XSTDERR;
+
+    g_nStopMessages++;
+    return g_bStopOnMessage ? XSTDERR : XSTDOK;
+}
+
+static int srch_stopped(const char *pDirectory, const char *pName, xbool_t bLines, xbool_t bStdin)
+{
+    xsearch_t search;
+    XSearch_Init(&search, pName);
+    search.bSearchLines = bLines;
+    search.callback = srch_stop_callback;
+    xstrncpy(search.sText, sizeof(search.sText), "needle");
+
+    int nStatus = bStdin ? srch_stdin(&search, "a needle\n", 9) : XSearch(&search, pDirectory);
+    int nStopped = nStatus == XSTDERR && XSYNC_ATOMIC_GET(search.pInterrupted) && !XArray_Used(&search.fileArray);
+
+    XSearch_Destroy(&search);
+    return nStopped;
+}
+
+static int XTest_interruptions(void)
+{
+    srch_fixture_t fixture;
+    CHECK(srch_build(&fixture) == XSTDOK, "Build the search fixture");
+
+    const char binary[] = "head\0needle\n";
+    char sPath[512];
+    snprintf(sPath, sizeof(sPath), "%s/blob.bin", fixture.sRoot);
+    FILE *pFile = fopen(sPath, "wb");
+    CHECK(pFile != NULL && fwrite(binary, 1, sizeof(binary) - 1, pFile) == sizeof(binary) - 1, "Write the binary file");
+    fclose(pFile);
+
+    /* A callback that stops at the first match, of a line, a text or a binary file, stops the whole search */
+    CHECK(srch_stopped(fixture.sRoot, "alpha.txt", XFALSE, XFALSE), "A text match stops the search");
+    CHECK(srch_stopped(fixture.sRoot, "alpha.txt", XTRUE, XFALSE), "A line match stops the search");
+    CHECK(srch_stopped(fixture.sRoot, "blob.bin", XTRUE, XFALSE), "A binary line match stops the search");
+    CHECK(srch_stopped(NULL, "*", XFALSE, XTRUE), "An input match stops the search");
+
+    /* A callback that stops at a message stops the search there */
+    g_bStopOnMessage = XTRUE;
+    g_nStopMessages = 0;
+    CHECK(srch_stopped("/no/such/directory/anywhere", "*", XFALSE, XFALSE) && g_nStopMessages == 1,
+        "A directory that does not open stops the search");
+
+    /* Entries of a directory that can be listed but not searched can not be examined */
+    char sLocked[512];
+    snprintf(sLocked, sizeof(sLocked), "%s/nested", fixture.sRoot);
+    if (geteuid() != 0 && chmod(sLocked, 0400) == 0)
+    {
+        g_nStopMessages = 0;
+        CHECK(srch_stopped(sLocked, "*", XFALSE, XFALSE) && g_nStopMessages == 1, "An entry that does not stat stops the search");
+
+        g_bStopOnMessage = XFALSE;
+        g_nStopMessages = 0;
+        xsearch_t search;
+        XSearch_Init(&search, "*");
+        search.callback = srch_stop_callback;
+        CHECK(XSearch(&search, sLocked) == XSTDOK && g_nStopMessages == 2 && !XArray_Used(&search.fileArray),
+            "Every entry that does not stat is reported and passed");
+        XSearch_Destroy(&search);
+        CHECK(chmod(sLocked, 0755) == 0, "Unlock the directory");
+    }
+
+    g_bStopOnMessage = XFALSE;
+    srch_destroy(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(interruptions),
     XTEST_CASE(deep_tree),
     XTEST_CASE(name_matching),
     XTEST_CASE(recursion),
@@ -979,5 +1172,6 @@ XTEST_MAIN(
     XTEST_CASE(nocase_binary),
     XTEST_CASE(stdin_search),
     XTEST_CASE(empty_stdin),
-    XTEST_CASE(binary_lines)
+    XTEST_CASE(binary_lines),
+    XTEST_CASE(long_paths)
 )

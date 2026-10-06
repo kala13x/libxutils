@@ -245,6 +245,14 @@ char *XDecrypt_Casear(const char *pInput, size_t nLength, size_t nKey)
     return pRetVal;
 }
 
+/* The length is documented in bytes and the tools pass it in bits: both name the same three key sizes.
+   Any other length used to leave the key unset and the data encrypted with no key at all. */
+static size_t XCrypt_AESKeyBits(size_t nKeyLen)
+{
+    if (nKeyLen == 16 || nKeyLen == 24 || nKeyLen == 32) return nKeyLen * 8;
+    return nKeyLen;
+}
+
 uint8_t* XCrypt_AES(const uint8_t *pInput, size_t *pLength, const uint8_t *pKey, size_t nKeyLen, const uint8_t *pIV)
 {
     if (pInput == NULL || pKey == NULL || !nKeyLen ||
@@ -253,8 +261,8 @@ uint8_t* XCrypt_AES(const uint8_t *pInput, size_t *pLength, const uint8_t *pKey,
     xaes_t ctx;
     xaes_key_t key;
 
-    XAES_InitKey(&key, pKey, nKeyLen, pIV, XTRUE);
-    XAES_Init(&ctx, &key, XAES_MODE_CBC);
+    XAES_InitKey(&key, pKey, XCrypt_AESKeyBits(nKeyLen), pIV, XTRUE);
+    if (XAES_Init(&ctx, &key, XAES_MODE_CBC) != XSTDOK) return NULL;
 
     return XAES_Encrypt(&ctx, pInput, pLength);
 }
@@ -267,8 +275,8 @@ uint8_t* XDecrypt_AES(const uint8_t *pInput, size_t *pLength, const uint8_t *pKe
     xaes_t ctx;
     xaes_key_t key;
 
-    XAES_InitKey(&key, pKey, nKeyLen, pIV, XTRUE);
-    XAES_Init(&ctx, &key, XAES_MODE_CBC);
+    XAES_InitKey(&key, pKey, XCrypt_AESKeyBits(nKeyLen), pIV, XTRUE);
+    if (XAES_Init(&ctx, &key, XAES_MODE_CBC) != XSTDOK) return NULL;
 
     return XAES_Decrypt(&ctx, pInput, pLength);
 }
@@ -580,10 +588,7 @@ uint8_t* XCrypt_Multy(xcrypt_ctx_t *pCtx, const uint8_t *pInput, size_t *pLength
         xcrypt_chipher_t eCipher = XCrypt_GetCipher(pCipher);
         if (eCipher == XC_INVALID)
         {
-            XCrypt_ErrorCallback(pCtx,
-                "Invalid or unsupported cipher: %s",
-                XCrypt_GetCipherStr(eCipher));
-
+            XCrypt_ErrorCallback(pCtx, "Invalid or unsupported cipher: %s", pCipher);
             XArray_Destroy(pCiphersArr);
             free(pData);
             return NULL;

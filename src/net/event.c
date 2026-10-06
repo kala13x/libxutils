@@ -525,6 +525,13 @@ xevent_status_t XEvents_Create(xevents_t *pEvents, uint32_t nMax, void *pUser, x
     else if (nMax) pEvents->nEventMax = nMax;
     else return XEVENTS_EOMAX;
 
+#if defined(_XEVENTS_USE_EPOLL)
+    /* epoll_wait() fails with EINVAL above this batch, which a descriptor limit of "infinity" exceeds.
+       Here the limit only sizes the batch, it does not bound how many descriptors are registered. */
+    const uint32_t nBatchMax = (uint32_t)(INT_MAX / sizeof(struct epoll_event));
+    if (pEvents->nEventMax > nBatchMax) pEvents->nEventMax = nBatchMax;
+#endif
+
     pEvents->eventCallback = callBack;
     pEvents->pUserSpace = pUser;
     pEvents->bUseHash = bUseHash;

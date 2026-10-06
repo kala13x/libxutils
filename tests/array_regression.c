@@ -664,7 +664,83 @@ static int XTest_search_holes(void)
     return 0;
 }
 
+static int XTest_api_guards(void)
+{
+    xarray_t local;
+    CHECK(XArray_InitPool(NULL, 64, 2, XFALSE) == NULL, "A pool array needs a holder");
+    CHECK(XArray_Used(NULL) == 0 && XArray_Size(NULL) == 0 && !XArray_Contains(NULL, 0), "A missing array is empty");
+    CHECK(XArray_Realloc(NULL) == 0, "A missing array has no space");
+    CHECK(XArray_GetSize(NULL, 0) == 0, "A missing array has no sizes");
+    XArray_ClearData(NULL, NULL);
+    XArray_Delete(NULL, 0);
+    XArray_Sort(NULL, XTest_CompareKey, NULL);
+    XArray_QuickSort(NULL, XTest_CompareKey, NULL, 0, 1);
+    XArray_BubbleSort(NULL, XTest_CompareKey, NULL);
+    CHECK(XArray_Insert(NULL, 0, NULL) == NULL && XArray_InsertData(NULL, 0, NULL, 0) == NULL, "A missing array takes nothing");
+    CHECK(XArray_LinearSearch(NULL, 1) == XARRAY_FAILURE && XArray_SentinelSearch(NULL, 1) == XARRAY_FAILURE,
+        "A missing array has nothing to find");
+    CHECK(XArray_DoubleSearch(NULL, 1) == XARRAY_FAILURE && XArray_BinarySearch(NULL, 1) == XARRAY_FAILURE,
+        "A missing array has nothing to find");
+
+    /* An empty array that never grew keeps its size */
+    XArray_Init(&local, NULL, 0, XFALSE);
+    CHECK(XArray_Realloc(&local) == 0, "An array of no slots keeps no slots");
+    CHECK(XArray_LinearSearch(&local, 1) == XARRAY_FAILURE && XArray_SentinelSearch(&local, 1) == XARRAY_FAILURE,
+        "An empty array has nothing to find");
+    CHECK(XArray_DoubleSearch(&local, 1) == XARRAY_FAILURE && XArray_BinarySearch(&local, 1) == XARRAY_FAILURE,
+        "An empty array has nothing to find");
+    XArray_Sort(&local, XTest_CompareKey, NULL);
+    XArray_BubbleSort(&local, XTest_CompareKey, NULL);
+    XArray_Destroy(&local);
+
+    xarray_t *pArr = XArray_New(NULL, 4, XFALSE);
+    CHECK(pArr != NULL, "Create an array");
+
+    /* A pushed buffer is owned, not copied, and released with the array */
+    char *pOwned = strdup("owned");
+    CHECK(pOwned != NULL && XArray_PushData(pArr, pOwned, strlen(pOwned) + 1) == 0, "Push an owned buffer");
+    CHECK(XArray_GetData(pArr, 0) == pOwned && XArray_GetSize(pArr, 0) == 6, "The pushed buffer is kept as it is");
+    CHECK(XArray_GetSize(pArr, 3) == 0 && XArray_GetSize(pArr, 100) == 0, "An empty or missing slot has no size");
+    int value = 1, fallback = 2;
+    CHECK(XArray_GetDataOr(pArr, 3, &fallback) == &fallback && XArray_GetKey(pArr, 3) == 0, "An empty slot has nothing");
+
+    CHECK(XArray_Insert(pArr, 0, NULL) == NULL, "Nothing is inserted for no data");
+    CHECK(XArray_Insert(pArr, 2, (xarray_data_t*)&value) == NULL, "Nothing is inserted past the used slots");
+    CHECK(XArray_InsertData(pArr, 2, &value, sizeof(value)) == NULL, "No data is inserted past the used slots");
+    CHECK(XArray_Set(pArr, 4, NULL) == NULL, "A slot past the capacity is not set");
+
+    for (uint32_t i = 1; i <= 3; i++) CHECK(XArray_AddDataKey(pArr, &i, sizeof(i), 10 - i) >= 0, "Add keyed items");
+    XArray_Swap(pArr, 0, 4);
+    CHECK(XArray_GetData(pArr, 0) == pOwned, "A swap with a slot past the used ones changes nothing");
+
+    XArray_QuickSort(pArr, NULL, NULL, 0, 3);
+    XArray_QuickSort(pArr, XTest_CompareKey, NULL, 0, 4);
+    XArray_QuickSort(pArr, XTest_CompareKey, NULL, -1, 3);
+    XArray_Sort(pArr, NULL, NULL);
+    XArray_BubbleSort(pArr, NULL, NULL);
+    XArray_SortBy(pArr, -1);
+    CHECK(XArray_GetData(pArr, 0) == pOwned && XArray_GetKey(pArr, 3) == 7, "No refused sort moved anything");
+
+    XArray_SortBy(pArr, XARRAY_SORTBY_KEY);
+    CHECK(XArray_GetKey(pArr, 0) == 0 && XArray_GetKey(pArr, 1) == 7 && XArray_GetKey(pArr, 3) == 9, "Sort by key");
+
+    /* The double ended search passes an empty slot at its back end */
+    xarray_data_t *pLast = XArray_Set(pArr, 3, NULL);
+    CHECK(XArray_DoubleSearch(pArr, 8) == 2 && XArray_DoubleSearch(pArr, 0) == 0, "Search past an empty last slot");
+    XArray_Delete(pArr, 3);
+    CHECK(XArray_Used(pArr) == 3, "An empty used slot is deleted");
+    XArray_Delete(pArr, 3);
+    CHECK(XArray_Used(pArr) == 3, "A slot past the used ones is not deleted");
+    XArray_FreeData(pLast);
+    XArray_ClearData(NULL, XArray_Remove(pArr, 0));
+    CHECK(XArray_Used(pArr) == 2, "A removed item is released without its array");
+
+    XArray_Destroy(pArr);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
     XTEST_CASE(pool_clear_reuse),
     XTEST_CASE(sort_scaling),
     XTEST_CASE(sort_unsigned_keys),

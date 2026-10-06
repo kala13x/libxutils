@@ -79,7 +79,11 @@ void* XArray_Init(xarray_t *pArr, xpool_t *pPool, size_t nSize, uint8_t nFixed)
     if (nSize)
     {
         pArr->pData = (xarray_data_t**)xalloc(pPool, nSize * sizeof(xarray_data_t*));
-        if (pArr->pData == NULL) return NULL;
+        if (pArr->pData == NULL)
+        {
+            pArr->nSize = 0;
+            return NULL;
+        }
     }
 
     size_t i;

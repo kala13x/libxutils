@@ -4,6 +4,7 @@
 #include "str.h"
 #include <unistd.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 
 typedef struct xtest_log_ {
     int nCalls;
@@ -495,7 +496,166 @@ static int XTest_enabled(void)
     return 0;
 }
 
+/* Backdates pPath to the same day of the month nMonths before, with nYears less; XFALSE when no such day exists */
+static xbool_t log_backdate(const char *pPath, int nMonths, int nYears, struct tm *pWhen)
+{
+    time_t nNow = time(NULL);
+    struct tm now;
+    localtime_r(&nNow, &now);
+
+    *pWhen = now;
+    pWhen->tm_mon -= nMonths;
+    pWhen->tm_year -= nYears;
+    pWhen->tm_isdst = -1;
+
+    time_t nThen = mktime(pWhen);
+    if (nThen == (time_t)-1 || pWhen->tm_mday != now.tm_mday) return XFALSE;
+
+    struct timespec times[2];
+    times[0].tv_sec = times[1].tv_sec = nThen;
+    times[0].tv_nsec = times[1].tv_nsec = 0;
+    return utimensat(AT_FDCWD, pPath, times, 0) == 0 ? XTRUE : XFALSE;
+}
+
+static int XTest_api_paths(void)
+{
+    xtest_log_t test = {0};
+    int nLocal = 0;
+
+    /* Before the log is set up, nothing asked of it changes anything */
+    CHECK(!xlog_is_init(), "The log starts without being set up");
+    XLog_FlagEnable(XLOG_INFO);
+    XLog_FlagDisable(XLOG_INFO);
+    XLog_CallbackSet(XTest_Callback, &test);
+    XLog_SeparatorSet("|");
+    XLog_ColorFormatSet(XLOG_COLORING_FULL);
+    XLog_TimeFormatSet(XLOG_DATE);
+    XLog_IndentSet(XTRUE);
+    XLog_FlushSet(XTRUE);
+    XLog_FileLogSet(XTRUE);
+    XLog_ScreenLogSet(XTRUE);
+    XLog_TraceTid(XTRUE);
+    XLog_UseHeap(XTRUE);
+
+    xlog_cfg_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    XLog_ConfigGet(&cfg);
+    XLog_ConfigSet(&cfg);
+    CHECK(XLog_FlagsGet() == 0 && !XLog_PathSet("/tmp") && !XLog_NameSet("x") && !XLog_IsEnabled(XLOG_ERROR),
+        "And it has nothing to report");
+    CHECK(XLog_Throw(-5, "x") == -5 && XLog_Throwe(-5, "x") == -5 && XLog_ThrowPtr(&nLocal, "x") == &nLocal,
+        "A throw still hands back its value");
+    CHECK(test.nCalls == 0, "Without logging anything");
+
+    xlog_init("paths", XLOG_ERROR, XFALSE);
+    xlog_init("again", XLOG_ALL, XFALSE);
+    CHECK(XLog_FlagsGet() == XLOG_ERROR, "A second setup changes nothing");
+    xlog_screen(XFALSE);
+    xlog_callback(XTest_Callback, &test);
+
+    XLog_FlagEnable(XLOG_ALL);
+    CHECK(XLog_FlagsGet() == XLOG_ALL, "Every severity is enabled at once");
+    XLog_FlagDisable(XLOG_ALL);
+    CHECK(XLog_FlagsGet() == 0, "And disabled at once");
+    XLog_FlagEnable(XLOG_ERROR);
+
+    /* A throw without a message says what errno says */
+    errno = ENOENT;
+    CHECK(XLog_Throw(-1, NULL) == -1 && strstr(test.sLast, strerror(ENOENT)) != NULL, "A bare throw reports errno");
+    errno = EACCES;
+    CHECK(XLog_Throwe(-1, NULL) == -1 && strstr(test.sLast, strerror(EACCES)) != NULL, "So does a bare errno throw");
+    errno = EPERM;
+    CHECK(XLog_ThrowPtr(NULL, NULL) == NULL && strstr(test.sLast, strerror(EPERM)) != NULL, "And a bare pointer throw");
+    CHECK(test.nCalls == 3, "Each logged once");
+
+    /* A status that is no failure is thrown at no severity, which nothing enables */
+    CHECK(XLog_Throw(5, "fine") == 5 && XLog_Throwe(5, "fine") == 5 && test.nCalls == 3, "Success is not logged");
+    XLog_FlagDisable(XLOG_ERROR);
+    CHECK(XLog_Throwe(-1, "off") == -1 && XLog_ThrowPtr(NULL, "off") == NULL && test.nCalls == 3,
+        "A disabled severity is not thrown");
+    XLog_FlagEnable(XLOG_ALL);
+
+    /* A line without its newline, and one with nothing in it at all */
+    XLog_Display(XLOG_INFO, XFALSE, "%s", "no newline");
+    CHECK(test.nCalls == 4 && test.sLast[test.nLength - 1] == 'e', "A line can be written without its newline");
+    XLog_UseHeap(XTRUE);
+    XLog_Display(XLOG_NONE, XFALSE, "%s", "");
+    CHECK(test.nCalls == 4, "A line with nothing in it reaches nobody");
+    XLog_UseHeap(XFALSE);
+
+    char sDir[] = "/tmp/xutils-logpath-XXXXXX";
+    CHECK(mkdtemp(sDir) != NULL, "Create a private log directory");
+    CHECK(!XLog_PathSet(NULL) && !XLog_NameSet(NULL), "A path and a name are set from something");
+    CHECK(XLog_PathSet(sDir) > 0 && XLog_PathSet(sDir) > 0, "The same path can be set again");
+    CHECK(XLog_NameSet("paths") > 0 && XLog_NameSet("paths") > 0, "And the same name");
+
+    /* A file that is not kept open is opened for every line */
+    xlog_get(&cfg);
+    cfg.bToFile = XTRUE;
+    cfg.bKeepOpen = XFALSE;
+    cfg.bRotate = XFALSE;
+    xlog_set(&cfg);
+    xlog_set(&cfg);
+    xloge("first");
+    xloge("second");
+
+    char sPath[256];
+    snprintf(sPath, sizeof(sPath), "%s/paths.log", sDir);
+    size_t nLength = 0;
+    char *pContents = log_slurp(sPath, &nLength);
+    CHECK(pContents != NULL && strstr(pContents, "first") && strstr(pContents, "second"), "Both lines are written");
+    free(pContents);
+
+    cfg.bToFile = XFALSE;
+    xlog_set(&cfg);
+
+    /* Rotation looks at the month and the year of the file as well as its day */
+    struct tm when;
+    const int offsets[][2] = { { 0, 1 }, { 1, 0 }, { 2, 0 } };
+    for (size_t i = 0; i < sizeof(offsets) / sizeof(*offsets); i++)
+    {
+        FILE *pOld = fopen(sPath, "wb");
+        CHECK(pOld != NULL, "Plant a log file");
+        fputs("old\n", pOld);
+        fclose(pOld);
+        if (!log_backdate(sPath, offsets[i][0], offsets[i][1], &when)) continue;
+
+        cfg.bToFile = XTRUE;
+        cfg.bRotate = XTRUE;
+        xlog_set(&cfg);
+        xloge("new");
+        cfg.bToFile = XFALSE;
+        xlog_set(&cfg);
+
+        char sArchive[256];
+        snprintf(sArchive, sizeof(sArchive), "%s/paths-%04d-%02d-%02d.log", sDir,
+            when.tm_year + 1900, when.tm_mon + 1, when.tm_mday);
+        pContents = log_slurp(sArchive, &nLength);
+        CHECK(pContents != NULL && strstr(pContents, "old") != NULL, "The file of the same day another month is archived");
+        free(pContents);
+        unlink(sArchive);
+    }
+
+    /* A log file that can not be opened writes nothing, and the log goes on */
+    CHECK(XLog_PathSet("/no/such/xutils/directory") > 0, "Point the log where nothing can be written");
+    cfg.bToFile = XTRUE;
+    cfg.bRotate = XFALSE;
+    xlog_get(&cfg);
+    cfg.bToFile = XTRUE;
+    xlog_set(&cfg);
+    int nCalls = test.nCalls;
+    xloge("nowhere");
+    CHECK(test.nCalls == nCalls + 1, "The callback still gets the line");
+
+    xlog_callback(NULL, NULL);
+    xlog_destroy();
+    unlink(sPath);
+    rmdir(sDir);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_paths),
     XTEST_CASE(filtering),
     XTEST_CASE(large_message),
     XTEST_CASE(severities),

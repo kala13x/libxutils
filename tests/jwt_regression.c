@@ -13,6 +13,10 @@
 #include "rsa.h"
 #include "jwt.h"
 
+/* Exported by the library without a declaration in its header */
+XSTATUS XJWT_CreateSignature(xjwt_t *pJWT, const uint8_t *pSecret, size_t nSecretLen);
+char* XJWT_GetSignature(xjwt_t *pJWT, const uint8_t *pSecret, size_t nSecretLen, xbool_t bDecode, size_t *pSignatureLen);
+
 static const uint8_t g_secret[] = "local-regression-test-key";
 #define SECRET_LEN (sizeof(g_secret) - 1)
 
@@ -76,6 +80,24 @@ static int XTest_roundtrip(void)
 
     XJWT_Destroy(&jwt);
     free(pToken);
+    return 0;
+}
+
+static int XTest_refused_key(void)
+{
+    /* A key the HMAC refuses, absent but with a length, leaves its hash unwritten: the token was signed with
+       whatever the stack held there and reported as signed */
+    xjwt_t jwt;
+    XJWT_Init(&jwt, XJWT_ALG_HS256);
+    CHECK(XJWT_AddPayload(&jwt, "{\"sub\":\"device\"}", 16, XFALSE) == XSTDOK, "A payload is added");
+
+    CHECK(XJWT_CreateSignature(&jwt, NULL, SECRET_LEN) == XSTDERR, "A refused key signs nothing");
+    CHECK(jwt.pSignature == NULL && jwt.nSignatureLen == 0, "No signature is kept");
+
+    CHECK(XJWT_CreateSignature(&jwt, g_secret, SECRET_LEN) == XSTDOK, "The key it needs signs it");
+    CHECK(jwt.pSignature != NULL && jwt.nSignatureLen > 0, "And the signature is kept");
+
+    XJWT_Destroy(&jwt);
     return 0;
 }
 
@@ -501,8 +523,143 @@ static int XTest_rs256(void)
 #endif
 }
 
+static int XTest_api_guards(void)
+{
+    xjwt_t jwt;
+    size_t nLength = 1;
+
+    XJWT_Init(NULL, XJWT_ALG_HS256);
+    XJWT_Destroy(NULL);
+    CHECK(XJWT_CreateHeaderObj(XJWT_ALG_INVALID) == NULL, "No header is made for no algorithm");
+    CHECK(XJWT_AddPayload(NULL, "{}", 2, XFALSE) == XSTDINV && XJWT_AddHeader(NULL, "{}", 2, XFALSE) == XSTDINV,
+        "Nothing is added to no token");
+    CHECK(XJWT_GetPayload(NULL, XFALSE, NULL) == NULL && XJWT_GetHeader(NULL, XFALSE, NULL) == NULL &&
+        XJWT_GetPayloadObj(NULL) == NULL && XJWT_GetHeaderObj(NULL) == NULL, "Nothing is read from no token");
+    CHECK(XJWT_GetAlgorithm(NULL) == XJWT_ALG_INVALID && XJWT_GetAlg(NULL) == XJWT_ALG_INVALID,
+        "No token and no name have no algorithm");
+    CHECK(XJWT_Create(NULL, g_secret, SECRET_LEN, &nLength) == NULL && !nLength, "No token is created from nothing");
+    CHECK(XJWT_Verify(NULL, "s", 1, g_secret, SECRET_LEN) == XSTDINV, "No token is verified");
+
+    /* A token whose parts are given as objects: the header and the payload are written from them */
+    XJWT_Init(&jwt, XJWT_ALG_HS256);
+    CHECK(XJWT_AddPayload(&jwt, NULL, 2, XFALSE) == XSTDINV && XJWT_AddPayload(&jwt, "{}", 0, XFALSE) == XSTDINV,
+        "A payload needs content");
+    CHECK(XJWT_AddHeader(&jwt, NULL, 2, XFALSE) == XSTDINV && XJWT_AddHeader(&jwt, "{}", 0, XFALSE) == XSTDINV,
+        "A header too");
+
+    jwt.pHeaderObj = XJWT_CreateHeaderObj(XJWT_ALG_HS256);
+    jwt.pPayloadObj = XJSON_NewObject(NULL, NULL, XFALSE);
+    CHECK(jwt.pHeaderObj != NULL && jwt.pPayloadObj != NULL, "Make both parts as objects");
+    CHECK(XJSON_AddString(jwt.pPayloadObj, "sub", "object") == XJSON_ERR_NONE, "Fill the payload");
+
+    char *pToken = XJWT_Create(&jwt, g_secret, SECRET_LEN, NULL);
+    CHECK(pToken != NULL && strstr(pToken, ".") != NULL, "A token is written from its objects, without its length");
+    CHECK(XJWT_GetPayloadObj(&jwt) == jwt.pPayloadObj && XJWT_GetHeaderObj(&jwt) == jwt.pHeaderObj,
+        "And keeps them");
+
+    /* Made from an object, a segment is encoded like any other: written as plain JSON, the token did not parse */
+    char *pPayload = XJWT_GetPayload(&jwt, XTRUE, &nLength);
+    CHECK(pPayload != NULL && !strcmp(pPayload, "{\"sub\":\"object\"}") && nLength == strlen(pPayload),
+        "The payload segment decodes to the object's JSON");
+    free(pPayload);
+    CHECK(strchr(jwt.pHeader, '{') == NULL && strchr(jwt.pPayload, '{') == NULL, "Neither segment is plain JSON");
+
+    char *pSignature = XJWT_GetSignature(&jwt, NULL, 0, XTRUE, &nLength);
+    CHECK(pSignature != NULL && nLength == 32, "The signature decodes to the HMAC");
+    free(pSignature);
+    CHECK(XJWT_GetSignature(&jwt, NULL, 0, XFALSE, NULL) == jwt.pSignature, "Or is handed back as it is");
+    CHECK(XJWT_GetSignature(NULL, NULL, 0, XFALSE, NULL) == NULL, "No token has no signature");
+
+    xjwt_t parsed;
+    CHECK(XJWT_Parse(&parsed, pToken, strlen(pToken), g_secret, SECRET_LEN) == XSTDOK && parsed.bVerified,
+        "The written token parses and verifies");
+    XJWT_Destroy(&parsed);
+    free(pToken);
+    XJWT_Destroy(&jwt);
+
+    /* A header written for the algorithm, read back without its length */
+    XJWT_Init(&jwt, XJWT_ALG_HS256);
+    char *pHeader = XJWT_GetHeader(&jwt, XTRUE, NULL);
+    CHECK(pHeader != NULL && strstr(pHeader, "HS256") != NULL, "A default header is made and decoded");
+    free(pHeader);
+    CHECK(XJWT_GetHeader(&jwt, XFALSE, NULL) == jwt.pHeader, "And kept encoded");
+    pHeader = XJWT_GetHeader(&jwt, XTRUE, NULL);
+    CHECK(pHeader != NULL && strstr(pHeader, "HS256") != NULL, "The kept header decodes without its length");
+    free(pHeader);
+    XJWT_Destroy(&jwt);
+
+    /* Verification with nothing to verify, and an algorithm that is not known */
+    XJWT_Init(&jwt, XJWT_ALG_HS256);
+    CHECK(XJWT_AddPayload(&jwt, "{}", 2, XFALSE) == XSTDOK, "Add a payload");
+    CHECK(XJWT_Verify(&jwt, NULL, 4, g_secret, SECRET_LEN) == XSTDINV, "Verifying needs a signature");
+    CHECK(XJWT_Verify(&jwt, "s", 0, g_secret, SECRET_LEN) == XSTDINV, "Of some length");
+    CHECK(XJWT_Verify(&jwt, "s", 1, NULL, SECRET_LEN) == XSTDINV && XJWT_Verify(&jwt, "s", 1, g_secret, 0) == XSTDINV,
+        "And a secret");
+    jwt.eAlgorithm = (xjwt_alg_t)99;
+    CHECK(XJWT_Verify(&jwt, "s", 1, g_secret, SECRET_LEN) == XSTDNON, "An unknown algorithm verifies nothing");
+    XJWT_Destroy(&jwt);
+
+    /* A header that names no algorithm, or an algorithm that is not a string */
+    const char *pBadHeaders[] = { "{\"typ\":\"JWT\"}", "{\"alg\":5}", "not json" };
+    for (size_t i = 0; i < sizeof(pBadHeaders) / sizeof(*pBadHeaders); i++)
+    {
+        XJWT_Init(&jwt, XJWT_ALG_INVALID);
+        CHECK(XJWT_AddHeader(&jwt, pBadHeaders[i], strlen(pBadHeaders[i]), XFALSE) == XSTDOK, "Add the header");
+        CHECK(XJWT_AddPayload(&jwt, "{}", 2, XFALSE) == XSTDOK, "Add a payload");
+        CHECK(XJWT_GetAlgorithm(&jwt) == XJWT_ALG_INVALID, "No algorithm is read from it");
+        CHECK(XJWT_Create(&jwt, g_secret, SECRET_LEN, &nLength) == NULL, "And no token is made");
+        XJWT_Destroy(&jwt);
+    }
+
+    /* A payload that is not JSON has no object */
+    XJWT_Init(&jwt, XJWT_ALG_HS256);
+    CHECK(XJWT_AddPayload(&jwt, "not json", 8, XFALSE) == XSTDOK && XJWT_GetPayloadObj(&jwt) == NULL,
+        "A payload that is not JSON has no object");
+    XJWT_Destroy(&jwt);
+
+    CHECK(XJWT_Parse(&jwt, "a.b.c\x01", 6, NULL, 0) == XSTDERR, "A control byte is no part of a token");
+    XJWT_Destroy(&jwt);
+    return 0;
+}
+
+static int XTest_optional_lengths(void)
+{
+    /* Every length a getter reports is optional, and the parts read without one are the parts read with one */
+    xjwt_t jwt;
+    XJWT_Init(&jwt, XJWT_ALG_HS256);
+    CHECK(XJWT_AddPayload(&jwt, "{\"sub\":\"x\"}", 11, XFALSE) == XSTDOK, "Add a payload");
+
+    char *pRawHeader = XJWT_GetHeader(&jwt, XTRUE, NULL);
+    CHECK(pRawHeader != NULL && strstr(pRawHeader, "HS256") != NULL, "A new header is handed out decoded");
+    free(pRawHeader);
+    CHECK(XJWT_GetHeader(&jwt, XFALSE, NULL) == jwt.pHeader, "The encoded header is kept");
+
+    pRawHeader = XJWT_GetHeader(&jwt, XTRUE, NULL);
+    char *pRawPayload = XJWT_GetPayload(&jwt, XTRUE, NULL);
+    CHECK(pRawHeader != NULL && strstr(pRawHeader, "HS256") != NULL, "The kept header decodes");
+    CHECK(pRawPayload != NULL && !strcmp(pRawPayload, "{\"sub\":\"x\"}"), "The payload decodes");
+    free(pRawHeader);
+    free(pRawPayload);
+    CHECK(XJWT_GetPayload(&jwt, XFALSE, NULL) == jwt.pPayload, "The encoded payload is kept");
+
+    char *pSignature = XJWT_GetSignature(&jwt, g_secret, SECRET_LEN, XFALSE, NULL);
+    CHECK(pSignature != NULL && pSignature == jwt.pSignature, "A signature is made without its length");
+    char *pRawSignature = XJWT_GetSignature(&jwt, g_secret, SECRET_LEN, XTRUE, NULL);
+    CHECK(pRawSignature != NULL, "And decoded without it");
+    free(pRawSignature);
+
+    size_t nLength = 0;
+    pSignature = XJWT_GetSignature(&jwt, g_secret, SECRET_LEN, XFALSE, &nLength);
+    CHECK(pSignature == jwt.pSignature && nLength == jwt.nSignatureLen, "Or with it");
+    XJWT_Destroy(&jwt);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(optional_lengths),
+    XTEST_CASE(api_guards),
     XTEST_CASE(roundtrip),
+    XTEST_CASE(refused_key),
     XTEST_CASE(wrong_secret),
     XTEST_CASE(tampering),
     XTEST_CASE(boundaries),

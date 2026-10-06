@@ -597,7 +597,223 @@ static int XTest_forced_bind_failure(void)
     return 0;
 }
 
+#ifndef _WIN32
+/* A connected TCP pair over loopback: pClient made here, the accepted end in pPeer */
+static int sock_tcp_pair(xsock_t *pListener, xsock_t *pClient, xsock_t *pPeer)
+{
+    uint16_t nPort = sock_bind_free(pListener, XSOCK_TCP_SERVER | XSOCK_REUSEADDR);
+    if (!nPort) return XSTDERR;
+
+    if (XSock_Create(pClient, XSOCK_TCP_CLIENT, "127.0.0.1", nPort) == XSOCK_INVALID) return XSTDERR;
+    return XSock_Accept(pListener, pPeer) == XSOCK_INVALID ? XSTDERR : XSTDOK;
+}
+
+/* Closes the descriptor with a reset, the way a peer that vanishes does */
+static void sock_reset(xsock_t *pSock)
+{
+    struct linger reset;
+    reset.l_onoff = 1;
+    reset.l_linger = 0;
+    setsockopt(pSock->nFD, SOL_SOCKET, SO_LINGER, &reset, sizeof(reset));
+    close(pSock->nFD);
+    pSock->nFD = XSOCK_INVALID;
+}
+#endif
+
+static int XTest_stream_errors(void)
+{
+#ifndef _WIN32
+    xsock_t listener, client, peer;
+    uint8_t sBuffer[64];
+    CHECK(sock_tcp_pair(&listener, &client, &peer) == XSTDOK, "Connect a TCP pair");
+
+    /* Nothing is read or written with no buffer or no length */
+    CHECK(XSock_Recv(&client, NULL, 1) == XSOCK_NONE && XSock_Recv(&client, sBuffer, 0) == XSOCK_NONE,
+        "A receive needs a buffer and a size");
+    CHECK(XSock_Send(&client, NULL, 1) == XSOCK_NONE && XSock_Send(&client, "x", 0) == XSOCK_NONE,
+        "A send needs data and a length");
+    CHECK(XSock_WriteBuff(&client, NULL) == XSOCK_NONE && XSock_SendBuff(&client, NULL) == XSOCK_NONE,
+        "Writing a buffer needs one");
+
+    /* A non-blocking socket with nothing to read, or no room to write, says it would block */
+    CHECK(XSock_NonBlock(&client, XTRUE) != XSOCK_INVALID, "Make the client non-blocking");
+    CHECK(XSock_Recv(&client, sBuffer, sizeof(sBuffer)) < 0 && XSock_Status(&client) == XSOCK_WANT_READ,
+        "An empty receive wants a read event");
+    CHECK(XSock_Read(&client, sBuffer, sizeof(sBuffer)) < 0 && XSock_Status(&client) == XSOCK_WANT_READ,
+        "So does an empty read");
+
+    static uint8_t block[64 * 1024];
+    int nSent = 0, nWritten = 0;
+    for (int i = 0; i < 4096 && (nSent = XSock_Send(&client, block, sizeof(block))) > 0; i++);
+    CHECK(nSent < 0 && XSock_Status(&client) == XSOCK_WANT_WRITE, "A full send buffer wants a write event");
+    for (int i = 0; i < 4096 && (nWritten = XSock_Write(&client, block, sizeof(block))) > 0; i++);
+    CHECK(nWritten < 0 && XSock_Status(&client) == XSOCK_WANT_WRITE, "And so does a write into it");
+    CHECK(client.nFD != XSOCK_INVALID, "Waiting is not an error");
+
+    /* The peer's end of the stream is an end of file, its reset an error, and either closes the socket */
+    XSock_Close(&peer);
+
+    xsock_t second, accepted;
+    uint16_t nPort = XSock_GetPort(&listener);
+    CHECK(XSock_Create(&second, XSOCK_TCP_CLIENT, "127.0.0.1", nPort) != XSOCK_INVALID, "Connect again");
+    CHECK(XSock_Accept(&listener, &accepted) != XSOCK_INVALID, "Accept it");
+    XSock_Close(&accepted);
+    CHECK(XSock_Recv(&second, sBuffer, sizeof(sBuffer)) == 0, "A closed peer reads as the end of the stream");
+    CHECK(XSock_Status(&second) == XSOCK_EOF && second.nFD == XSOCK_INVALID, "The socket is closed at the end");
+
+    CHECK(XSock_Create(&second, XSOCK_TCP_CLIENT, "127.0.0.1", nPort) != XSOCK_INVALID, "Connect again");
+    CHECK(XSock_Accept(&listener, &accepted) != XSOCK_INVALID, "Accept it");
+    sock_reset(&accepted);
+    xusleep(20000);
+    CHECK(XSock_Recv(&second, sBuffer, sizeof(sBuffer)) < 0, "A reset peer is a receive error");
+    CHECK(XSock_Status(&second) == XSOCK_ERR_RECV && second.nFD == XSOCK_INVALID, "Which closes the socket");
+
+    CHECK(XSock_Create(&second, XSOCK_TCP_CLIENT, "127.0.0.1", nPort) != XSOCK_INVALID, "Connect again");
+    CHECK(XSock_Accept(&listener, &accepted) != XSOCK_INVALID, "Accept it");
+    sock_reset(&accepted);
+    xusleep(20000);
+    CHECK(XSock_RecvChunk(&second, sBuffer, sizeof(sBuffer)) == XSOCK_ERROR, "A reset peer fails an exact receive");
+    CHECK(XSock_Status(&second) == XSOCK_ERR_RECV && second.nFD == XSOCK_INVALID, "Which closes the socket too");
+
+    CHECK(XSock_Create(&second, XSOCK_TCP_CLIENT, "127.0.0.1", nPort) != XSOCK_INVALID, "Connect again");
+    CHECK(XSock_Accept(&listener, &accepted) != XSOCK_INVALID, "Accept it");
+    sock_reset(&accepted);
+    xusleep(20000);
+    int nChunk = XSock_SendChunk(&second, block, sizeof(block));
+    for (int i = 0; i < 16 && nChunk > 0; i++) nChunk = XSock_SendChunk(&second, block, sizeof(block));
+    CHECK(nChunk <= 0 && XSock_Status(&second) == XSOCK_ERR_SEND, "Sending to a reset peer fails");
+    CHECK(second.nFD == XSOCK_INVALID, "And closes the socket");
+
+    /* A closed socket does nothing at all */
+    CHECK(XSock_Recv(&second, sBuffer, 1) == XSOCK_ERROR && XSock_RecvChunk(&second, sBuffer, 1) == XSOCK_ERROR,
+        "A closed socket receives nothing");
+    CHECK(XSock_Send(&second, "x", 1) == XSOCK_ERROR && XSock_SendChunk(&second, "x", 1) == XSOCK_ERROR,
+        "Sends nothing");
+    CHECK(XSock_Write(&second, "x", 1) == XSOCK_ERROR && XSock_MsgPeek(&second) == XSOCK_ERROR, "Writes and peeks nothing");
+    CHECK(XSock_Accept(&second, &accepted) == XSOCK_INVALID && XSock_AcceptNB(&second) == XSOCK_INVALID,
+        "And accepts nothing");
+
+    /* Accepting on a socket that is not listening is an error, not a wait */
+    CHECK(XSock_AcceptNB(&client) == XSOCK_INVALID && XSock_Status(&client) == XSOCK_ERR_ACCEPT,
+        "A socket that does not listen accepts nothing");
+
+    XSock_Close(&client);
+    XSock_Close(&listener);
+#endif
+    return 0;
+}
+
+static int XTest_call_guards(void)
+{
+    xsock_t sock;
+    char sText[64];
+
+    XSock_Close(NULL);
+    XSock_Free(NULL);
+    CHECK(XSock_Init(NULL, XSOCK_TCP_CLIENT, XSOCK_INVALID) == XSOCK_ERROR, "A socket is initialized in place");
+    CHECK(!strcmp(XSock_ErrStr(NULL), ""), "No socket has no error to describe");
+
+    const xsock_status_t ssl[] = {
+        XSOCK_ERR_SSLACC, XSOCK_ERR_SSLCNT, XSOCK_ERR_SSLREAD, XSOCK_ERR_SSLWRITE, XSOCK_ERR_SYSCALL, XSOCK_ERR_SSLERR,
+        XSOCK_ERR_INVSSL, XSOCK_ERR_PKCS12, XSOCK_ERR_SSLKEY, XSOCK_ERR_SSLCRT, XSOCK_ERR_SSLCA
+    };
+    for (size_t i = 0; i < sizeof(ssl) / sizeof(*ssl); i++)
+        CHECK(XSock_IsSSLError(ssl[i]), "Every TLS failure is a TLS error");
+    CHECK(!XSock_IsSSLError(XSOCK_ERR_SSLNEW) && !XSock_IsSSLError(XSOCK_EOF), "Not every status naming TLS is one");
+
+    /* A unix datagram socket is a datagram socket */
+    CHECK(XSock_Init(&sock, XSOCK_UNIX | XSOCK_UDP, XSOCK_INVALID) == XSOCK_SUCCESS, "Initialize a unix datagram socket");
+    CHECK(XSock_GetSockType(&sock) == SOCK_DGRAM && XSock_GetProto(&sock) == 0, "It is a datagram socket");
+
+    CHECK(XSock_LastSSLError(NULL, 8) == 0 && XSock_LastSSLError(sText, 0) == 0, "An error report needs room");
+#ifdef XSOCK_USE_SSL
+    ERR_clear_error();
+    CHECK(XSock_LastSSLError(sText, sizeof(sText)) == 0 && sText[0] == '\0', "No error queued is an empty report");
+    CHECK(XSock_GetSSLCTX(NULL) == NULL && XSock_GetSSL(NULL) == NULL, "No socket has no TLS state");
+#endif
+    CHECK(XSock_CreatePair(NULL) == XSTDERR, "A pair needs somewhere to go");
+    CHECK(XSock_Pending(NULL) == 0, "No socket has nothing pending");
+
+#ifndef _WIN32
+    /* A socket flagged for TLS that never got a session has no TLS to read or write through */
+    XSOCKET pair[2];
+    CHECK(XSock_CreatePair(pair) == XSTDOK, "Create a pair");
+    CHECK(XSock_Init(&sock, XSOCK_TCP_PEER, pair[0]) == XSOCK_SUCCESS, "Wrap one end plainly");
+    CHECK(XSock_Pending(&sock) == 0, "A plain socket has nothing pending");
+    XSock_Close(&sock);
+
+#ifdef XSOCK_USE_SSL
+    CHECK(XSock_Init(&sock, XSOCK_TCP_PEER | XSOCK_SSL, pair[1]) == XSOCK_SUCCESS, "Wrap the other end for TLS");
+    CHECK(XSock_Pending(&sock) == 0, "Without a session nothing is pending");
+    CHECK(XSock_SSLRead(&sock, sText, sizeof(sText), XFALSE) == XSOCK_ERROR, "Nothing is read without a session");
+    CHECK(XSock_Status(&sock) == XSOCK_ERR_SSLINV && sock.nFD == XSOCK_INVALID, "The socket is closed, saying why");
+    CHECK(XSock_Pending(&sock) == 0, "A closed socket has nothing pending");
+
+    CHECK(XSock_CreatePair(pair) == XSTDOK, "Create a pair");
+    CHECK(XSock_Init(&sock, XSOCK_TCP_PEER | XSOCK_SSL, pair[0]) == XSOCK_SUCCESS, "Wrap it for TLS");
+    CHECK(XSock_SSLWrite(&sock, "x", 0) == XSOCK_NONE, "Writing nothing writes nothing");
+    CHECK(XSock_SSLWrite(&sock, "x", 1) == XSOCK_ERROR, "Nothing is written without a session");
+    CHECK(XSock_Status(&sock) == XSOCK_ERR_SSLINV && sock.nFD == XSOCK_INVALID, "The socket is closed, saying why");
+
+    CHECK(XSock_Init(&sock, XSOCK_TCP_PEER | XSOCK_SSL, pair[1]) == XSOCK_SUCCESS, "Wrap the other end for TLS");
+    CHECK(XSock_SSLAccept(&sock) == XSOCK_INVALID && XSock_Status(&sock) == XSOCK_ERR_INVSSL,
+        "No handshake is answered without a session");
+    XSock_Close(&sock);
+#else
+    close(pair[1]);
+#endif
+#endif
+
+    /* Addresses: nothing to resolve, and the other family */
+    xsock_info_t info;
+    CHECK(XSock_AddrInfo(NULL, XF_IPV4, "127.0.0.1") == XSOCK_ERROR && XSock_AddrInfo(&info, XF_IPV4, "") == XSOCK_ERROR,
+        "A lookup needs somewhere to go and a host");
+#ifndef _WIN32
+    if (XSock_AddrInfo(&info, XF_IPV6, "::1") == XSOCK_SUCCESS)
+        CHECK(info.eFamily == XF_IPV6 && !strcmp(info.sAddr, "::1"), "The IPv6 loopback resolves as itself");
+#endif
+    CHECK(XSock_GetAddrInfo(&info, ":") == XSOCK_ERROR, "A host made of the port separator is no host");
+
+    /* Creating through the other entry points: unix addresses and missing ones */
+    xsock_info_t none;
+    XSock_InitInfo(&none);
+    CHECK(XSock_New(XSOCK_UNIX_CLIENT, &none) == NULL && XSock_New(XSOCK_TCP_CLIENT, &none) == NULL,
+        "A socket is made for an address");
+    xstrncpy(none.sAddr, sizeof(none.sAddr), "127.0.0.1");
+    CHECK(XSock_New(XSOCK_TCP_CLIENT, &none) == NULL, "And for a port");
+
+#ifndef _WIN32
+    char sDir[] = "/tmp/xutils-sock-XXXXXX";
+    CHECK(mkdtemp(sDir) != NULL, "Create a directory");
+
+    xsock_info_t local;
+    XSock_InitInfo(&local);
+    snprintf(local.sAddr, sizeof(local.sAddr), "%s/new.sock", sDir);
+
+    xsock_t *pServer = XSock_New(XSOCK_UNIX_SERVER, &local);
+    CHECK(pServer != NULL && XSock_GetFD(pServer) != XSOCK_INVALID, "A unix listener is made from an address");
+    CHECK(XSock_Open(&sock, XSOCK_UNIX_CLIENT, &local) != XSOCK_INVALID, "A unix client opens without a port");
+    XSock_Close(&sock);
+    CHECK(XSock_Setup(&sock, XSOCK_UNIX_CLIENT, local.sAddr) != XSOCK_INVALID, "And sets up from its path");
+    XSock_Close(&sock);
+    XSock_Free(pServer);
+
+    /* A forced listener that can not bind leaves nothing behind */
+    char sMissing[160], sTemp[192];
+    snprintf(sMissing, sizeof(sMissing), "%s/missing/new.sock", sDir);
+    snprintf(sTemp, sizeof(sTemp), "%s.%d.tmp", sMissing, (int)getpid());
+    CHECK(XSock_Create(&sock, XSOCK_UNIX_SERVER | XSOCK_FORCE, sMissing, 0) == XSOCK_INVALID, "The bind fails");
+    CHECK(XSock_Status(&sock) == XSOCK_ERR_BIND && access(sTemp, F_OK) != 0, "Without leaving a temporary file");
+
+    unlink(local.sAddr);
+    rmdir(sDir);
+#endif
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(stream_errors),
+    XTEST_CASE(call_guards),
     XTEST_CASE(address_conversion),
     XTEST_CASE(address_info),
     XTEST_CASE(status_strings),

@@ -350,6 +350,10 @@ HTTP request/response object, parser, assembler and simple blocking client helpe
   - `XHTTP_COMPLETE` when the body is complete or EOF finishes a body-without-length.
   - `XHTTP_INCOMPLETE` for partial non-blocking reads.
   - error status on allocation/read/callback failures.
+- Caveat:
+  - on a non-blocking socket, a body without `Content-Length` that has not started to arrive yet is reported as
+    `XHTTP_COMPLETE` with an empty body; once part of it has arrived, a read that would block is `XHTTP_EREAD`.
+    The length and header paths also report a read that would block as `XHTTP_EREAD`: check the socket status.
 
 #### `xhttp_status_t XHTTP_Receive(xhttp_t *pHttp, xsock_t *pSock)`
 

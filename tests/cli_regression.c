@@ -819,7 +819,59 @@ static int XTest_read_bounds(void)
     return 0;
 }
 
+static int XTest_async_input(void)
+{
+    /* An asynchronous read of a pipe says when nothing is there yet, instead of waiting for it */
+    int pipes[2];
+    CHECK(pipe(pipes) == 0, "Create a pipe");
+    int nSaved = dup(STDIN_FILENO);
+    CHECK(nSaved >= 0 && dup2(pipes[0], STDIN_FILENO) >= 0, "Put the pipe on standard input");
+    close(pipes[0]);
+
+    char sBuffer[8];
+    XSTATUS nEmpty = XCLI_ReadStdin(sBuffer, sizeof(sBuffer), XTRUE);
+    int bWritten = write(pipes[1], "ab", 2) == 2;
+    XSTATUS nData = XCLI_ReadStdin(sBuffer, sizeof(sBuffer), XTRUE);
+    close(pipes[1]);
+    XSTATUS nEnd = XCLI_ReadStdin(sBuffer, sizeof(sBuffer), XTRUE);
+    XSTATUS nClosed = XCLI_ReadStdin(sBuffer, sizeof(sBuffer), XFALSE);
+
+    close(STDIN_FILENO);
+    XSTATUS nNoAsync = XCLI_ReadStdin(sBuffer, sizeof(sBuffer), XTRUE);
+    XSTATUS nNoWait = XCLI_ReadStdin(sBuffer, sizeof(sBuffer), XFALSE);
+
+    dup2(nSaved, STDIN_FILENO);
+    close(nSaved);
+
+    CHECK(nEmpty == XSTDNON && sBuffer[0] == '\0', "Nothing to read is not an error");
+    CHECK(bWritten && nData == 2, "What is there is read");
+    CHECK(nEnd == 0 && nClosed == 0, "A closed pipe reads as its end");
+    CHECK(nNoAsync == XSTDERR && nNoWait == XSTDERR, "Without standard input a read fails");
+
+    /* A password ended by the end of input instead of a newline comes back whole, and no input at all is empty */
+    cli_pty_t pty;
+    if (pty_begin(&pty) != XSTDOK)
+    {
+        pty_end(&pty);
+        return 0;
+    }
+
+    char sPass[16];
+    CHECK(write(pty.nMaster, "abc\x04\x04", 5) == 5, "Type a password and end the input");
+    XSTATUS nPass = XCLI_GetPass(NULL, sPass, sizeof(sPass));
+    clearerr(stdin);
+    CHECK(nPass == 3 && !strcmp(sPass, "abc"), "The password without a newline is read whole");
+
+    CHECK(write(pty.nMaster, "\x04", 1) == 1, "End the input at once");
+    nPass = XCLI_GetPass(NULL, sPass, sizeof(sPass));
+    CHECK(nPass == 0 && sPass[0] == '\0', "No input is an empty password");
+
+    pty_end(&pty);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(async_input),
     XTEST_CASE(window_size),
     XTEST_CASE(window_lines),
     XTEST_CASE(window_align),

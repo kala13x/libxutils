@@ -491,7 +491,6 @@ size_t xstrxcpyf(char **pDst, const char *pFmt, ...)
 
     if (nBytes < 0)
     {
-        free(*pDst);
         *pDst = NULL;
         return 0;
     }

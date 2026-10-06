@@ -907,7 +907,70 @@ static int XTest_parse_restores_buffer(void)
     return 0;
 }
 
+static int XTest_api_guards(void)
+{
+    xhttp_t http, copy;
+    char sToken[64];
+
+    CHECK(XHTTP_SetUnixAddr(NULL, "/a") == (size_t)XSTDERR && XHTTP_SetUnixAddr(&http, "") == (size_t)XSTDERR,
+        "A unix address needs a handle and a path");
+    CHECK(XHTTP_Copy(NULL, &http) == XSTDERR && XHTTP_Copy(&copy, NULL) == XSTDERR, "A copy needs both handles");
+    XHTTP_Free(NULL);
+
+    CHECK(!XHTTP_GetAuthToken(sToken, 0, "u", "p") && !XHTTP_GetAuthToken(sToken, 8, NULL, "p") &&
+        !XHTTP_GetAuthToken(sToken, 8, "u", NULL), "A token needs room and both credentials");
+    CHECK(!XHTTP_GetAuthToken(sToken, 4, "user", "pass") && sToken[0] == '\0', "A token that does not fit is none");
+
+    CHECK(XHTTP_InitRequest(&http, XHTTP_GET, "/", "1.1") > 0, "The request initializes");
+    CHECK(XHTTP_SetAuthBasic(&http, "user", "") == XSTDNON && XHTTP_GetHeader(&http, "Authorization") == NULL,
+        "Basic auth needs both credentials");
+
+    /* Setting a header again to what it holds is no update; to anything else it is, and needs permission */
+    CHECK(XHTTP_AddHeader(&http, "X-Kept", "one") == 1, "A header is added");
+    CHECK(XHTTP_AddHeader(&http, "X-Kept", "one") == 1, "The same value again changes nothing");
+    CHECK(XHTTP_AddHeader(&http, "X-Kept", "two") == XSTDEXC, "Another value is refused without permission");
+    CHECK(!strcmp(XHTTP_GetHeader(&http, "X-Kept"), "one"), "And the header keeps its value");
+
+    /* Keep-alive asks for a connection header unless one is set */
+    http.nKeepAlive = XTRUE;
+    CHECK(XHTTP_Assemble(&http, NULL, 0) != NULL, "The request assembles");
+    CHECK(!strcmp(XHTTP_GetHeader(&http, "Connection"), "keep-alive"), "A kept connection is announced");
+    CHECK(XHTTP_Assemble(&http, NULL, 0) == &http.rawData, "Assembling it again gives what is already there");
+
+    char *pRaw = XHTTP_GetHeaderRaw(&http);
+    CHECK(pRaw != NULL && strstr(pRaw, "X-Kept: one\r\n") != NULL, "The raw header is what was assembled");
+    free(pRaw);
+    XHTTP_Clear(&http);
+
+    CHECK(XHTTP_GetHeaderRaw(NULL) == NULL && XHTTP_GetHeaderRaw(&http) == NULL, "No header has no raw form");
+    CHECK(!XHTTP_GetExtraSize(NULL) && !XHTTP_GetPacketSize(NULL), "No handle has no extra data or size");
+
+    /* A header and its body, with nothing after it */
+    const char *pWire = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)pWire, strlen(pWire)) == XHTTP_COMPLETE, "A response parses");
+    CHECK(XHTTP_GetExtraData(&http) == NULL && XHTTP_GetPacketSize(&http) == strlen(pWire), "Nothing follows it");
+    XHTTP_Clear(&http);
+
+    /* A length too big for the type is no length */
+    pWire = "POST / HTTP/1.1\r\nContent-Length: 99999999999999999999999\r\n\r\n";
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)pWire, strlen(pWire)) == XHTTP_COMPLETE, "An oversized length parses");
+    CHECK(http.nContentLength == 0, "As no length");
+    XHTTP_Clear(&http);
+
+    /* Spaces around the target are not part of it */
+    pWire = "GET    /spaced/path    HTTP/1.1\r\nHost: x\r\n\r\n";
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)pWire, strlen(pWire)) == XHTTP_COMPLETE, "A spaced request line parses");
+    CHECK(!strcmp(http.sUri, "/spaced/path"), "The target is what is between the spaces");
+    XHTTP_Clear(&http);
+
+    pWire = "HTTP/1.1\r\n\r\n";
+    CHECK(XHTTP_ParseData(&http, (uint8_t*)pWire, strlen(pWire)) == XHTTP_INVALID, "A status line without a code is invalid");
+    XHTTP_Clear(&http);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
     XTEST_CASE(partial),
     XTEST_CASE(pipeline),
     XTEST_CASE(headers),

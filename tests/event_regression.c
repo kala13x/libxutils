@@ -15,6 +15,7 @@ typedef struct xtest_events_ {
     int nClears;
     int nTimers;
     int nUsers;
+    int nErrors;
     xbool_t bRemove;
     xbool_t bFailed;
 } xtest_events_t;
@@ -28,6 +29,7 @@ static int XTest_EventCallback(void *pLoop, void *pData, XSOCKET nFD, xevent_cb_
     if (eReason == XEVENT_CB_CLEAR) pTest->nClears++;
     if (eReason == XEVENT_CB_WRITE) pTest->nWrites++;
     if (eReason == XEVENT_CB_TIMEOUT) pTest->nTimers++;
+    if (eReason == XEVENT_CB_ERROR) pTest->nErrors++;
     if (eReason == XEVENT_CB_READ)
     {
         if (pEvent->nType == XEVENT_TYPE_EVENT)
@@ -783,7 +785,243 @@ static int XTest_urgent_data(void)
     return 0;
 }
 
+#ifdef XTEST_WRAP_SYSCONF
+long __real_sysconf(int nName);
+static long g_nOpenMax = 0;
+static xbool_t g_bNoOpenMax = XFALSE;
+
+/* The descriptor limit a loop sizes itself by, when one is set here */
+long __wrap_sysconf(int nName)
+{
+    if (nName == _SC_OPEN_MAX && g_bNoOpenMax) return 0;
+    if (nName == _SC_OPEN_MAX && g_nOpenMax) return g_nOpenMax;
+    return __real_sysconf(nName);
+}
+#endif
+
+static int XTest_descriptor_limit(void)
+{
+#if defined(XTEST_WRAP_SYSCONF) && defined(_XEVENTS_USE_EPOLL)
+    /* valgrind zeroes every calloc() itself, and the largest batch epoll takes is two gigabytes of it */
+    const char *pPreload = getenv("LD_PRELOAD");
+    if (pPreload != NULL && strstr(pPreload, "vgpreload") != NULL) return 77;
+
+    /* epoll_wait() reports at most INT_MAX / sizeof(struct epoll_event) events a call. A loop sized by a
+       descriptor limit of "infinity", 2^30 in a container, or by one sysconf() can not tell, asked for more
+       and every wait failed. The batch is cut to what the kernel takes; descriptors stay unlimited. */
+    const uint32_t nBatchMax = (uint32_t)(INT_MAX / sizeof(struct epoll_event));
+    const long limits[] = { 1073741816L, -1L, (long)nBatchMax + 1 };
+
+    for (size_t i = 0; i < sizeof(limits) / sizeof(*limits); i++)
+    {
+        xtest_events_t test = {0};
+        xevents_t loop;
+
+        g_nOpenMax = limits[i];
+        xevent_status_t eStatus = XEvents_Create(&loop, 0, &test, XTest_EventCallback, XTRUE);
+        g_nOpenMax = 0;
+
+        CHECK(eStatus == XEVENTS_SUCCESS, "A loop is created whatever the descriptor limit");
+        CHECK(loop.nEventMax == nBatchMax, "One wait reports no more than epoll_wait() takes");
+
+        XSOCKET pair[2];
+        CHECK(XSock_CreatePair(pair) == XSTDOK, "Create isolated stream pair");
+        CHECK(XEvents_RegisterEvent(&loop, NULL, pair[0], XPOLLIN, XEVENT_TYPE_CUSTOM) != NULL, "Register a descriptor");
+        CHECK(send(pair[1], "x", 1, 0) == 1, "Make the descriptor readable");
+        CHECK(XEvents_Service(&loop, 1000) == XEVENTS_SUCCESS, "The wait succeeds");
+        CHECK(test.nReads == 1 && !test.bFailed, "The wait reports the ready descriptor");
+
+        XEvents_Destroy(&loop);
+        xclosesock(pair[0]);
+        xclosesock(pair[1]);
+    }
+
+    /* A limit the kernel takes is kept exactly, whichever of the two sets it */
+    const long kept[] = { (long)nBatchMax, 200000L };
+    for (size_t i = 0; i < sizeof(kept) / sizeof(*kept); i++)
+    {
+        xtest_events_t test = {0};
+        xevents_t loop;
+
+        g_nOpenMax = kept[i];
+        xevent_status_t eStatus = XEvents_Create(&loop, 0, &test, XTest_EventCallback, XTRUE);
+        g_nOpenMax = 0;
+
+        CHECK(eStatus == XEVENTS_SUCCESS && loop.nEventMax == (uint32_t)kept[i], "A limit epoll takes is the batch");
+        XEvents_Destroy(&loop);
+    }
+
+    xtest_events_t test = {0};
+    xevents_t loop;
+    g_nOpenMax = 1073741816L;
+    xevent_status_t eStatus = XEvents_Create(&loop, 4096, &test, XTest_EventCallback, XTRUE);
+    g_nOpenMax = 0;
+
+    CHECK(eStatus == XEVENTS_SUCCESS && loop.nEventMax == 4096, "A batch the caller asks for stays below either limit");
+    XEvents_Destroy(&loop);
+    return 0;
+#else
+    return 77;
+#endif
+}
+
+static int XTest_api_guards(void)
+{
+    xtest_events_t test = {0};
+    xevents_t loop;
+
+    XEvents_Destroy(NULL);
+    CHECK(XEvents_Create(NULL, 8, &test, XTest_EventCallback, XTRUE) == XEVENTS_EINVALID, "A loop needs a holder");
+    CHECK(XEvents_Create(&loop, 8, &test, NULL, XTRUE) == XEVENTS_ENOCB, "A loop needs a callback");
+    CHECK(XEvents_RegisterEvent(NULL, NULL, 0, XPOLLIN, XEVENT_TYPE_CUSTOM) == NULL, "Registering needs a loop");
+    CHECK(XEvents_CreateEvent(NULL, NULL) == NULL && XEvents_AddTimer(NULL, NULL, 10) == NULL, "Creating needs a loop");
+    CHECK(XEvents_GetData(NULL, 0) == NULL, "Looking up needs a loop");
+    CHECK(XEvents_Suspend(NULL, NULL) == XEVENTS_EINVALID && XEvents_Resume(NULL, NULL, XPOLLIN) == XEVENTS_EINVALID,
+        "Suspending and resuming need a loop");
+
+#ifdef XTEST_WRAP_SYSCONF
+    /* With no system limit known the caller's limit sizes the loop, and with neither nothing does */
+    g_bNoOpenMax = XTRUE;
+    xevent_status_t eStatus = XEvents_Create(&loop, 16, &test, XTest_EventCallback, XTRUE);
+    CHECK(eStatus == XEVENTS_SUCCESS && loop.nEventMax == 16, "The caller's limit stands in for the system's");
+    XEvents_Destroy(&loop);
+    eStatus = XEvents_Create(&loop, 0, &test, XTest_EventCallback, XTRUE);
+    g_bNoOpenMax = XFALSE;
+    CHECK(eStatus == XEVENTS_EOMAX, "A loop with no limit at all is refused");
+#endif
+
+    CHECK(XEvents_Create(&loop, 8, &test, XTest_EventCallback, XTRUE) == XEVENTS_SUCCESS, "Create a loop");
+    CHECK(XEvents_AddTimer(&loop, NULL, 0) == NULL, "A timer needs a timeout");
+    CHECK(XEvents_ExtendTimer(&loop, NULL, 10) == XEVENTS_EINVALID, "Only a timer is extended");
+
+    xevent_data_t *pTimer = XEvents_AddTimer(&loop, NULL, 60000);
+    CHECK(pTimer != NULL && XEvents_ExtendTimer(&loop, pTimer, 0) == XEVENTS_EINVALID, "A timer is extended by a timeout");
+
+    XSOCKET pair[2];
+    CHECK(XSock_CreatePair(pair) == XSTDOK, "Create isolated stream pair");
+    xevent_data_t *pEvent = XEvents_RegisterEvent(&loop, NULL, pair[0], XPOLLIN, XEVENT_TYPE_CUSTOM);
+    CHECK(pEvent != NULL && XEvents_ExtendTimer(&loop, pEvent, 10) == XEVENTS_EINVALID, "Only a timer is extended");
+
+    char cByte = 'q';
+    CHECK(send(pair[1], "x", 1, 0) == 1 && XEvent_ReadByte(pEvent, NULL) == 1, "A byte is read without a destination");
+    CHECK(xclosesock(pair[1]) == 0 && XEvent_ReadByte(pEvent, &cByte) == 0 && cByte == 'q', "End of file stores no byte");
+
+    xevent_data_t invalid;
+    memset(&invalid, 0, sizeof(invalid));
+    invalid.nFD = XSOCK_INVALID;
+    CHECK(XEvents_Add(&loop, &invalid, XPOLLIN) == XEVENTS_EINVALID, "A descriptor is needed to watch");
+    CHECK(XEvents_Modify(&loop, NULL, XPOLLIN) == XEVENTS_EINVALID, "Modifying needs an event");
+    CHECK(XEvents_Suspend(&loop, &invalid) == XEVENTS_EINVALID && XEvents_Resume(&loop, &invalid, XPOLLIN) == XEVENTS_EINVALID,
+        "A descriptor is needed to suspend or resume");
+
+#if defined(_XEVENTS_USE_EPOLL)
+    CHECK(XEvents_Modify(&loop, &invalid, XPOLLIN) == XEVENTS_ECTL, "A descriptor is needed to modify");
+#ifdef EPOLLEXCLUSIVE
+    CHECK(XEvents_Modify(&loop, pEvent, XPOLLIN | EPOLLEXCLUSIVE) == XEVENTS_SUCCESS, "A modification drops the exclusive flag");
+#endif
+    CHECK(XEvents_Resume(&loop, pEvent, XPOLLIN) == XEVENTS_ECTL, "A watched descriptor is not resumed again");
+    CHECK(XEvents_Suspend(&loop, pEvent) == XEVENTS_SUCCESS, "Suspend a watched descriptor");
+    CHECK(XEvents_Suspend(&loop, pEvent) == XEVENTS_ECTL, "A suspended descriptor is not suspended again");
+    CHECK(XEvents_Resume(&loop, pEvent, XPOLLIN) == XEVENTS_SUCCESS, "Resume a suspended descriptor");
+#endif
+
+    /* An event with no descriptor is still released by a delete */
+    xevent_data_t *pLoose = XEvents_NewData(NULL, XSOCK_INVALID, XEVENT_TYPE_CUSTOM);
+    int nClears = test.nClears;
+    CHECK(pLoose != NULL, "Create an unwatched event");
+    XEvents_Delete(&loop, pLoose);
+    CHECK(test.nClears == nClears + 1, "The unwatched event is released");
+
+    XEvents_Destroy(&loop);
+    CHECK(XEvents_Service(&loop, 0) == XEVENTS_EINVALID, "A destroyed loop is not serviced");
+    xclosesock(pair[0]);
+    return 0;
+}
+
+typedef struct {
+    xevent_data_t *pEvents[2];
+    int nCalls;
+    int nErrors;
+    int nTimeouts;
+    xbool_t bDrain;
+} event_pair_t;
+
+/* The first of two ready events takes the other out of the batch: it deletes it, or drains it */
+static int event_pair_cb(void *pLoop, void *pData, XSOCKET nFD, xevent_cb_type_t eReason)
+{
+    xevents_t *pEvents = (xevents_t*)pLoop;
+    event_pair_t *pPair = (event_pair_t*)pEvents->pUserSpace;
+    (void)nFD;
+
+    if (eReason == XEVENT_CB_ERROR) pPair->nErrors++;
+    if (eReason == XEVENT_CB_TIMEOUT) pPair->nTimeouts++;
+    if (eReason != XEVENT_CB_READ && eReason != XEVENT_CB_TIMEOUT) return XEVENTS_CONTINUE;
+    if (pPair->nCalls++) return XEVENTS_CONTINUE;
+
+    xevent_data_t *pOther = pPair->pEvents[0] == pData ? pPair->pEvents[1] : pPair->pEvents[0];
+    if (!pPair->bDrain) XEvents_Delete(pEvents, pOther);
+    else XEvent_ReadU64(pOther, NULL);
+
+    return XEVENTS_CONTINUE;
+}
+
+static int XTest_error_events(void)
+{
+#if defined(_XEVENTS_USE_EPOLL)
+    /* The write end of a pipe whose reader is gone reports an error, and nothing to read or hang up on */
+    xtest_events_t test = {0};
+    xevents_t loop;
+    int pipes[2];
+    CHECK(XEvents_Create(&loop, 8, &test, XTest_EventCallback, XTRUE) == XEVENTS_SUCCESS && pipe(pipes) == 0,
+        "Create a loop and a pipe");
+    xevent_data_t *pWriter = XEvents_RegisterEvent(&loop, NULL, pipes[1], XPOLLOUT, XEVENT_TYPE_CUSTOM);
+    CHECK(pWriter != NULL && close(pipes[0]) == 0, "Watch the writer and close the reader");
+    CHECK(XEvents_Service(&loop, 1000) == XEVENTS_SUCCESS && test.nErrors == 1 && !test.nWrites,
+        "An error alone is reported as an error");
+    XEvents_Destroy(&loop);
+    close(pipes[1]);
+
+    /* An event deleted by the one before it in the same batch is skipped, not dispatched */
+    event_pair_t pair = {0};
+    XSOCKET sockets[2][2];
+    CHECK(XEvents_Create(&loop, 8, &pair, event_pair_cb, XTRUE) == XEVENTS_SUCCESS, "Create a batch loop");
+    for (int i = 0; i < 2; i++)
+    {
+        CHECK(XSock_CreatePair(sockets[i]) == XSTDOK && send(sockets[i][1], "x", 1, 0) == 1, "Make a ready pair");
+        pair.pEvents[i] = XEvents_RegisterEvent(&loop, NULL, sockets[i][0], XPOLLIN, XEVENT_TYPE_CUSTOM);
+        CHECK(pair.pEvents[i] != NULL, "Watch the ready pair");
+    }
+    CHECK(XEvents_Service(&loop, 1000) == XEVENTS_SUCCESS && pair.nCalls == 1, "Only the first event is dispatched");
+    CHECK(loop.nEventCount == 1, "The other one is gone");
+    XEvents_Destroy(&loop);
+    for (int i = 0; i < 2; i++)
+    {
+        xclosesock(sockets[i][0]);
+        xclosesock(sockets[i][1]);
+    }
+
+    /* A timer drained by the one before it has nothing to read: that is an error, and it is deleted */
+    memset(&pair, 0, sizeof(pair));
+    pair.bDrain = XTRUE;
+    CHECK(XEvents_Create(&loop, 8, &pair, event_pair_cb, XTRUE) == XEVENTS_SUCCESS, "Create a timer loop");
+    for (int i = 0; i < 2; i++) CHECK((pair.pEvents[i] = XEvents_AddTimer(&loop, NULL, 1)) != NULL, "Add a short timer");
+
+    struct pollfd fds[2] = { { pair.pEvents[0]->nFD, POLLIN, 0 }, { pair.pEvents[1]->nFD, POLLIN, 0 } };
+    for (int i = 0; i < 100 && poll(fds, 2, 50) < 2; i++);
+    CHECK((fds[0].revents & POLLIN) && (fds[1].revents & POLLIN), "Both timers expire");
+    CHECK(XEvents_Service(&loop, 1000) == XEVENTS_SUCCESS, "Service both timers");
+    CHECK(pair.nTimeouts == 1 && pair.nErrors == 1 && loop.nEventCount == 1, "The drained timer fails and is deleted");
+    XEvents_Destroy(&loop);
+    return 0;
+#else
+    return 77;
+#endif
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
+    XTEST_CASE(error_events),
+    XTEST_CASE(descriptor_limit),
     XTEST_CASE(urgent_data),
     XTEST_CASE(detached_delete),
     XTEST_CASE(lifecycle),

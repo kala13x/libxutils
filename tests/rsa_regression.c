@@ -509,7 +509,103 @@ static int XTest_partial_key_files(void)
     return 0;
 }
 
+typedef uint8_t* (*rsa_ctx_op_t)(xrsa_ctx_t *pCtx, const uint8_t *pData, size_t nLength, size_t *pOutLength);
+typedef uint8_t* (*rsa_key_op_t)(const uint8_t *pInput, size_t nLength, const char *pKey, size_t nKeyLen, size_t *pOutLen);
+
+static int XTest_call_guards(void)
+{
+    const uint8_t sData[] = "data";
+    const char *pKey = "key";
+    size_t nLength = 1;
+    xrsa_ctx_t key;
+
+    XRSA_Init(NULL);
+    XRSA_Destroy(NULL);
+    CHECK(XRSA_GenerateKeys(NULL, 1024, 65537) == XSTDINV, "Keys are generated into a context");
+
+    /* Without a key every operation of a context does nothing, whatever it is given */
+    const rsa_ctx_op_t ctxOps[] = { XRSA_Crypt, XRSA_Decrypt, XRSA_PrivCrypt, XRSA_PubDecrypt };
+    XRSA_Init(&key);
+
+    for (size_t i = 0; i < sizeof(ctxOps) / sizeof(*ctxOps); i++)
+    {
+        CHECK(ctxOps[i](NULL, sData, 4, &nLength) == NULL && ctxOps[i](&key, NULL, 4, &nLength) == NULL &&
+            ctxOps[i](&key, sData, 0, &nLength) == NULL, "An operation needs a context and data");
+        CHECK(ctxOps[i](&key, sData, (size_t)INT_MAX + 1, &nLength) == NULL && !nLength, "Data an int counts");
+        CHECK(ctxOps[i](&key, sData, 4, NULL) == NULL, "And a key");
+    }
+
+    CHECK(XRSA_LoadPrivKey(NULL) == XSTDINV && XRSA_LoadPrivKey(&key) == XSTDINV, "No private key text loads nothing");
+    CHECK(XRSA_LoadPubKey(NULL) == XSTDINV && XRSA_LoadPubKey(&key) == XSTDINV, "No public key text loads nothing");
+    CHECK(XRSA_SetPubKey(NULL, pKey, 3) == XSTDINV && XRSA_SetPubKey(&key, NULL, 3) == XSTDINV &&
+        XRSA_SetPubKey(&key, pKey, 0) == XSTDINV && XRSA_SetPubKey(&key, pKey, (size_t)INT_MAX + 1) == XSTDINV,
+        "A public key is set from text");
+    CHECK(XRSA_SetPrivKey(NULL, pKey, 3) == XSTDINV && XRSA_SetPrivKey(&key, NULL, 3) == XSTDINV &&
+        XRSA_SetPrivKey(&key, pKey, 0) == XSTDINV && XRSA_SetPrivKey(&key, pKey, (size_t)INT_MAX + 1) == XSTDINV,
+        "So is a private key");
+    CHECK(XRSA_LoadPubKeyFile(NULL, "/x") == XSTDINV && XRSA_LoadPubKeyFile(&key, NULL) == XSTDINV &&
+        XRSA_LoadPubKeyFile(NULL, NULL) == XSTDINV, "A public key file needs a context and a path");
+    CHECK(XRSA_LoadPrivKeyFile(NULL, "/x") == XSTDINV && XRSA_LoadPrivKeyFile(&key, NULL) == XSTDINV,
+        "So does a private one");
+    CHECK(XRSA_LoadKeyFiles(NULL, "/x", "/y") == XSTDINV, "And both");
+
+    /* The one call forms check what they are given the same way */
+    const rsa_key_op_t keyOps[] = { XCrypt_RSA, XDecrypt_RSA, XCrypt_PrivRSA, XDecrypt_PubRSA };
+    for (size_t i = 0; i < sizeof(keyOps) / sizeof(*keyOps); i++)
+    {
+        CHECK(keyOps[i](NULL, 4, pKey, 3, &nLength) == NULL && keyOps[i](sData, 0, pKey, 3, &nLength) == NULL &&
+            keyOps[i](sData, 4, NULL, 3, &nLength) == NULL && keyOps[i](sData, 4, pKey, 0, &nLength) == NULL,
+            "A one call operation needs data and a key");
+        CHECK(keyOps[i](sData, 4, pKey, 3, NULL) == NULL, "A key that is not one is refused");
+    }
+
+    CHECK(XCrypt_RS256(NULL, 4, pKey, 3, &nLength) == NULL && XCrypt_RS256(sData, 0, pKey, 3, &nLength) == NULL,
+        "Signing needs data");
+    CHECK(XCrypt_VerifyRS256(NULL, 4, sData, 4, pKey, 3) == XSTDINV && XCrypt_VerifyRS256(sData, 0, sData, 4, pKey, 3) == XSTDINV,
+        "Verifying needs a signature");
+    CHECK(XCrypt_VerifyRS256(sData, 4, NULL, 4, pKey, 3) == XSTDINV && XCrypt_VerifyRS256(sData, 4, sData, 0, pKey, 3) == XSTDINV,
+        "And data");
+    CHECK(XCrypt_VerifyRS256(sData, 4, sData, 4, NULL, 3) == XSTDINV, "And a key");
+    CHECK(XCrypt_VerifyRS256(sData, 4, sData, 4, pKey, 0) == XSTDINV, "Of some length");
+
+    ERR_clear_error();
+    CHECK(XSSL_LastErrors(NULL) == NULL, "No error is no report");
+
+    /* With a key, every operation can leave its length unasked */
+    CHECK(XRSA_GenerateKeys(&key, 1024, 65537) == XSTDOK, "Generate a key");
+    uint8_t *pCipher = XRSA_Crypt(&key, sData, 4, NULL);
+    CHECK(pCipher != NULL, "Encrypt without asking the length");
+    uint8_t *pPlain = XRSA_Decrypt(&key, pCipher, 128, NULL);
+    CHECK(pPlain != NULL && !memcmp(pPlain, sData, 4), "Decrypt without asking it");
+    free(pCipher);
+    free(pPlain);
+
+    pCipher = XRSA_PrivCrypt(&key, sData, 4, NULL);
+    CHECK(pCipher != NULL, "Sign without asking the length");
+    pPlain = XRSA_PubDecrypt(&key, pCipher, 128, NULL);
+    CHECK(pPlain != NULL && !memcmp(pPlain, sData, 4), "Recover without asking it");
+    free(pCipher);
+    free(pPlain);
+
+    /* No path to load a public key from leaves the one that is there */
+    char *pPublic = key.pPublicKey;
+    CHECK(XRSA_LoadPubKeyFile(&key, NULL) == XSTDINV && key.pPublicKey == pPublic && key.nPubKeyLen > 0,
+        "A missing path does not drop the public key");
+
+    xrsa_ctx_t other;
+    XRSA_Init(&other);
+    CHECK(XRSA_SetPrivKey(&other, "not a key", 9) == XSTDERR, "Text that is not a key is refused");
+    char *pErrors = XSSL_LastErrors(NULL);
+    CHECK(pErrors != NULL, "And leaves an error to report without its length");
+    free(pErrors);
+
+    XRSA_Destroy(&other);
+    XRSA_Destroy(&key);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(call_guards),
     XTEST_CASE(signatures),
     XTEST_CASE(encryption),
     XTEST_CASE(invalid_keys),

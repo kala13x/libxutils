@@ -103,7 +103,7 @@ static int XTest_invalid_start(void)
             struct rlimit limit = { 1, 1 };
             int nNull = open("/dev/null", O_WRONLY);
             if (nNull >= 0) dup2(nNull, STDERR_FILENO);
-            if (setrlimit(RLIMIT_NPROC, &limit) < 0) _exit(2);
+            if (setrlimit(RLIMIT_NPROC, &limit) < 0) XTEST_EXIT(2);
 
             XThread_Init(&thread);
             thread.functionCb = XTest_Idle;
@@ -111,8 +111,8 @@ static int XTest_invalid_start(void)
             errno = 0;
             int nStatus = XThread_Run(&thread);
             if (nStatus == XSTDOK && !nDetached) XThread_Join(&thread);
-            if (nStatus == XSTDOK) _exit(0);
-            _exit(nStatus == XSTDERR && thread.nStatus == XTHREAD_FAIL && errno == EAGAIN ? 0 : 1);
+            if (nStatus == XSTDOK) XTEST_EXIT(0);
+            XTEST_EXIT(nStatus == XSTDERR && thread.nStatus == XTHREAD_FAIL && errno == EAGAIN ? 0 : 1);
         }
 
         int nStatus = 0;

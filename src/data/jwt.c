@@ -143,6 +143,27 @@ XSTATUS XJWT_AddPayload(xjwt_t *pJWT, const char *pPayload, size_t nPayloadLen, 
     return XSTDOK;
 }
 
+/* A segment made from an object is the Base64Url form of its JSON, like every other segment */
+static char* XJWT_EncodeObj(xjson_obj_t *pObj, size_t *pLength)
+{
+    size_t nRawLen = 0;
+    char *pRaw = XJSON_DumpObj(pObj, 0, &nRawLen);
+    *pLength = 0;
+
+    if (pRaw == NULL || !nRawLen)
+    {
+        free(pRaw);
+        return NULL;
+    }
+
+    *pLength = nRawLen;
+    char *pEncoded = XBase64_UrlEncrypt((const uint8_t*)pRaw, pLength);
+    if (pEncoded == NULL) *pLength = 0;
+
+    free(pRaw);
+    return pEncoded;
+}
+
 char* XJWT_GetPayload(xjwt_t *pJWT, xbool_t bDecode, size_t *pPayloadLen)
 {
     XCHECK(pJWT, NULL);
@@ -150,7 +171,7 @@ char* XJWT_GetPayload(xjwt_t *pJWT, xbool_t bDecode, size_t *pPayloadLen)
 
     if (pJWT->pPayload == NULL)
     {
-        pJWT->pPayload = XJSON_DumpObj(pJWT->pPayloadObj, 0, &pJWT->nPayloadLen);
+        pJWT->pPayload = XJWT_EncodeObj(pJWT->pPayloadObj, &pJWT->nPayloadLen);
         XCHECK((pJWT->pPayload && pJWT->nPayloadLen), NULL);
     }
 
@@ -220,7 +241,7 @@ char* XJWT_GetHeader(xjwt_t *pJWT, xbool_t bDecode, size_t *pHeaderLen)
     {
         if (pJWT->pHeaderObj != NULL)
         {
-            pJWT->pHeader = XJSON_DumpObj(pJWT->pHeaderObj, 0, &pJWT->nHeaderLen);
+            pJWT->pHeader = XJWT_EncodeObj(pJWT->pHeaderObj, &pJWT->nHeaderLen);
             XCHECK((pJWT->pHeader && pJWT->nHeaderLen), NULL);
         }
         else
@@ -340,7 +361,8 @@ XSTATUS XJWT_CreateSignature(xjwt_t *pJWT, const uint8_t *pSecret, size_t nSecre
 
     if (pJWT->eAlgorithm == XJWT_ALG_HS256)
     {
-        XHMAC_SHA256(hash, sizeof(hash), (uint8_t*)pJointData, nJointLength, (uint8_t*)pSecret, nSecretLen);
+        XSTATUS nStatus = XHMAC_SHA256(hash, sizeof(hash), (uint8_t*)pJointData, nJointLength, (uint8_t*)pSecret, nSecretLen);
+        XCHECK_FREE((nStatus == XSTDOK), pJointData, XSTDERR);
         pSignature = hash;
     }
 #ifdef XCRYPT_USE_SSL

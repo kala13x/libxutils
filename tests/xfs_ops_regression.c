@@ -703,7 +703,212 @@ static int XTest_remove_large_dir(void)
     return 0;
 }
 
+/* Builds below pBase a path of exactly nLength characters, out of directory names of 99 characters */
+static char* xfs_long_path(const char *pBase, size_t nLength)
+{
+    size_t nBase = strlen(pBase);
+    if (nLength <= nBase + 1) return NULL;
+
+    char *pPath = (char*)malloc(nLength + 1);
+    if (pPath == NULL) return NULL;
+
+    memcpy(pPath, pBase, nBase);
+    for (size_t i = nBase; i < nLength; i++) pPath[i] = (i - nBase) % 100 ? 'd' : '/';
+    if (pPath[nLength - 1] == '/') pPath[nLength - 1] = 'e';
+
+    pPath[nLength] = '\0';
+    return pPath;
+}
+
+static int XTest_long_directories(void)
+{
+    xfs_fixture_t fixture;
+    CHECK(xfs_begin(&fixture) == XSTDOK, "Create the filesystem fixture");
+
+    /* Either side of the buffer the path is worked on in, and far past it: the whole path is made, and nothing
+       else. Cut to the buffer it named another directory, which was made, and success was reported. */
+    for (size_t nLength = XPATH_MAX - 3; nLength <= XPATH_MAX + 3; nLength++)
+    {
+        char sBase[128];
+        snprintf(sBase, sizeof(sBase), "%s/len-%zu", fixture.sRoot, nLength);
+
+        char *pPath = xfs_long_path(sBase, nLength);
+        CHECK(pPath != NULL, "Build a path of the length");
+
+        errno = 0;
+        CHECK(XDir_Create(pPath, 0755) == 1, "A long path is created");
+        CHECK(XDir_Valid(pPath) > 0, "The directory asked for is the one that exists");
+
+        if (nLength >= XPATH_MAX) pPath[XPATH_MAX - 1] = '\0';
+        CHECK(nLength < XPATH_MAX || XDir_Valid(pPath) <= 0, "No directory is made of the path cut short");
+
+        free(pPath);
+    }
+
+    char sBase[128];
+    snprintf(sBase, sizeof(sBase), "%s/deep", fixture.sRoot);
+
+    char *pDeep = xfs_long_path(sBase, 3000);
+    CHECK(pDeep != NULL, "Build a deep path");
+    CHECK(XDir_Create(pDeep, 0700) == 1 && XDir_Valid(pDeep) > 0, "A path longer than the buffer is created whole");
+    CHECK(XDir_Create(pDeep, 0700) == 1, "An existing long path is a success");
+
+    /* The parent of a socket path is made the same way */
+    snprintf(sBase, sizeof(sBase), "%s/socket", fixture.sRoot);
+    char *pSocket = xfs_long_path(sBase, 2600);
+    CHECK(pSocket != NULL, "Build a long socket path");
+
+    char *pSlash = strrchr(pSocket, '/');
+    CHECK(pSlash != NULL, "The socket path has a directory");
+
+    CHECK(XPath_EnsureDirectory(pSocket) == 1, "The directory of a long path is created");
+    *pSlash = '\0';
+    CHECK(XDir_Valid(pSocket) > 0, "It is the directory of that path");
+
+    pSocket[XPATH_MAX - 1] = '\0';
+    CHECK(XDir_Valid(pSocket) <= 0, "Not the directory of the path cut short");
+    free(pSocket);
+
+    /* A failure is reported the way mkdir() reported it */
+    snprintf(sBase, sizeof(sBase), "%s/blocked", fixture.sRoot);
+    CHECK(XPath_Write(sBase, (const uint8_t*)"x", 1, "cwt") == 1, "A file is where a directory has to go");
+
+    char *pBlocked = xfs_long_path(sBase, 2500);
+    CHECK(pBlocked != NULL, "Build a path through the file");
+
+    errno = 0;
+    CHECK(XDir_Create(pBlocked, 0755) == 0 && errno == ENOTDIR, "A long path through a file fails with ENOTDIR");
+
+    errno = 0;
+    CHECK(XPath_EnsureDirectory(pBlocked) == 0 && errno == ENOTDIR, "And so does making its directory");
+    free(pBlocked);
+
+    /* No path names no directory */
+    char sCwd[XPATH_MAX];
+    CHECK(getcwd(sCwd, sizeof(sCwd)) != NULL && chdir(fixture.sRoot) == 0, "Work in the fixture");
+
+    CHECK(XDir_Create(NULL, 0755) == 0, "No directory is made for no path");
+    CHECK(XDir_Create("", 0755) == 0, "Nor for an empty one");
+    CHECK(!XPath_Exists("(null)"), "A missing path was not formatted into a name");
+    CHECK(chdir(sCwd) == 0, "Leave the fixture");
+
+    free(pDeep);
+
+    xfs_end(&fixture);
+    return 0;
+}
+
+static int XTest_api_guards(void)
+{
+    xfs_fixture_t fixture;
+    CHECK(xfs_begin(&fixture) == XSTDOK, "Create the filesystem fixture");
+
+    char sFile[128], sMissing[128], sLine[8];
+    xfs_path(&fixture, sFile, sizeof(sFile), "file.txt");
+    xfs_path(&fixture, sMissing, sizeof(sMissing), "missing/file.txt");
+    CHECK(XPath_Write(sFile, (const uint8_t*)"0123456789\nab\n", 14, "cwt") == 14, "Write a file");
+
+    xfile_t file;
+    CHECK(XFile_Open(NULL, sFile, "r", NULL) == XSTDERR && XFile_Open(&file, NULL, "r", NULL) == XSTDERR,
+        "Opening needs a handle and a path");
+    CHECK(XFile_OpenM(NULL, sFile, "r", 0644) == XSTDERR && XFile_OpenM(&file, NULL, "r", 0644) == XSTDERR,
+        "With a mode as well");
+    /* A permission string that is not one used to create the file with no permissions at all */
+    char sCreated[160];
+    xfs_path(&fixture, sCreated, sizeof(sCreated), "created.txt");
+    CHECK(XFile_Open(&file, sCreated, "cw", "rw-") == XSTDERR && file.nFD < 0, "Permissions are nine characters");
+    CHECK(!XPath_Exists(sCreated), "And no file is created without them");
+    CHECK(XFile_Reopen(NULL, sFile, "r", NULL) == XSTDERR, "Reopening needs a handle");
+    XFile_Close(NULL);
+    XFile_Destroy(NULL);
+    xfile_t *pNone = NULL;
+    XFile_Free(&pNone);
+    XFile_Free(NULL);
+
+    /* A closed handle does nothing */
+    CHECK(XFile_Open(&file, sFile, "r", NULL) >= 0, "Open the file");
+    XFile_Close(&file);
+    CHECK(XFile_Seek(&file, 0, SEEK_SET) == (size_t)XSTDERR && XFile_Write(&file, "x", 1) == XSTDERR &&
+        XFile_Read(&file, sLine, 1) == XSTDERR, "A closed file seeks, writes and reads nothing");
+    CHECK(XFile_GetLine(&file, sLine, sizeof(sLine)) == XSTDERR && XFile_GetLine(&file, NULL, 8) == XSTDINV &&
+        XFile_GetLine(&file, sLine, 0) == XSTDINV, "And has no lines");
+
+    /* A line longer than the buffer is cut where the buffer ends */
+    CHECK(XFile_Open(&file, sFile, "r", NULL) >= 0, "Open the file");
+    CHECK(XFile_GetLine(&file, sLine, sizeof(sLine)) == 7 && !strcmp(sLine, "0123456"), "A long line fills the buffer");
+    XFile_Close(&file);
+
+    /* What is not a regular file has no content to load */
+    CHECK(XFile_Open(&file, fixture.sRoot, "r", NULL) >= 0, "Open the directory");
+    CHECK(XFile_Load(&file, NULL) == NULL, "A directory loads nothing");
+    XFile_Close(&file);
+
+    CHECK(XFile_IsExec(0010) && XFile_IsExec(0001) && !XFile_IsExec(0644), "Any execute bit makes a file executable");
+
+    xmode_t nMode = 0;
+    char sPerm[XPERM_LEN + 1];
+    CHECK(XPath_PermToMode("rwx", &nMode) == XSTDERR, "A short permission string is refused");
+    CHECK(XPath_ModeToPerm(sPerm, XPERM_LEN, 0644) == 0 && sPerm[0] == '\0', "A short output takes no permissions");
+    CHECK(XPath_SetPerm(sFile, "rw") == XSTDERR && XPath_SetPerm(sMissing, "rw-r--r--") == XSTDERR,
+        "Permissions need a valid string and a file");
+
+    CHECK(!XPath_Exists("") && XPath_EnsureDirectory("") == XSTDERR && XPath_EnsureDirectory("nodir") == XSTDNON,
+        "No path is no file, and a bare name needs no directory");
+    CHECK(XPath_CopyFile("", sFile) == XSTDERR && XPath_CopyFile(sFile, "") == XSTDERR &&
+        XPath_CopyFile(sMissing, sFile) == XSTDERR, "A copy needs a source that is there and a destination");
+
+    uint8_t sBuffer[16];
+    CHECK(XPath_Read(sFile, NULL, 8) == XSTDERR && XPath_Read(sFile, sBuffer, 0) == XSTDERR &&
+        XPath_Read(sMissing, sBuffer, sizeof(sBuffer)) == XSTDERR, "A read needs a buffer and a file");
+    CHECK(XPath_LoadSize(sMissing, 4, NULL) == NULL, "A missing file loads nothing");
+    uint8_t *pPart = XPath_LoadSize(sFile, 4, NULL);
+    CHECK(pPart != NULL && !memcmp(pPart, "0123", 4), "A limited load need not report its size");
+    free(pPart);
+
+    xbyte_buffer_t buffer;
+    CHECK(!XPath_LoadBuffer(NULL, &buffer) && !XPath_LoadBuffer(sFile, NULL), "Loading needs a path and a buffer");
+    CHECK(!XPath_LoadBufferSize(NULL, &buffer, 4) && !XPath_LoadBufferSize(sFile, NULL, 4), "So does a limited load");
+    CHECK(!XPath_LoadBufferSize(sMissing, &buffer, 4) && buffer.pData == NULL, "A missing file loads nothing");
+    CHECK(XPath_Write(NULL, sBuffer, 1, "cwt") == XSTDERR && XPath_Write(sFile, NULL, 1, "cwt") == XSTDERR &&
+        XPath_Write(sFile, sBuffer, 0, "cwt") == XSTDERR, "A write needs a path, data and a length");
+    CHECK(XPath_Write(sMissing, sBuffer, 1, "cwt") == XSTDERR, "A write needs a directory to write in");
+    CHECK(XPath_WriteBuffer(NULL, &buffer, "cwt") == XSTDERR && XPath_WriteBuffer(sFile, NULL, "cwt") == XSTDERR,
+        "Writing a buffer needs a path and a buffer");
+
+    xdir_t dir;
+    CHECK(XDir_Open(&dir, NULL) == XSTDERR, "No path opens no directory");
+    XDir_Close(&dir);
+    CHECK(XDir_Read(NULL, NULL, 0) == XSTDERR && XDir_Read(&dir, NULL, 0) == XSTDERR, "A closed directory reads nothing");
+    CHECK(XDir_Open(&dir, fixture.sRoot) == XSTDOK, "Open the directory");
+    CHECK(XDir_Read(&dir, sLine, 0) == XSTDOK && dir.pCurrEntry != NULL, "An entry need not be copied");
+    XDir_Close(&dir);
+
+    errno = 0;
+    CHECK(XDir_Valid(sFile) == 0 && errno == ENOTDIR, "A file is no directory");
+
+    char sTrailing[160];
+    snprintf(sTrailing, sizeof(sTrailing), "%s/trailing/", fixture.sRoot);
+    CHECK(XDir_Create(sTrailing, 0755) == 1 && XDir_Valid(sTrailing) > 0, "A trailing slash is no part of the name");
+
+    /* A directory that can not be written to takes no new one */
+    char sLocked[160], sInside[192];
+    snprintf(sLocked, sizeof(sLocked), "%s/locked", fixture.sRoot);
+    snprintf(sInside, sizeof(sInside), "%s/locked/sub", fixture.sRoot);
+    CHECK(XDir_Create(sLocked, 0500) == 1, "Make a directory without write permission");
+    if (access(sLocked, W_OK) != 0)
+    {
+        errno = 0;
+        CHECK(XDir_Create(sInside, 0755) == 0 && errno == EACCES, "Nothing is made in it");
+    }
+    chmod(sLocked, 0700);
+
+    xfs_end(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
+    XTEST_CASE(long_directories),
     XTEST_CASE(file_io),
     XTEST_CASE(handles),
     XTEST_CASE(lines),

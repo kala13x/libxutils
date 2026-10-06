@@ -439,7 +439,7 @@ static int sync_run_child(void(*pMisuse)(void), char *pOutput, size_t nSize)
         dup2(pipeFds[1], STDERR_FILENO);
         close(pipeFds[0]);
         pMisuse();
-        _exit(0);
+        XTEST_EXIT(0);
     }
 
     close(pipeFds[1]);

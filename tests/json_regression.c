@@ -1370,7 +1370,130 @@ static int XTest_error_paths(void)
     return 0;
 }
 
+static xjson_obj_t* json_number_text(const char *pName, const char *pText)
+{
+    return XJSON_CreateObject(NULL, pName, xstrdup(pText), XJSON_TYPE_NUMBER);
+}
+
+static int XTest_api_guards(void)
+{
+    xjson_t json;
+    char sError[128];
+
+    /* An unexpected end is reported as such, wherever the parser stopped */
+    XJSON_Init(&json);
+    json.nError = XJSON_ERR_UNEXPECTED;
+    json.pData = "{";
+    json.nDataSize = 1;
+    json.nOffset = 1;
+    CHECK(XJSON_GetErrorStr(&json, sError, sizeof(sError)) > 0 && strstr(sError, "Unexpected EOF") != NULL,
+        "An unexpected end of the input is an end of file");
+    CHECK(XJSON_Parse(NULL, NULL, "{}", 2) == XJSON_FAILURE, "Nothing is parsed into nothing");
+
+    /* Objects made outside the parser: not allocated, without their data, numbers that are not numbers */
+    xjson_obj_t stackObj;
+    memset(&stackObj, 0, sizeof(stackObj));
+    stackObj.nType = XJSON_TYPE_OBJECT;
+    CHECK(XJSON_GetObject(&stackObj, "a") == NULL && XJSON_GetObjects(&stackObj) == NULL,
+        "An object without a map has no members");
+    char *pText = XJSON_DumpObj(&stackObj, 0, NULL);
+    CHECK(pText == NULL, "Nor is it written");
+    stackObj.nType = XJSON_TYPE_ARRAY;
+    CHECK(XJSON_GetArrayLength(&stackObj) == 0 && XJSON_DumpObj(&stackObj, 0, NULL) == NULL, "An array without one neither");
+    XJSON_FreeObject(&stackObj);
+    XJSON_SetStrict(NULL, XTRUE);
+
+    xjson_obj_t *pNumber = json_number_text("n", "12x");
+    CHECK(XJSON_GetInt(pNumber) == 0 && XJSON_GetU64(pNumber) == 0, "Text after the digits is no number");
+    XJSON_FreeObject(pNumber);
+    pNumber = json_number_text("n", "99999999999999999999999");
+    CHECK(XJSON_GetInt(pNumber) == 0 && XJSON_GetU64(pNumber) == 0, "Nor is one past the range");
+    XJSON_FreeObject(pNumber);
+    pNumber = json_number_text("n", "3000000000");
+    CHECK(XJSON_GetInt(pNumber) == 0 && XJSON_GetU64(pNumber) == 3000000000ULL, "An int takes less than an unsigned");
+    XJSON_FreeObject(pNumber);
+    pNumber = json_number_text("n", "");
+    CHECK(XJSON_GetU64(pNumber) == 0 && XJSON_GetInt(pNumber) == 0, "No digits are no number");
+    XJSON_FreeObject(pNumber);
+    pNumber = json_number_text("n", "-5");
+    CHECK(XJSON_GetU64(pNumber) == 0 && XJSON_GetInt(pNumber) == -5, "A negative number is not unsigned");
+    XJSON_FreeObject(pNumber);
+
+    /* An empty number is no text to write */
+    xjson_obj_t *pObject = XJSON_NewObject(NULL, NULL, XFALSE);
+    CHECK(pObject != NULL && XJSON_AddObject(pObject, json_number_text("empty", "")) == XJSON_ERR_NONE, "Hold one");
+    CHECK(XJSON_DumpObj(pObject, 0, NULL) == NULL, "An empty number can not be written");
+    XJSON_FreeObject(pObject);
+
+    CHECK(XJSON_AddObject(NULL, pObject) == XJSON_ERR_INVALID && XJSON_AddObject(pObject, NULL) == XJSON_ERR_INVALID,
+        "Adding needs both objects");
+
+    /* A member that is there already is refused without update permission, also as a float */
+    pObject = XJSON_NewObject(NULL, NULL, XFALSE);
+    CHECK(XJSON_AddFloat(pObject, "f", 1.5) == XJSON_ERR_NONE, "Add a float");
+    CHECK(XJSON_AddFloat(pObject, "f", 2.5) == XJSON_ERR_EXITS, "The same name again is refused");
+    CHECK(XJSON_GetFloat(XJSON_GetObject(pObject, "f")) == 1.5, "And the first value stays");
+
+    /* Members of an array have no names, so nothing named is created in one */
+    xjson_obj_t *pArray = XJSON_GetOrCreateArray(pObject, "list", XFALSE);
+    CHECK(pArray != NULL && XJSON_GetOrCreateObject(pArray, "x", XFALSE) == NULL &&
+        XJSON_GetOrCreateArray(pArray, "y", XFALSE) == NULL, "A named container is not put in an array");
+    CHECK(XJSON_GetArrayLength(pArray) == 0, "And nothing is left behind");
+    CHECK(XJSON_RemoveArrayItem(pArray, 3) == 0 && XJSON_GetArrayLength(pArray) == 0, "Removing past the end does nothing");
+
+    /* A strict container added to a strict one stays as it is */
+    xjson_obj_t *pChild = XJSON_NewObject(NULL, "child", XFALSE);
+    XJSON_SetStrict(pObject, XTRUE);
+    XJSON_SetStrict(pChild, XTRUE);
+    CHECK(XJSON_AddObject(pObject, pChild) == XJSON_ERR_NONE && pChild->nStrict == XJSON_STRICT_ON, "Its own mode is kept");
+
+    /* Pretty writing with every container linted or not, without a format of its own */
+    CHECK(XJSON_AddInt(pArray, NULL, 7) == XJSON_ERR_NONE && XJSON_AddNull(pArray, NULL) == XJSON_ERR_NONE, "Fill the array");
+    pArray->nAllowLinter = 0;
+    pChild->nAllowLinter = 0;
+    CHECK(XJSON_AddBool(pChild, "b", 1) == XJSON_ERR_NONE, "Fill the child");
+    size_t nLength = 1;
+    pText = XJSON_FormatObj(pObject, 2, NULL, NULL);
+    CHECK(pText != NULL && strstr(pText, "\n") != NULL, "An object is written pretty without a format or a length");
+    free(pText);
+    pText = XJSON_DumpObj(pObject, 4, &nLength);
+    CHECK(pText != NULL && nLength == strlen(pText), "And dumped with tabs");
+    free(pText);
+    XJSON_FreeObject(pObject);
+
+    /* The convenience entry points refuse what is not there, or does not fit */
+    CHECK(XJSON_Format(NULL, 2, NULL, NULL) == NULL && XJSON_Dump(NULL, 0, NULL) == NULL, "No document is written");
+    CHECK(XJSON_WriteObject(NULL, NULL) == XJSON_FAILURE, "No object is written");
+    CHECK(XJSON_FromStr(NULL, "%s", "") == NULL && XJSON_FromStr(NULL, "%s", "not json") == NULL,
+        "No text and no JSON make no object");
+
+    CHECK(XJSON_Parse(&json, NULL, "{\"a\":[1,2,3]}", 13) == XJSON_SUCCESS, "Parse a document");
+    char sSmall[4];
+    CHECK(XJSON_Write(&json, sSmall, sizeof(sSmall)) == XJSON_FAILURE, "A document longer than the output is not written");
+    char sOutput[64];
+    CHECK(XJSON_Write(&json, sOutput, sizeof(sOutput)) == XJSON_SUCCESS && !strcmp(sOutput, "{\"a\":[1,2,3]}"),
+        "One that fits is");
+    XJSON_Destroy(&json);
+
+    char sFixed[32];
+    xjson_writer_t writer;
+    CHECK(XJSON_InitWriter(&writer, NULL, sFixed, sizeof(sFixed)) == XJSON_SUCCESS && !writer.nAlloc,
+        "A writer can use a buffer");
+    XJSON_DestroyWriter(&writer);
+    XJSON_DestroyWriter(NULL);
+
+    /* A duplicate name that holds an array is refused like any other */
+    CHECK(XJSON_Parse(&json, NULL, "{\"a\":1,\"a\":[1]}", 15) == XJSON_FAILURE && json.nError == XJSON_ERR_EXITS,
+        "A duplicate array member is refused");
+
+    /* A field the scan is not asked about by name is skipped */
+    xjson_field_t fields[2] = { { NULL, NULL, 0, XJSON_TYPE_INVALID }, { "a", NULL, 0, XJSON_TYPE_INVALID } };
+    CHECK(XJSON_ScanFlat("{\"a\":1}", 7, fields, 2) && fields[1].nType == XJSON_TYPE_NUMBER, "A field without a name is skipped");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
     XTEST_CASE(parse_matrix),
     XTEST_CASE(parse_boundaries),
     XTEST_CASE(builders_and_writers),

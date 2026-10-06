@@ -138,6 +138,15 @@ int __wrap_fcntl(int nFD, int nCommand, ...)
     if (nCommand == F_GETFD) return __real_fcntl(nFD, nCommand);
     va_list args;
     va_start(args, nCommand);
+
+    /* The lock commands take a pointer: the coverage runtime locks its data files through here at exit */
+    if (nCommand == F_GETLK || nCommand == F_SETLK || nCommand == F_SETLKW)
+    {
+        struct flock *pLock = va_arg(args, struct flock*);
+        va_end(args);
+        return __real_fcntl(nFD, nCommand, pLock);
+    }
+
     int nArg = va_arg(args, int);
     va_end(args);
     if ((nCommand == F_SETFL && fault_hit(FAULT_SETFL)) || (nCommand == F_SETFD && fault_hit(FAULT_SETFD))) return -1;

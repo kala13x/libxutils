@@ -519,6 +519,16 @@ static int XSearch_Directory(xsearch_t *pSearch, const char *pDirectory, size_t 
     size_t nDirLen = strlen(pDirectory);
     while (nDirLen && pDirectory[nDirLen--] == XSTR_SPACE_CHAR);
     const char *pSlash = pDirectory[nDirLen] == '/' ? XSTR_EMPTY : "/";
+
+    /* A path cut to the buffer names another file, so one that does not fit is reported and skipped */
+    size_t nDirPathLen = strlen(pDirectory) + strlen(pSlash);
+    if (nDirPathLen >= XPATH_MAX)
+    {
+        XSearch_ErrorCallback(pSearch, "Path is too long: %s", pDirectory);
+        free(pPaths);
+        return XSYNC_ATOMIC_GET(pSearch->pInterrupted) ? XSTDERR : XSTDOK;
+    }
+
     xstrncpyf(sDirPath, XPATH_MAX, "%s%s", pDirectory, pSlash);
 
     if (XDir_Open(&dirHandle, sDirPath) < 0)
@@ -534,6 +544,15 @@ static int XSearch_Directory(xsearch_t *pSearch, const char *pDirectory, size_t 
         xstat_t statbuf;
 
         const char *pEntryName = dirHandle.pCurrEntry;
+        if (nDirPathLen + strlen(pEntryName) >= XPATH_MAX)
+        {
+            XSearch_ErrorCallback(pSearch, "Path is too long: %s%s", sDirPath, pEntryName);
+            if (!XSYNC_ATOMIC_GET(pSearch->pInterrupted)) continue;
+
+            nStatus = XSTDERR;
+            break;
+        }
+
         xstrncpyf(sFullPath, XPATH_MAX, "%s%s", sDirPath, pEntryName);
 
         if (xstat(sFullPath, &statbuf) < 0)

@@ -430,7 +430,78 @@ static int XTest_borrowed_resize(void)
     return 0;
 }
 
+static int XTest_guards(void)
+{
+    xstring_t str, other;
+    char sDst[16];
+
+    CHECK(XString_Add(NULL, "a", 1) == XSTDERR && XString_Insert(NULL, 0, "a", 1) == XSTDERR,
+        "Adding and inserting need a string");
+    CHECK(XString_Init(&str, 8, 0) >= 0 && XString_Add(&str, "abcd", 4) == 4, "Build a string");
+    CHECK(XString_Add(&str, NULL, 1) == XSTDERR && XString_Insert(&str, 0, NULL, 1) == XSTDERR,
+        "Data that is not there can not be added");
+    CHECK(XString_Add(&str, "x", INT_MAX) == XSTDERR && XString_Insert(&str, 0, "x", INT_MAX) == XSTDERR,
+        "Nor can more than an int counts");
+    CHECK(XString_Add(&str, str.pData + 2, 3) == XSTDERR && XString_Insert(&str, 0, str.pData + 2, 3) == XSTDERR,
+        "Nor more of the string's own bytes than it holds");
+    CHECK(XString_Insert(&str, 1, "x", 0) == 4 && !strcmp(str.pData, "abcd"), "Inserting nothing changes nothing");
+    CHECK(XString_Remove(&str, 1, 0) == 0 && str.nLength == 4, "Removing nothing changes nothing");
+
+    CHECK(XString_Case(&str, (xstr_case_t)99, 0, 4) == 4 && !strcmp(str.pData, "abcd"), "An unknown case does nothing");
+    CHECK(XString_Search(NULL, 0, "a") == XSTDERR && XString_Search(&str, 4, "a") == XSTDERR,
+        "A search needs a string and a start inside it");
+
+    CHECK(XString_Tokenize(NULL, sDst, sizeof(sDst), 0, ",") == XSTDERR, "Tokenizing needs a string");
+    CHECK(XString_Tokenize(&str, NULL, 0, 0, "c") == 3, "A token need not be copied");
+    CHECK(XString_Token(NULL, &other, 0, ",") == XSTDERR && XString_Token(&str, NULL, 0, ",") == XSTDERR,
+        "A token needs a string and a target");
+
+    CHECK(XString_Replace(NULL, "a", "b") == XSTDERR && XString_Replace(&str, "", "b") == XSTDERR &&
+        XString_Replace(&str, "a", NULL) == XSTDERR, "Replacing needs a string, a match and a replacement");
+    CHECK(XString_Sub(NULL, sDst, sizeof(sDst), 0, 1) == XSTDERR && XString_Sub(&str, sDst, sizeof(sDst), 4, 1) == XSTDERR,
+        "A substring needs a string and a start inside it");
+    CHECK(XString_SubStr(NULL, &other, 0, 1) == XSTDERR && XString_SubStr(&str, &other, 4, 1) == XSTDERR,
+        "So does an owned substring");
+    CHECK(XString_SubStr(&str, &other, 1, 0) == XSTDERR && other.pData == NULL, "An empty substring is refused");
+
+    CHECK(XString_Color(&str, XSTR_CLR_RED, 4, 1) == XSTDERR && XString_Color(&str, XSTR_CLR_RED, 2, 3) == XSTDERR,
+        "Coloring needs a range inside the string");
+
+    CHECK(XString_Cut(NULL, sDst, sizeof(sDst), "a", "c") == XSTDERR, "Cutting needs a string");
+    CHECK(XString_Cut(&str, sDst, sizeof(sDst), "x", "c") == XSTDERR, "And the start of the cut in it");
+    CHECK(XString_Cut(&str, sDst, sizeof(sDst), "abcd", NULL) == XSTDERR, "And something after the start");
+    CHECK(XString_Cut(&str, sDst, sizeof(sDst), "a", NULL) == 3 && !strcmp(sDst, "bcd"), "A cut can run to the end");
+    CHECK(XString_Cut(&str, sDst, sizeof(sDst), "a", "x") == XSTDERR, "An end that is not there is no cut");
+    CHECK(XString_CutSub(NULL, &other, "a", "c") == XSTDERR, "An owned cut needs a string");
+
+    CHECK(XString_From(NULL, 1) == NULL && XString_From("a", 0) == NULL, "A string is made from something");
+    CHECK(XString_FromFmt("%s", "") == NULL, "An empty format makes no string");
+    CHECK(XString_FromStr(NULL) == NULL, "Nor does no string");
+    CHECK(XString_SplitStr(NULL, ",") == NULL, "Nothing is split");
+
+    CHECK(XString_Copy(NULL, &str) == XSTDERR && XString_Copy(&other, NULL) == XSTDERR, "A copy needs both strings");
+
+    xstring_t empty;
+    CHECK(XString_Init(&empty, 0, 0) >= 0, "Make an empty string");
+    CHECK(XString_AddString(&str, &empty) == XSTDERR, "An empty string adds nothing");
+    CHECK(XString_Copy(&other, &empty) == XSTDERR, "Nor is it copied");
+    CHECK(XString_ChangeCase(&empty, XSTR_UPPER) == XSTDERR && XString_ChangeColor(&empty, XSTR_CLR_RED) == XSTDERR,
+        "An empty string has nothing to case or color");
+    CHECK(XString_Color(&empty, XSTR_CLR_RED, 0, 1) == XSTDERR, "Nor any range");
+    CHECK(XString_Tokenize(&empty, sDst, sizeof(sDst), 0, ",") == XSTDERR, "Nor any token");
+    CHECK(XString_Token(&empty, &other, 0, ",") == XSTDERR && XString_Replace(&empty, "a", "b") == XSTDERR,
+        "Nor anything to replace");
+    CHECK(XString_Cut(&empty, sDst, sizeof(sDst), "a", NULL) == XSTDERR &&
+        XString_CutSub(&empty, &other, "a", NULL) == XSTDERR, "Nor anything to cut");
+    CHECK(XString_FromStr(&empty) == NULL && XString_SplitStr(&empty, ",") == NULL, "And makes nothing");
+    XString_Clear(&empty);
+
+    XString_Clear(&str);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(guards),
     XTEST_CASE(build),
     XTEST_CASE(edit),
     XTEST_CASE(transform),

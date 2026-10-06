@@ -344,7 +344,59 @@ static int XTest_pair_transfer(void)
     return 0;
 }
 
+static int XTest_api_guards(void)
+{
+    char sKey[] = "key";
+    int nIndex = 0;
+    xmap_t map;
+
+    CHECK(XMap_Init(NULL, NULL, 4) == XMAP_OINV, "A map is initialized in place");
+    XMap_Free(NULL);
+    XMap_Reset(NULL);
+    CHECK(XMap_Iterate(NULL, NULL, NULL) == XMAP_OINV && XMap_UsedSize(NULL) == XMAP_OINV, "No map has nothing in it");
+    CHECK(XMap_Hash(NULL, "a") == XMAP_OINV && XMap_HashFNV(NULL, "a") == XMAP_OINV, "No map hashes nothing");
+    CHECK(XMap_GetHash(NULL, "a") == XMAP_OINV && XMap_Realloc(NULL) == XMAP_OINV, "Nor places anything");
+    CHECK(XMap_Put(NULL, sKey, NULL) == XMAP_OINV && XMap_PutPair(NULL, NULL) == XMAP_OINV, "Nor stores anything");
+    CHECK(XMap_Update(NULL, 0, NULL) == XMAP_OINV && XMap_Remove(NULL, "a") == XMAP_OINV, "Nor changes anything");
+    CHECK(XMap_GetPair(NULL, "a") == NULL && XMap_Get(NULL, "a") == NULL && XMap_GetIndex(NULL, "a", &nIndex) == NULL,
+        "Nor finds anything");
+
+    /* A map with no table yet */
+    CHECK(XMap_Init(&map, NULL, 0) == XMAP_OK, "A map starts without a table");
+    CHECK(XMap_Hash(&map, "a") == XMAP_EINIT && XMap_GetHash(&map, "a") == XMAP_EINIT, "It has nowhere to hash to");
+    CHECK(XMap_Hash(&map, NULL) == XMAP_OINV && XMap_GetHash(&map, NULL) == XMAP_OINV, "And no key hashes");
+    CHECK(XMap_GetPair(&map, "a") == NULL && XMap_Get(&map, "a") == NULL && XMap_Remove(&map, "a") == XMAP_EINIT,
+        "Nothing is found or removed in it");
+    CHECK(XMap_GetIndex(&map, "a", &nIndex) == NULL && XMap_Iterate(&map, NULL, NULL) == XMAP_EINIT, "Or walked");
+    CHECK(XMap_Put(&map, NULL, NULL) == XMAP_OINV, "A key is needed to store");
+    CHECK(XMap_Put(&map, sKey, sKey) == XMAP_OK && XMap_Get(&map, "key") == sKey, "The first store makes the table");
+
+    /* Keys and indexes that are not there */
+    CHECK(XMap_GetPair(&map, NULL) == NULL && XMap_Get(&map, NULL) == NULL && XMap_Remove(&map, NULL) == XMAP_OINV,
+        "No key finds nothing");
+    CHECK(XMap_GetIndex(&map, NULL, &nIndex) == NULL && XMap_GetIndex(&map, "key", NULL) == NULL,
+        "An index lookup needs a key and somewhere to put it");
+    CHECK(XMap_Update(&map, -1, NULL) == XMAP_OINV && XMap_Update(&map, (int)map.nTableSize, NULL) == XMAP_MISSING,
+        "An update needs an index inside the table");
+    CHECK(XMap_Remove(&map, "absent") == XMAP_MISSING, "A key that is not there is missing");
+
+    /* An update of a free slot fills it, of a deleted one takes it back */
+    int nFree = XMap_GetHash(&map, "other");
+    CHECK(nFree >= 0 && XMap_Update(&map, nFree, sKey) == XMAP_OK && map.nCount == 2, "A free slot is filled");
+    CHECK(XMap_Remove(&map, "key") == XMAP_OK && map.nDeleted == 1, "Remove a key");
+    for (uint32_t i = 0; i < map.nTableSize; i++)
+    {
+        if (map.pPairs[i].eStatus != XMAP_PAIR_DELETED) continue;
+        CHECK(XMap_Update(&map, (int)i, sKey) == XMAP_OK && map.nDeleted == 0, "A deleted slot is taken back");
+    }
+
+    map.pPairs[nFree].pKey = NULL;
+    XMap_Destroy(&map);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
     XTEST_CASE(lifecycle),
     XTEST_CASE(reference_model),
     XTEST_CASE(operations),

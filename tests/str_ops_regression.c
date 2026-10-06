@@ -488,6 +488,18 @@ static int XTest_duplicate(void)
     pTarget = xstrxcpy("%d", 7);
     CHECK(pTarget != NULL && strcmp(pTarget, "7") == 0, "The allocating format copy works");
     free(pTarget);
+
+#ifdef _XUTILS_USE_GNU
+    /* A wide character the locale can not encode fails the format. What vasprintf() leaves in the pointer then
+       is undefined, and some C libraries leave the caller's value: it was freed as if it were a result. */
+    static const wchar_t sWide[] = { 0x100, 0 };
+    char sOwned[8] = "owned";
+    pTarget = sOwned;
+
+    CHECK(xstrxcpyf(&pTarget, "%ls", sWide) == 0, "A format that fails copies nothing");
+    CHECK(pTarget == NULL && strcmp(sOwned, "owned") == 0, "It hands back no string and frees nothing of the caller's");
+    CHECK(xstrxcpy("%ls", sWide) == NULL, "The allocating copy of it fails as well");
+#endif
     return 0;
 }
 
@@ -905,7 +917,147 @@ static int XTest_format_boundaries(void)
     return 0;
 }
 
+static char* str_pool_copy(xpool_t *pPool, size_t *pLength, const char *pFmt, ...)
+{
+    va_list args;
+    va_start(args, pFmt);
+    char *pCopy = xstrpcpyargs(pPool, pFmt, args, pLength);
+    va_end(args);
+    return pCopy;
+}
+
+static int XTest_argument_guards(void)
+{
+    static const wchar_t sWide[] = { 0x100, 0 };
+    char sDst[16], sBig[XSTR_MIN * 2];
+    size_t nLength = 1;
+
+    CHECK(xstralloc(0) == NULL, "A zero length allocation is refused");
+    CHECK(!xstrrand(NULL, 8, 4, XTRUE, XTRUE) && !xstrrand(sDst, 0, 4, XTRUE, XTRUE) &&
+        !xstrrand(sDst, sizeof(sDst), 0, XTRUE, XTRUE), "Random text needs a buffer, room and a length");
+
+    CHECK(!xstrncmpn(NULL, 1, "a", 1) && !xstrncmpn("a", 1, NULL, 1) && !xstrncmpn("a", 0, "a", 0),
+        "A bounded comparison with a missing or empty side is false");
+    CHECK(!xstrnmatch(NULL, 1, "*", 1) && !xstrnmatch("a", 1, NULL, 1), "Matching needs a string and a pattern");
+    CHECK(!xstrmatch(NULL, 1, "*") && !xstrmatch("a", 1, NULL), "And so does the terminated pattern");
+    CHECK(!xstrmatchm(NULL, 1, "*", ";") && !xstrmatchm("a", 1, NULL, ";"), "And the multi pattern");
+    CHECK(xstrmatchm("abc", 0, "", NULL) && !xstrmatchm("abc", 0, "a*", NULL), "No text matches only no pattern");
+    CHECK(!xstrmatchm("abc", 3, ";abc", NULL), "A pattern starting with the separator is matched as written");
+    CHECK(xstrmatchm("abc", 3, "x,a*", ",") && !xstrmatchm("abc", 3, "x;a*", ","), "The separator can be chosen");
+
+    /* Formatting into a pool: short and long results, with and without a length, and nothing for no text */
+    xpool_t pool;
+    CHECK(XPool_Init(&pool, 4096) == XSTDOK, "Create a pool");
+
+    char *pCopy = str_pool_copy(&pool, NULL, "%s", "short");
+    CHECK(pCopy != NULL && !strcmp(pCopy, "short"), "A short result is formatted without its length");
+    CHECK(str_pool_copy(&pool, &nLength, "%s", "") == NULL && nLength == 0, "No text formats to nothing");
+    CHECK(str_pool_copy(&pool, &nLength, "%ls", sWide) == NULL && nLength == 0, "A failed format gives nothing");
+
+    memset(sBig, 'b', sizeof(sBig) - 1);
+    sBig[sizeof(sBig) - 1] = '\0';
+    pCopy = str_pool_copy(&pool, &nLength, "%s", sBig);
+    CHECK(pCopy != NULL && nLength == sizeof(sBig) - 1 && !strcmp(pCopy, sBig), "A long result is measured first");
+    pCopy = str_pool_copy(&pool, NULL, "%s", sBig);
+    CHECK(pCopy != NULL && !strcmp(pCopy, sBig), "Its length need not be asked for");
+    XPool_Destroy(&pool);
+
+    pCopy = xstracpyn(NULL, "%d", 42);
+    CHECK(pCopy != NULL && !strcmp(pCopy, "42"), "A counted copy need not count");
+    free(pCopy);
+
+#ifdef _XUTILS_USE_GNU
+    CHECK(xstrxcpy("%s", "") == NULL, "An empty allocating copy is no copy");
+    CHECK(!xstrxcpyf(NULL, "%d", 1) && !xstrxcpyf(&pCopy, NULL), "The indirect copy needs a target and a format");
+#endif
+
+    CHECK(!xstrncpyfl(NULL, 8, 4, '.', "x") && !xstrncpyfl(sDst, 0, 4, '.', "x"), "A filled copy needs room");
+    CHECK(xstrncpyfl(sDst, 4, 10, '.', "%s", "a") == 3 && !strcmp(sDst, "a.."), "A field wider than the buffer fills it");
+    CHECK(!xstrnlcpyf(sDst, sizeof(sDst), 4, '.', "%s", "") && sDst[0] == '\0', "A left filled copy of nothing is empty");
+    CHECK(!xstrnrgb(NULL, 8, 1, 2, 3) && !xstrnrgb(sDst, 0, 1, 2, 3), "A color code needs room");
+
+    size_t nChars = 0, nPosit = 0;
+    CHECK(xstrextra("\x1BZ\xC2Z", 4, 0, &nChars, &nPosit) == 0 && nChars == 4 && nPosit == 4,
+        "An escape that starts no known sequence is text");
+
+    CHECK(!xstrncat(NULL, 8, "x") && !xstrncat(sDst, 0, "x"), "Appending needs room");
+    CHECK(!xstrncatf(NULL, 8, "x") && !xstrncatf(sDst, 0, "x"), "So does the counted append");
+    CHECK(!xstrnclr(NULL, 8, XSTR_CLR_RED, "x") && !xstrnclr(sDst, 0, XSTR_CLR_RED, "x"), "So does coloring");
+
+    xstrncpy(sDst, sizeof(sDst), "MiXeD");
+    CHECK(xstrcase(sDst, (xstr_case_t)99) == 0 && !strcmp(sDst, "MiXeD"), "An unknown case leaves the string alone");
+    CHECK(xstrncases(sDst, sizeof(sDst), (xstr_case_t)99, "AbC", 3) == 3 && !strcmp(sDst, "AbC"),
+        "An unknown case copies as it is");
+    CHECK(!xstrncase(NULL, 8, XSTR_LOWER, "a") && !xstrncase(sDst, 8, XSTR_LOWER, NULL) &&
+        !xstrncase(sDst, 0, XSTR_LOWER, "a"), "Casing a copy needs both strings and room");
+    CHECK(xstracase("", XSTR_LOWER) == NULL && xstracasen("", XSTR_LOWER, 4) == NULL &&
+        xstracasen("abc", XSTR_LOWER, 0) == NULL, "Nothing to case allocates nothing");
+
+    CHECK(xstrnsrc(NULL, 3, "a", 0) < 0 && xstrnsrc("abc", 3, NULL, 0) < 0 && xstrnsrc("abc", 3, "a", 3) < 0,
+        "A bounded search needs a string, a needle and a start inside it");
+    CHECK(xstrnsrc("abc", 3, "bcd", 1) < 0, "A needle longer than what is left is not found");
+    CHECK(xstrsrcp(NULL, "a", 0) < 0 && xstrsrcp("abc", NULL, 0) < 0, "A positioned search needs both strings");
+
+    /* Tokens: an empty delimiter, one at the very start, and the copy into a buffer */
+    char *pReplaced = xstrrep("abc", "", "x");
+    CHECK(pReplaced != NULL && !strcmp(pReplaced, "abc"), "Nothing to replace leaves the text");
+    free(pReplaced);
+    pReplaced = xstrrep(",a,", ",", "-");
+    CHECK(pReplaced != NULL && !strcmp(pReplaced, "-a-"), "A match at the start and at the end is replaced");
+    free(pReplaced);
+    CHECK(xstrntok(sDst, sizeof(sDst), "a,,b", 2, ",") == 3 && sDst[0] == '\0', "So it is when tokenizing a string");
+    CHECK(xstrntokat(NULL, 0, "abc", 3, 0, "c", 1) == 3, "A token need not be copied");
+    CHECK(xstrntokat(sDst, sizeof(sDst), "axab", 4, 0, "ab", 2) == 4 && !strcmp(sDst, "ax"),
+        "A partial delimiter is part of the token");
+
+    CHECK(!xstrncuts(sDst, sizeof(sDst), "a=b", NULL, NULL) && sDst[0] == '\0', "A cut needs one of its ends");
+    CHECK(xstrncuts(sDst, sizeof(sDst), "key=value", NULL, "=") == 3 && !strcmp(sDst, "key"), "A cut can start at the start");
+
+    char sCut[] = "head:body";
+    CHECK(xstrcut(sCut, NULL, NULL) == NULL, "An in place cut needs one of its ends");
+    CHECK(!strcmp(xstrcut(sCut, "head:", NULL), "body"), "An in place cut can run to the end");
+
+    CHECK(!xstrncut(sDst, sizeof(sDst), NULL, 0, 1) && !xstrncut(sDst, 0, "a", 0, 1) && !xstrncut(sDst, 8, "a", 0, 0),
+        "A bounded cut needs a source, room and a length");
+    CHECK(!xstrncut(sDst, sizeof(sDst), "", 0, 1) && !xstrncut(sDst, sizeof(sDst), "ab", 2, 1), "And something to cut");
+    CHECK(xstracut(NULL, 0, 1) == NULL && xstracut("a", 0, 0) == NULL && xstracut("", 0, 1) == NULL &&
+        xstracut("ab", 2, 1) == NULL, "An allocated cut needs something to cut");
+
+    xstrncpy(sDst, sizeof(sDst), "abcdef");
+    CHECK(!xstrnrm(NULL, 0, 1) && !xstrnrm(sDst, 0, 0) && !xstrnrm(sDst, 6, 1), "Removing needs a range inside");
+    CHECK(xstrnrm(sDst, 2, 10) == 2 && !strcmp(sDst, "ab"), "Removing past the end cuts the tail");
+    CHECK(xstrnrm(sDst, 0, 2) == 0 && sDst[0] == '\0', "Removing everything leaves nothing");
+
+    CHECK(xstrrep(NULL, "a", "b") == NULL && xstrrep("a", NULL, "b") == NULL && xstrrep("a", "a", NULL) == NULL,
+        "Replacing needs all three strings");
+    CHECK(xstrnrep(NULL, 8, "a", "a", "b") == XSTDINV, "Replacing in place needs a destination");
+    CHECK(xstrnrep(sDst, 8, NULL, "a", "b") == XSTDINV && xstrnrep(sDst, 8, "a", NULL, "b") == XSTDINV &&
+        xstrnrep(sDst, 8, "a", "a", NULL) == XSTDINV, "And all three strings");
+    CHECK(xstrnrep(sDst, sizeof(sDst), "aXbXc", "X", "--") == XSTDOK && !strcmp(sDst, "a--b--c"),
+        "Text between the matches is kept");
+    CHECK(xstrnrep(sDst, 3, "abcXd", "X", "-") == XSTDNON, "A destination too small for the text before a match");
+    CHECK(xstrnrep(sDst, 5, "abX", "X", "---") == XSTDNON, "Or for the replacement is not enough");
+
+    CHECK(xstrpdup(NULL, NULL) == NULL, "Nothing is duplicated into a pool");
+    xstrnull(sDst, 0);
+    CHECK(sDst[0] == '\0', "Clearing no length clears the first byte");
+    xstrnul(NULL);
+
+    xarray_t tokens;
+    XArray_Init(&tokens, NULL, 0, XFALSE);
+    CHECK(!xstrsplita(NULL, ",", &tokens, XFALSE, XFALSE) && !xstrsplita("a", NULL, &tokens, XFALSE, XFALSE) &&
+        !xstrsplita("a", ",", NULL, XFALSE, XFALSE), "Splitting needs a string, a delimiter and a target");
+    XArray_Destroy(&tokens);
+
+    CHECK(xstrsplit(NULL, ",") == NULL && xstrsplit("a", "") == NULL, "A split needs a string and a delimiter");
+    CHECK(xstrsplitd("", ",") == NULL && xstrsplitd("a", NULL) == NULL, "So does one keeping the delimiters");
+    CHECK(xstrsplite(NULL, ",") == NULL && xstrsplite("a", "") == NULL, "So does one keeping empty tokens");
+    CHECK(xstrsplit(",,,", ",") == NULL, "Delimiters alone split into nothing");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(argument_guards),
     XTEST_CASE(split_scaling),
     XTEST_CASE(match_pathological),
     XTEST_CASE(bounded_copies),

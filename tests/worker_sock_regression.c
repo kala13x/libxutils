@@ -71,7 +71,7 @@ static int XTest_unix_backlog(void)
         xsock_t connector;
         int nResult = XSock_Create(&connector, XSOCK_UNIX_CLIENT | XSOCK_NB, sPath, 0);
         XSock_Close(&connector);
-        _exit(nResult == XSOCK_INVALID ? 0 : 1);
+        XTEST_EXIT(nResult == XSOCK_INVALID ? 0 : 1);
     }
     int nStatus = 0;
     CHECK(waitpid(nChild, &nStatus, 0) == nChild, "Reap connector");

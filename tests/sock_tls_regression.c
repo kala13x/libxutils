@@ -1118,8 +1118,201 @@ static int XTest_pkcs12_ownership(void)
     return 0;
 }
 
+/* A TLS session over loopback with both ends in this thread: both are non-blocking, so the handshake is stepped
+   one side at a time. The client trusts the fixture's certificate before the server answers it. */
+static int tls_pair(tls_fixture_t *pFixture, xsock_t *pListener, xsock_t *pClient, xsock_t *pPeer)
+{
+    uint16_t nPort = 0;
+    for (uint16_t nTry = 39700; nTry < 39800 && !nPort; nTry++)
+    {
+        uint32_t nFlags = XSOCK_TCP_SERVER | XSOCK_SSL | XSOCK_NB | XSOCK_REUSEADDR;
+        if (XSock_Create(pListener, nFlags, "127.0.0.1", nTry) != XSOCK_INVALID &&
+            XSock_Status(pListener) == XSOCK_ERR_NONE) nPort = nTry;
+        else XSock_Close(pListener);
+    }
+
+    if (!nPort) return XSTDERR;
+    xsock_cert_t cert;
+    XSock_InitCert(&cert);
+    cert.pCertPath = pFixture->sCert;
+    cert.pKeyPath = pFixture->sKey;
+    if (XSock_SetSSLCert(pListener, &cert) == XSOCK_INVALID) return XSTDERR;
+
+    uint32_t nFlags = XSOCK_TCP_CLIENT | XSOCK_SSL | XSOCK_NB | XSOCK_ASYNC;
+    if (XSock_Create(pClient, nFlags, "127.0.0.1", nPort) == XSOCK_INVALID) return XSTDERR;
+
+    XSock_InitCert(&cert);
+    cert.pCaPath = pFixture->sCert;
+    if (XSock_SetSSLCert(pClient, &cert) == XSOCK_INVALID) return XSTDERR;
+
+    xbool_t bAccepted = XFALSE, bServerDone = XFALSE, bClientDone = XFALSE;
+    for (int i = 0; i < 5000 && !(bServerDone && bClientDone); i++)
+    {
+        if (!bClientDone)
+        {
+            if (XSock_SSLConnect(pClient) == XSOCK_INVALID) return XSTDERR;
+            bClientDone = XSock_Status(pClient) == XSOCK_ERR_NONE;
+        }
+
+        if (!bAccepted)
+        {
+            bAccepted = XSock_Accept(pListener, pPeer) != XSOCK_INVALID;
+            if (!bAccepted && XSock_Status(pListener) != XSOCK_WANT_READ) return XSTDERR;
+            if (bAccepted) bServerDone = XSock_Status(pPeer) == XSOCK_ERR_NONE;
+        }
+        else if (!bServerDone)
+        {
+            if (XSock_SSLAccept(pPeer) == XSOCK_INVALID) return XSTDERR;
+            bServerDone = XSock_Status(pPeer) == XSOCK_ERR_NONE;
+        }
+
+        if (!(bServerDone && bClientDone)) xusleep(1000);
+    }
+
+    return bServerDone && bClientDone ? XSTDOK : XSTDERR;
+}
+
+static void tls_reset(xsock_t *pSock)
+{
+    struct linger reset;
+    reset.l_onoff = 1;
+    reset.l_linger = 0;
+    setsockopt(pSock->nFD, SOL_SOCKET, SO_LINGER, &reset, sizeof(reset));
+    close(pSock->nFD);
+    pSock->nFD = XSOCK_INVALID;
+}
+
+static int XTest_nonblocking_pair(void)
+{
+    tls_fixture_t fixture;
+    if (tls_fixture_begin(&fixture) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("No TLS fixture could be built, skipping\n");
+        return 77;
+    }
+
+    xsock_t listener, client, peer;
+    CHECK(tls_pair(&fixture, &listener, &client, &peer) == XSTDOK, "A non-blocking TLS session is set up");
+
+    /* A writer whose peer does not read fills its buffers and is told to wait, not failed */
+    static uint8_t chunk[16384];
+    memset(chunk, 'c', sizeof(chunk));
+
+    int nWritten = 1;
+    for (int i = 0; i < 100000 && nWritten > 0; i++) nWritten = XSock_SSLWrite(&client, chunk, sizeof(chunk));
+    CHECK(nWritten == 0 && XSock_Status(&client) == XSOCK_WANT_WRITE, "A full session wants a write event");
+    CHECK(XSock_GetFD(&client) != XSOCK_INVALID, "And stays open");
+
+    /* A SIGPIPE that was pending before a TLS call is still pending after it: it belongs to whoever waits for it */
+    sigset_t pipeSet, oldSet, pending;
+    sigemptyset(&pipeSet);
+    sigaddset(&pipeSet, SIGPIPE);
+    CHECK(pthread_sigmask(SIG_BLOCK, &pipeSet, &oldSet) == 0, "Block SIGPIPE");
+    CHECK(pthread_kill(pthread_self(), SIGPIPE) == 0, "Make one pending");
+
+    char sBuffer[256];
+    CHECK(XSock_SSLRead(&peer, sBuffer, sizeof(sBuffer), XFALSE) > 0, "The peer reads");
+    sigemptyset(&pending);
+    CHECK(sigpending(&pending) == 0 && sigismember(&pending, SIGPIPE), "The pending SIGPIPE was left alone");
+
+    struct timespec noWait = { 0, 0 };
+    CHECK(sigtimedwait(&pipeSet, NULL, &noWait) == SIGPIPE, "Consume it");
+    CHECK(pthread_sigmask(SIG_SETMASK, &oldSet, NULL) == 0, "Restore the mask");
+
+    /* A peer that resets the connection fails a read through TLS, and the socket is closed */
+    tls_reset(&peer);
+    xusleep(20000);
+
+    int nRead = 0;
+    for (int i = 0; i < 64; i++)
+    {
+        nRead = XSock_SSLRead(&client, sBuffer, sizeof(sBuffer), XFALSE);
+        if (nRead != 0 || XSock_Status(&client) != XSOCK_WANT_READ) break;
+        xusleep(5000);
+    }
+
+    CHECK(nRead < 0 && XSock_Status(&client) == XSOCK_ERR_SSLREAD, "A reset session is a read error");
+    CHECK(XSock_GetFD(&client) == XSOCK_INVALID, "Which closes the socket");
+    XSock_Close(&client);
+    XSock_Close(&peer);
+    XSock_Close(&listener);
+
+    /* And a write into one is a failed system call */
+    CHECK(tls_pair(&fixture, &listener, &client, &peer) == XSTDOK, "Set up another session");
+    tls_reset(&peer);
+    xusleep(20000);
+
+    int nSent = 1;
+    for (int i = 0; i < 64 && nSent > 0; i++)
+    {
+        nSent = XSock_SSLWrite(&client, chunk, sizeof(chunk));
+        if (nSent > 0) xusleep(5000);
+    }
+
+    CHECK(nSent < 0 && XSock_Status(&client) == XSOCK_ERR_SYSCALL, "Writing into a reset session fails in the system call");
+    CHECK(XSock_GetFD(&client) == XSOCK_INVALID, "Which closes the socket too");
+
+    XSock_Close(&client);
+    XSock_Close(&peer);
+    XSock_Close(&listener);
+    tls_fixture_end(&fixture);
+    return 0;
+}
+
+static int XTest_pkcs12_chain(void)
+{
+    /* A bundle that carries a chain hands it over with the identity, and it is released with it */
+    tls_fixture_t fixture;
+    if (tls_fixture_begin(&fixture) != XSTDOK)
+    {
+        tls_fixture_end(&fixture);
+        printf("No TLS fixture could be built, skipping\n");
+        return 77;
+    }
+
+    FILE *pFile = fopen(fixture.sCert, "rb");
+    X509 *pCert = pFile != NULL ? PEM_read_X509(pFile, NULL, NULL, NULL) : NULL;
+    if (pFile != NULL) fclose(pFile);
+
+    pFile = fopen(fixture.sKey, "rb");
+    EVP_PKEY *pKey = pFile != NULL ? PEM_read_PrivateKey(pFile, NULL, NULL, NULL) : NULL;
+    if (pFile != NULL) fclose(pFile);
+    CHECK(pCert != NULL && pKey != NULL, "Read the identity back");
+
+    STACK_OF(X509) *pChain = sk_X509_new_null();
+    CHECK(pChain != NULL && sk_X509_push(pChain, X509_dup(pCert)) > 0, "Put a certificate in a chain");
+
+    char sChained[160];
+    snprintf(sChained, sizeof(sChained), "%s/chained.p12", fixture.sRoot);
+    PKCS12 *pBundle = PKCS12_create("regression", "xutils", pKey, pCert, pChain, 0, 0, 0, 0, 0);
+    CHECK(pBundle != NULL, "Bundle the identity with its chain");
+
+    pFile = fopen(sChained, "wb");
+    CHECK(pFile != NULL && i2d_PKCS12_fp(pFile, pBundle) == 1, "Write the bundle");
+    fclose(pFile);
+
+    PKCS12_free(pBundle);
+    sk_X509_pop_free(pChain, X509_free);
+    X509_free(pCert);
+    EVP_PKEY_free(pKey);
+
+    xsock_ssl_cert_t loaded;
+    memset(&loaded, 0, sizeof(loaded));
+    CHECK(XSock_LoadPKCS12(&loaded, sChained, "regression") == XSOCK_SUCCESS, "The chained bundle loads");
+    CHECK(loaded.pCert != NULL && loaded.pKey != NULL && loaded.pCa != NULL, "With its chain");
+    XSock_FreePKCS12(&loaded);
+    CHECK(loaded.pCert == NULL && loaded.pKey == NULL && loaded.pCa == NULL, "And all of it is released");
+
+    unlink(sChained);
+    tls_fixture_end(&fixture);
+    return 0;
+}
+
 XTEST_MAIN(
     XTEST_CASE(handshake),
+    XTEST_CASE(nonblocking_pair),
+    XTEST_CASE(pkcs12_chain),
     XTEST_CASE(stale_error_queue),
     XTEST_CASE(pkcs12_identity),
     XTEST_CASE(pkcs12_ownership),

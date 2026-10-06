@@ -360,7 +360,7 @@ XSTATUS XRSA_SetPrivKey(xrsa_ctx_t *pCtx, const char *pPrivKey, size_t nLength)
 
 XSTATUS XRSA_LoadPubKeyFile(xrsa_ctx_t *pCtx, const char *pPath)
 {
-    XCHECK(pCtx && pPath, XSTDINV);
+    XCHECK((pCtx && pPath), XSTDINV);
     if (pCtx->pPublicKey)
     {
         free(pCtx->pPublicKey);

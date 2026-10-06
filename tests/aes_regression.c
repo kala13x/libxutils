@@ -640,7 +640,124 @@ static int XTest_length_overflow(void)
     return 0;
 }
 
+typedef uint8_t* (*aes_op_t)(xaes_t*, const uint8_t*, size_t*);
+
+static int XTest_api_guards(void)
+{
+    const uint8_t key[32] = {7}, nonce[16] = {9};
+    uint8_t data[48] = {1};
+    xaes_key_t aesKey;
+    xaes_t aes;
+
+    XAES_InitKey(NULL, key, 128, NULL, XFALSE);
+    XAES_InitSIVKey(NULL, key, key, 128);
+    XAES_InitKey(&aesKey, key, 128, NULL, XFALSE);
+    CHECK(XAES_Init(NULL, &aesKey, XAES_MODE_CBC) == XSTDERR && XAES_Init(&aes, NULL, XAES_MODE_CBC) == XSTDERR,
+        "Initialization needs a context and a key");
+    XAES_InitSIVKey(&aesKey, key, key, 100);
+    CHECK(XAES_Init(&aes, &aesKey, XAES_MODE_SIV) == XSTDINV, "A SIV key of no AES size is refused");
+
+    XAES_InitSIVKey(&aesKey, key, key, 128);
+    CHECK(XAES_Init(&aes, &aesKey, XAES_MODE_SIV_NONCE) == XSTDOK, "Initialize a nonce fixture");
+    XAES_SetSIVNonce(NULL, nonce, sizeof(nonce));
+    XAES_SetSIVNonce(&aes, NULL, sizeof(nonce));
+    XAES_SetSIVNonce(&aes, nonce, sizeof(nonce) - 1);
+    CHECK(aes.key.IV[0] == 0, "A refused nonce leaves the context alone");
+    XAES_SetSIVNonce(&aes, nonce, sizeof(nonce));
+    CHECK(!memcmp(aes.key.IV, nonce, sizeof(nonce)), "A whole block nonce is taken");
+
+    const aes_op_t ops[] = {
+        XAES_SIV_Crypt, XAES_SIV_Decrypt, XAES_CBC_Crypt, XAES_CBC_Decrypt,
+        XAES_XBC_Crypt, XAES_XBC_Decrypt, XAES_Encrypt, XAES_Decrypt
+    };
+
+    for (size_t i = 0; i < sizeof(ops) / sizeof(*ops); i++)
+    {
+        size_t nLength = sizeof(data);
+        CHECK(ops[i](NULL, data, &nLength) == NULL, "Every mode needs a context");
+        CHECK(ops[i](&aes, NULL, &nLength) == NULL, "Every mode needs input");
+        CHECK(ops[i](&aes, data, NULL) == NULL, "Every mode needs a length");
+        if (ops[i] == XAES_SIV_Crypt || ops[i] == XAES_Encrypt || ops[i] == XAES_Decrypt) continue;
+        nLength = 0;
+        CHECK(ops[i](&aes, data, &nLength) == NULL, "Every mode but SIV encryption needs a length above zero");
+    }
+
+    /* SIV authenticates an empty message with a bare tag, but a bare tag carries nothing to decrypt */
+    size_t nLength = 0;
+    uint8_t *pTag = XAES_SIV_Crypt(&aes, data, &nLength);
+    CHECK(pTag != NULL && nLength == 16, "An empty message encrypts to its tag");
+    CHECK(XAES_SIV_Decrypt(&aes, pTag, &nLength) == NULL, "A bare tag does not decrypt");
+    free(pTag);
+    return 0;
+}
+
+static int XTest_cbc_padding(void)
+{
+    /* With a zero IV carried by the context, CBC decryption of one block is ECB decryption: the last
+       plaintext byte is the padding the decryptor reads */
+    const uint8_t key[16] = {5};
+    const uint8_t pads[] = {0, 17, 0xff};
+
+    for (size_t i = 0; i < sizeof(pads); i++)
+    {
+        xaes_key_t aesKey;
+        xaes_t aes;
+        XAES_InitKey(&aesKey, key, 128, NULL, XFALSE);
+        CHECK(XAES_Init(&aes, &aesKey, XAES_MODE_CBC) == XSTDOK, "Initialize a padding fixture");
+
+        uint8_t block[16];
+        memset(block, 0x10, sizeof(block));
+        block[15] = pads[i];
+        XAES_ECB_Crypt(&aes, block);
+
+        size_t nLength = sizeof(block);
+        CHECK(XAES_CBC_Decrypt(&aes, block, &nLength) == NULL && nLength == sizeof(block),
+            "A padding length of no block size is refused");
+    }
+
+    return 0;
+}
+
+static int XTest_xbc_carried_iv(void)
+{
+    const uint8_t key[16] = {3}, data[] = "carried initialisation vector";
+    xaes_key_t aesKey;
+    xaes_t aes;
+    XAES_InitKey(&aesKey, key, 128, NULL, XTRUE);
+    CHECK(XAES_Init(&aes, &aesKey, XAES_MODE_XBC) == XSTDOK, "Initialize a carried IV fixture");
+
+    size_t nLength = sizeof(data) - 1;
+    uint8_t *pCrypted = XAES_Encrypt(&aes, data, &nLength);
+    CHECK(pCrypted != NULL && nLength > 16 && !((nLength - 16) % 16), "The ciphertext leads with its IV");
+    CHECK(!memcmp(pCrypted, aes.key.IV, 16), "The carried IV is the context's");
+
+    uint8_t sIV[16];
+    memcpy(sIV, aes.key.IV, sizeof(sIV));
+    size_t nPlain = nLength;
+    uint8_t *pPlain = XAES_Decrypt(&aes, pCrypted, &nPlain);
+    CHECK(pPlain != NULL && nPlain == sizeof(data) - 1 && !memcmp(pPlain, data, nPlain), "The carried IV decrypts");
+    CHECK(!memcmp(aes.key.IV, sIV, sizeof(sIV)), "A carried IV does not chain into the context");
+    free(pPlain);
+
+    nPlain = 16;
+    CHECK(XAES_XBC_Decrypt(&aes, pCrypted, &nPlain) == NULL, "A ciphertext of its IV alone is refused");
+    nPlain = nLength - 1;
+    CHECK(XAES_XBC_Decrypt(&aes, pCrypted, &nPlain) == NULL, "A ciphertext off the block size is refused");
+    free(pCrypted);
+
+    XAES_InitKey(&aesKey, key, 128, NULL, XFALSE);
+    CHECK(XAES_Init(&aes, &aesKey, XAES_MODE_XBC) == XSTDOK, "Initialize an uncarried IV fixture");
+    nPlain = 15;
+    CHECK(XAES_XBC_Decrypt(&aes, data, &nPlain) == NULL, "A ciphertext under a block is refused");
+    nPlain = 17;
+    CHECK(XAES_XBC_Decrypt(&aes, data, &nPlain) == NULL, "A ciphertext off the block size is refused");
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
+    XTEST_CASE(cbc_padding),
+    XTEST_CASE(xbc_carried_iv),
     XTEST_CASE(ecb_vector),
     XTEST_CASE(xbc_prefix),
     XTEST_CASE(length_overflow),

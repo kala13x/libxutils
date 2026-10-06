@@ -38,7 +38,10 @@ case "$MODE" in
         CMAKE_ARGS+=('-DCMAKE_C_FLAGS=-fsanitize=thread -fno-omit-frame-pointer' '-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread')
         export TSAN_OPTIONS="${TSAN_OPTIONS:-halt_on_error=1}"
         ;;
-    coverage) CMAKE_ARGS+=('-DCMAKE_C_FLAGS=--coverage' '-DCMAKE_EXE_LINKER_FLAGS=--coverage' -DXUTILS_TEST_COVERAGE=ON) ;;
+    # Atomic counters: threads that run the same code at once otherwise lose increments, and the counts gcov
+    # derives from the ones left go negative and cancel what other tests covered.
+    coverage) CMAKE_ARGS+=('-DCMAKE_C_FLAGS=--coverage -fprofile-update=atomic' '-DCMAKE_EXE_LINKER_FLAGS=--coverage'
+        -DXUTILS_TEST_COVERAGE=ON) ;;
 esac
 cmake "${CMAKE_ARGS[@]}"
 cmake --build "$TEST_BUILD" -j "$TEST_JOBS"

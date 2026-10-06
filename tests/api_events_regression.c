@@ -18,6 +18,9 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
+#include <fcntl.h>
+#include <pwd.h>
+#include <grp.h>
 
 typedef struct {
     xapi_t api;
@@ -1121,8 +1124,39 @@ static int api_ev_accept_exhausted(void)
     for (int i = 0; i < 50 && !test.nAcceptedCb && bQueued; i++) XAPI_Service(&test.api, 20);
     CHECK(test.nAcceptedCb == 1 || !bQueued, "The connection waited in the queue and is accepted once descriptors are free");
 
-    close(nClient);
+    /* Paused again: a wait longer than the pause, or for ever, ends when the listener is due back, and a listener
+       that goes away while it is paused is forgotten with it */
+    int nSecond = (int)socket(AF_INET, SOCK_STREAM, 0);
+    CHECK(nSecond >= 0 && connect(nSecond, (struct sockaddr*)&addr, sizeof(addr)) == 0, "Queue another connection");
+
+    nFilled = 0;
+    while (nFilled < sizeof(nFills) / sizeof(nFills[0]))
+    {
+        int nFD = dup(nClient);
+        if (nFD < 0) break;
+        nFills[nFilled++] = nFD;
+    }
+
+    nErrors = test.nErrors;
+    for (int i = 0; i < 50 && test.nErrors == nErrors; i++) XAPI_Service(&test.api, 10);
+
+    if (bQueued && test.nErrors > nErrors)
+    {
+        nStartMs = XTime_GetMonoMs();
+        CHECK(XAPI_Service(&test.api, 1000) == XEVENTS_SUCCESS, "Wait longer than the pause");
+        CHECK(XTime_GetMonoMs() - nStartMs < 900, "The wait ends when the listener is due back");
+
+        nStartMs = XTime_GetMonoMs();
+        CHECK(XAPI_Service(&test.api, -1) == XEVENTS_SUCCESS, "Wait for ever");
+        CHECK(XTime_GetMonoMs() - nStartMs < 900, "That wait ends then too");
+    }
+
     XAPI_Destroy(&test.api);
+    CHECK(test.api.nAcceptPaused == 0, "A destroyed listener is no longer paused");
+
+    for (size_t i = 0; i < nFilled; i++) close(nFills[i]);
+    close(nSecond);
+    close(nClient);
     return 0;
 }
 
@@ -1130,7 +1164,7 @@ static int XTest_accept_exhausted(void)
 {
     pid_t nPid = fork();
     CHECK(nPid >= 0, "Fork a child for its own descriptor limit");
-    if (nPid == 0) _exit(api_ev_accept_exhausted());
+    if (nPid == 0) XTEST_EXIT(api_ev_accept_exhausted());
 
     int nStatus = 0;
     CHECK(waitpid(nPid, &nStatus, 0) == nPid, "Wait for the child");
@@ -1138,7 +1172,253 @@ static int XTest_accept_exhausted(void)
     return 0;
 }
 
+static int XTest_api_guards(void)
+{
+    api_ev_t test;
+    memset(&test, 0, sizeof(test));
+    CHECK(XAPI_Init(&test.api, api_ev_callback, &test) == XSTDOK, "The API initializes");
+
+    CHECK(!strcmp(XAPI_GetStatus(NULL), "Invalid API context"), "No context has a status of its own");
+    CHECK(XAPI_GetRxBuff(NULL) == NULL && XAPI_GetTxBuff(NULL) == NULL, "No session has no buffers");
+    CHECK(XAPI_PutTxBuff(NULL, NULL) == XSTDINV, "Nothing is queued for no session");
+    CHECK(XAPI_RespondHTTP(NULL, 200, XAPI_UNKNOWN) == XSTDINV, "No session is answered");
+    CHECK(XAPI_AuthorizeHTTP(NULL, "t", "k") == XSTDINV, "No session is authorized");
+    CHECK(XAPI_SetEvents(NULL, XPOLLIN) == XSTDINV && XAPI_EnableEvent(NULL, XPOLLIN) == XSTDINV &&
+        XAPI_DisableEvent(NULL, XPOLLIN) == XSTDINV, "No session has events");
+    CHECK(XAPI_DeleteTimer(NULL) == XSTDINV && XAPI_Disconnect(NULL) == XSTDINV, "No session has a timer or a link");
+    CHECK(XAPI_AddTimer(NULL, 10) == XSTDINV && XAPI_ExtendTimer(NULL, 10) == XSTDINV, "No session gets a timer");
+    CHECK(XAPI_ProcessBuffered(NULL) == XAPI_DISCONNECT, "No session processes anything");
+    CHECK(XAPI_Service(NULL, 0) == XEVENTS_EINVALID && XAPI_Service(&test.api, 0) == XEVENTS_EINVALID,
+        "An API without events has nothing to service");
+    CHECK(XAPI_SetRxSize(NULL, 1) == XSTDINV && XAPI_SetWorkerAffinity(NULL, XTRUE) == XSTDINV,
+        "Settings need an API");
+    CHECK(XAPI_InitWorkers(NULL, 2, XFALSE) == XSTDINV && XAPI_InitWorkers(&test.api, 0, XFALSE) == XSTDINV,
+        "Workers need an API and a count");
+    CHECK(XAPI_InitWorkers(&test.api, 2, XFALSE) == XSTDINV, "And something to serve");
+    XAPI_InitEndpoint(NULL);
+    XAPI_Destroy(NULL);
+
+    /* An API without workers has none to wait for, stop or watch */
+    int nWaitStatus = 0;
+    CHECK(XAPI_WaitWorker(NULL, &nWaitStatus) == XSTDINV && XAPI_WaitWorker(&test.api, &nWaitStatus) == XSTDNON,
+        "There is no worker to wait for");
+    CHECK(XAPI_WaitWorkers(NULL) == XSTDINV && XAPI_WaitWorkers(&test.api) == XSTDNON, "Nor any to wait for at all");
+    CHECK(XAPI_StopWorkers(NULL, SIGTERM) == XSTDINV && XAPI_StopWorkers(&test.api, SIGTERM) == XSTDNON,
+        "Nor any to stop");
+    CHECK(XAPI_WatchWorkers(NULL, NULL) == XSTDINV && XAPI_WatchWorkers(&test.api, NULL) == XSTDNON, "Nor to watch");
+    test.api.bIsWorker = XTRUE;
+    CHECK(XAPI_WatchWorkers(&test.api, NULL) == XSTDNON, "A worker watches no workers");
+    test.api.bIsWorker = XFALSE;
+
+    /* Endpoints that can not be listened on or connected to */
+    xapi_endpoint_t endpoint;
+    XAPI_InitEndpoint(&endpoint);
+    endpoint.eType = XAPI_SOCK;
+    CHECK(XAPI_Listen(&test.api, &endpoint) == XSTDINV && XAPI_Connect(&test.api, &endpoint) == XSTDINV,
+        "An endpoint needs an address");
+    endpoint.pAddr = "127.0.0.1";
+    CHECK(XAPI_Listen(&test.api, &endpoint) == XSTDINV && XAPI_Connect(&test.api, &endpoint) == XSTDINV,
+        "And a port when it is not a unix socket");
+    CHECK(test.nErrors == 2, "Both are reported");
+    endpoint.eType = XAPI_SELF;
+    CHECK(XAPI_Connect(&test.api, &endpoint) == XSTDINV, "The loop's own type is not connected to");
+    CHECK(XAPI_Listen(NULL, &endpoint) == XSTDINV && XAPI_Connect(NULL, &endpoint) == XSTDINV &&
+        XAPI_Listen(&test.api, NULL) == XSTDINV && XAPI_Connect(&test.api, NULL) == XSTDINV,
+        "Listening and connecting need an API and an endpoint");
+    CHECK(XAPI_AddPeer(NULL, &endpoint) == XSTDINV && XAPI_AddPeer(&test.api, NULL) == XSTDINV,
+        "So does adding a peer");
+    CHECK(XAPI_AddEndpoint(NULL, &endpoint) == XSTDINV && XAPI_AddEndpoint(&test.api, NULL) == XSTDINV,
+        "And adding an endpoint");
+
+    XAPI_Destroy(&test.api);
+    return 0;
+}
+
+static int XTest_event_dispatch(void)
+{
+    /* What the event loop reports is mapped to the callback whatever the reason, also one the loop itself does
+       not produce for an API: a user callback is passed on, anything unknown is let be */
+    api_ev_t test;
+    int nFD = api_ev_connect(&test, XPOLLIN, XFALSE);
+    if (nFD < 0) { printf("No loopback fixture, skipping\n"); return 77; }
+
+    xevents_t *pEvents = &test.api.events;
+    CHECK(pEvents->eventCallback(pEvents, NULL, XSOCK_INVALID, XEVENT_CB_USER) == XEVENTS_CONTINUE,
+        "A user callback continues the loop");
+    CHECK(test.nUserCbs == 1, "And reaches the user");
+    CHECK(pEvents->eventCallback(pEvents, NULL, XSOCK_INVALID, XEVENT_CB_EXCEPTION) == XEVENTS_CONTINUE &&
+        pEvents->eventCallback(pEvents, NULL, XSOCK_INVALID, XEVENT_CB_ERROR) == XEVENTS_CONTINUE,
+        "A reason the API does not handle is let be");
+    CHECK(pEvents->eventCallback(NULL, NULL, XSOCK_INVALID, XEVENT_CB_USER) == XEVENTS_CONTINUE, "So is no loop");
+    CHECK(test.nUserCbs == 1 && test.nErrors == 0, "Without reaching the user");
+
+    close(nFD);
+    XAPI_Destroy(&test.api);
+    return 0;
+}
+
+static int XTest_peer_reset(void)
+{
+    /* A peer that resets the connection is a read error, which is reported and ends the session */
+    api_ev_t test;
+    int nFD = api_ev_connect(&test, XPOLLIN, XFALSE);
+    if (nFD < 0) { printf("No loopback fixture, skipping\n"); return 77; }
+
+    struct linger reset;
+    reset.l_onoff = 1;
+    reset.l_linger = 0;
+    CHECK(setsockopt(nFD, SOL_SOCKET, SO_LINGER, &reset, sizeof(reset)) == 0, "Make the close a reset");
+    close(nFD);
+
+    for (int i = 0; i < 100 && XAPI_GetEventCount(&test.api) > 1; i++) XAPI_Service(&test.api, 20);
+    CHECK(test.nErrors == 1 && test.nRead == 0, "The reset is reported as an error, not as data");
+    CHECK(test.nClosedCb == 1 && XAPI_GetEventCount(&test.api) == 1, "And the session is gone");
+
+    XAPI_Destroy(&test.api);
+    return 0;
+}
+
+static int api_ev_refuse(xapi_ctx_t *pCtx, xapi_session_t *pSession)
+{
+    api_ev_t *pTest = (api_ev_t*)pCtx->pApi->pUserCtx;
+    if (pCtx->eCbType == XAPI_CB_CLOSED) pTest->nClosedCb++;
+    if (pCtx->eCbType == XAPI_CB_ACCEPTED)
+    {
+        pTest->nAcceptedCb++;
+        return XAPI_DISCONNECT;
+    }
+
+    (void)pSession;
+    return XAPI_CONTINUE;
+}
+
+static int XTest_accept_refused(void)
+{
+    /* A peer the accept callback refuses is dropped at once, and the listener goes on accepting */
+    api_ev_t test;
+    memset(&test, 0, sizeof(test));
+    CHECK(XAPI_Init(&test.api, api_ev_refuse, &test) == XSTDOK, "The API initializes");
+
+    uint16_t nPort = api_ev_port();
+    CHECK(nPort != 0, "Find a free port");
+
+    xapi_endpoint_t listener;
+    XAPI_InitEndpoint(&listener);
+    listener.eType = XAPI_SOCK;
+    listener.eRole = XAPI_SERVER;
+    listener.pAddr = "127.0.0.1";
+    listener.pUri = "/refused";
+    listener.nPort = nPort;
+    CHECK(XAPI_Listen(&test.api, &listener) == XSTDOK, "Listen");
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(nPort);
+
+    for (int nClient = 0; nClient < 2; nClient++)
+    {
+        int nFD = (int)socket(AF_INET, SOCK_STREAM, 0);
+        CHECK(nFD >= 0 && connect(nFD, (struct sockaddr*)&addr, sizeof(addr)) == 0, "Connect");
+        for (int i = 0; i < 100 && test.nAcceptedCb == nClient; i++) XAPI_Service(&test.api, 20);
+
+        char cByte;
+        CHECK(test.nAcceptedCb == nClient + 1 && test.nClosedCb == nClient + 1, "The refused peer is closed");
+        CHECK(XAPI_GetEventCount(&test.api) == 1, "Only the listener is left");
+        CHECK(recv(nFD, &cByte, 1, 0) == 0, "The client sees the end of the stream");
+        close(nFD);
+    }
+
+    XAPI_Destroy(&test.api);
+    return 0;
+}
+
+static int XTest_unix_listener(void)
+{
+    /* A unix listener makes its directory, takes its mode and owner, and says which of them failed */
+    char sDir[] = "/tmp/xutils-api-XXXXXX";
+    CHECK(mkdtemp(sDir) != NULL, "Create a directory");
+
+    char sBlocked[64], sPath[96];
+    snprintf(sBlocked, sizeof(sBlocked), "%s/file", sDir);
+    CHECK(close(open(sBlocked, O_CREAT | O_WRONLY, 0600)) == 0, "A file is where a directory has to go");
+
+    api_ev_t test;
+    memset(&test, 0, sizeof(test));
+    CHECK(XAPI_Init(&test.api, api_ev_callback, &test) == XSTDOK, "The API initializes");
+
+    xapi_endpoint_t endpoint;
+    XAPI_InitEndpoint(&endpoint);
+    endpoint.eType = XAPI_SOCK;
+    endpoint.eRole = XAPI_SERVER;
+    endpoint.bUnix = XTRUE;
+
+    snprintf(sPath, sizeof(sPath), "%s/sub/api.sock", sBlocked);
+    endpoint.pAddr = sPath;
+    CHECK(XAPI_Listen(&test.api, &endpoint) == XSTDERR && test.nErrors == 1, "A directory that can not be made fails");
+
+    struct passwd *pUser = getpwuid(getuid());
+    struct group *pGroup = getgrgid(getgid());
+    CHECK(pUser != NULL && pGroup != NULL, "Look up who runs this");
+
+    snprintf(sPath, sizeof(sPath), "%s/missing.sock", sDir);
+    endpoint.pUser = "no-such-user-for-xutils";
+    endpoint.pGroup = pGroup->gr_name;
+    CHECK(XAPI_Listen(&test.api, &endpoint) == XSTDERR && test.nErrors == 2, "An owner that does not exist fails");
+
+    snprintf(sPath, sizeof(sPath), "%s/owned.sock", sDir);
+    endpoint.pUser = pUser->pw_name;
+    endpoint.nMode = 0600;
+    CHECK(XAPI_Listen(&test.api, &endpoint) == XSTDOK && test.nListening == 1, "The listener takes its owner and mode");
+
+    struct stat st;
+    CHECK(stat(sPath, &st) == 0 && (st.st_mode & 0777) == 0600 && st.st_uid == getuid(), "Which the socket file has");
+
+    XAPI_Destroy(&test.api);
+    unlink(sPath);
+    snprintf(sPath, sizeof(sPath), "%s/missing.sock", sDir);
+    unlink(sPath);
+    unlink(sBlocked);
+    rmdir(sDir);
+    return 0;
+}
+
+static int XTest_unknown_type(void)
+{
+    /* Data on a session whose type no handler knows ends the session */
+    api_ev_t test;
+    memset(&test, 0, sizeof(test));
+    CHECK(XAPI_Init(&test.api, api_ev_callback, &test) == XSTDOK, "The API initializes");
+
+    XSOCKET pair[2];
+    CHECK(XSock_CreatePair(pair) == XSTDOK, "Create a pair");
+
+    xapi_endpoint_t endpoint;
+    XAPI_InitEndpoint(&endpoint);
+    endpoint.eType = XAPI_EVENT;
+    endpoint.eRole = XAPI_PEER;
+    endpoint.bUnix = XTRUE;
+    endpoint.nEvents = XPOLLIN;
+    endpoint.nFD = pair[0];
+    CHECK(XAPI_AddEvent(&test.api, &endpoint) == XSTDOK && test.nRegistered == 1, "Register it");
+
+    CHECK(send(pair[1], "x", 1, 0) == 1, "Send it something");
+    for (int i = 0; i < 100 && XAPI_GetEventCount(&test.api) > 0; i++) XAPI_Service(&test.api, 20);
+    CHECK(XAPI_GetEventCount(&test.api) == 0 && test.nRead == 0, "The session is ended without a read");
+
+    close(pair[1]);
+    XAPI_Destroy(&test.api);
+    return 0;
+}
+
 XTEST_MAIN(
+    XTEST_CASE(api_guards),
+    XTEST_CASE(event_dispatch),
+    XTEST_CASE(peer_reset),
+    XTEST_CASE(accept_refused),
+    XTEST_CASE(unix_listener),
+    XTEST_CASE(unknown_type),
     XTEST_CASE(peer_closed),
     XTEST_CASE(peer_hunged),
     XTEST_CASE(user_callback),
